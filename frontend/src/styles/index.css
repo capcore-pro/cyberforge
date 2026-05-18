@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Styles globaux CyberForge */
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full min-h-screen;
+  }
+
+  body {
+    @apply bg-cyber-bg text-cyber-text font-sans;
+  }
+}
+
+@layer components {
+  .cyber-panel {
+    @apply rounded-lg border border-cyber-border bg-cyber-surface p-4 shadow-lg;
+  }
+
+  .cyber-btn {
+    @apply rounded-md bg-cyber-accent px-4 py-2 text-sm font-medium text-cyber-bg transition hover:bg-cyber-accentMuted;
+  }
+}
