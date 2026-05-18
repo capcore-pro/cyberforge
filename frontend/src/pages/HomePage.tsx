@@ -10,7 +10,8 @@ export function HomePage() {
   >("loading");
 
   // URL de l'API lue depuis les variables d'environnement Vite (jamais de clé API ici)
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+  const apiBaseUrl =
+    import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8001";
 
   useEffect(() => {
     const controller = new AbortController();

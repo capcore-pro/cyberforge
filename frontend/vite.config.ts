@@ -3,8 +3,12 @@ import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
 import path from "node:path";
 
+// .env à la racine du monorepo (voir docs/ARCHITECTURE.md)
+const monorepoRoot = path.resolve(__dirname, "..");
+
 // Configuration Vite : React côté renderer, Electron pour le processus principal
 export default defineConfig({
+  envDir: monorepoRoot,
   plugins: [
     react(),
     electron({
