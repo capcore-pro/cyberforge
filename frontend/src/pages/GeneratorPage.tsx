@@ -134,7 +134,7 @@ export function GeneratorPage() {
       });
     } catch (err) {
       setActionError(
-        err instanceof Error ? err.message : "Impossible d'ouvrir la prévisualisation.",
+        err instanceof Error ? err.message : "Impossible d'ouvrir l'aperçu visuel.",
       );
     }
   }
@@ -203,8 +203,8 @@ export function GeneratorPage() {
           le modèle le moins cher et enregistre chaque génération dans l'historique
           local.
           {isElectronPreviewAvailable()
-            ? " La prévisualisation s'ouvre dans une fenêtre Electron dédiée."
-            : " La prévisualisation s'affiche dans une iframe intégrée."}
+            ? " L'aperçu visuel s'ouvre dans une fenêtre Electron (maquette HTML)."
+            : " L'aperçu visuel s'affiche en maquette HTML dans une iframe."}
         </p>
       </header>
 

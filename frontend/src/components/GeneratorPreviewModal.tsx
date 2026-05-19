@@ -16,10 +16,15 @@ export function GeneratorPreviewModal({
       aria-label="Prévisualisation du code généré"
     >
       <div className="flex h-[min(90vh,720px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-cyber-accent/40 bg-cyber-surface shadow-neonCyan">
-        <div className="flex items-center justify-between border-b border-cyber-border px-4 py-3">
-          <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-neon">
-            Prévisualisation
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyber-border px-4 py-3">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-neon">
+              Aperçu visuel
+            </h2>
+            <p className="text-[10px] text-cyber-muted">
+              Maquette HTML simplifiée (titre, sections, couleurs)
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -30,8 +35,8 @@ export function GeneratorPreviewModal({
         </div>
         <iframe
           title="Prévisualisation CyberForge"
-          className="min-h-0 flex-1 bg-white"
-          sandbox="allow-scripts allow-same-origin"
+          className="min-h-0 flex-1 bg-[#0a0a0f]"
+          sandbox="allow-same-origin"
           srcDoc={html}
         />
       </div>
