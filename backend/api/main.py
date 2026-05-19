@@ -6,14 +6,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import coremind, health, projects
-from config import get_settings
+from config import refresh_settings
+from db.supabase_store import reset_supabase_store
 
 APP_VERSION = "0.1.0"
 
 
 def create_app() -> FastAPI:
     """Crée et configure l'instance FastAPI."""
-    settings = get_settings()
+    settings = refresh_settings()
+    reset_supabase_store()
 
     application = FastAPI(
         title=settings.app_name,

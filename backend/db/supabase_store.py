@@ -74,19 +74,19 @@ class SupabaseStore:
         self._settings = settings or get_settings()
 
     def is_configured(self) -> bool:
-        return bool(self._url and self._secret_key)
+        return self._settings.supabase_configured
 
     @property
     def _url(self) -> str | None:
         raw = self._settings.supabase_url
-        return raw.strip() if raw else None
+        if not raw:
+            return None
+        cleaned = raw.strip().rstrip("/")
+        return cleaned or None
 
     @property
     def _secret_key(self) -> str | None:
-        secret = self._settings.supabase_secret_key
-        if secret is None:
-            return None
-        value = secret.get_secret_value().strip()
+        value = self._settings.supabase_service_key
         return value or None
 
     def _headers(self, prefer: str | None = None) -> dict[str, str]:
@@ -384,5 +384,11 @@ _store: SupabaseStore | None = None
 def get_supabase_store() -> SupabaseStore:
     global _store
     if _store is None:
-        _store = SupabaseStore()
+        _store = SupabaseStore(get_settings())
     return _store
+
+
+def reset_supabase_store() -> None:
+    """Réinitialise le client après rechargement de la config."""
+    global _store
+    _store = None
