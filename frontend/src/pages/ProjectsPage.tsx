@@ -111,11 +111,15 @@ export function ProjectsPage() {
 
       {error ? (
         <section className="cyber-panel border-red-400/30 p-5">
-          <p className="text-sm text-red-400">{error}</p>
-          <p className="mt-2 text-xs text-cyber-muted">
-            Exécutez la migration{" "}
-            <code className="text-cyber-violet">supabase/migrations/001_projects_generations.sql</code>{" "}
-            puis renseignez SUPABASE_URL et SUPABASE_SECRET_KEY dans backend/.env.
+          <p className="text-xs font-bold uppercase tracking-wider text-red-400">
+            Erreur Supabase
+          </p>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-red-400/20 bg-cyber-bg/80 p-3 font-mono text-[11px] leading-relaxed text-red-300">
+            {error}
+          </pre>
+          <p className="mt-3 text-xs text-cyber-muted">
+            Consultez aussi les logs du terminal backend (uvicorn). Migration :{" "}
+            <code className="text-cyber-violet">supabase/migrations/001_projects_generations.sql</code>
           </p>
         </section>
       ) : null}
