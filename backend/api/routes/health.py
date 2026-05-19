@@ -18,8 +18,10 @@ async def health_check() -> dict[str, str]:
     Ne renvoie jamais de secrets ni de clés API.
     """
     settings = get_settings()
+    status = "ok" if settings.supabase_configured else "degraded"
     return {
-        "status": "ok",
+        "status": status,
         "app": settings.app_name,
         "version": APP_VERSION,
+        "supabase": "configured" if settings.supabase_configured else "missing",
     }

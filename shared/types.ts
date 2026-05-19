@@ -87,10 +87,58 @@ export interface CoreMindGenerateResponse {
   provider: string;
 }
 
+/** Identifiants Supabase après sauvegarde */
+export interface PersistenceResult {
+  project_id: string;
+  generation_id: string;
+  storage: string;
+}
+
 /** Réponse POST /api/agents/coremind/run — flow complet */
 export interface CoreMindRunResponse {
   analysis: CoreMindResponse;
   generation: CoreMindGenerateResponse;
   metrics: GenerationMetrics;
   planned_models: string[];
+  persistence?: PersistenceResult | null;
+}
+
+/** Projet enregistré dans Supabase */
+export interface ProjectRecord {
+  id: string;
+  title: string;
+  prompt: string;
+  project_type: ProjectType;
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+  generation_count: number;
+  latest_model: string | null;
+}
+
+/** Génération enregistrée dans Supabase */
+export interface GenerationRecord {
+  id: string;
+  project_id: string;
+  prompt: string;
+  project_type: ProjectType;
+  model: string;
+  provider: string;
+  complexity: ComplexityLevel;
+  complexity_score: number;
+  duration_ms: number;
+  estimated_cost_usd: number;
+  code: string;
+  files: GeneratedFile[];
+  stack: string[];
+  analysis: CoreMindResponse;
+  generation_summary: string | null;
+  planned_models: string[];
+  created_at: string;
+}
+
+/** Détail projet + historique des générations */
+export interface ProjectDetailResponse {
+  project: ProjectRecord;
+  generations: GenerationRecord[];
 }

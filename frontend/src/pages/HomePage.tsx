@@ -135,12 +135,13 @@ function AgentCard({ agent }: { agent: AgentDef }) {
 
 interface HomePageProps {
   onOpenGenerator?: () => void;
+  onOpenProjects?: () => void;
 }
 
 /**
  * Page d'accueil — tableau de bord et statut système.
  */
-export function HomePage({ onOpenGenerator }: HomePageProps) {
+export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
   const [health, setHealth] = useState<HealthInfo | null>(null);
 
@@ -214,7 +215,15 @@ export function HomePage({ onOpenGenerator }: HomePageProps) {
           >
             Générateur
           </button>{" "}
-          pour créer un projet en une phrase.
+          pour créer un projet en une phrase. Consultez l&apos;
+          <button
+            type="button"
+            onClick={onOpenProjects}
+            className="text-cyber-neon underline hover:text-cyber-accent"
+          >
+            historique Projets
+          </button>{" "}
+          une fois Supabase configuré.
         </p>
       </header>
 

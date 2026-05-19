@@ -47,10 +47,14 @@ function isElectronPreviewAvailable(): boolean {
   return typeof window.cyberforge?.preview?.open === "function";
 }
 
+interface GeneratorPageProps {
+  onOpenProjects?: () => void;
+}
+
 /**
  * Page Générateur — flow complet CoreMindAI.
  */
-export function GeneratorPage() {
+export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const [prompt, setPrompt] = useState("");
   const [projectType, setProjectType] = useState<ProjectType>("site_web");
   const [phase, setPhase] = useState<FlowPhase>("idle");
@@ -62,6 +66,7 @@ export function GeneratorPage() {
   const [copyLabel, setCopyLabel] = useState("Copier le code");
   const [history, setHistory] = useState<GenerationHistoryEntry[]>([]);
   const [lastSavedId, setLastSavedId] = useState<string | null>(null);
+  const [cloudSaved, setCloudSaved] = useState(false);
 
   const refreshHistory = useCallback(() => {
     setHistory(listGenerationHistory());
@@ -118,6 +123,7 @@ export function GeneratorPage() {
 
     const entry = saveGenerationToHistory(trimmed, projectType, response.data);
     setLastSavedId(entry.id);
+    setCloudSaved(Boolean(response.data.persistence?.project_id));
     refreshHistory();
     setResult(response.data);
     setActiveFile(0);
@@ -345,8 +351,18 @@ export function GeneratorPage() {
               {result.metrics.project_type_selected
                 ? ` · Sélection : ${result.metrics.project_type_selected}`
                 : ""}
-              {lastSavedId ? " · Sauvegardé dans l'historique local" : ""}
+              {lastSavedId ? " · Historique local" : ""}
+              {cloudSaved ? " · Supabase" : ""}
             </p>
+            {cloudSaved && onOpenProjects ? (
+              <button
+                type="button"
+                onClick={onOpenProjects}
+                className="text-xs text-cyber-accent underline hover:text-cyber-neon"
+              >
+                Voir dans Projets →
+              </button>
+            ) : null}
           </section>
 
           <section className="space-y-3">

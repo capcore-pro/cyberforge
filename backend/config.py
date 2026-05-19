@@ -66,7 +66,23 @@ class Settings(BaseSettings):
         default=2, alias="COREMIND_MAX_PROVIDER_ATTEMPTS"
     )
 
+    supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
+    supabase_anon_key: SecretStr | None = Field(default=None, alias="SUPABASE_ANON_KEY")
+    supabase_secret_key: SecretStr | None = Field(
+        default=None, alias="SUPABASE_SECRET_KEY"
+    )
+
     secret_key: SecretStr = Field(default=SecretStr("change-me-in-production"), alias="SECRET_KEY")
+
+    @property
+    def supabase_configured(self) -> bool:
+        """True si le backend peut écrire dans Supabase (URL + clé secrète)."""
+        secret = (
+            self.supabase_secret_key.get_secret_value().strip()
+            if self.supabase_secret_key
+            else ""
+        )
+        return bool(self.supabase_url and self.supabase_url.strip() and secret)
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",
         alias="CORS_ORIGINS",

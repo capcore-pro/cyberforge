@@ -2,11 +2,16 @@
 Route CoreMindAI — analyse, génération et flow complet.
 """
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.coremind_agent import CoreMindAgent, CoreMindAnalysis, CoreMindRunResult, ProjectType
+from db.supabase_store import PersistenceResult, SupabaseStoreError, get_supabase_store
 from tools.codegen_service import CodeGenService, CodeGenServiceError, CodeGenerateResult
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agents"])
 
@@ -35,6 +40,12 @@ class CoreMindRequest(BaseModel):
         default=None,
         description="Type de projet choisi dans le Générateur (optionnel)",
     )
+
+
+class CoreMindRunResponse(CoreMindRunResult):
+    """Réponse du flow complet, avec persistance Supabase optionnelle."""
+
+    persistence: PersistenceResult | None = None
 
 
 class CoreMindGenerateRequest(BaseModel):
@@ -79,15 +90,31 @@ async def generate_code_with_coremind(
         raise _codegen_http_error(exc) from exc
 
 
-@router.post("/agents/coremind/run", response_model=CoreMindRunResult)
-async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResult:
+@router.post("/agents/coremind/run", response_model=CoreMindRunResponse)
+async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
     """
     Flow complet CoreMindAI : analyse → sélection du modèle → génération de code.
+    Enregistre automatiquement dans Supabase si configuré.
     """
     agent = CoreMindAgent()
     try:
-        return await agent.run_flow(body.prompt, body.project_type)
+        result = await agent.run_flow(body.prompt, body.project_type)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except CodeGenServiceError as exc:
         raise _codegen_http_error(exc) from exc
+
+    persistence: PersistenceResult | None = None
+    store = get_supabase_store()
+    if store.is_configured():
+        try:
+            project_type = body.project_type or result.analysis.project_type
+            persistence = await store.save_generation(
+                body.prompt.strip(),
+                project_type,
+                result,
+            )
+        except SupabaseStoreError as exc:
+            logger.warning("Sauvegarde Supabase ignorée : %s", exc)
+
+    return CoreMindRunResponse(**result.model_dump(), persistence=persistence)
