@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { APP_NAME, DEFAULT_API_BASE_URL } from "@shared/constants";
-import { CoreMindPanel } from "@/components/CoreMindPanel";
 import { apiRequest, isElectronApiAvailable } from "@/lib/api-client";
 
 type BackendStatus = "loading" | "online" | "offline";
@@ -17,14 +16,6 @@ interface AgentDef {
   tag: string;
   accent: "cyan" | "violet";
 }
-
-const NAV_ITEMS = [
-  { id: "dashboard", label: "Tableau de bord", icon: "◈", active: true },
-  { id: "agents", label: "Agents", icon: "◇", active: false },
-  { id: "tools", label: "Outils", icon: "⬡", active: false },
-  { id: "reports", label: "Rapports", icon: "▣", active: false },
-  { id: "settings", label: "Paramètres", icon: "⚙", active: false },
-] as const;
 
 const AGENTS: AgentDef[] = [
   {
@@ -142,10 +133,14 @@ function AgentCard({ agent }: { agent: AgentDef }) {
   );
 }
 
+interface HomePageProps {
+  onOpenGenerator?: () => void;
+}
+
 /**
- * Page d'accueil — tableau de bord cyber avec agents et statut système.
+ * Page d'accueil — tableau de bord et statut système.
  */
-export function HomePage() {
+export function HomePage({ onOpenGenerator }: HomePageProps) {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
   const [health, setHealth] = useState<HealthInfo | null>(null);
 
@@ -198,154 +193,96 @@ export function HomePage() {
   }[backendStatus];
 
   return (
-    <div className="flex h-full min-h-0 w-full">
-      {/* Navigation latérale */}
-      <aside className="cyber-sidebar">
-        <div className="border-b border-cyber-border px-4 py-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyber-violet">
-            Navigation
-          </p>
-          <p className="mt-1 text-xs text-cyber-muted">{APP_NAME}</p>
-        </div>
-
-        <nav className="flex flex-1 flex-col gap-1 p-3" aria-label="Navigation principale">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              disabled={!item.active}
-              className={`cyber-nav-item w-full text-left ${
-                item.active ? "cyber-nav-item-active" : ""
-              } disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              <span className="text-cyber-accent" aria-hidden>
-                {item.icon}
-              </span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="border-t border-cyber-border p-4">
-          <p className="text-[10px] uppercase tracking-wider text-cyber-muted">
-            Agents actifs
-          </p>
-          <p className="mt-1 text-2xl font-bold text-cyber-neon">1 / 8</p>
-          <p className="text-[10px] text-cyber-muted">CoreMindAI opérationnel</p>
-        </div>
-      </aside>
-
-      {/* Contenu principal */}
-      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div
-          className="pointer-events-none absolute inset-0 bg-cyber-grid bg-cyber-grid opacity-40"
-          aria-hidden
-        />
-        <div className="cyber-scanline" aria-hidden />
-
-        <div className="relative flex-1 overflow-y-auto p-6 md:p-8">
-          {/* En-tête hero */}
-          <header className="mb-8">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.35em] text-cyber-violet">
-              // secure_ops_dashboard
-            </p>
-            <h1
-              className="cyber-glitch-title text-3xl md:text-4xl lg:text-5xl"
-              data-text={APP_NAME}
-            >
-              {APP_NAME}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm text-cyber-muted">
-              Plateforme desktop d&apos;assistance IA pour la cybersécurité.
-              Orchestration multi-agents, analyse et remédiation — configurez{" "}
-              <code className="rounded border border-cyber-border bg-cyber-surface px-1.5 py-0.5 text-cyber-neon">
-                .env
-              </code>{" "}
-              à la racine avant le déploiement.
-            </p>
-          </header>
-
-          {/* Statut système */}
-          <section
-            className="cyber-panel mb-8 overflow-hidden border-cyber-borderGlow bg-gradient-to-br from-cyber-surface via-cyber-surfaceAlt to-cyber-surface p-0"
-            aria-labelledby="system-status-heading"
+    <div className="mx-auto max-w-5xl space-y-8">
+      <header className="mb-2">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.35em] text-cyber-violet">
+          // secure_ops_dashboard
+        </p>
+        <h1
+          className="cyber-glitch-title text-3xl md:text-4xl lg:text-5xl"
+          data-text={APP_NAME}
+        >
+          {APP_NAME}
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm text-cyber-muted">
+          Plateforme desktop d&apos;assistance IA pour la cybersécurité.
+          Utilisez le{" "}
+          <button
+            type="button"
+            onClick={onOpenGenerator}
+            className="text-cyber-neon underline hover:text-cyber-accent"
           >
-            <div className="border-b border-cyber-border bg-cyber-surfaceAlt/80 px-5 py-3">
-              <h2
-                id="system-status-heading"
-                className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-neon"
-              >
-                Statut système
-              </h2>
-            </div>
+            Générateur
+          </button>{" "}
+          pour créer un projet en une phrase.
+        </p>
+      </header>
 
-            <div className="grid gap-6 p-5 sm:grid-cols-[auto_1fr] sm:items-center">
-              <StatusIndicator status={backendStatus} />
-
-              <div>
-                <p className="text-lg font-semibold text-cyber-text">{statusLabel}</p>
-                <p className="text-sm text-cyber-muted">{statusSub}</p>
-              </div>
-
-              <div className="col-span-full grid gap-3 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-4">
-                <StatusMetric
-                  label="Backend FastAPI"
-                  value={backendStatus === "online" ? "ONLINE" : backendStatus === "offline" ? "OFFLINE" : "…"}
-                  highlight={backendStatus === "online"}
-                />
-                <StatusMetric
-                  label="Transport"
-                  value={transportLabel}
-                />
-                <StatusMetric
-                  label="Shell Electron"
-                  value={electronReady ? "ACTIF" : "WEB"}
-                />
-                <StatusMetric
-                  label="API"
-                  value={health?.version ? `v${health.version}` : "—"}
-                  sub={health?.app ?? apiBaseUrl}
-                />
-              </div>
-            </div>
-
-            <div className="border-t border-cyber-border bg-cyber-bg/50 px-5 py-2">
-              <p className="truncate font-mono text-[10px] text-cyber-muted">
-                <span className="text-cyber-violet">endpoint</span>{" "}
-                <span className="text-cyber-neon">{apiBaseUrl}/api/health</span>
-              </p>
-            </div>
-          </section>
-
-          <CoreMindPanel />
-
-          {/* Grille agents */}
-          <section aria-labelledby="agents-heading">
-            <div className="mb-4 flex items-end justify-between gap-4">
-              <div>
-                <h2
-                  id="agents-heading"
-                  className="text-sm font-bold uppercase tracking-[0.2em] text-cyber-violet"
-                >
-                  Écosystème agents
-                </h2>
-                <p className="mt-1 text-xs text-cyber-muted">
-                  Huit modules spécialisés — prêts pour l&apos;orchestration CoreMindAI
-                </p>
-              </div>
-              <span className="hidden rounded border border-cyber-violet/40 bg-cyber-violet/10 px-3 py-1 text-[10px] uppercase tracking-wider text-cyber-violet sm:inline">
-                CoreMindAI live
-              </span>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {AGENTS.map((agent) => (
-                <AgentCard key={agent.id} agent={agent} />
-              ))}
-            </div>
-          </section>
+      <section
+        className="cyber-panel overflow-hidden border-cyber-borderGlow bg-gradient-to-br from-cyber-surface via-cyber-surfaceAlt to-cyber-surface p-0"
+        aria-labelledby="system-status-heading"
+      >
+        <div className="border-b border-cyber-border bg-cyber-surfaceAlt/80 px-5 py-3">
+          <h2
+            id="system-status-heading"
+            className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-neon"
+          >
+            Statut système
+          </h2>
         </div>
-      </div>
+
+        <div className="grid gap-6 p-5 sm:grid-cols-[auto_1fr] sm:items-center">
+          <StatusIndicator status={backendStatus} />
+          <div>
+            <p className="text-lg font-semibold text-cyber-text">{statusLabel}</p>
+            <p className="text-sm text-cyber-muted">{statusSub}</p>
+          </div>
+          <div className="col-span-full grid gap-3 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-4">
+            <StatusMetric
+              label="Backend FastAPI"
+              value={
+                backendStatus === "online"
+                  ? "ONLINE"
+                  : backendStatus === "offline"
+                    ? "OFFLINE"
+                    : "…"
+              }
+              highlight={backendStatus === "online"}
+            />
+            <StatusMetric label="Transport" value={transportLabel} />
+            <StatusMetric
+              label="Shell Electron"
+              value={electronReady ? "ACTIF" : "WEB"}
+            />
+            <StatusMetric
+              label="API"
+              value={health?.version ? `v${health.version}` : "—"}
+              sub={health?.app ?? apiBaseUrl}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="agents-heading">
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <h2
+              id="agents-heading"
+              className="text-sm font-bold uppercase tracking-[0.2em] text-cyber-violet"
+            >
+              Écosystème agents
+            </h2>
+            <p className="mt-1 text-xs text-cyber-muted">
+              Huit modules spécialisés — CoreMindAI pilote le Générateur
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {AGENTS.map((agent) => (
+            <AgentCard key={agent.id} agent={agent} />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

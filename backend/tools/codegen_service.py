@@ -17,16 +17,14 @@ from pydantic import BaseModel, Field
 
 from config import Settings, get_settings
 
-CODEGEN_SYSTEM_PROMPT = """Tu es CoreMindAI, le moteur de génération de code de CyberForge.
-Génère du code full-stack (React, TypeScript, Tailwind) à partir du prompt utilisateur.
-Réponds UNIQUEMENT avec un JSON valide (sans markdown) de la forme :
-{
-  "summary": "résumé court en français",
-  "code": "fichier principal ou extrait principal",
-  "files": [{"path": "chemin/relatif", "content": "contenu complet"}],
-  "stack": ["react", "typescript", ...]
-}
-Inclus au moins un fichier dans files. Le champ code doit reprendre le fichier le plus important."""
+CODEGEN_SYSTEM_PROMPT = """Tu es CoreMindAI (CyberForge). Génère vite un prototype React + TypeScript + Tailwind.
+Règles strictes :
+- UN seul fichier : src/App.tsx (composant autonome, ≤ 120 lignes, pas de dépendances externes).
+- Pas de texte hors JSON, pas de markdown.
+- JSON compact uniquement :
+{"summary":"1 phrase FR","code":"…contenu App.tsx…","files":[{"path":"src/App.tsx","content":"…"}],"stack":["react","typescript","tailwind"]}
+Le champ code = contenu de files[0]. Reste minimal et fonctionnel."""
+MAX_USER_PROMPT_CHARS = 2500
 
 
 class CodeGenComplexity(str, Enum):
@@ -59,7 +57,7 @@ class CodeGenServiceError(Exception):
 class _ProviderSpec:
     provider_id: str
     model: str
-    call: Callable[[str, str], Awaitable[str]]
+    call: Callable[[str, str, httpx.AsyncClient], Awaitable[str]]
 
 
 class CodeGenService:
@@ -71,6 +69,13 @@ class CodeGenService:
     def is_configured(self) -> bool:
         return len(self._available_specs(CodeGenComplexity.ELEVEE)) > 0
 
+    def planned_models(self, complexity: CodeGenComplexity) -> list[str]:
+        """Liste des modèles configurés qui seront tentés (ordre de coût)."""
+        return [
+            f"{spec.provider_id} · {spec.model}"
+            for spec in self._available_specs(complexity)
+        ]
+
     async def generate_code(
         self,
         prompt: str,
@@ -80,21 +85,30 @@ class CodeGenService:
         if len(trimmed) < 3:
             raise CodeGenServiceError("Le prompt doit contenir au moins 3 caractères.")
 
-        specs = self._available_specs(complexity)
+        specs = self._generation_specs(complexity)
         if not specs:
             raise CodeGenServiceError(
                 "Aucune clé LLM configurée. Ajoutez au moins une clé dans backend/.env : "
                 "DEEPSEEK_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY ou ANTHROPIC_API_KEY."
             )
 
+        prompt_for_llm = _trim_prompt(trimmed)
+        timeout = self._http_timeout()
         errors: list[str] = []
-        for spec in specs:
-            try:
-                text = await spec.call(trimmed, spec.model)
-                parsed = _parse_json_response(text)
-                return _to_code_result(parsed, spec.provider_id, spec.model)
-            except Exception as exc:
-                errors.append(f"{spec.provider_id}/{spec.model}: {exc}")
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for spec in specs:
+                try:
+                    text = await spec.call(prompt_for_llm, spec.model, client)
+                    parsed = _parse_json_response(text)
+                    return _to_code_result(parsed, spec.provider_id, spec.model)
+                except httpx.TimeoutException:
+                    limit = self._settings.coremind_llm_timeout_seconds
+                    errors.append(
+                        f"{spec.provider_id}/{spec.model}: timeout ({limit:.0f}s)"
+                    )
+                except Exception as exc:
+                    errors.append(f"{spec.provider_id}/{spec.model}: {exc}")
 
         raise CodeGenServiceError(
             "Tous les modèles ont échoué : " + " | ".join(errors[:4])
@@ -115,6 +129,32 @@ class CodeGenService:
                     _ProviderSpec("anthropic", model, self._call_anthropic)
                 )
         return specs
+
+    def _generation_specs(self, complexity: CodeGenComplexity) -> list[_ProviderSpec]:
+        """Fournisseurs à tenter (limités pour respecter le budget temps)."""
+        all_specs = self._available_specs(complexity)
+        limit = max(1, self._settings.coremind_max_provider_attempts)
+
+        if complexity == CodeGenComplexity.ELEVEE:
+            haiku = self._settings.coremind_haiku_model
+            sonnet = self._settings.coremind_sonnet_model
+            priority = [
+                s
+                for s in all_specs
+                if s.model in (haiku, sonnet)
+            ]
+            priority.sort(key=lambda s: 0 if s.model == haiku else 1)
+            rest = [s for s in all_specs if s not in priority]
+            all_specs = priority + rest
+
+        return all_specs[:limit]
+
+    def _http_timeout(self) -> httpx.Timeout:
+        seconds = self._settings.coremind_llm_timeout_seconds
+        return httpx.Timeout(seconds, connect=min(10.0, seconds))
+
+    def _max_output_tokens(self) -> int:
+        return max(256, self._settings.coremind_max_output_tokens)
 
     def _model_chain(
         self, complexity: CodeGenComplexity
@@ -145,44 +185,57 @@ class CodeGenService:
     def _anthropic_key(self) -> str | None:
         return self._secret(self._settings.anthropic_api_key)
 
-    async def _call_deepseek(self, prompt: str, model: str) -> str:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(
-                "https://api.deepseek.com/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._deepseek_key()}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "temperature": 0.2,
-                    "messages": [
-                        {"role": "system", "content": CODEGEN_SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt},
-                    ],
-                },
-            )
+    async def _call_deepseek(
+        self, prompt: str, model: str, client: httpx.AsyncClient
+    ) -> str:
+        body, content_headers = _utf8_json_body(
+            {
+                "model": model,
+                "temperature": 0.2,
+                "max_tokens": self._max_output_tokens(),
+                "messages": [
+                    {"role": "system", "content": CODEGEN_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+            }
+        )
+        response = await client.post(
+            "https://api.deepseek.com/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self._deepseek_key()}",
+                **content_headers,
+            },
+            content=body,
+        )
         return _extract_openai_text(response, "DeepSeek")
 
-    async def _call_gemini(self, prompt: str, model: str) -> str:
+    async def _call_gemini(
+        self, prompt: str, model: str, client: httpx.AsyncClient
+    ) -> str:
         key = self._gemini_key()
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{model}:generateContent?key={key}"
         )
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(
-                url,
-                headers={"Content-Type": "application/json"},
-                json={
-                    "systemInstruction": {"parts": [{"text": CODEGEN_SYSTEM_PROMPT}]},
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.2},
+        body, content_headers = _utf8_json_body(
+            {
+                "systemInstruction": {"parts": [{"text": CODEGEN_SYSTEM_PROMPT}]},
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "maxOutputTokens": self._max_output_tokens(),
                 },
-            )
+            }
+        )
+        response = await client.post(
+            url,
+            headers=content_headers,
+            content=body,
+        )
         if response.status_code >= 400:
             raise CodeGenServiceError(
-                f"Gemini a répondu {response.status_code}: {response.text[:300]}"
+                f"Gemini a répondu {response.status_code}: "
+                f"{_response_text_snippet(response)}"
             )
         payload = response.json()
         candidates = payload.get("candidates") or []
@@ -194,25 +247,30 @@ class CodeGenService:
             raise CodeGenServiceError("Réponse Gemini vide.")
         return text
 
-    async def _call_anthropic(self, prompt: str, model: str) -> str:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            response = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": self._anthropic_key() or "",
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "max_tokens": 16384,
-                    "system": CODEGEN_SYSTEM_PROMPT,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
+    async def _call_anthropic(
+        self, prompt: str, model: str, client: httpx.AsyncClient
+    ) -> str:
+        body, content_headers = _utf8_json_body(
+            {
+                "model": model,
+                "max_tokens": self._max_output_tokens(),
+                "system": CODEGEN_SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        )
+        response = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": self._anthropic_key() or "",
+                "anthropic-version": "2023-06-01",
+                **content_headers,
+            },
+            content=body,
+        )
         if response.status_code >= 400:
             raise CodeGenServiceError(
-                f"Anthropic a répondu {response.status_code}: {response.text[:300]}"
+                f"Anthropic a répondu {response.status_code}: "
+                f"{_response_text_snippet(response)}"
             )
         payload = response.json()
         blocks = payload.get("content", [])
@@ -224,10 +282,31 @@ class CodeGenService:
         return text
 
 
+def _trim_prompt(prompt: str) -> str:
+    """Limite la taille du prompt utilisateur pour accélérer la génération."""
+    text = prompt.strip()
+    if len(text) <= MAX_USER_PROMPT_CHARS:
+        return text
+    return text[:MAX_USER_PROMPT_CHARS] + "\n… [prompt tronqué]"
+
+
+def _utf8_json_body(payload: dict[str, Any]) -> tuple[bytes, dict[str, str]]:
+    """Sérialise le corps en UTF-8 (évite ascii codec sur Windows avec —, accents, etc.)."""
+    return (
+        json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        {"Content-Type": "application/json; charset=utf-8"},
+    )
+
+
+def _response_text_snippet(response: httpx.Response, limit: int = 300) -> str:
+    return response.content.decode("utf-8", errors="replace")[:limit]
+
+
 def _extract_openai_text(response: httpx.Response, label: str) -> str:
     if response.status_code >= 400:
         raise CodeGenServiceError(
-            f"{label} a répondu {response.status_code}: {response.text[:300]}"
+            f"{label} a répondu {response.status_code}: "
+            f"{_response_text_snippet(response)}"
         )
     payload = response.json()
     content = payload["choices"][0]["message"]["content"]
@@ -237,14 +316,114 @@ def _extract_openai_text(response: httpx.Response, label: str) -> str:
 
 
 def _parse_json_response(text: str) -> dict[str, Any]:
-    cleaned = text.strip()
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-    if fence:
-        cleaned = fence.group(1).strip()
+    """
+    Parse la réponse LLM : JSON strict, JSON embarqué, ou repli code texte libre
+    (cas fréquent DeepSeek).
+    """
+    cleaned = text.strip().lstrip("\ufeff")
+    if not cleaned:
+        raise CodeGenServiceError("Réponse LLM vide.")
+
+    json_fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned, re.IGNORECASE)
+    if json_fence:
+        parsed = _try_load_json_object(json_fence.group(1).strip())
+        if parsed is not None:
+            return parsed
+
+    parsed = _try_load_json_object(cleaned)
+    if parsed is not None:
+        return parsed
+
+    embedded = _find_embedded_json_object(cleaned)
+    if embedded is not None:
+        return embedded
+
+    return _fallback_plain_code_payload(cleaned)
+
+
+def _try_load_json_object(text: str) -> dict[str, Any] | None:
     try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise CodeGenServiceError("Réponse LLM non JSON — réessayez.") from exc
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _find_embedded_json_object(text: str) -> dict[str, Any] | None:
+    """Extrait le premier objet JSON équilibré dans un texte mixte."""
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        quote = ""
+
+        for i in range(start, len(text)):
+            char = text[i]
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == quote:
+                    in_string = False
+            elif char in ('"', "'"):
+                in_string = True
+                quote = char
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    parsed = _try_load_json_object(text[start : i + 1])
+                    if parsed is not None:
+                        return parsed
+                    break
+        start = text.find("{", start + 1)
+    return None
+
+
+def _extract_code_fence(text: str) -> str | None:
+    match = re.search(r"```(?:\w+)?\s*([\s\S]*?)```", text)
+    if not match:
+        return None
+    body = match.group(1).strip()
+    return body or None
+
+
+def _guess_primary_path(code: str) -> str:
+    head = code.lstrip()[:800]
+    if head.startswith("<!") or "<html" in head.lower():
+        return "index.html"
+    if re.search(r"\bdef\s+\w+\s*\(", head):
+        return "main.py"
+    if (
+        re.search(r"\bexport\s+(default\s+)?(function|const)\b", head)
+        or "import React" in head
+        or ("<" in head and ">" in head and "className" in head)
+    ):
+        return "src/App.tsx"
+    return "src/generated.ts"
+
+
+def _fallback_plain_code_payload(text: str) -> dict[str, Any]:
+    """Repli lorsque le modèle renvoie du code brut sans enveloppe JSON."""
+    code = _extract_code_fence(text) or text.strip()
+    if not code:
+        raise CodeGenServiceError("Réponse LLM non JSON et sans contenu exploitable.")
+
+    path = _guess_primary_path(code)
+    summary = "Code généré par CoreMindAI (réponse texte libre du modèle)."
+    preamble = text[:200].strip()
+    if preamble and preamble != code[:200].strip():
+        summary = preamble.split("\n", 1)[0][:240]
+
+    return {
+        "summary": summary,
+        "code": code,
+        "files": [{"path": path, "content": code}],
+        "stack": [],
+    }
 
 
 def _to_code_result(

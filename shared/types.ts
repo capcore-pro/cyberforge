@@ -20,6 +20,7 @@ export interface AgentInfo {
 /** Types de projet détectés par CoreMindAI */
 export type ProjectType =
   | "site_web"
+  | "landing_page"
   | "application_web"
   | "application_mobile"
   | "extension_navigateur"
@@ -37,6 +38,18 @@ export type ComplexityLevel = "faible" | "moyenne" | "elevee";
 /** Requête POST /api/agents/coremind */
 export interface CoreMindRequest {
   prompt: string;
+  project_type?: ProjectType | null;
+}
+
+/** Métriques de génération (page Générateur) */
+export interface GenerationMetrics {
+  model: string;
+  provider: string;
+  complexity: ComplexityLevel;
+  complexity_score: number;
+  duration_ms: number;
+  estimated_cost_usd: number;
+  project_type_selected: string | null;
 }
 
 /** Réponse structurée de CoreMindAI */
@@ -72,4 +85,12 @@ export interface CoreMindGenerateResponse {
   stack: string[];
   model: string;
   provider: string;
+}
+
+/** Réponse POST /api/agents/coremind/run — flow complet */
+export interface CoreMindRunResponse {
+  analysis: CoreMindResponse;
+  generation: CoreMindGenerateResponse;
+  metrics: GenerationMetrics;
+  planned_models: string[];
 }

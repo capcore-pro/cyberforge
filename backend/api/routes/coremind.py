@@ -1,14 +1,25 @@
 """
-Route CoreMindAI — analyse de prompt et génération de code multi-modèles.
+Route CoreMindAI — analyse, génération et flow complet.
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from agents.coremind_agent import CoreMindAgent, CoreMindAnalysis
+from agents.coremind_agent import CoreMindAgent, CoreMindAnalysis, CoreMindRunResult, ProjectType
 from tools.codegen_service import CodeGenService, CodeGenServiceError, CodeGenerateResult
 
 router = APIRouter(tags=["agents"])
+
+
+def _codegen_http_error(exc: CodeGenServiceError) -> HTTPException:
+    message = str(exc)
+    if "clé LLM" in message:
+        status = 503
+    elif "timeout" in message.lower():
+        status = 504
+    else:
+        status = 422
+    return HTTPException(status_code=status, detail=message)
 
 
 class CoreMindRequest(BaseModel):
@@ -19,6 +30,10 @@ class CoreMindRequest(BaseModel):
         min_length=3,
         max_length=8000,
         description="Description du projet ou besoin utilisateur",
+    )
+    project_type: ProjectType | None = Field(
+        default=None,
+        description="Type de projet choisi dans le Générateur (optionnel)",
     )
 
 
@@ -35,13 +50,10 @@ class CoreMindGenerateRequest(BaseModel):
 
 @router.post("/agents/coremind", response_model=CoreMindAnalysis)
 async def analyze_with_coremind(body: CoreMindRequest) -> CoreMindAnalysis:
-    """
-    Analyse un prompt utilisateur et retourne type de projet,
-    outil recommandé, complexité et prochaines étapes.
-    """
+    """Analyse un prompt utilisateur (type, outil, complexité)."""
     agent = CoreMindAgent()
     try:
-        return await agent.analyze(body.prompt)
+        return await agent.analyze(body.prompt, body.project_type)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -50,10 +62,7 @@ async def analyze_with_coremind(body: CoreMindRequest) -> CoreMindAnalysis:
 async def generate_code_with_coremind(
     body: CoreMindGenerateRequest,
 ) -> CodeGenerateResult:
-    """
-    CoreMindAI route le prompt vers DeepSeek, Gemini Flash, Claude Haiku
-    ou Claude Sonnet (si complexité élevée), par ordre de coût.
-    """
+    """Génère du code via le routage multi-modèles CoreMindAI."""
     service = CodeGenService()
     if not service.is_configured():
         raise HTTPException(
@@ -67,4 +76,18 @@ async def generate_code_with_coremind(
     try:
         return await agent.generate_code(body.prompt)
     except CodeGenServiceError as exc:
+        raise _codegen_http_error(exc) from exc
+
+
+@router.post("/agents/coremind/run", response_model=CoreMindRunResult)
+async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResult:
+    """
+    Flow complet CoreMindAI : analyse → sélection du modèle → génération de code.
+    """
+    agent = CoreMindAgent()
+    try:
+        return await agent.run_flow(body.prompt, body.project_type)
+    except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except CodeGenServiceError as exc:
+        raise _codegen_http_error(exc) from exc

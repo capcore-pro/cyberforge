@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     coremind_sonnet_model: str = Field(
         default="claude-sonnet-4-20250514", alias="COREMIND_SONNET_MODEL"
     )
+    coremind_llm_timeout_seconds: float = Field(
+        default=30.0, alias="COREMIND_LLM_TIMEOUT_SECONDS"
+    )
+    coremind_max_output_tokens: int = Field(
+        default=2048, alias="COREMIND_MAX_OUTPUT_TOKENS"
+    )
+    coremind_max_provider_attempts: int = Field(
+        default=2, alias="COREMIND_MAX_PROVIDER_ATTEMPTS"
+    )
 
     secret_key: SecretStr = Field(default=SecretStr("change-me-in-production"), alias="SECRET_KEY")
     cors_origins: str = Field(

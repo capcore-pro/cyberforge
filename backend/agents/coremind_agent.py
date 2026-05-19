@@ -6,6 +6,7 @@ Analyse heuristique (sans appel LLM) ; extensible via clés API configurées.
 from __future__ import annotations
 
 import re
+import time
 from enum import Enum
 from typing import Any
 
@@ -15,13 +16,16 @@ from agents.base_agent import BaseAgent
 from tools.codegen_service import (
     CodeGenComplexity,
     CodeGenService,
+    CodeGenServiceError,
     CodeGenerateResult,
     complexity_from_score,
 )
+from tools.pricing import estimate_cost_usd
 
 
 class ProjectType(str, Enum):
     SITE_WEB = "site_web"
+    LANDING_PAGE = "landing_page"
     APPLICATION_WEB = "application_web"
     APPLICATION_MOBILE = "application_mobile"
     EXTENSION_NAVIGATEUR = "extension_navigateur"
@@ -44,7 +48,8 @@ class ComplexityLevel(str, Enum):
 
 
 PROJECT_TYPE_LABELS: dict[ProjectType, str] = {
-    ProjectType.SITE_WEB: "Site web / landing",
+    ProjectType.SITE_WEB: "Site web",
+    ProjectType.LANDING_PAGE: "Landing page",
     ProjectType.APPLICATION_WEB: "Application web",
     ProjectType.APPLICATION_MOBILE: "Application mobile",
     ProjectType.EXTENSION_NAVIGATEUR: "Extension navigateur",
@@ -56,16 +61,25 @@ PROJECT_TYPE_LABELS: dict[ProjectType, str] = {
 
 # Mots-clés par type (français + anglais)
 _TYPE_KEYWORDS: dict[ProjectType, tuple[str, ...]] = {
+    ProjectType.LANDING_PAGE: (
+        "landing page",
+        "landing",
+        "one page",
+        "une page",
+        "page unique",
+        "hero",
+        "cta",
+    ),
     ProjectType.SITE_WEB: (
         "site web",
         "website",
-        "landing",
         "portfolio",
         "vitrine",
         "page d'accueil",
         "homepage",
         "blog",
         "marketing",
+        "multi-page",
     ),
     ProjectType.APPLICATION_WEB: (
         "application web",
@@ -129,6 +143,7 @@ _TYPE_KEYWORDS: dict[ProjectType, tuple[str, ...]] = {
 
 _TOOL_BY_TYPE: dict[ProjectType, RecommendedTool] = {
     ProjectType.SITE_WEB: RecommendedTool.V0,
+    ProjectType.LANDING_PAGE: RecommendedTool.V0,
     ProjectType.APPLICATION_WEB: RecommendedTool.LOVABLE,
     ProjectType.APPLICATION_MOBILE: RecommendedTool.BOLT,
     ProjectType.EXTENSION_NAVIGATEUR: RecommendedTool.BOLT,
@@ -201,6 +216,30 @@ class CoreMindAnalysis(BaseModel):
     summary: str
 
 
+class GenerationMetrics(BaseModel):
+    """Métriques affichées dans le Générateur."""
+
+    model: str
+    provider: str
+    complexity: ComplexityLevel
+    complexity_score: int = Field(ge=1, le=10)
+    duration_ms: int = Field(ge=0)
+    estimated_cost_usd: float = Field(ge=0)
+    project_type_selected: str | None = None
+
+
+class CoreMindRunResult(BaseModel):
+    """Flow complet : analyse + sélection de modèles + génération."""
+
+    analysis: CoreMindAnalysis
+    generation: CodeGenerateResult
+    metrics: GenerationMetrics
+    planned_models: list[str] = Field(
+        default_factory=list,
+        description="Modèles configurés tentés par ordre de coût",
+    )
+
+
 class CoreMindAgent(BaseAgent):
     """Cerveau central — classification de projet et recommandation d'outil."""
 
@@ -216,13 +255,17 @@ class CoreMindAgent(BaseAgent):
         analysis = await self.analyze(prompt)
         return analysis.model_dump_json()
 
-    async def analyze(self, prompt: str) -> CoreMindAnalysis:
+    async def analyze(
+        self,
+        prompt: str,
+        project_type_hint: ProjectType | None = None,
+    ) -> CoreMindAnalysis:
         """Analyse un prompt utilisateur et retourne une recommandation structurée."""
         normalized = _normalize(prompt)
         if not normalized.strip():
             raise ValueError("Le prompt ne peut pas être vide.")
 
-        project_type = _detect_project_type(normalized)
+        project_type = project_type_hint or _detect_project_type(normalized)
         tool = _select_tool(normalized, project_type)
         complexity, score = _estimate_complexity(normalized)
         steps = _build_next_steps(project_type, tool, complexity)
@@ -248,10 +291,64 @@ class CoreMindAgent(BaseAgent):
         """
         normalized = _normalize(prompt)
         _, score = _estimate_complexity(normalized)
-        complexity = complexity_from_score(score)
-        # Map vers CodeGenComplexity (mêmes valeurs)
-        tier = CodeGenComplexity(complexity.value)
+        tier = CodeGenComplexity(complexity_from_score(score).value)
         return await CodeGenService(self._settings).generate_code(prompt, tier)
+
+    async def run_flow(
+        self,
+        prompt: str,
+        project_type_hint: ProjectType | None = None,
+    ) -> CoreMindRunResult:
+        """Analyse le prompt, sélectionne le modèle et génère le code."""
+        analysis = await self.analyze(prompt, project_type_hint)
+        tier = CodeGenComplexity(analysis.complexity.value)
+        codegen = CodeGenService(self._settings)
+        if not codegen.is_configured():
+            raise CodeGenServiceError(
+                "Aucune clé LLM dans backend/.env : DEEPSEEK_API_KEY, "
+                "GOOGLE_GENERATIVE_AI_API_KEY ou ANTHROPIC_API_KEY."
+            )
+
+        type_label = PROJECT_TYPE_LABELS.get(
+            project_type_hint or analysis.project_type,
+            analysis.project_type_label,
+        )
+        enriched = (
+            f"Type de projet cible : {type_label}.\n\n{prompt.strip()}"
+            if project_type_hint
+            else prompt.strip()
+        )
+
+        start = time.perf_counter()
+        generation = await codegen.generate_code(enriched, tier)
+        duration_ms = int((time.perf_counter() - start) * 1000)
+
+        output_chars = len(generation.code) + sum(
+            len(f.content) for f in generation.files
+        )
+        cost = estimate_cost_usd(
+            generation.provider,
+            generation.model,
+            len(enriched),
+            output_chars,
+        )
+
+        metrics = GenerationMetrics(
+            model=generation.model,
+            provider=generation.provider,
+            complexity=analysis.complexity,
+            complexity_score=analysis.complexity_score,
+            duration_ms=duration_ms,
+            estimated_cost_usd=cost,
+            project_type_selected=type_label if project_type_hint else None,
+        )
+
+        return CoreMindRunResult(
+            analysis=analysis,
+            generation=generation,
+            metrics=metrics,
+            planned_models=codegen.planned_models(tier),
+        )
 
 
 def _normalize(text: str) -> str:
