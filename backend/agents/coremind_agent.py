@@ -12,7 +12,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agents.base_agent import BaseAgent
-from tools.claude_service import ClaudeCodeResult, ClaudeService
+from tools.codegen_service import (
+    CodeGenComplexity,
+    CodeGenService,
+    CodeGenerateResult,
+    complexity_from_score,
+)
 
 
 class ProjectType(str, Enum):
@@ -236,9 +241,17 @@ class CoreMindAgent(BaseAgent):
             summary=summary,
         )
 
-    async def generate_code(self, prompt: str) -> ClaudeCodeResult:
-        """Envoie le prompt à Claude (Anthropic) et retourne le code généré."""
-        return await ClaudeService(self._settings).generate_code(prompt)
+    async def generate_code(self, prompt: str) -> CodeGenerateResult:
+        """
+        Génère du code via le routage CoreMindAI (coût croissant selon complexité).
+        DeepSeek → Gemini Flash → Claude Haiku → Claude Sonnet si élevée.
+        """
+        normalized = _normalize(prompt)
+        _, score = _estimate_complexity(normalized)
+        complexity = complexity_from_score(score)
+        # Map vers CodeGenComplexity (mêmes valeurs)
+        tier = CodeGenComplexity(complexity.value)
+        return await CodeGenService(self._settings).generate_code(prompt, tier)
 
 
 def _normalize(text: str) -> str:

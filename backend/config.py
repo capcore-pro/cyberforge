@@ -10,16 +10,19 @@ from dotenv import load_dotenv
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Charge .env à la racine du monorepo (parent de backend/)
 _ROOT = Path(__file__).resolve().parent.parent
+_BACKEND = Path(__file__).resolve().parent
+
+# .env racine monorepo puis backend/.env (priorité au backend)
 load_dotenv(_ROOT / ".env")
+load_dotenv(_BACKEND / ".env")
 
 
 class Settings(BaseSettings):
     """Paramètres applicatifs lus depuis l'environnement."""
 
     model_config = SettingsConfigDict(
-        env_file=_ROOT / ".env",
+        env_file=(_ROOT / ".env", _BACKEND / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -33,15 +36,26 @@ class Settings(BaseSettings):
 
     database_url: str = Field(default="sqlite:///./database/cyberforge.db", alias="DATABASE_URL")
 
-    # SecretStr empêche l'affichage accidentel des clés dans les logs
     openai_api_key: SecretStr | None = Field(default=None, alias="OPENAI_API_KEY")
     anthropic_api_key: SecretStr | None = Field(default=None, alias="ANTHROPIC_API_KEY")
-    coremind_claude_model: str = Field(
-        default="claude-sonnet-4-20250514",
-        alias="COREMIND_CLAUDE_MODEL",
-        description="Modèle Claude pour la génération de code CoreMindAI",
+    deepseek_api_key: SecretStr | None = Field(default=None, alias="DEEPSEEK_API_KEY")
+    google_generative_ai_api_key: SecretStr | None = Field(
+        default=None, alias="GOOGLE_GENERATIVE_AI_API_KEY"
     )
     ollama_base_url: str | None = Field(default=None, alias="OLLAMA_BASE_URL")
+
+    coremind_deepseek_model: str = Field(
+        default="deepseek-chat", alias="COREMIND_DEEPSEEK_MODEL"
+    )
+    coremind_gemini_model: str = Field(
+        default="gemini-2.0-flash", alias="COREMIND_GEMINI_MODEL"
+    )
+    coremind_haiku_model: str = Field(
+        default="claude-3-5-haiku-20241022", alias="COREMIND_HAIKU_MODEL"
+    )
+    coremind_sonnet_model: str = Field(
+        default="claude-sonnet-4-20250514", alias="COREMIND_SONNET_MODEL"
+    )
 
     secret_key: SecretStr = Field(default=SecretStr("change-me-in-production"), alias="SECRET_KEY")
     cors_origins: str = Field(

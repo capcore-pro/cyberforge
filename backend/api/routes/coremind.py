@@ -1,12 +1,12 @@
 """
-Route CoreMindAI — analyse de prompt et génération de code via Claude.
+Route CoreMindAI — analyse de prompt et génération de code multi-modèles.
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.coremind_agent import CoreMindAgent, CoreMindAnalysis
-from tools.claude_service import ClaudeCodeResult, ClaudeService, ClaudeServiceError
+from tools.codegen_service import CodeGenService, CodeGenServiceError, CodeGenerateResult
 
 router = APIRouter(tags=["agents"])
 
@@ -46,22 +46,25 @@ async def analyze_with_coremind(body: CoreMindRequest) -> CoreMindAnalysis:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.post("/agents/coremind/generate", response_model=ClaudeCodeResult)
+@router.post("/agents/coremind/generate", response_model=CodeGenerateResult)
 async def generate_code_with_coremind(
     body: CoreMindGenerateRequest,
-) -> ClaudeCodeResult:
+) -> CodeGenerateResult:
     """
-    CoreMindAI envoie le prompt à l'API Anthropic Claude
-    et retourne le code généré (modèle claude-sonnet-4-20250514 par défaut).
+    CoreMindAI route le prompt vers DeepSeek, Gemini Flash, Claude Haiku
+    ou Claude Sonnet (si complexité élevée), par ordre de coût.
     """
-    service = ClaudeService()
+    service = CodeGenService()
     if not service.is_configured():
         raise HTTPException(
             status_code=503,
-            detail="ANTHROPIC_API_KEY non configurée dans .env",
+            detail=(
+                "Aucune clé LLM dans backend/.env : DEEPSEEK_API_KEY, "
+                "GOOGLE_GENERATIVE_AI_API_KEY ou ANTHROPIC_API_KEY."
+            ),
         )
     agent = CoreMindAgent()
     try:
         return await agent.generate_code(body.prompt)
-    except ClaudeServiceError as exc:
+    except CodeGenServiceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
