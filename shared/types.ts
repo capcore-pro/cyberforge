@@ -52,3 +52,25 @@ export interface CoreMindResponse {
   next_steps: string[];
   summary: string;
 }
+
+/** Fichier généré par Bolt.new */
+export interface BoltFile {
+  path: string;
+  content: string;
+}
+
+/** Requête POST /api/tools/bolt */
+export interface BoltGenerateRequest {
+  prompt: string;
+}
+
+/** Réponse POST /api/tools/bolt */
+export interface BoltGenerateResponse {
+  summary: string;
+  code: string;
+  files: BoltFile[];
+  stack: string[];
+  provider: "bolt.new" | "openai" | "anthropic";
+  model: string;
+  project_url?: string | null;
+}

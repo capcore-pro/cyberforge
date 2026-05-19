@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { APP_NAME, DEFAULT_API_BASE_URL } from "@shared/constants";
+import { BoltPanel } from "@/components/BoltPanel";
 import { CoreMindPanel } from "@/components/CoreMindPanel";
 import { apiRequest, isElectronApiAvailable } from "@/lib/api-client";
 
@@ -318,6 +319,8 @@ export function HomePage() {
           </section>
 
           <CoreMindPanel />
+
+          <BoltPanel />
 
           {/* Grille agents */}
           <section aria-labelledby="agents-heading">
