@@ -36,19 +36,12 @@ class Settings(BaseSettings):
     # SecretStr empêche l'affichage accidentel des clés dans les logs
     openai_api_key: SecretStr | None = Field(default=None, alias="OPENAI_API_KEY")
     anthropic_api_key: SecretStr | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    coremind_claude_model: str = Field(
+        default="claude-sonnet-4-20250514",
+        alias="COREMIND_CLAUDE_MODEL",
+        description="Modèle Claude pour la génération de code CoreMindAI",
+    )
     ollama_base_url: str | None = Field(default=None, alias="OLLAMA_BASE_URL")
-
-    bolt_api_key: SecretStr | None = Field(default=None, alias="BOLT_API_KEY")
-    bolt_api_base_url: str | None = Field(
-        default=None,
-        alias="BOLT_API_BASE_URL",
-        description="URL de base de l'API Bolt.new (ex. https://api.bolt.new)",
-    )
-    bolt_model: str = Field(
-        default="gpt-4o-mini",
-        alias="BOLT_MODEL",
-        description="Modèle LLM de repli si l'API Bolt n'est pas joignable",
-    )
 
     secret_key: SecretStr = Field(default=SecretStr("change-me-in-production"), alias="SECRET_KEY")
     cors_origins: str = Field(

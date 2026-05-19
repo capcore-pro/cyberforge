@@ -12,6 +12,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agents.base_agent import BaseAgent
+from tools.claude_service import ClaudeCodeResult, ClaudeService
 
 
 class ProjectType(str, Enum):
@@ -235,6 +236,10 @@ class CoreMindAgent(BaseAgent):
             summary=summary,
         )
 
+    async def generate_code(self, prompt: str) -> ClaudeCodeResult:
+        """Envoie le prompt à Claude (Anthropic) et retourne le code généré."""
+        return await ClaudeService(self._settings).generate_code(prompt)
+
 
 def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
@@ -330,7 +335,7 @@ def _build_next_steps(
         )
     else:
         steps.append(
-            "Structurer la stack (frontend + API) dans Bolt.new et valider le schéma de données."
+            "Générer le socle code via CoreMindAI (Claude), puis valider le schéma de données."
         )
 
     if complexity == ComplexityLevel.ELEVEE:

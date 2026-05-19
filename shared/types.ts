@@ -53,24 +53,23 @@ export interface CoreMindResponse {
   summary: string;
 }
 
-/** Fichier généré par Bolt.new */
-export interface BoltFile {
+/** Fichier généré par CoreMindAI (Claude) */
+export interface GeneratedFile {
   path: string;
   content: string;
 }
 
-/** Requête POST /api/tools/bolt */
-export interface BoltGenerateRequest {
+/** Requête POST /api/agents/coremind/generate */
+export interface CoreMindGenerateRequest {
   prompt: string;
 }
 
-/** Réponse POST /api/tools/bolt */
-export interface BoltGenerateResponse {
+/** Réponse POST /api/agents/coremind/generate */
+export interface CoreMindGenerateResponse {
   summary: string;
   code: string;
-  files: BoltFile[];
+  files: GeneratedFile[];
   stack: string[];
-  provider: "bolt.new" | "openai" | "anthropic";
   model: string;
-  project_url?: string | null;
+  provider: string;
 }

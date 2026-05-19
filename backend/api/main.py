@@ -5,7 +5,7 @@ Factory FastAPI — assemble routes, CORS et métadonnées de l'API.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import bolt, coremind, health
+from api.routes import coremind, health
 from config import get_settings
 
 APP_VERSION = "0.1.0"
@@ -33,6 +33,5 @@ def create_app() -> FastAPI:
 
     application.include_router(health.router, prefix="/api")
     application.include_router(coremind.router, prefix="/api")
-    application.include_router(bolt.router, prefix="/api")
 
     return application
