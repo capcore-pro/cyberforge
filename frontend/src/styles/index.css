@@ -23,4 +23,82 @@
   .cyber-btn {
     @apply rounded-md bg-cyber-accent px-4 py-2 text-sm font-medium text-cyber-bg transition hover:bg-cyber-accentMuted;
   }
+
+  .cyber-sidebar {
+    @apply flex w-56 shrink-0 flex-col border-r border-cyber-border bg-cyber-surfaceAlt;
+  }
+
+  .cyber-nav-item {
+    @apply flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-cyber-muted transition;
+  }
+
+  .cyber-nav-item-active {
+    @apply border border-cyber-borderGlow bg-cyber-surface text-cyber-neon shadow-neonCyan;
+  }
+
+  .cyber-nav-item:hover:not(:disabled) {
+    @apply border border-cyber-border bg-cyber-surface text-cyber-text;
+  }
+
+  .cyber-glitch-title {
+    @apply relative inline-block font-bold tracking-widest text-transparent;
+    text-shadow:
+      0 0 10px rgba(34, 211, 238, 0.8),
+      0 0 30px rgba(168, 85, 247, 0.5);
+    background: linear-gradient(90deg, #22d3ee, #a855f7, #06b6d4);
+    background-clip: text;
+    -webkit-background-clip: text;
+  }
+
+  .cyber-glitch-title::before,
+  .cyber-glitch-title::after {
+    content: attr(data-text);
+    @apply absolute left-0 top-0 w-full overflow-hidden;
+    background: inherit;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  .cyber-glitch-title::before {
+    left: 2px;
+    text-shadow: -2px 0 #a855f7;
+    animation: glitch 3s infinite reverse;
+    clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+  }
+
+  .cyber-glitch-title::after {
+    left: -2px;
+    text-shadow: 2px 0 #22d3ee;
+    animation: glitch 2.5s infinite;
+    clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+  }
+
+  .cyber-agent-card {
+    @apply relative overflow-hidden rounded-lg border border-cyber-border bg-cyber-surface p-4 shadow-card transition duration-300;
+  }
+
+  .cyber-agent-card:hover {
+    @apply border-cyber-violet shadow-neonViolet;
+    transform: translateY(-2px);
+  }
+
+  .cyber-agent-card::before {
+    content: "";
+    @apply pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyber-neon to-transparent opacity-60;
+  }
+
+  .cyber-status-ring {
+    @apply relative flex h-16 w-16 items-center justify-center rounded-full border-2;
+  }
+
+  .cyber-scanline {
+    @apply pointer-events-none absolute inset-0 overflow-hidden opacity-[0.07];
+  }
+
+  .cyber-scanline::after {
+    content: "";
+    @apply absolute inset-x-0 h-24 w-full bg-gradient-to-b from-transparent via-cyber-neon to-transparent;
+    animation: scan 4s linear infinite;
+  }
 }
