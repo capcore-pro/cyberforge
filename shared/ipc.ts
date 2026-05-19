@@ -5,6 +5,7 @@
 
 export const IPC_CHANNELS = {
   API_REQUEST: "api:request",
+  PREVIEW_OPEN: "preview:open",
 } as const;
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
@@ -24,4 +25,10 @@ export interface ApiResponsePayload<T = unknown> {
   status: number;
   statusText: string;
   data: T;
+}
+
+/** Ouverture d'une fenêtre de prévisualisation (processus principal Electron). */
+export interface PreviewOpenPayload {
+  html: string;
+  title?: string;
 }

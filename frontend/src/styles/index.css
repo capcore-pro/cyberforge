@@ -136,6 +136,14 @@
   .cyber-metric-tile-highlight {
     @apply border-cyber-accent/40 shadow-[0_0_16px_rgba(6,182,212,0.15)];
   }
+
+  .cyber-action-btn {
+    @apply rounded-md border border-cyber-border bg-cyber-bg/80 px-3 py-2 text-xs font-medium text-cyber-text transition hover:border-cyber-violet disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .cyber-action-btn-primary {
+    @apply border-cyber-accent/50 text-cyber-neon hover:border-cyber-neon hover:bg-cyber-accent/10;
+  }
 }
 
 @layer utilities {

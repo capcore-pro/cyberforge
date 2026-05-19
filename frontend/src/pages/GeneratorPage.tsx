@@ -1,9 +1,25 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API_PREFIX } from "@shared/constants";
 import type { CoreMindRunResponse, ProjectType } from "@shared/types";
 import { CodeHighlight } from "@/components/CodeHighlight";
+import { CodeOutputActions } from "@/components/CodeOutputActions";
+import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
+import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { apiRequest } from "@/lib/api-client";
+import {
+  copyTextToClipboard,
+  downloadProjectZip,
+  zipFilenameFromPrompt,
+} from "@/lib/generation-export";
+import {
+  listGenerationHistory,
+  removeGenerationFromHistory,
+  saveGenerationToHistory,
+  clearGenerationHistory,
+  type GenerationHistoryEntry,
+} from "@/lib/generation-history";
+import { openCodePreview } from "@/lib/preview";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
 
 type FlowPhase = "idle" | "running" | "done" | "error";
@@ -27,6 +43,10 @@ function formatCost(usd: number): string {
   return `~$${usd.toFixed(3)}`;
 }
 
+function isElectronPreviewAvailable(): boolean {
+  return typeof window.cyberforge?.preview?.open === "function";
+}
+
 /**
  * Page Générateur — flow complet CoreMindAI.
  */
@@ -35,8 +55,35 @@ export function GeneratorPage() {
   const [projectType, setProjectType] = useState<ProjectType>("site_web");
   const [phase, setPhase] = useState<FlowPhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [result, setResult] = useState<CoreMindRunResponse | null>(null);
   const [activeFile, setActiveFile] = useState(0);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [copyLabel, setCopyLabel] = useState("Copier le code");
+  const [history, setHistory] = useState<GenerationHistoryEntry[]>([]);
+  const [lastSavedId, setLastSavedId] = useState<string | null>(null);
+
+  const refreshHistory = useCallback(() => {
+    setHistory(listGenerationHistory());
+  }, []);
+
+  useEffect(() => {
+    refreshHistory();
+  }, [refreshHistory]);
+
+  const files =
+    result && result.generation.files.length > 0
+      ? result.generation.files
+      : result
+        ? [{ path: "src/App.tsx", content: result.generation.code }]
+        : [];
+
+  const activePath = files[activeFile]?.path ?? "output";
+  const displayedCode =
+    files[activeFile]?.content ?? result?.generation.code ?? "";
+
+  const isRunning = phase === "running";
+  const hasOutput = files.length > 0 && displayedCode.length > 0;
 
   async function handleGenerate(event: React.FormEvent) {
     event.preventDefault();
@@ -48,7 +95,9 @@ export function GeneratorPage() {
 
     setPhase("running");
     setError(null);
+    setActionError(null);
     setResult(null);
+    setPreviewHtml(null);
 
     const response = await apiRequest<CoreMindRunResponse>({
       method: "POST",
@@ -67,23 +116,78 @@ export function GeneratorPage() {
       return;
     }
 
+    const entry = saveGenerationToHistory(trimmed, projectType, response.data);
+    setLastSavedId(entry.id);
+    refreshHistory();
     setResult(response.data);
     setActiveFile(0);
     setPhase("done");
   }
 
-  const files =
-    result && result.generation.files.length > 0
-      ? result.generation.files
-      : result
-        ? [{ path: "src/App.tsx", content: result.generation.code }]
-        : [];
+  async function handlePreview() {
+    if (!hasOutput) return;
+    setActionError(null);
+    try {
+      await openCodePreview(files, {
+        title: "Prévisualisation CyberForge",
+        onIframe: (html) => setPreviewHtml(html),
+      });
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Impossible d'ouvrir la prévisualisation.",
+      );
+    }
+  }
 
-  const activePath = files[activeFile]?.path ?? "output";
-  const displayedCode =
-    files[activeFile]?.content ?? result?.generation.code ?? "";
+  async function handleCopy() {
+    if (!displayedCode) return;
+    setActionError(null);
+    try {
+      await copyTextToClipboard(displayedCode);
+      setCopyLabel("Copié !");
+      window.setTimeout(() => setCopyLabel("Copier le code"), 2000);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Échec de la copie dans le presse-papiers.",
+      );
+    }
+  }
 
-  const isRunning = phase === "running";
+  function handleExportZip() {
+    if (!hasOutput) return;
+    setActionError(null);
+    try {
+      const name = zipFilenameFromPrompt(prompt || "projet");
+      downloadProjectZip(files, name);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Échec de l'export ZIP.",
+      );
+    }
+  }
+
+  function handleRestoreEntry(entry: GenerationHistoryEntry) {
+    setPrompt(entry.prompt);
+    setProjectType(entry.projectType);
+    setResult(entry.result);
+    setActiveFile(0);
+    setPhase("done");
+    setError(null);
+    setActionError(null);
+    setPreviewHtml(null);
+  }
+
+  function handleRemoveHistory(id: string) {
+    removeGenerationFromHistory(id);
+    refreshHistory();
+    if (lastSavedId === id) setLastSavedId(null);
+  }
+
+  function handleClearHistory() {
+    clearGenerationHistory();
+    refreshHistory();
+    setLastSavedId(null);
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -96,8 +200,11 @@ export function GeneratorPage() {
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
           Un prompt, un type de projet : CoreMindAI analyse la complexité, choisit
-          le modèle le moins cher (DeepSeek → Gemini Flash → Haiku → Sonnet) et
-          affiche le code ici.
+          le modèle le moins cher et enregistre chaque génération dans l'historique
+          local.
+          {isElectronPreviewAvailable()
+            ? " La prévisualisation s'ouvre dans une fenêtre Electron dédiée."
+            : " La prévisualisation s'affiche dans une iframe intégrée."}
         </p>
       </header>
 
@@ -108,24 +215,24 @@ export function GeneratorPage() {
               Type de projet
             </span>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {PROJECT_TYPE_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  disabled={isRunning}
-                  onClick={() => setProjectType(option.id)}
-                  className={`cyber-type-pill ${
-                    projectType === option.id ? "cyber-type-pill-active" : ""
-                  }`}
-                >
-                  <span className="block text-sm font-semibold text-cyber-text">
-                    {option.label}
-                  </span>
-                  <span className="mt-0.5 block text-[10px] text-cyber-muted">
-                    {option.description}
-                  </span>
-                </button>
-              ))}
+            {PROJECT_TYPE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                disabled={isRunning}
+                onClick={() => setProjectType(option.id)}
+                className={`cyber-type-pill ${
+                  projectType === option.id ? "cyber-type-pill-active" : ""
+                }`}
+              >
+                <span className="block text-sm font-semibold text-cyber-text">
+                  {option.label}
+                </span>
+                <span className="mt-0.5 block text-[10px] text-cyber-muted">
+                  {option.description}
+                </span>
+              </button>
+            ))}
             </div>
           </div>
 
@@ -184,7 +291,9 @@ export function GeneratorPage() {
                 onClick={() => {
                   setResult(null);
                   setError(null);
+                  setActionError(null);
                   setPhase("idle");
+                  setPreviewHtml(null);
                 }}
               >
                 Nouveau projet
@@ -236,10 +345,25 @@ export function GeneratorPage() {
               {result.metrics.project_type_selected
                 ? ` · Sélection : ${result.metrics.project_type_selected}`
                 : ""}
+              {lastSavedId ? " · Sauvegardé dans l'historique local" : ""}
             </p>
           </section>
 
           <section className="space-y-3">
+            <CodeOutputActions
+              disabled={!hasOutput}
+              copyLabel={copyLabel}
+              onPreview={() => void handlePreview()}
+              onCopy={() => void handleCopy()}
+              onExportZip={handleExportZip}
+            />
+
+            {actionError ? (
+              <p className="rounded border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-300">
+                {actionError}
+              </p>
+            ) : null}
+
             {files.length > 1 ? (
               <div className="flex flex-wrap gap-2">
                 {files.map((file, index) => (
@@ -274,6 +398,20 @@ export function GeneratorPage() {
             CoreMindAI analyse, sélectionne le modèle optimal et génère votre code…
           </p>
         </section>
+      ) : null}
+
+      <GenerationHistoryPanel
+        entries={history}
+        onRestore={handleRestoreEntry}
+        onRemove={handleRemoveHistory}
+        onClear={handleClearHistory}
+      />
+
+      {previewHtml ? (
+        <GeneratorPreviewModal
+          html={previewHtml}
+          onClose={() => setPreviewHtml(null)}
+        />
       ) : null}
     </div>
   );

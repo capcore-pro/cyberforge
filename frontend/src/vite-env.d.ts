@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { ApiRequestPayload, ApiResponsePayload } from "@shared/ipc";
+import type {
+  ApiRequestPayload,
+  ApiResponsePayload,
+  PreviewOpenPayload,
+} from "@shared/ipc";
 
 // Variables d'environnement exposées au renderer (préfixe VITE_)
 interface ImportMetaEnv {
@@ -19,6 +23,9 @@ declare global {
       getPlatform: () => string;
       api?: {
         request: (payload: ApiRequestPayload) => Promise<ApiResponsePayload>;
+      };
+      preview?: {
+        open: (payload: PreviewOpenPayload) => Promise<void>;
       };
     };
   }
