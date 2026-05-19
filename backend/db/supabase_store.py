@@ -13,7 +13,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from agents.coremind_agent import CoreMindRunResult, ProjectType
-from config import Settings, get_settings
+from config import Settings, get_settings, plain_secret_str
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +85,24 @@ class SupabaseStore:
         return cleaned or None
 
     @property
-    def _secret_key(self) -> str | None:
-        value = self._settings.supabase_service_key
-        return value or None
+    def _secret_key(self) -> str:
+        return plain_secret_str(self._settings.supabase_secret_key)
+
+    @property
+    def _anon_key(self) -> str:
+        return plain_secret_str(self._settings.supabase_anon_key)
 
     def _headers(self, prefer: str | None = None) -> dict[str, str]:
-        key = self._secret_key or ""
+        secret = self._secret_key
+        if not secret:
+            raise SupabaseStoreError(
+                "SUPABASE_SECRET_KEY manquant ou invalide (SecretStr non résolu)."
+            )
+        # apikey = anon/publishable ; Authorization = clé secrète (service_role / sb_secret_)
+        api_key = self._anon_key or secret
         headers = {
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
+            "apikey": api_key,
+            "Authorization": f"Bearer {secret}",
             "Content-Type": "application/json",
         }
         if prefer:

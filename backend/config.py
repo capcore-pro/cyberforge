@@ -26,6 +26,15 @@ def load_env_files() -> None:
 load_env_files()
 
 
+def plain_secret_str(value: SecretStr | str | None) -> str:
+    """Extrait une chaîne utilisable depuis un SecretStr pydantic."""
+    if value is None:
+        return ""
+    if isinstance(value, SecretStr):
+        return value.get_secret_value().strip()
+    return str(value).strip()
+
+
 class Settings(BaseSettings):
     """Paramètres applicatifs lus depuis l'environnement."""
 
@@ -109,14 +118,21 @@ class Settings(BaseSettings):
     @property
     def supabase_configured(self) -> bool:
         """True si le backend peut écrire dans Supabase (URL + clé secrète)."""
-        return bool(self.supabase_url and self.supabase_url.strip() and self.supabase_service_key)
+        return bool(
+            self.supabase_url
+            and self.supabase_url.strip()
+            and plain_secret_str(self.supabase_secret_key)
+        )
 
     @property
     def supabase_service_key(self) -> str:
         """Clé service_role / secret pour PostgREST (jamais exposée au frontend)."""
-        if self.supabase_secret_key is None:
-            return ""
-        return self.supabase_secret_key.get_secret_value().strip()
+        return plain_secret_str(self.supabase_secret_key)
+
+    @property
+    def supabase_public_key(self) -> str:
+        """Clé anon / publishable pour l'en-tête apikey PostgREST."""
+        return plain_secret_str(self.supabase_anon_key)
 
     @field_validator("supabase_url", mode="before")
     @classmethod
@@ -124,6 +140,15 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return value.strip().strip('"').strip("'")
         return value
+
+    @field_validator("supabase_secret_key", "supabase_anon_key", mode="before")
+    @classmethod
+    def _coerce_supabase_secret(cls, value: object) -> object:
+        if value is None or value == "":
+            return None
+        if isinstance(value, SecretStr):
+            return value
+        return SecretStr(plain_secret_str(value))  # type: ignore[arg-type]
 
 
 @lru_cache
