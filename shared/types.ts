@@ -16,3 +16,39 @@ export interface AgentInfo {
   description: string;
   enabled: boolean;
 }
+
+/** Types de projet détectés par CoreMindAI */
+export type ProjectType =
+  | "site_web"
+  | "application_web"
+  | "application_mobile"
+  | "extension_navigateur"
+  | "api_backend"
+  | "application_desktop"
+  | "saas_dashboard"
+  | "projet_generique";
+
+/** Outils de génération recommandés */
+export type RecommendedTool = "bolt.new" | "lovable" | "v0";
+
+/** Niveau de complexité estimé */
+export type ComplexityLevel = "faible" | "moyenne" | "elevee";
+
+/** Requête POST /api/agents/coremind */
+export interface CoreMindRequest {
+  prompt: string;
+}
+
+/** Réponse structurée de CoreMindAI */
+export interface CoreMindResponse {
+  agent_id: string;
+  agent_name: string;
+  project_type: ProjectType;
+  project_type_label: string;
+  recommended_tool: RecommendedTool;
+  tool_rationale: string;
+  complexity: ComplexityLevel;
+  complexity_score: number;
+  next_steps: string[];
+  summary: string;
+}

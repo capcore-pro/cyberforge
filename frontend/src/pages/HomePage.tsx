@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { APP_NAME, DEFAULT_API_BASE_URL } from "@shared/constants";
+import { CoreMindPanel } from "@/components/CoreMindPanel";
 import { apiRequest, isElectronApiAvailable } from "@/lib/api-client";
 
 type BackendStatus = "loading" | "online" | "offline";
@@ -125,8 +126,12 @@ function AgentCard({ agent }: { agent: AgentDef }) {
         >
           {agent.tag}
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-          standby
+        <span
+          className={`text-[10px] uppercase tracking-wider ${
+            agent.id === "coremind" ? "text-green-400" : "text-cyber-muted"
+          }`}
+        >
+          {agent.id === "coremind" ? "actif" : "standby"}
         </span>
       </div>
       <h3 className="mb-1.5 text-sm font-bold text-cyber-text group-hover:text-cyber-neon">
@@ -225,8 +230,8 @@ export function HomePage() {
           <p className="text-[10px] uppercase tracking-wider text-cyber-muted">
             Agents actifs
           </p>
-          <p className="mt-1 text-2xl font-bold text-cyber-neon">0 / 8</p>
-          <p className="text-[10px] text-cyber-muted">En attente d&apos;activation</p>
+          <p className="mt-1 text-2xl font-bold text-cyber-neon">1 / 8</p>
+          <p className="text-[10px] text-cyber-muted">CoreMindAI opérationnel</p>
         </div>
       </aside>
 
@@ -312,6 +317,8 @@ export function HomePage() {
             </div>
           </section>
 
+          <CoreMindPanel />
+
           {/* Grille agents */}
           <section aria-labelledby="agents-heading">
             <div className="mb-4 flex items-end justify-between gap-4">
@@ -326,8 +333,8 @@ export function HomePage() {
                   Huit modules spécialisés — prêts pour l&apos;orchestration CoreMindAI
                 </p>
               </div>
-              <span className="hidden rounded border border-cyber-border px-3 py-1 text-[10px] uppercase tracking-wider text-cyber-muted sm:inline">
-                mode: preview
+              <span className="hidden rounded border border-cyber-violet/40 bg-cyber-violet/10 px-3 py-1 text-[10px] uppercase tracking-wider text-cyber-violet sm:inline">
+                CoreMindAI live
               </span>
             </div>
 
