@@ -6,6 +6,11 @@ import path from "node:path";
 // .env à la racine du monorepo (voir docs/ARCHITECTURE.md)
 const monorepoRoot = path.resolve(__dirname, "..");
 
+const resolveAlias = {
+  "@": path.resolve(__dirname, "src"),
+  "@shared": path.resolve(__dirname, "../shared"),
+};
+
 // Configuration Vite : React côté renderer, Electron pour le processus principal
 export default defineConfig({
   envDir: monorepoRoot,
@@ -14,17 +19,16 @@ export default defineConfig({
     electron({
       main: {
         entry: "electron/main.ts",
+        vite: { resolve: { alias: resolveAlias } },
       },
       preload: {
         input: path.join(__dirname, "electron/preload.ts"),
+        vite: { resolve: { alias: resolveAlias } },
       },
     }),
   ],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src"),
-      "@shared": path.resolve(__dirname, "../shared"),
-    },
+    alias: resolveAlias,
   },
   server: {
     port: 5173,

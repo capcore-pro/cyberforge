@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { APP_NAME } from "@shared/constants";
+import { APP_NAME, DEFAULT_API_BASE_URL } from "@shared/constants";
+import { apiRequest, isElectronApiAvailable } from "@/lib/api-client";
 
 /**
  * Page d'accueil — tableau de bord et statut de connexion au backend.
@@ -9,27 +10,30 @@ export function HomePage() {
     "loading" | "online" | "offline"
   >("loading");
 
-  // URL de l'API lue depuis les variables d'environnement Vite (jamais de clé API ici)
   const apiBaseUrl =
-    import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8001";
+    import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+  const transportLabel = isElectronApiAvailable()
+    ? "IPC → FastAPI"
+    : "HTTP direct";
 
   useEffect(() => {
-    const controller = new AbortController();
+    let cancelled = false;
 
     async function checkHealth() {
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/health`, {
-          signal: controller.signal,
-        });
+      const response = await apiRequest<{ status?: string }>({
+        method: "GET",
+        path: "/api/health",
+      });
+      if (!cancelled) {
         setBackendStatus(response.ok ? "online" : "offline");
-      } catch {
-        setBackendStatus("offline");
       }
     }
 
     void checkHealth();
-    return () => controller.abort();
-  }, [apiBaseUrl]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const statusLabel = {
     loading: "Vérification…",
@@ -58,6 +62,7 @@ export function HomePage() {
         <div>
           <p className="text-sm font-medium">État du backend</p>
           <p className={`text-xs ${statusColor}`}>{statusLabel}</p>
+          <p className="mt-1 text-xs text-cyber-muted">{transportLabel}</p>
         </div>
         <span className="text-xs text-cyber-muted">{apiBaseUrl}</span>
       </div>
