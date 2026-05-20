@@ -16,6 +16,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from config import Settings, get_settings
+from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG, get_effective_llm_key
 
 CODEGEN_SYSTEM_PROMPT = """Tu es CoreMindAI (CyberForge). Génère vite un prototype React + TypeScript + Tailwind.
 Règles strictes :
@@ -87,10 +88,7 @@ class CodeGenService:
 
         specs = self._generation_specs(complexity)
         if not specs:
-            raise CodeGenServiceError(
-                "Aucune clé LLM configurée. Ajoutez au moins une clé dans backend/.env : "
-                "DEEPSEEK_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY ou ANTHROPIC_API_KEY."
-            )
+            raise CodeGenServiceError(LLM_KEYS_UNAVAILABLE_MSG)
 
         prompt_for_llm = _trim_prompt(trimmed)
         timeout = self._http_timeout()
@@ -170,20 +168,14 @@ class CodeGenService:
             chain.append(("anthropic", s.coremind_sonnet_model))
         return chain
 
-    def _secret(self, value: Any) -> str | None:
-        if value is None:
-            return None
-        text = value.get_secret_value().strip()
-        return text or None
-
     def _deepseek_key(self) -> str | None:
-        return self._secret(self._settings.deepseek_api_key)
+        return get_effective_llm_key("DEEPSEEK_API_KEY", self._settings)
 
     def _gemini_key(self) -> str | None:
-        return self._secret(self._settings.google_generative_ai_api_key)
+        return get_effective_llm_key("GOOGLE_GENERATIVE_AI_API_KEY", self._settings)
 
     def _anthropic_key(self) -> str | None:
-        return self._secret(self._settings.anthropic_api_key)
+        return get_effective_llm_key("ANTHROPIC_API_KEY", self._settings)
 
     async def _call_deepseek(
         self, prompt: str, model: str, client: httpx.AsyncClient

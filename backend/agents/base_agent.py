@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from config import Settings, get_settings
+from security.llm_secrets import any_llm_key_configured
 
 
 class BaseAgent(ABC):
@@ -27,17 +28,10 @@ class BaseAgent(ABC):
 
     def has_llm_credentials(self) -> bool:
         """
-        Indique si au moins un fournisseur LLM est configuré via l'environnement.
+        Indique si au moins un fournisseur LLM est configuré (coffre ou .env).
         Ne expose pas la valeur des clés.
         """
-        openai = self._settings.openai_api_key
-        anthropic = self._settings.anthropic_api_key
-        ollama = self._settings.ollama_base_url
-        return bool(
-            (openai and openai.get_secret_value())
-            or (anthropic and anthropic.get_secret_value())
-            or ollama
-        )
+        return any_llm_key_configured(self._settings)
 
     @abstractmethod
     async def run(self, prompt: str, **kwargs: Any) -> str:

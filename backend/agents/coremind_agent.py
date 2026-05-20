@@ -13,6 +13,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agents.base_agent import BaseAgent
+from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG
 from tools.codegen_service import (
     CodeGenComplexity,
     CodeGenService,
@@ -304,10 +305,7 @@ class CoreMindAgent(BaseAgent):
         tier = CodeGenComplexity(analysis.complexity.value)
         codegen = CodeGenService(self._settings)
         if not codegen.is_configured():
-            raise CodeGenServiceError(
-                "Aucune clé LLM dans backend/.env : DEEPSEEK_API_KEY, "
-                "GOOGLE_GENERATIVE_AI_API_KEY ou ANTHROPIC_API_KEY."
-            )
+            raise CodeGenServiceError(LLM_KEYS_UNAVAILABLE_MSG)
 
         type_label = PROJECT_TYPE_LABELS.get(
             project_type_hint or analysis.project_type,

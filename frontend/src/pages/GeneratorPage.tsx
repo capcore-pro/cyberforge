@@ -115,7 +115,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       setError(
         apiErrorMessage(
           response,
-          "Backend injoignable ou clés LLM manquantes dans backend/.env",
+          "Backend injoignable ou clés LLM manquantes — configurez-les dans Paramètres.",
         ),
       );
       return;

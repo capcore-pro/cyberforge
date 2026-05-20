@@ -22,5 +22,5 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "agents", label: "Agents", icon: "◇", enabled: false },
   { id: "tools", label: "Outils", icon: "⬡", enabled: false },
   { id: "reports", label: "Rapports", icon: "◫", enabled: false },
-  { id: "settings", label: "Paramètres", icon: "⚙", enabled: false },
+  { id: "settings", label: "Paramètres", icon: "⚙", enabled: true },
 ];

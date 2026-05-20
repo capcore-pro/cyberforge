@@ -5,6 +5,7 @@ import type { AppPage } from "./lib/navigation";
 import { GeneratorPage } from "./pages/GeneratorPage";
 import { HomePage } from "./pages/HomePage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 /**
  * Composant racine — navigation entre les pages principales.
@@ -18,6 +19,8 @@ export default function App() {
         return <GeneratorPage onOpenProjects={() => setPage("projects")} />;
       case "projects":
         return <ProjectsPage />;
+      case "settings":
+        return <SettingsPage />;
       default:
         return (
           <HomePage

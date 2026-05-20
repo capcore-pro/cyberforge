@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.coremind_agent import CoreMindAgent, CoreMindAnalysis, CoreMindRunResult, ProjectType
+from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG
 from db.supabase_store import PersistenceResult, SupabaseStoreError, get_supabase_store
 from tools.codegen_service import CodeGenService, CodeGenServiceError, CodeGenerateResult
 
@@ -76,13 +77,7 @@ async def generate_code_with_coremind(
     """Génère du code via le routage multi-modèles CoreMindAI."""
     service = CodeGenService()
     if not service.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Aucune clé LLM dans backend/.env : DEEPSEEK_API_KEY, "
-                "GOOGLE_GENERATIVE_AI_API_KEY ou ANTHROPIC_API_KEY."
-            ),
-        )
+        raise HTTPException(status_code=503, detail=LLM_KEYS_UNAVAILABLE_MSG)
     agent = CoreMindAgent()
     try:
         return await agent.generate_code(body.prompt)
