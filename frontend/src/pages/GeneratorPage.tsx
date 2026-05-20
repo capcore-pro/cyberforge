@@ -25,6 +25,7 @@ import {
   clearGenerationHistory,
   type GenerationHistoryEntry,
 } from "@/lib/generation-history";
+import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { openCodePreview } from "@/lib/preview";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
 
@@ -87,9 +88,9 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   }, [refreshHistory]);
 
   const files =
-    result && result.generation.files.length > 0
+    result && (result.generation.files?.length ?? 0) > 0
       ? result.generation.files
-      : result
+      : result?.generation.code
         ? [{ path: "src/App.tsx", content: result.generation.code }]
         : [];
 
@@ -192,9 +193,16 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   }
 
   function handleRestoreEntry(entry: GenerationHistoryEntry) {
+    const normalized = normalizeRunResponse(entry.result);
+    if (!normalized) {
+      setActionError(
+        "Entrée d'historique invalide ou incomplète — supprimez-la et relancez une génération.",
+      );
+      return;
+    }
     setPrompt(entry.prompt);
     setProjectType(entry.projectType);
-    setResult(entry.result);
+    setResult(normalized);
     setActiveFile(0);
     setPhase("done");
     setError(null);

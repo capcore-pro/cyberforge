@@ -1,4 +1,5 @@
 import type { CoreMindRunResponse, ProjectType } from "@shared/types";
+import { normalizeRunResponse } from "@/lib/normalize-run-response";
 
 const STORAGE_KEY = "cyberforge_generation_history";
 const MAX_ENTRIES = 40;
@@ -26,14 +27,15 @@ function readAll(): GenerationHistoryEntry[] {
 function isHistoryEntry(value: unknown): value is GenerationHistoryEntry {
   if (!value || typeof value !== "object") return false;
   const entry = value as GenerationHistoryEntry;
-  return (
-    typeof entry.id === "string" &&
-    typeof entry.createdAt === "string" &&
-    typeof entry.prompt === "string" &&
-    typeof entry.projectType === "string" &&
-    entry.result !== null &&
-    typeof entry.result === "object"
-  );
+  if (
+    typeof entry.id !== "string" ||
+    typeof entry.createdAt !== "string" ||
+    typeof entry.prompt !== "string" ||
+    typeof entry.projectType !== "string"
+  ) {
+    return false;
+  }
+  return normalizeRunResponse(entry.result) !== null;
 }
 
 function writeAll(entries: GenerationHistoryEntry[]): void {
@@ -60,7 +62,13 @@ export function saveGenerationToHistory(
 }
 
 export function listGenerationHistory(): GenerationHistoryEntry[] {
-  return readAll();
+  return readAll()
+    .map((entry) => {
+      const normalized = normalizeRunResponse(entry.result);
+      if (!normalized) return null;
+      return { ...entry, result: normalized };
+    })
+    .filter((entry): entry is GenerationHistoryEntry => entry !== null);
 }
 
 export function removeGenerationFromHistory(id: string): void {
