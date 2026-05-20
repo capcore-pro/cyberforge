@@ -109,11 +109,29 @@ class Settings(BaseSettings):
         default="http://127.0.0.1:5173,http://localhost:5173",
         alias="CORS_ORIGINS",
     )
+    frontend_public_url_env: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "FRONTEND_PUBLIC_URL",
+            "VITE_DEV_SERVER_URL",
+        ),
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:
         """Liste des origines CORS autorisées."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def frontend_public_url(self) -> str:
+        """URL de base du frontend pour les liens /demo/{token}."""
+        explicit = self.frontend_public_url_env
+        if explicit and str(explicit).strip():
+            return str(explicit).strip().rstrip("/")
+        origins = self.cors_origin_list
+        if origins:
+            return origins[0].rstrip("/")
+        return "http://127.0.0.1:5173"
 
     @property
     def supabase_configured(self) -> bool:

@@ -4,9 +4,15 @@ import type { CoreMindRunResponse, ProjectType } from "@shared/types";
 import { CodeHighlight } from "@/components/CodeHighlight";
 import { CodeOutputActions } from "@/components/CodeOutputActions";
 import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
+import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { apiRequest } from "@/lib/api-client";
+import {
+  createClientDemo,
+  type CreateDemoResponse,
+  type DemoDuration,
+} from "@/lib/demos-api";
 import {
   copyTextToClipboard,
   downloadProjectZip,
@@ -67,6 +73,10 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const [history, setHistory] = useState<GenerationHistoryEntry[]>([]);
   const [lastSavedId, setLastSavedId] = useState<string | null>(null);
   const [cloudSaved, setCloudSaved] = useState(false);
+  const [demoModalOpen, setDemoModalOpen] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [demoCreated, setDemoCreated] = useState<CreateDemoResponse | null>(null);
 
   const refreshHistory = useCallback(() => {
     setHistory(listGenerationHistory());
@@ -193,6 +203,46 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     clearGenerationHistory();
     refreshHistory();
     setLastSavedId(null);
+  }
+
+  function openDemoModal() {
+    setDemoCreated(null);
+    setDemoError(null);
+    setDemoModalOpen(true);
+  }
+
+  function closeDemoModal() {
+    setDemoModalOpen(false);
+    setDemoBusy(false);
+    setDemoError(null);
+    setDemoCreated(null);
+  }
+
+  async function handleCreateDemo(duration: DemoDuration) {
+    if (!result || !hasOutput) return;
+    setDemoBusy(true);
+    setDemoError(null);
+    const response = await createClientDemo({
+      duration,
+      title: result.analysis.summary.slice(0, 120) || "Démo CyberForge",
+      files: files.map((f) => ({ path: f.path, content: f.content })),
+      stack: result.generation.stack,
+      summary: result.generation.summary,
+      project_type: result.analysis.project_type,
+      code: result.generation.code,
+      generation_id: result.persistence?.generation_id ?? null,
+    });
+    setDemoBusy(false);
+    if (!response.ok || !response.data) {
+      setDemoError(
+        apiErrorMessage(
+          response,
+          "Impossible de créer la démo (vérifiez Supabase et le backend).",
+        ),
+      );
+      return;
+    }
+    setDemoCreated(response.data);
   }
 
   return (
@@ -366,13 +416,23 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
           </section>
 
           <section className="space-y-3">
-            <CodeOutputActions
-              disabled={!hasOutput}
-              copyLabel={copyLabel}
-              onPreview={() => void handlePreview()}
-              onCopy={() => void handleCopy()}
-              onExportZip={handleExportZip}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <CodeOutputActions
+                disabled={!hasOutput}
+                copyLabel={copyLabel}
+                onPreview={() => void handlePreview()}
+                onCopy={() => void handleCopy()}
+                onExportZip={handleExportZip}
+              />
+              <button
+                type="button"
+                className="cyber-action-btn cyber-action-btn-primary"
+                disabled={!hasOutput}
+                onClick={openDemoModal}
+              >
+                Créer une démo client
+              </button>
+            </div>
 
             {actionError ? (
               <p className="rounded border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-300">
@@ -429,6 +489,15 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
           onClose={() => setPreviewHtml(null)}
         />
       ) : null}
+
+      <CreateDemoModal
+        open={demoModalOpen}
+        busy={demoBusy}
+        created={demoCreated}
+        error={demoError}
+        onClose={closeDemoModal}
+        onCreate={(duration) => void handleCreateDemo(duration)}
+      />
     </div>
   );
 }

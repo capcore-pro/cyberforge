@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { Layout } from "./components/Layout";
+import { getPublicDemoToken } from "@/lib/demo-route";
 import type { AppPage } from "./lib/navigation";
+import { ClientDemoPage } from "./pages/ClientDemoPage";
 import { GeneratorPage } from "./pages/GeneratorPage";
 import { HomePage } from "./pages/HomePage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -11,7 +13,16 @@ import { SettingsPage } from "./pages/SettingsPage";
  * Composant racine — navigation entre les pages principales.
  */
 export default function App() {
+  const demoToken = getPublicDemoToken();
   const [page, setPage] = useState<AppPage>("dashboard");
+
+  if (demoToken) {
+    return (
+      <Layout>
+        <ClientDemoPage token={demoToken} />
+      </Layout>
+    );
+  }
 
   function renderPage() {
     switch (page) {
