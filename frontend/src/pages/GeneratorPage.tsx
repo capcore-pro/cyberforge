@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_PREFIX } from "@shared/constants";
-import type { CoreMindRunResponse, ProjectType } from "@shared/types";
+import type { ComplexityLevel, CoreMindRunResponse, ProjectType } from "@shared/types";
+import { useBackendHealth } from "@/context/BackendHealthContext";
 import { CodeHighlight } from "@/components/CodeHighlight";
 import { CodeOutputActions } from "@/components/CodeOutputActions";
 import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
@@ -32,11 +33,11 @@ import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
 
 type FlowPhase = "idle" | "running" | "done" | "error";
 
-const COMPLEXITY_STYLES = {
+const COMPLEXITY_STYLES: Record<ComplexityLevel, string> = {
   faible: "text-green-400 border-green-400/40 bg-green-400/10",
   moyenne: "text-amber-400 border-amber-400/40 bg-amber-400/10",
   elevee: "text-red-400 border-red-400/40 bg-red-400/10",
-} as const;
+};
 
 const EXAMPLE_PROMPT =
   "Crée un site vitrine pour un restaurant italien : menu, réservation en ligne, galerie photos, ambiance sombre et néon discret.";
@@ -63,6 +64,7 @@ interface GeneratorPageProps {
  * Page Générateur — flow complet CoreMindAI.
  */
 export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
+  const { status: backendStatus } = useBackendHealth();
   const [prompt, setPrompt] = useState("");
   const [projectType, setProjectType] = useState<ProjectType>("site_web");
   const [phase, setPhase] = useState<FlowPhase>("idle");
@@ -88,12 +90,27 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     refreshHistory();
   }, [refreshHistory]);
 
+  useEffect(() => {
+    if (backendStatus === "offline" && phase === "running") {
+      setPhase("error");
+      setError(
+        "Connexion au backend perdue. Attendez la reconnexion (bandeau orange) puis réessayez.",
+      );
+    }
+  }, [backendStatus, phase]);
+
   const files =
     result && (result.generation.files?.length ?? 0) > 0
       ? result.generation.files
       : result?.generation.code
         ? [{ path: "src/App.tsx", content: result.generation.code }]
         : [];
+
+  useEffect(() => {
+    if (files.length > 0 && activeFile >= files.length) {
+      setActiveFile(0);
+    }
+  }, [activeFile, files.length]);
 
   const activePath = files[activeFile]?.path ?? "output";
   const displayedCode =
@@ -194,21 +211,33 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   }
 
   function handleRestoreEntry(entry: GenerationHistoryEntry) {
-    const normalized = normalizeRunResponse(entry.result);
-    if (!normalized) {
+    try {
+      const normalized = normalizeRunResponse(entry.result);
+      if (!normalized) {
+        setActionError(
+          "Entrée d'historique invalide ou incomplète — supprimez-la et relancez une génération.",
+        );
+        return;
+      }
+      const safeType = PROJECT_TYPE_OPTIONS.some((o) => o.id === entry.projectType)
+        ? entry.projectType
+        : "site_web";
+      setPrompt(entry.prompt);
+      setProjectType(safeType);
+      setActiveFile(0);
+      setResult(normalized);
+      setPhase("done");
+      setError(null);
+      setActionError(null);
+      setPreviewHtml(null);
+    } catch (err) {
+      console.error("[CyberForge] Restaurer", err);
       setActionError(
-        "Entrée d'historique invalide ou incomplète — supprimez-la et relancez une génération.",
+        err instanceof Error
+          ? err.message
+          : "Impossible de restaurer cette entrée.",
       );
-      return;
     }
-    setPrompt(entry.prompt);
-    setProjectType(entry.projectType);
-    setResult(normalized);
-    setActiveFile(0);
-    setPhase("done");
-    setError(null);
-    setActionError(null);
-    setPreviewHtml(null);
   }
 
   function handleRemoveHistory(id: string) {
@@ -405,7 +434,10 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
             <MetricTile
               label="Complexité"
               value={`${result.metrics.complexity} · ${result.metrics.complexity_score}/10`}
-              className={COMPLEXITY_STYLES[result.metrics.complexity]}
+              className={
+                COMPLEXITY_STYLES[result.metrics.complexity] ??
+                COMPLEXITY_STYLES.moyenne
+              }
             />
             <MetricTile
               label="Temps"

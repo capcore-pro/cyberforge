@@ -93,18 +93,27 @@ export function SettingsPage() {
   const refreshStatus = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const response = await fetchSecretsStatus();
-    setLoading(false);
-    if (!response.ok || !response.data) {
+    try {
+      const response = await fetchSecretsStatus();
+      if (!response.ok || !response.data) {
+        setError(
+          apiErrorMessage(
+            response,
+            "Impossible de joindre le backend pour le coffre de clés.",
+          ),
+        );
+        return;
+      }
+      setStatus(response.data);
+    } catch (err) {
       setError(
-        apiErrorMessage(
-          response,
-          "Impossible de joindre le backend pour le coffre de clés.",
-        ),
+        err instanceof Error
+          ? err.message
+          : "Erreur inattendue lors du chargement du coffre.",
       );
-      return;
+    } finally {
+      setLoading(false);
     }
-    setStatus(response.data);
   }, []);
 
   useEffect(() => {

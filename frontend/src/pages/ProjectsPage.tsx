@@ -41,21 +41,30 @@ export function ProjectsPage() {
   const loadProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const response = await apiRequest<ProjectRecord[]>({
-      method: "GET",
-      path: `${API_PREFIX}/projects`,
-    });
-    setLoading(false);
-    if (!response.ok) {
+    try {
+      const response = await apiRequest<ProjectRecord[]>({
+        method: "GET",
+        path: `${API_PREFIX}/projects`,
+      });
+      if (!response.ok) {
+        setError(
+          apiErrorMessage(
+            response,
+            "Impossible de charger les projets. Vérifiez Supabase dans backend/.env.",
+          ),
+        );
+        return;
+      }
+      setProjects(Array.isArray(response.data) ? response.data : []);
+    } catch (err) {
       setError(
-        apiErrorMessage(
-          response,
-          "Impossible de charger les projets. Vérifiez Supabase dans backend/.env.",
-        ),
+        err instanceof Error
+          ? err.message
+          : "Erreur inattendue lors du chargement des projets.",
       );
-      return;
+    } finally {
+      setLoading(false);
     }
-    setProjects(Array.isArray(response.data) ? response.data : []);
   }, []);
 
   useEffect(() => {
@@ -71,16 +80,25 @@ export function ProjectsPage() {
     setExpandedId(projectId);
     setDetail(null);
     setDetailLoading(true);
-    const response = await apiRequest<ProjectDetailResponse>({
-      method: "GET",
-      path: `${API_PREFIX}/projects/${projectId}`,
-    });
-    setDetailLoading(false);
-    if (!response.ok) {
-      setError(apiErrorMessage(response, "Détail du projet indisponible."));
-      return;
+    try {
+      const response = await apiRequest<ProjectDetailResponse>({
+        method: "GET",
+        path: `${API_PREFIX}/projects/${projectId}`,
+      });
+      if (!response.ok) {
+        setError(apiErrorMessage(response, "Détail du projet indisponible."));
+        return;
+      }
+      setDetail(response.data ?? null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Erreur inattendue lors du chargement du détail.",
+      );
+    } finally {
+      setDetailLoading(false);
     }
-    setDetail(response.data);
   }
 
   return (

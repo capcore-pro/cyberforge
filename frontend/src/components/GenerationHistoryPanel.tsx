@@ -61,8 +61,10 @@ export function GenerationHistoryPanel({
                     {entry.prompt}
                   </p>
                   <p className="mt-1 text-[10px] text-cyber-muted">
-                    {formatHistoryDate(entry.createdAt)} · {typeLabel} ·{" "}
-                    {entry.result.metrics.model}
+                    {formatHistoryDate(entry.createdAt)} · {typeLabel}
+                    {entry.result.metrics?.model
+                      ? ` · ${entry.result.metrics.model}`
+                      : ""}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">

@@ -2,10 +2,15 @@ import { useMemo } from "react";
 
 const KEYWORDS =
   /\b(const|let|var|function|return|export|default|import|from|if|else|async|await|interface|type|class|extends|new|true|false|null|undefined|void)\b/g;
-const STRINGS = /(`[^`]*`|"[^"]*"|'[^']*')/g;
+const STRINGS = /(`[^`]*`|"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')/g;
 const COMMENTS = /(\/\/.*$|\/\*[\s\S]*?\*\/)/g;
 const TAGS = /(<\/?[A-Za-z][A-Za-z0-9]*|>)/g;
 const NUMBERS = /\b(\d+\.?\d*)\b/g;
+const NEXT_TOKEN =
+  /\/\/|\/\*|`|"[^"\\]|'[^'\\]|<\/?[A-Za-z]|\b(const|let|return|export|import)\b|\d/;
+
+const MAX_HIGHLIGHT_CHARS = 120_000;
+const MAX_HIGHLIGHT_LINES = 800;
 
 type TokenKind = "plain" | "keyword" | "string" | "comment" | "tag" | "number";
 
@@ -36,14 +41,21 @@ function tokenizeLine(line: string): Token[] {
         break;
       }
     }
-    if (!matched) {
-      const next = rest.search(
-        /\/\/|\/\*|`|"('|')|<\/?[A-Za-z]|\b(const|let|return|export|import)\b|\d/,
-      );
-      const chunk = next === -1 ? rest : rest.slice(0, next);
-      if (chunk) tokens.push({ text: chunk, kind: "plain" });
-      rest = next === -1 ? "" : rest.slice(next);
+    if (matched) continue;
+
+    const next = rest.search(NEXT_TOKEN);
+    if (next === -1) {
+      if (rest) tokens.push({ text: rest, kind: "plain" });
+      break;
     }
+    if (next > 0) {
+      tokens.push({ text: rest.slice(0, next), kind: "plain" });
+      rest = rest.slice(next);
+      continue;
+    }
+    // next === 0 mais aucun motif reconnu — avancer d'un caractère (évite boucle infinie)
+    tokens.push({ text: rest[0], kind: "plain" });
+    rest = rest.slice(1);
   }
   return tokens;
 }
@@ -66,7 +78,22 @@ interface CodeHighlightProps {
  * Coloration syntaxique légère (TS/JS/JSX) — thème cyber.
  */
 export function CodeHighlight({ code, filePath }: CodeHighlightProps) {
-  const lines = useMemo(() => code.split("\n"), [code]);
+  const { lines, truncated } = useMemo(() => {
+    let text = code;
+    let truncatedNote = false;
+    if (text.length > MAX_HIGHLIGHT_CHARS) {
+      text = text.slice(0, MAX_HIGHLIGHT_CHARS);
+      truncatedNote = true;
+    }
+    const allLines = text.split("\n");
+    const limited =
+      allLines.length > MAX_HIGHLIGHT_LINES
+        ? allLines.slice(0, MAX_HIGHLIGHT_LINES)
+        : allLines;
+    if (limited.length < allLines.length) truncatedNote = true;
+    return { lines: limited, truncated: truncatedNote };
+  }, [code]);
+
   const lang =
     filePath?.endsWith(".css") ? "css" : filePath?.endsWith(".html") ? "html" : "tsx";
 
@@ -75,6 +102,7 @@ export function CodeHighlight({ code, filePath }: CodeHighlightProps) {
       <div className="flex items-center justify-between border-b border-cyber-border bg-cyber-surfaceAlt/80 px-3 py-2">
         <span className="font-mono text-[10px] text-cyber-muted">
           {filePath ?? "output"} · {lang}
+          {truncated ? " · aperçu tronqué" : ""}
         </span>
         <span className="text-[10px] uppercase tracking-wider text-cyber-violet">
           syntax highlight

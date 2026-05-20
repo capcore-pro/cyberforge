@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { AppShell } from "./components/AppShell";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
+import { BackendHealthProvider } from "@/context/BackendHealthContext";
 import { getPublicDemoToken } from "@/lib/demo-route";
 import type { AppPage } from "./lib/navigation";
 import { ClientDemoPage } from "./pages/ClientDemoPage";
@@ -43,10 +45,14 @@ export default function App() {
   }
 
   return (
-    <Layout>
-      <AppShell currentPage={page} onNavigate={setPage}>
-        {renderPage()}
-      </AppShell>
-    </Layout>
+    <ErrorBoundary>
+      <BackendHealthProvider>
+        <Layout>
+          <AppShell currentPage={page} onNavigate={setPage}>
+            {renderPage()}
+          </AppShell>
+        </Layout>
+      </BackendHealthProvider>
+    </ErrorBoundary>
   );
 }

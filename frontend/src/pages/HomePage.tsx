@@ -1,13 +1,9 @@
-import { useEffect, useState } from "react";
 import { APP_NAME, DEFAULT_API_BASE_URL } from "@shared/constants";
-import { apiRequest, isElectronApiAvailable } from "@/lib/api-client";
-
-type BackendStatus = "loading" | "online" | "offline";
-
-interface HealthInfo {
-  app?: string;
-  version?: string;
-}
+import { isElectronApiAvailable } from "@/lib/api-client";
+import {
+  useBackendHealth,
+  type BackendConnectionStatus,
+} from "@/context/BackendHealthContext";
 
 interface AgentDef {
   id: string;
@@ -76,7 +72,7 @@ const AGENTS: AgentDef[] = [
   },
 ];
 
-function StatusIndicator({ status }: { status: BackendStatus }) {
+function StatusIndicator({ status }: { status: BackendConnectionStatus }) {
   const ringClass = {
     loading: "border-cyber-muted text-cyber-muted",
     online: "border-green-400 text-green-400 shadow-[0_0_20px_rgba(74,222,128,0.4)]",
@@ -142,8 +138,7 @@ interface HomePageProps {
  * Page d'accueil — tableau de bord et statut système.
  */
 export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
-  const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
-  const [health, setHealth] = useState<HealthInfo | null>(null);
+  const { status: backendStatus, health } = useBackendHealth();
 
   const apiBaseUrl =
     import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
@@ -154,35 +149,6 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
       ? "IPC → FastAPI"
       : "HTTP direct";
   const electronReady = electronShell;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function checkHealth() {
-      const response = await apiRequest<{
-        status?: string;
-        app?: string;
-        version?: string;
-      }>({
-        method: "GET",
-        path: "/api/health",
-      });
-      if (!cancelled) {
-        setBackendStatus(response.ok ? "online" : "offline");
-        if (response.ok && response.data) {
-          setHealth({
-            app: response.data.app,
-            version: response.data.version,
-          });
-        }
-      }
-    }
-
-    void checkHealth();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const statusLabel = {
     loading: "Initialisation…",

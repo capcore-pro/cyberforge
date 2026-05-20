@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { APP_NAME } from "@shared/constants";
+import { BackendStatusBanner } from "@/components/BackendStatusBanner";
 import { NAV_ITEMS, type AppPage } from "@/lib/navigation";
 
 interface AppShellProps {
@@ -62,6 +63,7 @@ export function AppShell({
       </aside>
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        <BackendStatusBanner />
         <div
           className="pointer-events-none absolute inset-0 bg-cyber-grid bg-cyber-grid opacity-40"
           aria-hidden

@@ -17,6 +17,8 @@ export interface ApiRequestPayload {
   path: string;
   body?: unknown;
   headers?: Record<string, string>;
+  /** Délai max (ms) — évite les requêtes pendantes si le backend redémarre */
+  timeoutMs?: number;
 }
 
 /** Réponse sérialisée renvoyée au renderer. */
