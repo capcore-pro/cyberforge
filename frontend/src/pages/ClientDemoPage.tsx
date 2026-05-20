@@ -105,7 +105,7 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
         <iframe
           title={`Démo ${unlocked.title}`}
           className="min-h-0 flex-1 w-full bg-[#0a0a0f]"
-          sandbox=""
+          sandbox="allow-scripts allow-same-origin"
           srcDoc={previewHtml}
         />
       </div>

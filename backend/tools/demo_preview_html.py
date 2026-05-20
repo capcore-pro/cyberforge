@@ -487,5 +487,10 @@ def build_demo_preview_html(
             )
         )
 
-    mockup = extract_preview_mockup(sources, default_title=title)
-    return build_mockup_preview_html(mockup)
+    from tools.tsx_static_html import build_static_site_html
+
+    try:
+        return build_static_site_html(sources, title=title)
+    except Exception:
+        mockup = extract_preview_mockup(sources, default_title=title)
+        return build_mockup_preview_html(mockup)
