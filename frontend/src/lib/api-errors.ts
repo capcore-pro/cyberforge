@@ -34,7 +34,14 @@ export function formatApiErrorDetail(data: unknown): string {
   } else if (record.url) {
     lines.push(`URL : ${String(record.url)}`);
   }
-  if (record.status_code) lines.push(`HTTP ${String(record.status_code)}`);
+  if (record.upstream_status_code) {
+    lines.push(`PostgREST HTTP ${String(record.upstream_status_code)}`);
+  } else if (record.status_code) {
+    lines.push(`HTTP ${String(record.status_code)}`);
+  }
+  if (record.fastapi_route_registered) {
+    lines.push("Route FastAPI /api/projects : enregistrée");
+  }
   if (record.hint) lines.push(`Piste : ${String(record.hint)}`);
   if (record.response_body) lines.push(`Réponse Supabase :\n${String(record.response_body)}`);
   if (record.diagnostics) {

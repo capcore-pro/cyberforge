@@ -36,17 +36,21 @@ def _not_configured_detail(store: Any) -> dict[str, Any]:
 def _http_error_from_supabase(exc: SupabaseStoreError, route: str) -> HTTPException:
     detail = exc.to_http_detail()
     detail["route"] = route
+    upstream = detail.pop("status_code", None)
+    if upstream is not None:
+        detail["upstream_status_code"] = upstream
+    detail["fastapi_route_registered"] = True
     logger.error(
         "Supabase error on %s: %s | detail=%s",
         route,
         exc,
         detail,
     )
+    # 502 = erreur amont (Supabase). Ne pas renvoyer 404 HTTP : le client croit
+    # que la route FastAPI /api/projects n'existe pas.
     status = 502
-    if detail.get("status_code") == 401:
+    if upstream == 401:
         status = 401
-    elif detail.get("status_code") == 404:
-        status = 404
     return HTTPException(status_code=status, detail=detail)
 
 

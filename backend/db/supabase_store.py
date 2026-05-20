@@ -144,12 +144,19 @@ class SupabaseStore:
             raise SupabaseStoreError(
                 "SUPABASE_SECRET_KEY manquant ou invalide (SecretStr non résolu)."
             )
-        # apikey = anon/publishable ; Authorization = clé secrète (service_role / sb_secret_)
-        api_key = self._anon_key or secret
+        # sb_secret_* : apikey et Bearer doivent être la même clé (pas un JWT).
+        # service_role JWT : apikey = anon, Authorization = service_role.
+        if secret.startswith("sb_secret_"):
+            api_key = secret
+        else:
+            api_key = self._anon_key or secret
         headers = {
             "apikey": api_key,
             "Authorization": f"Bearer {secret}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Accept-Profile": "public",
+            "Content-Profile": "public",
         }
         if prefer:
             headers["Prefer"] = prefer
@@ -490,7 +497,10 @@ def _raise_transport_error(
         method=method,
         url=url,
         response_body=str(exc),
-        hint="Vérifiez SUPABASE_URL, la connexion Internet et que le projet Supabase est actif.",
+        hint=(
+            "DNS / réseau : vérifiez SUPABASE_URL (copie exacte depuis le dashboard), "
+            "la connexion Internet, et l'absence de faute de frappe dans le hostname."
+        ),
         configured=store.is_configured(),
         has_secret_key=diag.get("supabase_secret_key_set", False),
         has_anon_key=diag.get("supabase_anon_key_set", False),
@@ -514,8 +524,19 @@ def _hint_for_status(status: int, body: str) -> str:
         )
     if status == 404:
         if "relation" in lower and "does not exist" in lower:
-            return "Tables absentes : exécutez supabase/migrations/001_projects_generations.sql"
-        return "Route introuvable : vérifiez SUPABASE_URL."
+            return (
+                "PostgREST ne voit pas la table : exécutez la migration SQL, "
+                "schéma public, puis Settings → API → Reload schema dans Supabase."
+            )
+        if "requested path" in lower or "could not find" in lower:
+            return (
+                "URL Supabase incorrecte : SUPABASE_URL doit être "
+                "https://<ref>.supabase.co (sans /rest/v1)."
+            )
+        return (
+            "HTTP 404 PostgREST (pas FastAPI). La route GET /api/projects est bien "
+            "enregistrée ; vérifiez SUPABASE_URL et l'exposition des tables."
+        )
     if status == 403:
         return "Accès refusé (RLS) : le backend doit utiliser la clé service_role."
     if status >= 500:
