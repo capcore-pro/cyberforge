@@ -27,6 +27,7 @@ import {
 } from "@/lib/generation-history";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { openCodePreview } from "@/lib/preview";
+import { projectTitleFromPrompt } from "@/lib/project-title";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
 
 type FlowPhase = "idle" | "running" | "done" | "error";
@@ -241,7 +242,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     setDemoError(null);
     const response = await createClientDemo({
       duration,
-      title: result.analysis.summary.slice(0, 120) || "Démo CyberForge",
+      title: projectTitleFromPrompt(prompt),
       files: files.map((f) => ({ path: f.path, content: f.content })),
       stack: result.generation.stack,
       summary: result.generation.summary,
