@@ -131,7 +131,7 @@ class Settings(BaseSettings):
         origins = self.cors_origin_list
         if origins:
             return origins[0].rstrip("/")
-        return "http://127.0.0.1:5173"
+        return "http://localhost:5173"
 
     @property
     def supabase_configured(self) -> bool:
