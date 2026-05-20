@@ -14,6 +14,7 @@ from db.demos_store import (
     SupabaseStoreError,
     get_demos_store,
 )
+from tools.demo_preview_html import build_demo_preview_html
 
 router = APIRouter(tags=["demos"])
 
@@ -76,14 +77,24 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
     if not files:
         raise HTTPException(status_code=422, detail="Au moins un fichier est requis.")
 
+    title = (body.title or "").strip() or "Démo CyberForge"
+    try:
+        preview_html = build_demo_preview_html(
+            files,
+            title=title,
+            code=body.code,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Impossible de générer l'aperçu HTML : {exc}",
+        ) from exc
+
     payload = DemoPayload(
-        files=files,
-        stack=body.stack,
+        preview_html=preview_html,
         summary=body.summary,
         project_type=body.project_type,
-        code=body.code,
     )
-    title = (body.title or "").strip() or "Démo CyberForge"
 
     try:
         created = await store.create_demo(

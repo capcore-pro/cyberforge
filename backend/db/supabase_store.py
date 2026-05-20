@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from agents.coremind_agent import CoreMindRunResult, ProjectType
 from config import Settings, get_settings, plain_secret_str
+from tools.demo_preview_html import build_demo_preview_html
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,8 @@ class ProjectRow(BaseModel):
     updated_at: str
     generation_count: int = 0
     latest_model: str | None = None
+    latest_estimated_cost_usd: float | None = None
+    preview_html: str | None = None
 
 
 class GenerationRow(BaseModel):
@@ -91,6 +94,7 @@ class GenerationRow(BaseModel):
     analysis: dict[str, Any]
     generation_summary: str | None = None
     planned_models: list[str] = Field(default_factory=list)
+    preview_html: str | None = None
     created_at: str
 
 
@@ -211,13 +215,14 @@ class SupabaseStore:
             result: list[ProjectRow] = []
             for row in projects:
                 project_id = str(row["id"])
-                count, latest_model = await self._project_generation_stats(
-                    client, project_id
+                title = str(row["title"])
+                count, latest_model, latest_cost, preview_html = (
+                    await self._project_card_stats(client, project_id, title)
                 )
                 result.append(
                     ProjectRow(
                         id=project_id,
-                        title=str(row["title"]),
+                        title=title,
                         prompt=str(row["prompt"]),
                         project_type=str(row["project_type"]),
                         summary=row.get("summary"),
@@ -225,6 +230,8 @@ class SupabaseStore:
                         updated_at=str(row["updated_at"]),
                         generation_count=count,
                         latest_model=latest_model,
+                        latest_estimated_cost_usd=latest_cost,
+                        preview_html=preview_html,
                     )
                 )
             return result
@@ -251,12 +258,13 @@ class SupabaseStore:
                 return None
 
             row = rows[0]
-            count, latest_model = await self._project_generation_stats(
-                client, project_id
+            title = str(row["title"])
+            count, latest_model, latest_cost, preview_html = (
+                await self._project_card_stats(client, project_id, title)
             )
             project = ProjectRow(
                 id=str(row["id"]),
-                title=str(row["title"]),
+                title=title,
                 prompt=str(row["prompt"]),
                 project_type=str(row["project_type"]),
                 summary=row.get("summary"),
@@ -264,6 +272,8 @@ class SupabaseStore:
                 updated_at=str(row["updated_at"]),
                 generation_count=count,
                 latest_model=latest_model,
+                latest_estimated_cost_usd=latest_cost,
+                preview_html=preview_html,
             )
 
             gens_resp = await client.get(
@@ -354,6 +364,12 @@ class SupabaseStore:
         gen = run_result.generation
         metrics = run_result.metrics
         files = [{"path": f.path, "content": f.content} for f in gen.files]
+        project_title = _title_from_prompt(prompt)
+        preview_html = build_demo_preview_html(
+            files,
+            title=project_title,
+            code=gen.code,
+        )
 
         payload = {
             "project_id": project_id,
@@ -371,6 +387,7 @@ class SupabaseStore:
             "analysis": run_result.analysis.model_dump(),
             "generation_summary": gen.summary,
             "planned_models": run_result.planned_models,
+            "preview_html": preview_html,
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -402,25 +419,66 @@ class SupabaseStore:
                 json={"updated_at": datetime.now(UTC).isoformat()},
             )
 
-    async def _project_generation_stats(
-        self, client: httpx.AsyncClient, project_id: str
-    ) -> tuple[int, str | None]:
-        resp = await client.get(
+    async def _project_card_stats(
+        self,
+        client: httpx.AsyncClient,
+        project_id: str,
+        project_title: str,
+    ) -> tuple[int, str | None, float | None, str | None]:
+        """Compte les générations et récupère aperçu / coût du dernier run."""
+        count_headers = {**self._headers(), "Prefer": "count=exact"}
+        count_resp = await client.get(
+            f"{self._rest_url()}/generations",
+            headers=count_headers,
+            params={
+                "project_id": f"eq.{project_id}",
+                "select": "id",
+            },
+        )
+        count = 0
+        if count_resp.status_code < 400:
+            content_range = count_resp.headers.get("content-range", "")
+            if "/" in content_range:
+                try:
+                    count = int(content_range.split("/")[-1])
+                except ValueError:
+                    count = 0
+            else:
+                rows = count_resp.json()
+                count = len(rows) if isinstance(rows, list) else 0
+
+        latest_resp = await client.get(
             f"{self._rest_url()}/generations",
             headers=self._headers(),
             params={
                 "project_id": f"eq.{project_id}",
-                "select": "model,created_at",
+                "select": "model,estimated_cost_usd,preview_html,code,files",
                 "order": "created_at.desc",
+                "limit": "1",
             },
         )
-        if resp.status_code >= 400:
-            return 0, None
-        rows = resp.json()
-        if not isinstance(rows, list):
-            return 0, None
-        latest = str(rows[0]["model"]) if rows else None
-        return len(rows), latest
+        if latest_resp.status_code >= 400:
+            return count, None, None, None
+
+        rows = latest_resp.json()
+        if not isinstance(rows, list) or not rows:
+            return count, None, None, None
+
+        latest = rows[0]
+        model = str(latest.get("model") or "") or None
+        cost_raw = latest.get("estimated_cost_usd")
+        cost = float(cost_raw) if cost_raw is not None else None
+
+        stored_preview = latest.get("preview_html")
+        files = latest.get("files") if isinstance(latest.get("files"), list) else []
+        code = latest.get("code") if isinstance(latest.get("code"), str) else None
+        preview = _resolve_preview_html(
+            stored_preview if isinstance(stored_preview, str) else None,
+            files,
+            code,
+            project_title,
+        )
+        return count, model, cost, preview
 
     def _rest_url(self) -> str:
         if not self._url:
@@ -551,7 +609,38 @@ def _title_from_prompt(prompt: str, max_len: int = 80) -> str:
     return line[: max_len - 1].rstrip() + "…"
 
 
+def _resolve_preview_html(
+    stored: str | None,
+    files: list[Any],
+    code: str | None,
+    title: str,
+) -> str | None:
+    if stored and stored.strip():
+        return stored.strip()
+    normalized_files = [
+        {"path": str(f["path"]), "content": str(f["content"])}
+        for f in files
+        if isinstance(f, dict) and f.get("path") is not None
+    ]
+    if not normalized_files and not code:
+        return None
+    try:
+        return build_demo_preview_html(normalized_files, title=title, code=code)
+    except Exception:
+        logger.exception("Échec génération aperçu HTML pour projet %s", title)
+        return None
+
+
 def _generation_from_row(row: dict[str, Any]) -> GenerationRow:
+    files = row.get("files") or []
+    code = str(row.get("code") or "")
+    stored = row.get("preview_html")
+    preview = _resolve_preview_html(
+        stored if isinstance(stored, str) else None,
+        files if isinstance(files, list) else [],
+        code,
+        "Démo CyberForge",
+    )
     return GenerationRow(
         id=str(row["id"]),
         project_id=str(row["project_id"]),
@@ -569,6 +658,7 @@ def _generation_from_row(row: dict[str, Any]) -> GenerationRow:
         analysis=row.get("analysis") or {},
         generation_summary=row.get("generation_summary"),
         planned_models=row.get("planned_models") or [],
+        preview_html=preview,
         created_at=str(row["created_at"]),
     )
 

@@ -114,6 +114,8 @@ export interface ProjectRecord {
   updated_at: string;
   generation_count: number;
   latest_model: string | null;
+  latest_estimated_cost_usd: number | null;
+  preview_html: string | null;
 }
 
 /** Génération enregistrée dans Supabase */

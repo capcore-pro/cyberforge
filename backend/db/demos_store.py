@@ -14,6 +14,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from db.demo_password import generate_demo_password
+from tools.demo_preview_html import build_demo_preview_html
 from db.supabase_store import (
     SupabaseStore,
     SupabaseStoreError,
@@ -34,13 +35,11 @@ DURATION_HOURS: dict[DemoDuration, int] = {
 
 
 class DemoPayload(BaseModel):
-    """Livrable figé servi au client (lecture seule)."""
+    """Livrable figé servi au client (HTML rendu, lecture seule)."""
 
-    files: list[dict[str, str]] = Field(default_factory=list)
-    stack: list[str] = Field(default_factory=list)
+    preview_html: str = Field(..., min_length=1, max_length=500_000)
     summary: str | None = None
     project_type: str | None = None
-    code: str | None = None
 
 
 class DemoRow(BaseModel):
@@ -222,17 +221,40 @@ def _parse_iso(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoPayload:
+    """Charge le payload ; migre à la volée les anciennes démos (fichiers React bruts)."""
+    if not isinstance(raw, dict):
+        raw = {}
+
+    preview_html = raw.get("preview_html")
+    if isinstance(preview_html, str) and preview_html.strip():
+        return DemoPayload(
+            preview_html=preview_html.strip(),
+            summary=raw.get("summary"),
+            project_type=raw.get("project_type"),
+        )
+
+    files = raw.get("files") if isinstance(raw.get("files"), list) else []
+    return DemoPayload(
+        preview_html=build_demo_preview_html(
+            files,
+            title=title,
+            code=raw.get("code") if isinstance(raw.get("code"), str) else None,
+        ),
+        summary=raw.get("summary"),
+        project_type=raw.get("project_type"),
+    )
+
+
 def _demo_from_row(row: dict[str, Any]) -> DemoRow:
     raw_payload = row.get("payload") or {}
-    if not isinstance(raw_payload, dict):
-        raw_payload = {}
     return DemoRow(
         id=str(row["id"]),
         token=str(row["token"]),
         title=str(row["title"]),
         expires_at=str(row["expires_at"]),
         duration_hours=int(row["duration_hours"]),
-        payload=DemoPayload.model_validate(raw_payload),
+        payload=_payload_from_storage(raw_payload, title=str(row.get("title") or "Démo CyberForge")),
         generation_id=str(row["generation_id"]) if row.get("generation_id") else None,
         created_at=str(row["created_at"]),
     )

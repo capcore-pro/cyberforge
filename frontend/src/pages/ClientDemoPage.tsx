@@ -5,7 +5,6 @@ import {
   unlockClientDemo,
   type DemoUnlockResponse,
 } from "@/lib/demos-api";
-import { buildPreviewDocument } from "@/lib/preview-html";
 
 interface ClientDemoPageProps {
   token: string;
@@ -23,7 +22,7 @@ function formatExpiry(iso: string): string {
 }
 
 /**
- * Page publique client — /demo/{token}, mot de passe puis démo interactive.
+ * Page publique client — /demo/{token}, mot de passe puis aperçu HTML (srcdoc).
  */
 export function ClientDemoPage({ token }: ClientDemoPageProps) {
   const [loading, setLoading] = useState(true);
@@ -78,18 +77,13 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
       );
       return;
     }
-    const files =
-      response.data.payload.files.length > 0
-        ? response.data.payload.files
-        : response.data.payload.code
-          ? [{ path: "src/App.tsx", content: response.data.payload.code }]
-          : [];
-    if (files.length === 0) {
-      setError("Cette démo ne contient aucun livrable à afficher.");
+    const html = response.data.payload.preview_html?.trim();
+    if (!html) {
+      setError("Cette démo ne contient aucun aperçu à afficher.");
       return;
     }
     setUnlocked(response.data);
-    setPreviewHtml(buildPreviewDocument(files));
+    setPreviewHtml(html);
     setPassword("");
   }
 
@@ -104,14 +98,14 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
             <h1 className="text-sm font-semibold text-cyber-neon">{unlocked.title}</h1>
           </div>
           <p className="text-[10px] text-cyber-muted">
-            Expire le {formatExpiry(unlocked.expires_at)} — navigation et tests
-            autorisés, code non modifiable
+            Expire le {formatExpiry(unlocked.expires_at)} — aperçu statique,
+            code non modifiable
           </p>
         </header>
         <iframe
           title={`Démo ${unlocked.title}`}
           className="min-h-0 flex-1 w-full bg-[#0a0a0f]"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox=""
           srcDoc={previewHtml}
         />
       </div>

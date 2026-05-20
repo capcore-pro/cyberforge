@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_PREFIX } from "@shared/constants";
 import type { ProjectDetailResponse, ProjectRecord } from "@shared/types";
+import { ProjectPreviewThumbnail } from "@/components/ProjectPreviewThumbnail";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { apiRequest } from "@/lib/api-client";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
@@ -17,13 +18,17 @@ function formatDate(iso: string): string {
 }
 
 function projectTypeLabel(type: string): string {
-  return (
-    PROJECT_TYPE_OPTIONS.find((o) => o.id === type)?.label ?? type
-  );
+  return PROJECT_TYPE_OPTIONS.find((o) => o.id === type)?.label ?? type;
+}
+
+function formatCost(usd: number | null | undefined): string {
+  if (usd === null || usd === undefined) return "—";
+  if (usd < 0.01) return `< $0.01`;
+  return `~$${usd.toFixed(4)}`;
 }
 
 /**
- * Page Projets — historique Supabase des générations CoreMindAI.
+ * Page Projets — cartes avec type, date, coût et miniature visuelle.
  */
 export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -79,7 +84,7 @@ export function ProjectsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.35em] text-cyber-violet">
@@ -87,8 +92,8 @@ export function ProjectsPage() {
           </p>
           <h1 className="text-2xl font-bold text-cyber-neon md:text-3xl">Projets</h1>
           <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
-            Historique cloud des générations réussies — chaque exécution du
-            Générateur est enregistrée automatiquement.
+            Historique cloud des générations — titre, type, date, coût estimé et
+            aperçu visuel de chaque projet.
           </p>
         </div>
         <button
@@ -117,10 +122,6 @@ export function ProjectsPage() {
           <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-red-400/20 bg-cyber-bg/80 p-3 font-mono text-[11px] leading-relaxed text-red-300">
             {error}
           </pre>
-          <p className="mt-3 text-xs text-cyber-muted">
-            Consultez aussi les logs du terminal backend (uvicorn). Migration :{" "}
-            <code className="text-cyber-violet">supabase/migrations/001_projects_generations.sql</code>
-          </p>
         </section>
       ) : null}
 
@@ -133,65 +134,95 @@ export function ProjectsPage() {
       ) : null}
 
       {!loading && !error && projects.length > 0 ? (
-        <ul className="space-y-3">
+        <ul className="grid gap-4 sm:grid-cols-2">
           {projects.map((project) => {
             const isOpen = expandedId === project.id;
             return (
               <li key={project.id} className="cyber-panel overflow-hidden p-0">
-                <button
-                  type="button"
-                  onClick={() => void toggleProject(project.id)}
-                  className="flex w-full items-start justify-between gap-4 p-5 text-left transition hover:bg-cyber-violet/5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-base font-semibold text-cyber-text">
-                      {project.title}
-                    </h2>
-                    <p className="mt-1 line-clamp-2 text-xs text-cyber-muted">
-                      {project.prompt}
-                    </p>
-                    <p className="mt-2 text-[10px] text-cyber-violet">
-                      {projectTypeLabel(project.project_type)} ·{" "}
-                      {project.generation_count} génération
-                      {project.generation_count > 1 ? "s" : ""}
-                      {project.latest_model
-                        ? ` · ${project.latest_model}`
-                        : ""}
-                    </p>
+                <article className="flex flex-col">
+                  <ProjectPreviewThumbnail
+                    html={project.preview_html}
+                    title={project.title}
+                  />
+
+                  <div className="flex flex-1 flex-col p-4">
+                    <button
+                      type="button"
+                      onClick={() => void toggleProject(project.id)}
+                      className="flex flex-1 flex-col text-left"
+                    >
+                      <h2 className="line-clamp-2 text-base font-semibold text-cyber-text">
+                        {project.title}
+                      </h2>
+
+                      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+                        <div>
+                          <dt className="uppercase tracking-wider text-cyber-muted">
+                            Type
+                          </dt>
+                          <dd className="mt-0.5 font-medium text-cyber-violet">
+                            {projectTypeLabel(project.project_type)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="uppercase tracking-wider text-cyber-muted">
+                            Créé le
+                          </dt>
+                          <dd className="mt-0.5 text-cyber-text">
+                            {formatDate(project.created_at)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="uppercase tracking-wider text-cyber-muted">
+                            Coût estimé
+                          </dt>
+                          <dd className="mt-0.5 font-mono text-cyber-neon">
+                            {formatCost(project.latest_estimated_cost_usd)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="uppercase tracking-wider text-cyber-muted">
+                            Générations
+                          </dt>
+                          <dd className="mt-0.5 text-cyber-text">
+                            {project.generation_count}
+                            {project.latest_model
+                              ? ` · ${project.latest_model}`
+                              : ""}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      {project.summary ? (
+                        <p className="mt-3 line-clamp-2 text-xs text-cyber-muted">
+                          {project.summary}
+                        </p>
+                      ) : null}
+
+                      <span className="mt-3 text-[10px] text-cyber-accent">
+                        {isOpen ? "Masquer le détail ▲" : "Voir l'historique ▼"}
+                      </span>
+                    </button>
                   </div>
-                  <span className="shrink-0 text-[10px] text-cyber-muted">
-                    {formatDate(project.updated_at)}
-                    <span className="mt-1 block text-cyber-accent">
-                      {isOpen ? "▲" : "▼"}
-                    </span>
-                  </span>
-                </button>
+                </article>
 
                 {isOpen ? (
-                  <div className="border-t border-cyber-border bg-cyber-bg/40 p-5">
+                  <div className="border-t border-cyber-border bg-cyber-bg/40 p-4">
                     {detailLoading ? (
                       <p className="text-xs text-cyber-muted">Chargement…</p>
                     ) : detail && detail.project.id === project.id ? (
                       <div className="space-y-4">
-                        {project.summary || detail.project.summary ? (
-                          <p className="text-sm text-cyber-text">
-                            {detail.project.summary ?? project.summary}
-                          </p>
-                        ) : null}
                         <ul className="space-y-3">
                           {detail.generations.map((gen) => (
                             <li
                               key={gen.id}
-                              className="rounded-lg border border-cyber-border bg-cyber-surface/80 p-4"
+                              className="rounded-lg border border-cyber-border bg-cyber-surface/80 p-3"
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-cyber-muted">
-                                <span>
-                                  {formatDate(gen.created_at)} · {gen.model} ·{" "}
-                                  {gen.complexity} ({gen.complexity_score}/10)
-                                </span>
-                                <span>
-                                  {(gen.duration_ms / 1000).toFixed(2)} s · ~$
-                                  {gen.estimated_cost_usd.toFixed(4)}
+                                <span>{formatDate(gen.created_at)}</span>
+                                <span className="font-mono text-cyber-neon">
+                                  {formatCost(gen.estimated_cost_usd)} ·{" "}
+                                  {gen.model}
                                 </span>
                               </div>
                               {gen.generation_summary ? (
@@ -199,10 +230,6 @@ export function ProjectsPage() {
                                   {gen.generation_summary}
                                 </p>
                               ) : null}
-                              <pre className="mt-3 max-h-48 overflow-auto rounded border border-cyber-border bg-cyber-bg p-3 font-mono text-[10px] text-cyber-neon">
-                                {gen.code.slice(0, 1200)}
-                                {gen.code.length > 1200 ? "\n…" : ""}
-                              </pre>
                             </li>
                           ))}
                         </ul>

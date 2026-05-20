@@ -1,5 +1,9 @@
 import { API_PREFIX } from "@shared/constants";
 import { apiRequest } from "@/lib/api-client";
+import {
+  buildPublicDemoApiUrl,
+  fetchBackendJson,
+} from "@/lib/backend-url";
 
 export type DemoDuration = "24h" | "48h" | "7d";
 
@@ -36,11 +40,9 @@ export interface DemoMetaResponse {
 }
 
 export interface DemoPayload {
-  files: DemoFileInput[];
-  stack: string[];
+  preview_html: string;
   summary: string | null;
   project_type: string | null;
-  code: string | null;
 }
 
 export interface DemoUnlockResponse {
@@ -57,17 +59,17 @@ export async function createClientDemo(body: CreateDemoPayload) {
   });
 }
 
+/** Métadonnées démo — appel direct vers http://127.0.0.1:8002/api/public/demos/{token}/meta */
 export async function fetchDemoMeta(token: string) {
-  return apiRequest<DemoMetaResponse>({
-    method: "GET",
-    path: `${API_PREFIX}/public/demos/${encodeURIComponent(token)}/meta`,
-  });
+  const url = buildPublicDemoApiUrl(token, "meta");
+  return fetchBackendJson<DemoMetaResponse>(url, { method: "GET" });
 }
 
+/** Déverrouillage démo — appel direct vers http://127.0.0.1:8002/api/public/demos/{token}/unlock */
 export async function unlockClientDemo(token: string, password: string) {
-  return apiRequest<DemoUnlockResponse>({
+  const url = buildPublicDemoApiUrl(token, "unlock");
+  return fetchBackendJson<DemoUnlockResponse>(url, {
     method: "POST",
-    path: `${API_PREFIX}/public/demos/${encodeURIComponent(token)}/unlock`,
     body: { password },
   });
 }

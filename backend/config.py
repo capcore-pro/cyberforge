@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     app_debug: bool = Field(default=False, alias="APP_DEBUG")
 
     backend_host: str = Field(default="127.0.0.1", alias="BACKEND_HOST")
-    backend_port: int = Field(default=8000, alias="BACKEND_PORT")
+    backend_port: int = Field(default=8002, alias="BACKEND_PORT")
 
     database_url: str = Field(default="sqlite:///./database/cyberforge.db", alias="DATABASE_URL")
 
