@@ -13,9 +13,18 @@ export async function apiRequest<T = unknown>(
   payload: ApiRequestPayload,
 ): Promise<ApiResponsePayload<T>> {
   if (isElectronApiAvailable()) {
-    return window.cyberforge!.api!.request(payload) as Promise<
-      ApiResponsePayload<T>
-    >;
+    try {
+      return (await window.cyberforge!.api!.request(payload)) as ApiResponsePayload<T>;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erreur IPC vers le backend";
+      return {
+        ok: false,
+        status: 0,
+        statusText: message,
+        data: null as T,
+      };
+    }
   }
 
   const baseUrl =

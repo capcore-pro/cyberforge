@@ -114,30 +114,39 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     setResult(null);
     setPreviewHtml(null);
 
-    const response = await apiRequest<CoreMindRunResponse>({
-      method: "POST",
-      path: `${API_PREFIX}/agents/coremind/run`,
-      body: { prompt: trimmed, project_type: projectType },
-    });
+    try {
+      const response = await apiRequest<CoreMindRunResponse>({
+        method: "POST",
+        path: `${API_PREFIX}/agents/coremind/run`,
+        body: { prompt: trimmed, project_type: projectType },
+      });
 
-    if (!response.ok) {
+      if (!response.ok || !response.data) {
+        setPhase("error");
+        setError(
+          apiErrorMessage(
+            response,
+            "Backend injoignable ou clés LLM manquantes — configurez-les dans Paramètres.",
+          ),
+        );
+        return;
+      }
+
+      const entry = saveGenerationToHistory(trimmed, projectType, response.data);
+      setLastSavedId(entry.id);
+      setCloudSaved(Boolean(response.data.persistence?.project_id));
+      refreshHistory();
+      setResult(response.data);
+      setActiveFile(0);
+      setPhase("done");
+    } catch (err) {
       setPhase("error");
       setError(
-        apiErrorMessage(
-          response,
-          "Backend injoignable ou clés LLM manquantes — configurez-les dans Paramètres.",
-        ),
+        err instanceof Error
+          ? err.message
+          : "Erreur inattendue pendant la génération.",
       );
-      return;
     }
-
-    const entry = saveGenerationToHistory(trimmed, projectType, response.data);
-    setLastSavedId(entry.id);
-    setCloudSaved(Boolean(response.data.persistence?.project_id));
-    refreshHistory();
-    setResult(response.data);
-    setActiveFile(0);
-    setPhase("done");
   }
 
   async function handlePreview() {
