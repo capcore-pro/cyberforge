@@ -102,8 +102,8 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const isRunning = phase === "running";
   const hasOutput = files.length > 0 && displayedCode.length > 0;
 
-  async function handleGenerate(event: React.FormEvent) {
-    event.preventDefault();
+  async function handleGenerate(event?: React.SyntheticEvent) {
+    event?.preventDefault();
     const trimmed = prompt.trim();
     if (trimmed.length < 3) {
       setError("Décrivez votre projet en au moins 3 caractères.");
@@ -283,7 +283,11 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       </header>
 
       <section className="cyber-panel overflow-hidden border-cyber-borderGlow p-0">
-        <form onSubmit={(e) => void handleGenerate(e)} className="space-y-6 p-5">
+        <form
+          onSubmit={(e) => void handleGenerate(e)}
+          className="space-y-6 p-5"
+          noValidate
+        >
           <div>
             <span className="mb-2 block text-xs font-medium uppercase tracking-wider text-cyber-violet">
               Type de projet
@@ -329,9 +333,10 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
           <div className="flex flex-wrap items-center gap-3">
             <button
-              type="submit"
+              type="button"
               disabled={isRunning || prompt.trim().length < 3}
               className={`cyber-generate-btn ${isRunning ? "cyber-generate-btn-loading" : ""}`}
+              onClick={() => void handleGenerate()}
             >
               <span className="relative z-10 flex items-center gap-2">
                 {isRunning ? (

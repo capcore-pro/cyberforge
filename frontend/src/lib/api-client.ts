@@ -1,13 +1,31 @@
 import { DEFAULT_API_BASE_URL, API_PREFIX } from "@shared/constants";
 import type { ApiRequestPayload, ApiResponsePayload } from "@shared/ipc";
 
+/**
+ * En dev, le renderer Electron charge localhost:5173 : on passe par le proxy Vite
+ * (/api → :8002) au lieu de l'IPC, pour que les requêtes apparaissent comme en navigateur.
+ */
+function useViteDevProxy(): boolean {
+  return import.meta.env.DEV;
+}
+
 /** Indique si l'API IPC Electron est disponible dans le renderer. */
 export function isElectronApiAvailable(): boolean {
+  if (useViteDevProxy()) {
+    return false;
+  }
   return typeof window.cyberforge?.api?.request === "function";
 }
 
+function resolveFetchBaseUrl(): string {
+  if (useViteDevProxy()) {
+    return "";
+  }
+  return import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+}
+
 /**
- * Envoie une requête au backend via IPC (Electron) ou fetch direct (navigateur).
+ * Envoie une requête au backend via IPC (Electron packagé) ou fetch (navigateur / dev).
  */
 export async function apiRequest<T = unknown>(
   payload: ApiRequestPayload,
@@ -27,10 +45,11 @@ export async function apiRequest<T = unknown>(
     }
   }
 
-  const baseUrl =
-    import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+  const baseUrl = resolveFetchBaseUrl();
   const method = payload.method ?? "GET";
-  const url = `${baseUrl.replace(/\/$/, "")}${payload.path}`;
+  const url = baseUrl
+    ? `${baseUrl.replace(/\/$/, "")}${payload.path}`
+    : payload.path;
   const hasBody =
     payload.body !== undefined && method !== "GET" && method !== "HEAD";
 

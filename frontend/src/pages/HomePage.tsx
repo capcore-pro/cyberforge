@@ -147,10 +147,13 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
 
   const apiBaseUrl =
     import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
-  const transportLabel = isElectronApiAvailable()
-    ? "IPC → FastAPI"
-    : "HTTP direct";
-  const electronReady = isElectronApiAvailable();
+  const electronShell = typeof window.cyberforge?.getVersion === "function";
+  const transportLabel = import.meta.env.DEV
+    ? "HTTP → proxy Vite"
+    : isElectronApiAvailable()
+      ? "IPC → FastAPI"
+      : "HTTP direct";
+  const electronReady = electronShell;
 
   useEffect(() => {
     let cancelled = false;
