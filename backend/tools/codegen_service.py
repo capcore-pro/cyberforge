@@ -421,13 +421,20 @@ def _fallback_plain_code_payload(text: str) -> dict[str, Any]:
 def _to_code_result(
     data: dict[str, Any], provider: str, model: str
 ) -> CodeGenerateResult:
+    from tools.generation_sources import normalize_generation_sources
+
     files_raw = data.get("files") or []
-    files = [
-        GeneratedFile(path=str(f["path"]), content=str(f["content"]))
+    initial_files = [
+        {"path": str(f["path"]), "content": str(f["content"])}
         for f in files_raw
         if isinstance(f, dict) and f.get("path") is not None
     ]
-    code = str(data.get("code") or "")
+    initial_code = str(data.get("code") or "") or None
+    norm_files, norm_code = normalize_generation_sources(initial_files, initial_code)
+    files = [
+        GeneratedFile(path=f["path"], content=f["content"]) for f in norm_files
+    ]
+    code = norm_code or ""
     if not code and files:
         code = files[0].content
     if not code:

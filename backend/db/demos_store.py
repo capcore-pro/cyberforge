@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from db.demo_password import generate_demo_password
 from tools.demo_preview_html import build_demo_preview_html
+from tools.generation_sources import is_usable_preview_html, normalize_generation_sources
 from db.supabase_store import (
     SupabaseStore,
     SupabaseStoreError,
@@ -196,6 +197,54 @@ class DemosStore:
         stored = await self._fetch_password_hash(token)
         if not stored or not self.verify_password(password.strip(), stored):
             return None
+        return await self._refresh_preview_if_needed(row)
+
+    async def _refresh_preview_if_needed(self, row: DemoRow) -> DemoRow:
+        """Reconstruit preview_html depuis la génération liée si l'aperçu stocké est invalide."""
+        if is_usable_preview_html(row.payload.preview_html):
+            return row
+        if not row.generation_id:
+            return row
+
+        url = f"{self._rest_url()}/generations"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={
+                    "id": f"eq.{row.generation_id}",
+                    "select": "code,files",
+                },
+            )
+            _raise_for_status(resp, "get_generation_for_demo", "GET", url, self._supabase)
+            rows = resp.json()
+            if not isinstance(rows, list) or not rows:
+                return row
+            gen = rows[0]
+
+        files = gen.get("files") if isinstance(gen.get("files"), list) else []
+        code = str(gen.get("code") or "") or None
+        norm_files, norm_code = normalize_generation_sources(files, code)
+        try:
+            preview = build_demo_preview_html(
+                norm_files,
+                title=row.title,
+                code=norm_code,
+            )
+        except Exception:
+            logger.exception(
+                "Impossible de régénérer l'aperçu pour la démo %s", row.token
+            )
+            return row
+
+        if not is_usable_preview_html(preview):
+            return row
+
+        row.payload = DemoPayload(
+            preview_html=preview,
+            summary=row.payload.summary,
+            project_type=row.payload.project_type,
+        )
         return row
 
     async def _fetch_password_hash(self, token: str) -> str | None:
@@ -228,18 +277,22 @@ def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoP
 
     preview_html = raw.get("preview_html")
     if isinstance(preview_html, str) and preview_html.strip():
-        return DemoPayload(
-            preview_html=preview_html.strip(),
-            summary=raw.get("summary"),
-            project_type=raw.get("project_type"),
-        )
+        cleaned = preview_html.strip()
+        if is_usable_preview_html(cleaned):
+            return DemoPayload(
+                preview_html=cleaned,
+                summary=raw.get("summary"),
+                project_type=raw.get("project_type"),
+            )
 
     files = raw.get("files") if isinstance(raw.get("files"), list) else []
+    code = raw.get("code") if isinstance(raw.get("code"), str) else None
+    norm_files, norm_code = normalize_generation_sources(files, code)
     return DemoPayload(
         preview_html=build_demo_preview_html(
-            files,
+            norm_files,
             title=title,
-            code=raw.get("code") if isinstance(raw.get("code"), str) else None,
+            code=norm_code,
         ),
         summary=raw.get("summary"),
         project_type=raw.get("project_type"),

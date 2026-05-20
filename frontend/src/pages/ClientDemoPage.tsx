@@ -78,8 +78,15 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
       return;
     }
     const html = response.data.payload.preview_html?.trim();
-    if (!html) {
-      setError("Cette démo ne contient aucun aperçu à afficher.");
+    if (
+      !html ||
+      !html.includes("<!DOCTYPE") ||
+      html.includes('class=\\"') ||
+      /id=["']cf-demo-root["']>\s*\\n/i.test(html)
+    ) {
+      setError(
+        "Cette démo ne contient pas d'aperçu HTML valide. Recréez la démo depuis le Générateur.",
+      );
       return;
     }
     setUnlocked(response.data);

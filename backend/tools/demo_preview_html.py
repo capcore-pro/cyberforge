@@ -452,6 +452,9 @@ def build_demo_preview_html(
     code: str | None = None,
 ) -> str:
     """Produit le HTML final stocké en base pour la page /demo/{token}."""
+    from tools.generation_sources import normalize_generation_sources
+
+    files, code = normalize_generation_sources(files, code)
     normalized = [{"path": f["path"].strip(), "content": f["content"]} for f in files if f.get("path")]
 
     html_file = next((f for f in normalized if re.search(r"\.html?$", f["path"], re.I)), None)

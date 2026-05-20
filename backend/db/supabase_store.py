@@ -363,12 +363,15 @@ class SupabaseStore:
     ) -> str:
         gen = run_result.generation
         metrics = run_result.metrics
+        from tools.generation_sources import normalize_generation_sources
+
         files = [{"path": f.path, "content": f.content} for f in gen.files]
+        norm_files, norm_code = normalize_generation_sources(files, gen.code)
         project_title = _title_from_prompt(prompt)
         preview_html = build_demo_preview_html(
-            files,
+            norm_files,
             title=project_title,
-            code=gen.code,
+            code=norm_code,
         )
 
         payload = {
@@ -615,17 +618,20 @@ def _resolve_preview_html(
     code: str | None,
     title: str,
 ) -> str | None:
-    if stored and stored.strip():
+    from tools.generation_sources import is_usable_preview_html, normalize_generation_sources
+
+    if stored and stored.strip() and is_usable_preview_html(stored):
         return stored.strip()
     normalized_files = [
         {"path": str(f["path"]), "content": str(f["content"])}
         for f in files
         if isinstance(f, dict) and f.get("path") is not None
     ]
-    if not normalized_files and not code:
+    norm_files, norm_code = normalize_generation_sources(normalized_files, code)
+    if not norm_files and not norm_code:
         return None
     try:
-        return build_demo_preview_html(normalized_files, title=title, code=code)
+        return build_demo_preview_html(norm_files, title=title, code=norm_code)
     except Exception:
         logger.exception("Échec génération aperçu HTML pour projet %s", title)
         return None
