@@ -64,3 +64,27 @@ export default function App() {
     assert ".map" not in html
     assert "}}}" not in html
     assert "=>" not in html
+
+
+def test_react_event_handlers_converted_or_removed():
+    tsx = """
+export default function App() {
+  return (
+    <main className="p-8">
+      <button type="button" onClick={() => alert('x')}>Commander</button>
+      <input onChange={(e) => setName(e.target.value)} placeholder="Nom" />
+      <form onSubmit={(e) => e.preventDefault()}>
+        <button type="submit">Envoyer</button>
+      </form>
+    </main>
+  );
+}
+"""
+    html = build_demo_preview_html([{"path": "src/App.tsx", "content": tsx}], title="Form")
+    assert "Commander" in html
+    assert "onClick=" not in html
+    assert "onChange=" not in html
+    assert "onSubmit=" not in html
+    assert "onclick=" in html.lower() or 'type="submit"' in html
+    assert "class=" in html
+    assert "className=" not in html

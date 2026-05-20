@@ -362,14 +362,184 @@ def _cleanup_jsx_artifacts(text: str) -> str:
     return text.strip()
 
 
+def _consume_attr_value(text: str, start: int) -> int:
+    """Index après la valeur d'un attribut (commence après le « = »)."""
+    i = start
+    while i < len(text) and text[i].isspace():
+        i += 1
+    if i >= len(text):
+        return i
+    if text[i] == "{":
+        end = _scan_bracket_block(text, "{", "}", i)
+        return end if end is not None else i + 1
+    if text[i] in "\"'":
+        quote = text[i]
+        i += 1
+        while i < len(text):
+            if text[i] == "\\" and i + 1 < len(text):
+                i += 2
+                continue
+            if text[i] == quote:
+                return i + 1
+            i += 1
+        return i
+    while i < len(text) and text[i] not in " >\n\t\r/":
+        i += 1
+    return i
+
+
+# Handlers React → attributs HTML (démo statique, comportement générique)
+_REACT_EVENT_TO_HTML: dict[str, str] = {
+    "onClick": "onclick",
+    "onDoubleClick": "ondblclick",
+    "onChange": "onchange",
+    "onInput": "oninput",
+    "onSubmit": "onsubmit",
+    "onFocus": "onfocus",
+    "onBlur": "onblur",
+    "onKeyDown": "onkeydown",
+    "onKeyUp": "onkeyup",
+    "onMouseEnter": "onmouseenter",
+    "onMouseLeave": "onmouseleave",
+}
+
+# Attributs React sans équivalent HTML utile en démo — supprimés
+_REACT_ONLY_ATTRS = frozenset(
+    {
+        "key",
+        "ref",
+        "dangerouslySetInnerHTML",
+        "suppressHydrationWarning",
+    }
+)
+
+# camelCase → kebab-case HTML
+_CAMEL_DOM_ATTRS: dict[str, str] = {
+    "htmlFor": "for",
+    "tabIndex": "tabindex",
+    "colSpan": "colspan",
+    "rowSpan": "rowspan",
+    "autoFocus": "autofocus",
+    "autoComplete": "autocomplete",
+    "autoPlay": "autoplay",
+    "readOnly": "readonly",
+    "maxLength": "maxlength",
+    "minLength": "minlength",
+    "crossOrigin": "crossorigin",
+    "strokeWidth": "stroke-width",
+    "fillRule": "fill-rule",
+    "clipRule": "clip-rule",
+    "clipPath": "clip-path",
+    "contentEditable": "contenteditable",
+    "httpEquiv": "http-equiv",
+    "acceptCharset": "accept-charset",
+    "className": "class",
+}
+
+
+def _html_event_placeholder(react_name: str) -> str | None:
+    """Valeur inline minimale pour garder l'élément interactif en HTML statique."""
+    html_name = _REACT_EVENT_TO_HTML.get(react_name)
+    if not html_name:
+        return None
+    if html_name == "onsubmit":
+        return "return false"
+    if html_name in ("onclick", "ondblclick"):
+        return "void(0)"
+    if html_name in ("onchange", "oninput"):
+        return "void(0)"
+    return "void(0)"
+
+
+def _normalize_react_dom_attributes(html: str) -> str:
+    """
+    Supprime ou convertit les attributs React (onClick, onChange, key, ref…)
+    en attributs HTML valides pour une démo statique.
+    """
+    attr_pattern = re.compile(
+        r"\s([a-zA-Z][a-zA-Z0-9]*)\s*=",
+    )
+    out: list[str] = []
+    pos = 0
+    for match in attr_pattern.finditer(html):
+        name = match.group(1)
+        attr_start = match.start()
+        val_start = match.end()
+
+        if name in _CAMEL_DOM_ATTRS:
+            out.append(html[pos:attr_start])
+            out.append(f' {_CAMEL_DOM_ATTRS[name]}="')
+            pos = val_start
+            end = _consume_attr_value(html, pos)
+            value = html[pos:end].strip()
+            if value.startswith(("{", '"', "'")):
+                inner = _remove_jsx_expressions(value) if "{" in value else value
+                inner = inner.strip('"').strip("'").strip()
+                out.append(escape_attr(inner) if inner else "")
+            else:
+                out.append(escape_attr(value))
+            out.append('"')
+            pos = end
+            continue
+
+        if name in _REACT_ONLY_ATTRS or name.startswith("on") and name[2:3].isupper():
+            out.append(html[pos:attr_start])
+            end = _consume_attr_value(html, val_start)
+            placeholder = _html_event_placeholder(name) if name.startswith("on") else None
+            if placeholder:
+                html_attr = _REACT_EVENT_TO_HTML.get(name, name.lower())
+                out.append(f' {html_attr}="{placeholder}"')
+            pos = end
+            continue
+
+        if name in ("defaultValue", "defaultChecked"):
+            out.append(html[pos:attr_start])
+            target = "value" if name == "defaultValue" else "checked"
+            out.append(f" {target}=\"")
+            pos = val_start
+            end = _consume_attr_value(html, pos)
+            value = html[pos:end].strip()
+            if value.startswith("{"):
+                value = _remove_jsx_expressions(value).strip()
+            value = value.strip('"').strip("'")
+            out.append(escape_attr(value))
+            out.append('"')
+            pos = end
+            continue
+
+    out.append(html[pos:])
+    text = "".join(out)
+
+    text = re.sub(
+        r"\s+(disabled|checked|required|readonly|multiple|selected)\s*=\s*\{?\s*true\s*\}?",
+        r" \1",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"\s+(disabled|checked|required|readonly|multiple|selected)\s*=\s*\{?\s*false\s*\}?",
+        "",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r'\s+(disabled|checked|required|readonly|multiple|selected)\s*=\s*(?=["\s/>])',
+        r" \1",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(r"\s+on[A-Z][a-zA-Z]*\s*=\s*", " ", text)
+    text = re.sub(r"\s+on[A-Z][a-zA-Z]*(?=[\s/>])", "", text)
+    return text
+
+
 def _jsx_to_html(jsx: str) -> str:
     html = jsx
     html = re.sub(r"\{/\*[\s\S]*?\*/\}", "", html)
     html = _convert_style_objects(html)
     html = _expand_map_calls(html)
     html = _remove_jsx_expressions(html)
-    html = re.sub(r"className\s*=", "class=", html)
-    html = re.sub(r"htmlFor\s*=", "for=", html)
+    html = _normalize_react_dom_attributes(html)
     html = re.sub(r"\{`([^`]*)`\}", r"\1", html)
     html = _cleanup_jsx_artifacts(html)
     html = re.sub(r"\s+/", " /", html)
@@ -441,7 +611,8 @@ def _build_stylesheet(html: str) -> str:
         "background:#0a0a0f;color:#e2e8f0;min-height:100vh}",
         "a{color:inherit;text-decoration:none}",
         "a:hover{opacity:.9}",
-        "button{font:inherit;cursor:pointer;border:none;background:transparent}",
+        "button,input[type=button],input[type=submit]{font:inherit;cursor:pointer}",
+        "button,a{cursor:pointer}",
         "img,video{max-width:100%;height:auto}",
         "#cf-demo-root{min-height:100vh;width:100%}",
         ".cf-demo-banner{padding:.5rem 1rem;background:rgba(0,0,0,.45);",
@@ -468,18 +639,31 @@ def _build_stylesheet(html: str) -> str:
 
 
 _INTERACTION_SCRIPT = """
-document.querySelectorAll('button').forEach(function(btn) {
-  if (btn.dataset.cfBound) return;
-  btn.dataset.cfBound = '1';
-  btn.addEventListener('click', function() {
-    btn.classList.toggle('ring-2');
+function cfBindClickable(el) {
+  if (!el || el.dataset.cfBound) return;
+  el.dataset.cfBound = '1';
+  el.addEventListener('click', function() {
+    el.classList.toggle('ring-2');
   });
+}
+document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]').forEach(cfBindClickable);
+document.querySelectorAll('form').forEach(function(form) {
+  form.addEventListener('submit', function(e) { e.preventDefault(); });
 });
 document.querySelectorAll('a[href^="#"]').forEach(function(a) {
+  if (a.dataset.cfBound) return;
+  a.dataset.cfBound = '1';
   a.addEventListener('click', function(e) {
     var id = a.getAttribute('href').slice(1);
     var el = document.getElementById(id);
     if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+  });
+});
+document.querySelectorAll('input, textarea, select').forEach(function(el) {
+  if (el.dataset.cfBound) return;
+  el.dataset.cfBound = '1';
+  el.addEventListener('change', function() {
+    el.classList.add('ring-1');
   });
 });
 """
