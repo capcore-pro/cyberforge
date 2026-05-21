@@ -483,13 +483,16 @@ def build_mockup_preview_html(mockup: PreviewMockup) -> str:
 </html>"""
 
 
-def build_demo_preview_html(
+def collect_standalone_sources(
     files: list[dict[str, str]],
     *,
-    title: str = "Démo CyberForge",
     code: str | None = None,
-) -> str:
-    """Produit le HTML final stocké en base pour la page /demo/{token}."""
+) -> tuple[str | None, str | None]:
+    """
+    Prépare l'entrée pour build_standalone_demo_html.
+
+    Retourne (sources, static_html) : exactement l'un des deux est non vide.
+    """
     from tools.generation_sources import normalize_generation_sources
 
     files, code = normalize_generation_sources(files, code)
@@ -499,12 +502,12 @@ def build_demo_preview_html(
     if html_file and _is_complete_html(html_file["content"]):
         content = html_file["content"]
         if "mock-banner" not in content and "Démo client" not in content:
-            return content.replace(
+            content = content.replace(
                 "<body>",
                 '<body><p class="mock-banner" style="padding:0.5rem 1rem;background:#0a0a0f;color:#22d3ee;font-size:0.65rem;">Aperçu livrable · CyberForge</p>',
                 1,
             )
-        return content
+        return None, content
 
     sources = "\n\n".join(
         f["content"]
@@ -513,9 +516,27 @@ def build_demo_preview_html(
     )
     if not sources.strip() and code:
         sources = code
+    return sources.strip() or None, None
 
-    if not sources.strip():
-        return build_mockup_preview_html(
+
+def build_demo_preview_html(
+    files: list[dict[str, str]],
+    *,
+    title: str = "Démo CyberForge",
+    code: str | None = None,
+    password: str | None = None,
+) -> str:
+    """Produit le HTML final stocké en base pour la page /demo/{token}."""
+    from tools.standalone_demo_html import build_standalone_demo_html, wrap_with_password_gate
+
+    sources, static_html = collect_standalone_sources(files, code=code)
+    if static_html:
+        if password and password.strip():
+            return wrap_with_password_gate(static_html, password.strip(), title=title)
+        return static_html
+
+    if not sources:
+        inner = build_mockup_preview_html(
             PreviewMockup(
                 title=title,
                 subtitle="Aucun contenu à afficher.",
@@ -527,7 +548,8 @@ def build_demo_preview_html(
                 ],
             )
         )
+        if password and password.strip():
+            return wrap_with_password_gate(inner, password.strip(), title=title)
+        return inner
 
-    from tools.standalone_demo_html import build_standalone_demo_html
-
-    return build_standalone_demo_html(sources, title=title)
+    return build_standalone_demo_html(sources, title=title, password=password)

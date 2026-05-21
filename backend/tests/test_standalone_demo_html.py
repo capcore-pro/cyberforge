@@ -8,6 +8,7 @@ from tools.standalone_demo_html import (
     classify_demo_kind,
     is_fresh_task_preview_html,
     is_react_task_app,
+    wrap_with_password_gate,
 )
 
 REACT_TODO_TSX = """
@@ -105,7 +106,10 @@ def test_task_demo_is_interactive_standalone() -> None:
     assert "replaceChildren" in html
     assert "Mes tâches" in html
     assert "Ajouter une tâche" in html
-    assert "style=" in html
+    assert "<style>" in html
+    assert "app-header" in html
+    assert "task-check" in html
+    assert "btn-add" in html
     assert "onclick=" not in html.lower()
     assert "onchange=" not in html.lower()
     assert "onClick" not in html
@@ -129,6 +133,20 @@ def test_showcase_fallback_for_landing() -> None:
     assert classify_demo_kind(tsx, "Café") == "showcase"
     assert "mock-hero" in html or "mock-section" in html
     assert "onclick=" not in html.lower()
+
+
+def test_password_gate_wraps_demo_inline() -> None:
+    inner = build_task_manager_standalone_html(title="Todo", sources=REACT_TODO_TSX)
+    html = build_standalone_demo_html(REACT_TODO_TSX, title="Todo", password="soleil-bateau-rouge")
+    assert "cf-login-screen" in html
+    assert 'id="cf-demo-content"' in html
+    assert "display: none" in html or "display:none" in html
+    assert "soleil-bateau-rouge" in html
+    assert "task-input" in html
+    assert "<!DOCTYPE html>" in inner
+    wrapped = wrap_with_password_gate(inner, "secret-demo")
+    assert "cf-login-error" in wrapped
+    assert "EXPECTED" in wrapped
 
 
 def test_task_manager_direct_has_controls() -> None:

@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from config import get_settings
+from db.demo_password import generate_demo_password
 from db.demos_store import (
     DemoDuration,
     DemoPayload,
@@ -23,7 +24,8 @@ from tools.cloudflare_pages import (
     deploy_standalone_html,
     pages_project_name_for_token,
 )
-from tools.demo_preview_html import build_demo_preview_html
+from tools.demo_preview_html import collect_standalone_sources
+from tools.standalone_demo_html import build_standalone_demo_html, wrap_with_password_gate
 
 logger = logging.getLogger(__name__)
 
@@ -103,20 +105,35 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
         raise HTTPException(status_code=422, detail="Au moins un fichier est requis.")
 
     title = (body.title or "").strip() or "Démo CyberForge"
+    demo_token = DemosStore._new_token()
+    demo_password = generate_demo_password()
+    project_name = pages_project_name_for_token(demo_token)
+
     try:
-        preview_html = build_demo_preview_html(
-            files,
-            title=title,
-            code=body.code,
-        )
+        sources, static_html = collect_standalone_sources(files, code=body.code)
+        if static_html:
+            preview_html = wrap_with_password_gate(
+                static_html,
+                demo_password,
+                title=title,
+            )
+        elif sources:
+            preview_html = build_standalone_demo_html(
+                sources,
+                title=title,
+                password=demo_password,
+            )
+        else:
+            preview_html = build_standalone_demo_html(
+                "",
+                title=title,
+                password=demo_password,
+            )
     except Exception as exc:
         raise HTTPException(
             status_code=422,
             detail=f"Impossible de générer l'aperçu HTML : {exc}",
         ) from exc
-
-    demo_token = DemosStore._new_token()
-    project_name = pages_project_name_for_token(demo_token)
 
     try:
         deploy = await deploy_standalone_html(
@@ -149,6 +166,7 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
             duration=body.duration,
             generation_id=body.generation_id,
             token=demo_token,
+            password=demo_password,
         )
     except SupabaseStoreError as exc:
         raise _http_error_from_supabase(exc, "POST /api/demos") from exc

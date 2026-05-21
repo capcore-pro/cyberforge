@@ -114,6 +114,7 @@ class DemosStore:
         duration: DemoDuration,
         generation_id: str | None = None,
         token: str | None = None,
+        password: str | None = None,
     ) -> DemoCreated:
         if not self.is_configured():
             raise SupabaseStoreError(
@@ -122,7 +123,7 @@ class DemosStore:
 
         hours = DURATION_HOURS[duration]
         expires_at = datetime.now(UTC) + timedelta(hours=hours)
-        password = generate_demo_password()
+        password = (password or "").strip() or generate_demo_password()
         password_hash = self.hash_password(password)
         token = (token or "").strip() or self._new_token()
 
