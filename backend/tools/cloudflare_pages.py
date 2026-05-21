@@ -18,8 +18,17 @@ import httpx
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.cloudflare.com/client/v4"
+CYBERFORGE_DEMOS_PROJECT = "cyberforge-demos"
 # Version algorithme hash (Wrangler blake3) — visible dans les logs au reload.
 HASH_ALGO_VERSION = "wrangler-blake3-b64-ext-v1"
+
+_ROOT_STUB_HTML = (
+    "<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"UTF-8\"/>"
+    "<title>CyberForge Demos</title></head><body>"
+    "<p>Démos client CyberForge — accès via lien partagé.</p></body></html>"
+).encode("utf-8")
+ROOT_STUB_ASSET_PATH = "index.html"
+ROOT_STUB_MANIFEST_PATH = "/index.html"
 # TEMP DEBUG — print() stderr vers console uvicorn (retirer après diagnostic).
 CF_PAGES_DEBUG_PRINT = False
 
@@ -40,10 +49,43 @@ class CloudflareDeployResult:
 
 
 def pages_project_name_for_token(token: str) -> str:
-    """Nom de projet Pages valide (a-z0-9-), préfixe cf-."""
-    slug = re.sub(r"[^a-z0-9]", "-", token.lower()).strip("-")
-    slug = re.sub(r"-{2,}", "-", slug)[:40] or "demo"
-    return f"cf-{slug}"
+    """Déprécié — toutes les démos utilisent CYBERFORGE_DEMOS_PROJECT."""
+    return CYBERFORGE_DEMOS_PROJECT
+
+
+def pages_asset_path_for_token(token: str) -> str:
+    """Chemin fichier relatif pour Direct Upload (ex. d/abc/index.html)."""
+    slug = re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
+    return f"d/{slug}/index.html"
+
+
+def pages_manifest_path_for_token(token: str) -> str:
+    return _manifest_path(pages_asset_path_for_token(token))
+
+
+def public_demo_url_for_token(token: str) -> str:
+    """URL stable du projet Pages + chemin démo."""
+    base = f"https://{CYBERFORGE_DEMOS_PROJECT}.pages.dev"
+    slug = re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
+    return f"{base}/d/{slug}/"
+
+
+def _root_stub_digest() -> str:
+    return _file_digest(ROOT_STUB_ASSET_PATH, _ROOT_STUB_HTML)
+
+
+def demo_content_digest(token: str, html: str) -> tuple[str, str]:
+    """Retourne (chemin asset, hash) pour persistance Supabase."""
+    asset_path = pages_asset_path_for_token(token)
+    return asset_path, _file_digest(asset_path, html.encode("utf-8"))
+
+
+def build_pages_manifest(entries: dict[str, str]) -> dict[str, str]:
+    """Manifest complet : stub racine + entrées path → hash."""
+    manifest: dict[str, str] = {ROOT_STUB_MANIFEST_PATH: _root_stub_digest()}
+    for path, digest in entries.items():
+        manifest[_manifest_path(path)] = digest
+    return manifest
 
 
 def _file_extension(file_path: str) -> str:
@@ -517,36 +559,23 @@ async def _wait_deployment_ready(
     raise CloudflarePagesError("Délai dépassé en attendant le déploiement Cloudflare.")
 
 
-async def deploy_standalone_html(
+async def _deploy_with_manifest(
     *,
     account_id: str,
     api_token: str,
     project_name: str,
-    html: str,
+    manifest: dict[str, str],
+    upload_files: dict[str, bytes],
 ) -> CloudflareDeployResult:
-    """
-    Publie index.html sur un projet Cloudflare Pages (création projet si besoin).
-    """
-    body = html.encode("utf-8")
-    path = "index.html"
-    digest = _file_digest(path, body)
-    manifest_path = _manifest_path(path)
+    """Direct Upload : upload fichiers listés + déploiement manifest fusionné."""
     _log_deploy_step(
         "0/5 deploy_start",
         "préparation",
         algo=HASH_ALGO_VERSION,
         project=project_name,
-        digest=digest,
-        manifest_path=manifest_path,
-        html_bytes=len(body),
+        manifest_paths=len(manifest),
+        upload_count=len(upload_files),
     )
-    if CF_PAGES_DEBUG_PRINT:
-        print(
-            f"\n=== [CF-PAGES-DEBUG] 0/5 deploy_start | CF_PAGES_DEBUG_PRINT=True ===\n"
-            f"project={project_name} digest={digest} manifest_path={manifest_path} "
-            f"html_bytes={len(body)}\n",
-            flush=True,
-        )
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
         deploy_started = time.monotonic()
@@ -563,21 +592,27 @@ async def deploy_standalone_html(
                 api_token=api_token,
                 project_name=project_name,
             )
-            await _upload_asset(
-                client,
-                upload_jwt=upload_jwt,
-                path=path,
-                body=body,
-                content_type="text/html; charset=utf-8",
-                digest=digest,
-            )
-            await _upsert_hashes(client, upload_jwt=upload_jwt, digests=[digest])
+            for asset_path, body in upload_files.items():
+                digest = manifest.get(_manifest_path(asset_path))
+                if not digest:
+                    digest = _file_digest(asset_path, body)
+                await _upload_asset(
+                    client,
+                    upload_jwt=upload_jwt,
+                    path=asset_path,
+                    body=body,
+                    content_type="text/html; charset=utf-8",
+                    digest=digest,
+                )
+            unique_digests = sorted(set(manifest.values()))
+            if unique_digests:
+                await _upsert_hashes(client, upload_jwt=upload_jwt, digests=unique_digests)
             deployment_id = await _create_deployment(
                 client,
                 account_id=account_id,
                 api_token=api_token,
                 project_name=project_name,
-                manifest={manifest_path: digest},
+                manifest=manifest,
             )
             live_url = await _wait_deployment_ready(
                 client,
@@ -588,14 +623,14 @@ async def deploy_standalone_html(
             )
         except CloudflarePagesError:
             logger.exception(
-                "[Cloudflare Pages] deploy_standalone_html: échec après %.1fs | project=%s",
+                "[Cloudflare Pages] deploy: échec après %.1fs | project=%s",
                 time.monotonic() - deploy_started,
                 project_name,
             )
             raise
         except Exception:
             logger.exception(
-                "[Cloudflare Pages] deploy_standalone_html: erreur inattendue | project=%s",
+                "[Cloudflare Pages] deploy: erreur inattendue | project=%s",
                 project_name,
             )
             raise
@@ -615,4 +650,82 @@ async def deploy_standalone_html(
         project_name=project_name,
         deployment_id=deployment_id,
         url=live_url.rstrip("/"),
+    )
+
+
+async def deploy_demo_to_cyberforge_demos(
+    *,
+    account_id: str,
+    api_token: str,
+    token: str,
+    html: str,
+    other_manifest_entries: dict[str, str],
+) -> CloudflareDeployResult:
+    """
+    Publie la démo sous /d/{token}/ sur le projet fixe cyberforge-demos.
+    other_manifest_entries : chemins actifs path relatif → hash (hors cette démo).
+    """
+    asset_path = pages_asset_path_for_token(token)
+    body = html.encode("utf-8")
+    digest = _file_digest(asset_path, body)
+    entries = dict(other_manifest_entries)
+    entries[asset_path] = digest
+    manifest = build_pages_manifest(entries)
+    upload_files = {asset_path: body}
+    if ROOT_STUB_ASSET_PATH not in other_manifest_entries:
+        upload_files[ROOT_STUB_ASSET_PATH] = _ROOT_STUB_HTML
+
+    result = await _deploy_with_manifest(
+        account_id=account_id,
+        api_token=api_token,
+        project_name=CYBERFORGE_DEMOS_PROJECT,
+        manifest=manifest,
+        upload_files=upload_files,
+    )
+    return CloudflareDeployResult(
+        project_name=result.project_name,
+        deployment_id=result.deployment_id,
+        url=public_demo_url_for_token(token).rstrip("/"),
+    )
+
+
+async def remove_demo_from_cyberforge_demos(
+    *,
+    account_id: str,
+    api_token: str,
+    remaining_manifest_entries: dict[str, str],
+) -> CloudflareDeployResult:
+    """Retire une démo du manifest (lien 404) sans re-uploader son HTML."""
+    manifest = build_pages_manifest(remaining_manifest_entries)
+    return await _deploy_with_manifest(
+        account_id=account_id,
+        api_token=api_token,
+        project_name=CYBERFORGE_DEMOS_PROJECT,
+        manifest=manifest,
+        upload_files={},
+    )
+
+
+async def deploy_standalone_html(
+    *,
+    account_id: str,
+    api_token: str,
+    project_name: str,
+    html: str,
+) -> CloudflareDeployResult:
+    """Compat — délègue au projet fixe si project_name est cyberforge-demos."""
+    if project_name == CYBERFORGE_DEMOS_PROJECT:
+        raise CloudflarePagesError(
+            "Utilisez deploy_demo_to_cyberforge_demos avec un token de démo."
+        )
+    body = html.encode("utf-8")
+    path = "index.html"
+    digest = _file_digest(path, body)
+    manifest = {_manifest_path(path): digest}
+    return await _deploy_with_manifest(
+        account_id=account_id,
+        api_token=api_token,
+        project_name=project_name,
+        manifest=manifest,
+        upload_files={path: body},
     )

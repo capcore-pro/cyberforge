@@ -20,9 +20,12 @@ from db.demos_store import (
 )
 from security.cloudflare_env import cloudflare_configured, get_cloudflare_credentials
 from tools.cloudflare_pages import (
+    CYBERFORGE_DEMOS_PROJECT,
     CloudflarePagesError,
-    deploy_standalone_html,
-    pages_project_name_for_token,
+    demo_content_digest,
+    deploy_demo_to_cyberforge_demos,
+    public_demo_url_for_token,
+    remove_demo_from_cyberforge_demos,
 )
 from tools.demo_preview_html import collect_standalone_sources
 from tools.standalone_demo_html import build_standalone_demo_html, wrap_with_password_gate
@@ -107,7 +110,6 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
     title = (body.title or "").strip() or "Démo CyberForge"
     demo_token = DemosStore._new_token()
     demo_password = generate_demo_password()
-    project_name = pages_project_name_for_token(demo_token)
 
     try:
         sources, static_html = collect_standalone_sources(files, code=body.code)
@@ -136,12 +138,17 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
         ) from exc
 
     try:
-        deploy = await deploy_standalone_html(
+        other_entries = await store.list_cloudflare_manifest_entries(
+            exclude_token=demo_token,
+        )
+        deploy = await deploy_demo_to_cyberforge_demos(
             account_id=credentials.account_id,
             api_token=credentials.api_token,
-            project_name=project_name,
+            token=demo_token,
             html=preview_html,
+            other_manifest_entries=other_entries,
         )
+        cf_path, cf_hash = demo_content_digest(demo_token, preview_html)
     except CloudflarePagesError as exc:
         logger.exception("Échec déploiement Cloudflare Pages")
         raise HTTPException(
@@ -154,7 +161,10 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
 
     payload = DemoPayload(
         preview_html=preview_html,
-        cloudflare_url=deploy.url,
+        cloudflare_url=public_demo_url_for_token(demo_token).rstrip("/"),
+        cloudflare_path=cf_path,
+        cloudflare_hash=cf_hash,
+        cloudflare_project=CYBERFORGE_DEMOS_PROJECT,
         summary=body.summary,
         project_type=body.project_type,
     )
@@ -182,4 +192,64 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
         expires_at=created.expires_at,
         duration_hours=created.duration_hours,
         title=created.title,
+    )
+
+
+class DeleteDemoResponse(BaseModel):
+    id: str
+    deleted: bool
+    cloudflare_redeployed: bool
+
+
+@router.delete("/demos/{demo_id}", response_model=DeleteDemoResponse)
+async def delete_client_demo(demo_id: str) -> DeleteDemoResponse:
+    """Supprime la démo en base et retire son HTML du projet Pages cyberforge-demos."""
+    store = get_demos_store()
+    if not store.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail={"message": "Supabase non configuré."},
+        )
+
+    try:
+        row = await store.get_by_id(demo_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(exc, "DELETE /api/demos/{id}") from exc
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+
+    cf_redeployed = False
+    if row.payload.cloudflare_path and cloudflare_configured():
+        credentials = get_cloudflare_credentials()
+        if credentials is not None:
+            remaining = await store.list_cloudflare_manifest_entries(
+                exclude_token=row.token,
+            )
+            try:
+                await remove_demo_from_cyberforge_demos(
+                    account_id=credentials.account_id,
+                    api_token=credentials.api_token,
+                    remaining_manifest_entries=remaining,
+                )
+                cf_redeployed = True
+            except CloudflarePagesError as exc:
+                logger.exception("Échec retrait démo Cloudflare Pages")
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "message": str(exc),
+                        "hint": "La démo n'a peut‑être pas été retirée de Pages.",
+                    },
+                ) from exc
+
+    try:
+        await store.delete_demo(demo_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(exc, "DELETE /api/demos/{id}") from exc
+
+    return DeleteDemoResponse(
+        id=demo_id,
+        deleted=True,
+        cloudflare_redeployed=cf_redeployed,
     )

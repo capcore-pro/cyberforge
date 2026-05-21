@@ -41,6 +41,9 @@ class DemoPayload(BaseModel):
 
     preview_html: str = Field(..., min_length=1, max_length=500_000)
     cloudflare_url: str | None = Field(default=None, max_length=512)
+    cloudflare_path: str | None = Field(default=None, max_length=256)
+    cloudflare_hash: str | None = Field(default=None, max_length=64)
+    cloudflare_project: str | None = Field(default=None, max_length=64)
     summary: str | None = None
     project_type: str | None = None
 
@@ -162,6 +165,79 @@ class DemosStore:
                 duration_hours=int(row["duration_hours"]),
                 title=str(row["title"]),
             )
+
+    async def list_cloudflare_manifest_entries(
+        self,
+        *,
+        exclude_token: str | None = None,
+    ) -> dict[str, str]:
+        """Chemins actifs (non expirés) → hash pour manifest Pages fusionné."""
+        if not self.is_configured():
+            return {}
+
+        now_iso = datetime.now(UTC).isoformat()
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={
+                    "expires_at": f"gt.{now_iso}",
+                    "select": "token,payload",
+                },
+            )
+            _raise_for_status(resp, "list_demos_manifest", "GET", url, self._supabase)
+            rows = resp.json()
+
+        entries: dict[str, str] = {}
+        if not isinstance(rows, list):
+            return entries
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            token = str(row.get("token") or "")
+            if exclude_token and token == exclude_token:
+                continue
+            raw = row.get("payload")
+            if not isinstance(raw, dict):
+                continue
+            path = raw.get("cloudflare_path")
+            digest = raw.get("cloudflare_hash")
+            if isinstance(path, str) and path.strip() and isinstance(digest, str) and digest.strip():
+                entries[path.strip()] = digest.strip()
+        return entries
+
+    async def get_by_id(self, demo_id: str) -> DemoRow | None:
+        if not self.is_configured():
+            return None
+
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={"id": f"eq.{demo_id}", "select": "*"},
+            )
+            _raise_for_status(resp, "get_demo_by_id", "GET", url, self._supabase)
+            rows = resp.json()
+            if not isinstance(rows, list) or not rows:
+                return None
+            return _demo_from_row(rows[0])
+
+    async def delete_demo(self, demo_id: str) -> bool:
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.delete(
+                url,
+                headers=self._supabase._headers("return=minimal"),
+                params={"id": f"eq.{demo_id}"},
+            )
+            _raise_for_status(resp, "delete_demo", "DELETE", url, self._supabase)
+        return True
 
     async def get_by_token(self, token: str) -> DemoRow | None:
         if not self.is_configured():
@@ -289,6 +365,9 @@ def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoP
             return DemoPayload(
                 preview_html=cleaned,
                 cloudflare_url=raw.get("cloudflare_url"),
+                cloudflare_path=raw.get("cloudflare_path"),
+                cloudflare_hash=raw.get("cloudflare_hash"),
+                cloudflare_project=raw.get("cloudflare_project"),
                 summary=raw.get("summary"),
                 project_type=raw.get("project_type"),
             )
@@ -303,6 +382,9 @@ def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoP
             code=norm_code,
         ),
         cloudflare_url=raw.get("cloudflare_url"),
+        cloudflare_path=raw.get("cloudflare_path"),
+        cloudflare_hash=raw.get("cloudflare_hash"),
+        cloudflare_project=raw.get("cloudflare_project"),
         summary=raw.get("summary"),
         project_type=raw.get("project_type"),
     )

@@ -100,22 +100,23 @@ def test_task_demo_is_interactive_standalone() -> None:
     assert TASK_PREVIEW_MARKER in html
     assert is_fresh_task_preview_html(html)
     assert "function addTask" in html
-    assert "function toggleTask" in html
-    assert "function deleteTask" in html
+    assert "task-delete" in html
+    assert "addEventListener" in html
     assert "task-add-btn" in html
     assert "replaceChildren" in html
     assert "Mes tâches" in html
     assert "Ajouter une tâche" in html
     assert "<style>" in html
-    assert "app-header" in html
+    assert "saas-shell" in html
+    assert "saas-sidebar" in html
     assert "task-check" in html
     assert "btn-add" in html
     assert "onclick=" not in html.lower()
     assert "onchange=" not in html.lower()
     assert "onClick" not in html
     assert "void(0)" not in html
-    assert "className" not in html
     assert "React" not in html
+    assert "useState" not in html
 
 
 def test_showcase_fallback_for_landing() -> None:
@@ -144,9 +145,14 @@ def test_password_gate_wraps_demo_inline() -> None:
     assert "soleil-bateau-rouge" in html
     assert "task-input" in html
     assert "<!DOCTYPE html>" in inner
+    assert ".saas-shell" in inner
     wrapped = wrap_with_password_gate(inner, "secret-demo")
     assert "cf-login-error" in wrapped
     assert "EXPECTED" in wrapped
+    head_part = wrapped[: wrapped.lower().find("</head>")]
+    assert ".composer-input" in head_part
+    assert ".btn-add" in head_part
+    assert ".composer-input" in head_part
 
 
 def test_task_manager_direct_has_controls() -> None:
@@ -158,3 +164,7 @@ def test_task_manager_direct_has_controls() -> None:
     assert 'id="task-add-btn"' in html
     assert "Supprimer" in html
     assert "function addTask" in html
+    assert "saas-topbar" in html
+    assert "Alex Martin" in html
+    assert "SEED_TASKS" in html
+    assert "Finaliser la proposition client Acme Corp" in html
