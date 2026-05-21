@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   fetchDemoMeta,
@@ -36,6 +36,13 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
   const [unlocking, setUnlocking] = useState(false);
   const [unlocked, setUnlocked] = useState<DemoUnlockResponse | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const demoIframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const frame = demoIframeRef.current;
+    if (!frame || !previewHtml) return;
+    frame.srcdoc = previewHtml;
+  }, [previewHtml]);
 
   const loadMeta = useCallback(async () => {
     setLoading(true);
@@ -110,10 +117,10 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
           </p>
         </header>
         <iframe
+          ref={demoIframeRef}
           title={`Démo ${unlocked.title}`}
           className="min-h-0 flex-1 w-full bg-[#0a0a0f]"
           sandbox="allow-scripts allow-same-origin allow-forms"
-          srcDoc={previewHtml}
         />
       </div>
     );

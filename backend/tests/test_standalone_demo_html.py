@@ -45,6 +45,8 @@ def test_task_demo_is_interactive_standalone() -> None:
     )
     assert "<!DOCTYPE html>" in html
     assert "task-form" in html
+    assert "task-add-btn" in html
+    assert "replaceChildren" in html
     assert "addEventListener" in html
     assert "localStorage" in html
     assert "Ma liste de tâches" in html or "Gestion de tâches" in html
@@ -76,5 +78,6 @@ def test_showcase_fallback_for_landing() -> None:
 def test_task_manager_direct_has_controls() -> None:
     html = build_task_manager_standalone_html(title="Todo démo")
     assert 'id="task-input"' in html
+    assert 'id="task-add-btn"' in html
     assert "Supprimer" in html
     assert "filter-btn" in html

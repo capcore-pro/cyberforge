@@ -195,13 +195,14 @@ def build_task_manager_standalone_html(
       font-size:.95rem;
       word-break:break-word;
     }}
-    .empty{{
+    .empty-row{{
       text-align:center;
       padding:2rem 1rem;
       color:#64748b;
       font-size:.9rem;
       border:1px dashed rgba(148,163,184,.2);
       border-radius:.6rem;
+      list-style:none;
     }}
     .filters{{
       display:flex;
@@ -224,7 +225,7 @@ def build_task_manager_standalone_html(
     </header>
     <form id="task-form" class="composer" autocomplete="off">
       <input id="task-input" type="text" placeholder="Nouvelle tâche…" maxlength="200" />
-      <button type="submit" class="btn btn-primary">Ajouter</button>
+      <button type="button" id="task-add-btn" class="btn btn-primary">Ajouter</button>
     </form>
     <div class="filters">
       <button type="button" class="btn btn-ghost filter-btn active" data-filter="all">Toutes</button>
@@ -232,8 +233,7 @@ def build_task_manager_standalone_html(
       <button type="button" class="btn btn-ghost filter-btn" data-filter="done">Terminées</button>
     </div>
     <p class="stats" id="task-stats"></p>
-    <ul class="task-list" id="task-list" aria-live="polite"></ul>
-    <p class="empty" id="task-empty" hidden>Aucune tâche — ajoutez-en une ci-dessus.</p>
+    <ul class="task-list" id="task-list"></ul>
   </div>
   <script>
 (function () {{
@@ -243,23 +243,39 @@ def build_task_manager_standalone_html(
 
   var form = document.getElementById("task-form");
   var input = document.getElementById("task-input");
+  var addBtn = document.getElementById("task-add-btn");
   var listEl = document.getElementById("task-list");
-  var emptyEl = document.getElementById("task-empty");
   var statsEl = document.getElementById("task-stats");
 
   function uid() {{
     return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
   }}
 
+  function normalizeTasks(raw) {{
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter(function (t) {{ return t && typeof t.text === "string" && t.text.trim(); }})
+      .map(function (t) {{
+        return {{
+          id: typeof t.id === "string" ? t.id : uid(),
+          text: String(t.text).trim(),
+          done: Boolean(t.done),
+        }};
+      }});
+  }}
+
   function load() {{
     try {{
       var raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {{
-        var parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) tasks = parsed;
-      }}
+      if (raw) tasks = normalizeTasks(JSON.parse(raw));
     }} catch (e) {{}}
-    /* Liste vide au premier chargement — livrable prêt à l'emploi */
+  }}
+
+  function setFilterAll() {{
+    filter = "all";
+    document.querySelectorAll(".filter-btn").forEach(function (btn) {{
+      btn.classList.toggle("active", btn.getAttribute("data-filter") === "all");
+    }});
   }}
 
   function save() {{
@@ -279,60 +295,90 @@ def build_task_manager_standalone_html(
       done + "</strong> terminée(s) · <strong>" + total + "</strong> au total";
   }}
 
-  function render() {{
-    var items = visibleTasks();
-    listEl.innerHTML = "";
-    emptyEl.hidden = items.length > 0;
-    items.forEach(function (task) {{
-      var li = document.createElement("li");
-      li.classList.add("task-item");
-      if (task.done) li.classList.add("done");
-      li.dataset.id = task.id;
+  function buildTaskRow(task) {{
+    var li = document.createElement("li");
+    li.classList.add("task-item");
+    if (task.done) li.classList.add("done");
+    li.dataset.id = task.id;
 
-      var check = document.createElement("input");
-      check.type = "checkbox";
-      check.classList.add("task-check");
-      check.checked = task.done;
-      check.setAttribute("aria-label", "Marquer terminée");
-      check.addEventListener("change", function () {{
-        task.done = check.checked;
-        save();
-        render();
-      }});
-
-      var label = document.createElement("span");
-      label.classList.add("task-label");
-      label.textContent = task.text;
-
-      var del = document.createElement("button");
-      del.type = "button";
-      del.classList.add("btn", "btn-danger");
-      del.textContent = "Supprimer";
-      del.setAttribute("aria-label", "Supprimer la tâche");
-      del.addEventListener("click", function () {{
-        tasks = tasks.filter(function (t) {{ return t.id !== task.id; }});
-        save();
-        render();
-      }});
-
-      li.appendChild(check);
-      li.appendChild(label);
-      li.appendChild(del);
-      listEl.appendChild(li);
+    var check = document.createElement("input");
+    check.type = "checkbox";
+    check.classList.add("task-check");
+    check.checked = task.done;
+    check.setAttribute("aria-label", "Marquer terminée");
+    check.addEventListener("change", function () {{
+      task.done = check.checked;
+      save();
+      render();
     }});
-    updateStats();
+
+    var label = document.createElement("span");
+    label.classList.add("task-label");
+    label.textContent = task.text;
+
+    var del = document.createElement("button");
+    del.type = "button";
+    del.classList.add("btn", "btn-danger");
+    del.textContent = "Supprimer";
+    del.setAttribute("aria-label", "Supprimer la tâche");
+    del.addEventListener("click", function () {{
+      tasks = tasks.filter(function (t) {{ return t.id !== task.id; }});
+      save();
+      render();
+    }});
+
+    li.appendChild(check);
+    li.appendChild(label);
+    li.appendChild(del);
+    return li;
   }}
 
-  form.addEventListener("submit", function (e) {{
-    e.preventDefault();
+  function render() {{
+    if (!listEl) return;
+    var items = visibleTasks();
+    var fragment = document.createDocumentFragment();
+
+    if (!items.length) {{
+      var emptyRow = document.createElement("li");
+      emptyRow.classList.add("empty-row");
+      emptyRow.textContent = "Aucune tâche — ajoutez-en une ci-dessus.";
+      fragment.appendChild(emptyRow);
+    }} else {{
+      items.forEach(function (task) {{
+        fragment.appendChild(buildTaskRow(task));
+      }});
+    }}
+
+    listEl.replaceChildren(fragment);
+    if (statsEl) updateStats();
+  }}
+
+  function addTask() {{
     var text = (input.value || "").trim();
     if (text.length < 1) return;
     tasks.unshift({{ id: uid(), text: text, done: false }});
     input.value = "";
+    setFilterAll();
     save();
     render();
     input.focus();
-  }});
+  }}
+
+  if (form) {{
+    form.addEventListener("submit", function (e) {{
+      e.preventDefault();
+      addTask();
+    }});
+  }}
+  if (addBtn) addBtn.addEventListener("click", addTask);
+  if (input) {{
+    input.addEventListener("keydown", function (e) {{
+      if (e.key === "Enter") {{
+        e.preventDefault();
+        addTask();
+      }}
+    }});
+  }}
 
   document.querySelectorAll(".filter-btn").forEach(function (btn) {{
     btn.addEventListener("click", function () {{
