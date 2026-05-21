@@ -94,8 +94,11 @@ def _check_response(resp: httpx.Response, context: str) -> dict[str, Any]:
         ) or f"Échec Cloudflare ({context})."
         if context == "upsert_hashes":
             msg += (
-                " (upsert-hashes utilise le JWT d'upload, pas le token API ; "
-                "vérifiez surtout le format de hash Wrangler/blake3.)"
+                " (upsert-hashes : body JSON {\"hashes\": [\"...\"]} avec JWT d'upload.)"
+            )
+        if context == "create_deployment":
+            msg += (
+                " (create deployment : manifest en multipart/form-data, pas urlencoded.)"
             )
         raise CloudflarePagesError(msg, status_code=resp.status_code)
     result = payload.get("result")
@@ -203,14 +206,23 @@ async def _create_deployment(
     project_name: str,
     manifest: dict[str, str],
 ) -> str:
+    """
+    Crée le déploiement (Direct Upload).
+
+    Le manifest doit être envoyé en multipart/form-data (comme Wrangler),
+    pas en application/x-www-form-urlencoded.
+    """
     url = (
         f"{API_BASE}/accounts/{account_id}/pages/projects/"
         f"{project_name}/deployments"
     )
+    manifest_json = json.dumps(manifest)
     resp = await client.post(
         url,
         headers=_api_headers(api_token),
-        data={"manifest": json.dumps(manifest)},
+        files={
+            "manifest": (None, manifest_json, "application/json"),
+        },
     )
     result = _check_response(resp, "create_deployment")
     deployment_id = str(result.get("id") or "")
