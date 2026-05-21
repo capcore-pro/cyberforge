@@ -18,6 +18,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.cloudflare.com/client/v4"
+# Version algorithme hash (Wrangler blake3) — visible dans les logs au reload.
+HASH_ALGO_VERSION = "wrangler-blake3-b64-ext-v1"
 
 
 class CloudflarePagesError(Exception):
@@ -97,6 +99,9 @@ def _check_response(resp: httpx.Response, context: str) -> dict[str, Any]:
             )
         raise CloudflarePagesError(msg, status_code=resp.status_code)
     result = payload.get("result")
+    # upsert-hashes renvoie souvent success:true sans corps result (null / absent).
+    if context == "upsert_hashes":
+        return result if isinstance(result, dict) else {}
     if not isinstance(result, dict):
         raise CloudflarePagesError(
             f"Réponse Cloudflare incomplète ({context}).",
@@ -263,6 +268,12 @@ async def deploy_standalone_html(
     path = "index.html"
     digest = _file_digest(path, body)
     manifest_path = _manifest_path(path)
+    logger.info(
+        "Cloudflare Direct Upload: %s digest=%s manifest=%s",
+        HASH_ALGO_VERSION,
+        digest,
+        manifest_path,
+    )
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
         await _ensure_project(
