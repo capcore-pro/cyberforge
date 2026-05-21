@@ -40,6 +40,7 @@ class DemoPayload(BaseModel):
     """Livrable figé servi au client (HTML rendu, lecture seule)."""
 
     preview_html: str = Field(..., min_length=1, max_length=500_000)
+    cloudflare_url: str | None = Field(default=None, max_length=512)
     summary: str | None = None
     project_type: str | None = None
 
@@ -112,6 +113,7 @@ class DemosStore:
         payload: DemoPayload,
         duration: DemoDuration,
         generation_id: str | None = None,
+        token: str | None = None,
     ) -> DemoCreated:
         if not self.is_configured():
             raise SupabaseStoreError(
@@ -122,7 +124,7 @@ class DemosStore:
         expires_at = datetime.now(UTC) + timedelta(hours=hours)
         password = generate_demo_password()
         password_hash = self.hash_password(password)
-        token = self._new_token()
+        token = (token or "").strip() or self._new_token()
 
         body = {
             "token": token,
@@ -285,6 +287,7 @@ def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoP
         if is_usable_preview_html(cleaned):
             return DemoPayload(
                 preview_html=cleaned,
+                cloudflare_url=raw.get("cloudflare_url"),
                 summary=raw.get("summary"),
                 project_type=raw.get("project_type"),
             )
@@ -298,6 +301,7 @@ def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoP
             title=title,
             code=norm_code,
         ),
+        cloudflare_url=raw.get("cloudflare_url"),
         summary=raw.get("summary"),
         project_type=raw.get("project_type"),
     )

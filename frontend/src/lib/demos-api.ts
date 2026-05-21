@@ -27,7 +27,10 @@ export interface CreateDemoResponse {
   id: string;
   token: string;
   password: string;
+  /** URL publique Cloudflare Pages */
   url: string;
+  /** Page locale pour saisir le mot de passe */
+  unlock_url: string;
   expires_at: string;
   duration_hours: number;
   title: string;
@@ -41,6 +44,7 @@ export interface DemoMetaResponse {
 
 export interface DemoPayload {
   preview_html: string;
+  cloudflare_url?: string | null;
   summary: string | null;
   project_type: string | null;
 }

@@ -5,6 +5,7 @@ Route de santé — permet au frontend de vérifier la disponibilité du backend
 from fastapi import APIRouter
 
 from config import get_settings
+from security.cloudflare_env import cloudflare_configured
 from security.llm_secrets import any_llm_key_configured, llm_provider_flags
 from security.secret_vault import get_secret_vault
 
@@ -34,4 +35,5 @@ async def health_check() -> dict[str, str | bool | dict[str, bool]]:
             "locked": vault_status.locked,
         },
         "llm_configured": llm_provider_flags(settings),
+        "cloudflare_configured": cloudflare_configured(),
     }

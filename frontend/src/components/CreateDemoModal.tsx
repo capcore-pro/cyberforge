@@ -134,7 +134,7 @@ export function CreateDemoModal({
               </p>
               <div>
                 <p className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                  Lien
+                  Application (Cloudflare)
                 </p>
                 <p className="mt-1 break-all font-mono text-[11px] text-cyber-accent">
                   {created.url}
@@ -142,9 +142,26 @@ export function CreateDemoModal({
                 <button
                   type="button"
                   className="cyber-action-btn mt-2"
-                  onClick={() => void handleCopy("Lien copié", created.url)}
+                  onClick={() => void handleCopy("Lien application copié", created.url)}
                 >
-                  Copier le lien
+                  Copier le lien application
+                </button>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-cyber-muted">
+                  Accès mot de passe
+                </p>
+                <p className="mt-1 break-all font-mono text-[11px] text-cyber-violet">
+                  {created.unlock_url}
+                </p>
+                <button
+                  type="button"
+                  className="cyber-action-btn mt-2"
+                  onClick={() =>
+                    void handleCopy("Lien accès copié", created.unlock_url)
+                  }
+                >
+                  Copier le lien accès
                 </button>
               </div>
               <div>

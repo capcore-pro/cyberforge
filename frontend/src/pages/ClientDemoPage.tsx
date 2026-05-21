@@ -84,6 +84,12 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
       );
       return;
     }
+    const cloudflareUrl = response.data.payload.cloudflare_url?.trim();
+    if (cloudflareUrl) {
+      window.location.assign(cloudflareUrl);
+      return;
+    }
+
     const html = response.data.payload.preview_html?.trim();
     if (
       !html ||

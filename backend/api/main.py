@@ -41,6 +41,9 @@ def _log_registered_routes(application: FastAPI) -> None:
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
+    from security.cloudflare_env import load_cloudflare_from_env
+
+    load_cloudflare_from_env()
     _log_registered_routes(application)
     yield
 

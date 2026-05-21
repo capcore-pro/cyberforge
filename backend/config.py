@@ -105,6 +105,13 @@ class Settings(BaseSettings):
 
     secret_key: SecretStr = Field(default=SecretStr("change-me-in-production"), alias="SECRET_KEY")
 
+    cloudflare_account_id: SecretStr | None = Field(
+        default=None, alias="CLOUDFLARE_ACCOUNT_ID"
+    )
+    cloudflare_api_token: SecretStr | None = Field(
+        default=None, alias="CLOUDFLARE_API_TOKEN"
+    )
+
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",
         alias="CORS_ORIGINS",
@@ -132,6 +139,14 @@ class Settings(BaseSettings):
         if origins:
             return origins[0].rstrip("/")
         return "http://localhost:5173"
+
+    @property
+    def cloudflare_configured(self) -> bool:
+        """True si Account ID et token API sont définis dans backend/.env."""
+        return bool(
+            plain_secret_str(self.cloudflare_account_id)
+            and plain_secret_str(self.cloudflare_api_token)
+        )
 
     @property
     def supabase_configured(self) -> bool:
