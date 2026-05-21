@@ -66,25 +66,23 @@ export default function App() {
     assert "=>" not in html
 
 
-def test_react_event_handlers_converted_or_removed():
+def test_task_tsx_uses_standalone_not_jsx_conversion():
+    """Une app todo React source ne doit plus passer par la conversion JSX."""
     tsx = """
 export default function App() {
+  const [tasks, setTasks] = useState([]);
   return (
-    <main className="p-8">
-      <button type="button" onClick={() => alert('x')}>Commander</button>
-      <input onChange={(e) => setName(e.target.value)} placeholder="Nom" />
-      <form onSubmit={(e) => e.preventDefault()}>
-        <button type="submit">Envoyer</button>
-      </form>
-    </main>
+    <div>
+      <h1>Tâches</h1>
+      <button onClick={addTask}>Ajouter</button>
+    </div>
   );
 }
 """
-    html = build_demo_preview_html([{"path": "src/App.tsx", "content": tsx}], title="Form")
-    assert "Commander" in html
-    assert "onClick=" not in html
-    assert "onChange=" not in html
-    assert "onSubmit=" not in html
-    assert "onclick=" in html.lower() or 'type="submit"' in html
-    assert "class=" in html
-    assert "className=" not in html
+    html = build_demo_preview_html(
+        [{"path": "src/App.tsx", "content": tsx}],
+        title="Gestion de tâches",
+    )
+    assert "task-list" in html
+    assert "cf-demo-root" not in html
+    assert "void(0)" not in html

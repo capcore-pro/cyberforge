@@ -102,6 +102,37 @@ def _looks_like_code_token(text: str) -> bool:
     return False
 
 
+def _looks_like_price_or_fragment(text: str) -> bool:
+    if re.match(r"^[\d,.\s€$£+-]+$", text):
+        return True
+    if text in ("(", ")", "{", "}", "=>", "...", "key"):
+        return True
+    return len(text) < 4
+
+
+def _extract_map_literal_items(code: str) -> list[str]:
+    """Lit les objets { name, desc, price } typiques d'un .map JSX."""
+    items: list[str] = []
+    for match in re.finditer(
+        r"name\s*:\s*['\"]([^'\"]+)['\"][^}]*?"
+        r"(?:desc\s*:\s*['\"]([^'\"]+)['\"])?[^}]*?"
+        r"(?:price\s*:\s*['\"]([^'\"]+)['\"])?",
+        code,
+        re.I | re.S,
+    ):
+        name = match.group(1).strip()
+        desc = (match.group(2) or "").strip()
+        price = (match.group(3) or "").strip()
+        line = name
+        if desc:
+            line += f" — {desc}"
+        if price:
+            line += f" ({price})"
+        if name and line not in items:
+            items.append(line)
+    return items
+
+
 def _extract_headings(code: str) -> list[tuple[int, str]]:
     found: list[tuple[int, str]] = []
     for match in re.finditer(r"<h([1-3])[^>]*>([\s\S]*?)</h\1>", code, re.I):
@@ -222,6 +253,8 @@ def extract_preview_mockup(source: str, *, default_title: str = "Prototype gén�
     colors = _extract_colors(class_names)
     buttons = _extract_buttons(code, strings)
 
+    map_items = _extract_map_literal_items(code)
+
     title = default_title
     for level, text in headings:
         if level == 1:
@@ -229,7 +262,7 @@ def extract_preview_mockup(source: str, *, default_title: str = "Prototype gén�
             break
     if title == default_title:
         for s in strings:
-            if 4 < len(s) < 80:
+            if 4 < len(s) < 80 and not _looks_like_price_or_fragment(s):
                 title = s
                 break
 
@@ -243,10 +276,15 @@ def extract_preview_mockup(source: str, *, default_title: str = "Prototype gén�
     body_lines = [
         s
         for s in strings
-        if s not in (title, subtitle) and s not in section_headings and s not in buttons
+        if s not in (title, subtitle)
+        and s not in section_headings
+        and s not in buttons
+        and not _looks_like_price_or_fragment(s)
     ][:8]
 
     sections: list[PreviewSection] = []
+    if map_items:
+        sections.append(PreviewSection(heading="Contenu généré", lines=map_items[:8]))
     if section_headings:
         for heading in section_headings[:5]:
             lines = body_lines[:2]
@@ -490,10 +528,6 @@ def build_demo_preview_html(
             )
         )
 
-    from tools.tsx_static_html import build_static_site_html
+    from tools.standalone_demo_html import build_standalone_demo_html
 
-    try:
-        return build_static_site_html(sources, title=title)
-    except Exception:
-        mockup = extract_preview_mockup(sources, default_title=title)
-        return build_mockup_preview_html(mockup)
+    return build_standalone_demo_html(sources, title=title)
