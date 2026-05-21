@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import json
 import logging
 import re
@@ -43,20 +42,35 @@ def pages_project_name_for_token(token: str) -> str:
     return f"cf-{slug}"
 
 
-def _file_digest(path: str, body: bytes) -> str:
+def _file_extension(file_path: str) -> str:
+    """Extension sans point, comme extname(path).substring(1) dans Wrangler."""
+    name = file_path.replace("\\", "/").rsplit("/", 1)[-1]
+    dot = name.rfind(".")
+    return name[dot + 1 :] if dot >= 0 else ""
+
+
+def _file_digest(file_path: str, body: bytes) -> str:
     """
-    Empreinte fichier pour le manifest Pages.
-    Cloudflare utilise blake3(body + path) ; fallback SHA-256 identique côté API v4.
+    Empreinte fichier pour Direct Upload (compatible Wrangler pages/hash.ts).
+
+    blake3( base64(contenu) + extension )[:32] — pas blake3(body + chemin).
     """
     try:
         import blake3  # type: ignore[import-untyped]
+    except ImportError as exc:
+        raise CloudflarePagesError(
+            "Dépendance blake3 manquante pour le déploiement Cloudflare Pages."
+        ) from exc
 
-        hasher = blake3.blake3()
-        hasher.update(body)
-        hasher.update(path.encode("utf-8"))
-        return hasher.hexdigest()
-    except ImportError:
-        return hashlib.sha256(body + path.encode("utf-8")).hexdigest()
+    b64 = base64.b64encode(body).decode("ascii")
+    digest_input = (b64 + _file_extension(file_path)).encode("utf-8")
+    return blake3.blake3(digest_input).hexdigest()[:32]
+
+
+def _manifest_path(file_path: str) -> str:
+    """Chemin manifest avec slash initial (ex. /index.html)."""
+    normalized = file_path.replace("\\", "/").lstrip("/")
+    return f"/{normalized}"
 
 
 def _api_headers(api_token: str) -> dict[str, str]:
@@ -76,6 +90,11 @@ def _check_response(resp: httpx.Response, context: str) -> dict[str, Any]:
         msg = "; ".join(
             str(e.get("message", e)) for e in errors if isinstance(e, dict)
         ) or f"Échec Cloudflare ({context})."
+        if context == "upsert_hashes":
+            msg += (
+                " (upsert-hashes utilise le JWT d'upload, pas le token API ; "
+                "vérifiez surtout le format de hash Wrangler/blake3.)"
+            )
         raise CloudflarePagesError(msg, status_code=resp.status_code)
     result = payload.get("result")
     if not isinstance(result, dict):
@@ -243,6 +262,7 @@ async def deploy_standalone_html(
     body = html.encode("utf-8")
     path = "index.html"
     digest = _file_digest(path, body)
+    manifest_path = _manifest_path(path)
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
         await _ensure_project(
@@ -271,7 +291,7 @@ async def deploy_standalone_html(
             account_id=account_id,
             api_token=api_token,
             project_name=project_name,
-            manifest={path: digest},
+            manifest={manifest_path: digest},
         )
         live_url = await _wait_deployment_ready(
             client,
