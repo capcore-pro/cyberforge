@@ -54,7 +54,7 @@ def _extract_subtitle(sources: str, title: str) -> str:
         match = re.search(pattern, sources, re.I)
         if match:
             return match.group(1).strip()
-    return f"Démo interactive — {title}"
+    return "Organisez et suivez vos tâches au quotidien."
 
 
 def build_task_manager_standalone_html(
@@ -67,8 +67,7 @@ def build_task_manager_standalone_html(
     """
     page_title = escape_html(title.strip() or "Gestion des tâches")
     page_subtitle = escape_html(
-        (subtitle or "Ajoutez, complétez et supprimez des tâches — tout reste dans le navigateur.")
-        .strip()
+        (subtitle or "Organisez et suivez vos tâches au quotidien.").strip()
     )
     storage_slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", (title or "demo").strip())[:36] or "demo"
 
@@ -87,19 +86,11 @@ def build_task_manager_standalone_html(
       min-height:100vh;
       line-height:1.5;
     }}
-    .cf-demo-banner{{
-      padding:.5rem 1rem;
-      background:rgba(0,0,0,.45);
-      border-bottom:1px solid rgba(34,211,238,.25);
-      font-size:.65rem;
-      letter-spacing:.12em;
-      text-transform:uppercase;
-      color:#22d3ee;
-    }}
     .app{{
-      max-width:32rem;
+      max-width:36rem;
       margin:0 auto;
-      padding:1.5rem 1.25rem 2.5rem;
+      padding:2rem 1.5rem 3rem;
+      min-height:100vh;
     }}
     .app-header{{margin-bottom:1.5rem}}
     .app-header h1{{
@@ -149,12 +140,13 @@ def build_task_manager_standalone_html(
       border:1px solid rgba(148,163,184,.2);
     }}
     .btn-danger{{
-      background:rgba(248,113,113,.15);
+      background:rgba(248,113,113,.12);
       color:#fca5a5;
-      border:1px solid rgba(248,113,113,.35);
-      padding:.35rem .55rem;
-      font-size:.75rem;
+      border:1px solid rgba(248,113,113,.3);
+      padding:.4rem .7rem;
+      font-size:.8rem;
     }}
+    .btn-danger:hover{{background:rgba(248,113,113,.22)}}
     .stats{{
       display:flex;
       gap:1rem;
@@ -225,7 +217,6 @@ def build_task_manager_standalone_html(
   </style>
 </head>
 <body>
-  <p class="cf-demo-banner">Démo client · interactive · CyberForge</p>
   <div class="app" id="task-app">
     <header class="app-header">
       <h1>{page_title}</h1>
@@ -268,13 +259,7 @@ def build_task_manager_standalone_html(
         if (Array.isArray(parsed)) tasks = parsed;
       }}
     }} catch (e) {{}}
-    if (!tasks.length) {{
-      tasks = [
-        {{ id: uid(), text: "Préparer la démo client", done: false }},
-        {{ id: uid(), text: "Vérifier le déploiement", done: true }},
-        {{ id: uid(), text: "Envoyer le lien au client", done: false }}
-      ];
-    }}
+    /* Liste vide au premier chargement — livrable prêt à l'emploi */
   }}
 
   function save() {{
@@ -322,7 +307,7 @@ def build_task_manager_standalone_html(
       var del = document.createElement("button");
       del.type = "button";
       del.classList.add("btn", "btn-danger");
-      del.textContent = "Suppr.";
+      del.textContent = "Supprimer";
       del.setAttribute("aria-label", "Supprimer la tâche");
       del.addEventListener("click", function () {{
         tasks = tasks.filter(function (t) {{ return t.id !== task.id; }});

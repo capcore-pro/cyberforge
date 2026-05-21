@@ -22,7 +22,7 @@ export function GeneratorPreviewModal({
               Aperçu visuel
             </h2>
             <p className="text-[10px] text-cyber-muted">
-              Maquette HTML simplifiée (titre, sections, couleurs)
+              Aperçu interactif du livrable (formulaires et scripts activés)
             </p>
           </div>
           <button
@@ -36,7 +36,7 @@ export function GeneratorPreviewModal({
         <iframe
           title="Prévisualisation CyberForge"
           className="min-h-0 flex-1 bg-[#0a0a0f]"
-          sandbox="allow-same-origin"
+          sandbox="allow-scripts allow-same-origin allow-forms"
           srcDoc={html}
         />
       </div>

@@ -100,19 +100,19 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-cyber-border bg-cyber-surface/90 px-4 py-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyber-violet">
-              Démo client · lecture seule
+              Livrable client · application interactive
             </p>
             <h1 className="text-sm font-semibold text-cyber-neon">{unlocked.title}</h1>
           </div>
           <p className="text-[10px] text-cyber-muted">
-            Expire le {formatExpiry(unlocked.expires_at)} — aperçu statique,
-            code non modifiable
+            Expire le {formatExpiry(unlocked.expires_at)} — testez le produit comme en
+            production (ajout, modification, navigation)
           </p>
         </header>
         <iframe
           title={`Démo ${unlocked.title}`}
           className="min-h-0 flex-1 w-full bg-[#0a0a0f]"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts allow-same-origin allow-forms"
           srcDoc={previewHtml}
         />
       </div>

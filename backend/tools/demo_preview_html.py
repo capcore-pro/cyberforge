@@ -463,7 +463,7 @@ def build_mockup_preview_html(mockup: PreviewMockup) -> str:
   </style>
 </head>
 <body>
-  <p class="mock-banner">Démo client · lecture seule · CyberForge</p>
+  <p class="mock-banner">Aperçu livrable · CyberForge</p>
   <header class="mock-hero">
     <h1>{escape_html(mockup.title)}</h1>
     <p>{escape_html(mockup.subtitle)}</p>
@@ -501,7 +501,7 @@ def build_demo_preview_html(
         if "mock-banner" not in content and "Démo client" not in content:
             return content.replace(
                 "<body>",
-                '<body><p class="mock-banner" style="padding:0.5rem 1rem;background:#0a0a0f;color:#22d3ee;font-size:0.65rem;">Démo client · lecture seule · CyberForge</p>',
+                '<body><p class="mock-banner" style="padding:0.5rem 1rem;background:#0a0a0f;color:#22d3ee;font-size:0.65rem;">Aperçu livrable · CyberForge</p>',
                 1,
             )
         return content

@@ -76,5 +76,5 @@ def test_showcase_fallback_for_landing() -> None:
 def test_task_manager_direct_has_controls() -> None:
     html = build_task_manager_standalone_html(title="Todo démo")
     assert 'id="task-input"' in html
-    assert "Suppr." in html
+    assert "Supprimer" in html
     assert "filter-btn" in html

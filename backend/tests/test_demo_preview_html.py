@@ -27,7 +27,7 @@ export default function App() {
     html = build_demo_preview_html(files, title="Ma démo")
     assert "<!DOCTYPE html>" in html
     assert "Restaurant Le Neon" in html
-    assert "Démo client" in html
+    assert "CyberForge" in html
     assert "Réserver" in html or "réserver" in html.lower()
 
 
