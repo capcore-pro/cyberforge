@@ -2,10 +2,82 @@
 
 from tools.demo_preview_html import build_demo_preview_html
 from tools.standalone_demo_html import (
+    TASK_PREVIEW_MARKER,
     build_standalone_demo_html,
     build_task_manager_standalone_html,
     classify_demo_kind,
+    is_fresh_task_preview_html,
+    is_react_task_app,
 )
+
+REACT_TODO_TSX = """
+export default function App() {
+  const [tasks, setTasks] = useState([]);
+  const [input, setInput] = useState("");
+
+  const addTask = () => {
+    if (!input.trim()) return;
+    setTasks([...tasks, { id: Date.now(), text: input.trim(), completed: false }]);
+    setInput("");
+  };
+
+  const toggleTask = (id) => {
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)));
+  };
+
+  const deleteTask = (id) => {
+    setTasks(tasks.filter((t) => t.id !== id));
+  };
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-8">
+      <h1 className="text-2xl font-bold text-cyan-400">Mes tâches</h1>
+      <div className="flex gap-2 mt-4">
+        <input
+          className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+          placeholder="Ajouter une tâche"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+        />
+        <button
+          type="button"
+          className="rounded-lg bg-violet-600 px-4 py-2 font-semibold"
+          onClick={addTask}
+        >
+          Ajouter
+        </button>
+      </div>
+      <ul className="mt-6 space-y-2">
+        {tasks.map((task) => (
+          <li
+            key={task.id}
+            className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-900 p-4"
+          >
+            <input
+              type="checkbox"
+              checked={task.completed}
+              onChange={() => toggleTask(task.id)}
+            />
+            <span className={task.completed ? "line-through opacity-60" : ""}>{task.text}</span>
+            <button
+              type="button"
+              className="text-red-400 hover:text-red-300"
+              onClick={() => deleteTask(task.id)}
+            >
+              Supprimer
+            </button>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+"""
+
+
+def test_detect_react_task_app() -> None:
+    assert is_react_task_app(REACT_TODO_TSX)
+    assert classify_demo_kind(REACT_TODO_TSX, "Todo") == "tasks"
 
 
 def test_classify_gestion_taches() -> None:
@@ -20,36 +92,20 @@ def test_classify_gestion_taches() -> None:
 
 
 def test_task_demo_is_interactive_standalone() -> None:
-    tsx = """
-    // App gestion de tâches — React source (non rendue telle quelle)
-    export default function App() {
-      const [tasks, setTasks] = useState([]);
-      return (
-        <div>
-          <h1>Ma liste de tâches</h1>
-          <input onChange={(e) => setText(e.target.value)} />
-          <button onClick={addTask}>Ajouter une tâche</button>
-          {tasks.map((task) => (
-            <div key={task.id}>
-              <input type="checkbox" checked={task.done} onChange={() => toggle(task.id)} />
-              <button onClick={() => removeTask(task.id)}>Supprimer</button>
-            </div>
-          ))}
-        </div>
-      );
-    }
-    """
     html = build_demo_preview_html(
-        [{"path": "src/App.tsx", "content": tsx}],
+        [{"path": "src/App.tsx", "content": REACT_TODO_TSX}],
         title="Gestion de tâches",
     )
-    assert "<!DOCTYPE html>" in html
-    assert "task-form" in html
+    assert TASK_PREVIEW_MARKER in html
+    assert is_fresh_task_preview_html(html)
+    assert "function addTask" in html
+    assert "function toggleTask" in html
+    assert "function deleteTask" in html
     assert "task-add-btn" in html
     assert "replaceChildren" in html
-    assert "addEventListener" in html
-    assert "localStorage" in html
-    assert "Ma liste de tâches" in html or "Gestion de tâches" in html
+    assert "Mes tâches" in html
+    assert "Ajouter une tâche" in html
+    assert "style=" in html
     assert "onclick=" not in html.lower()
     assert "onchange=" not in html.lower()
     assert "onClick" not in html
@@ -76,8 +132,11 @@ def test_showcase_fallback_for_landing() -> None:
 
 
 def test_task_manager_direct_has_controls() -> None:
-    html = build_task_manager_standalone_html(title="Todo démo")
+    html = build_task_manager_standalone_html(
+        title="Todo démo",
+        sources=REACT_TODO_TSX,
+    )
     assert 'id="task-input"' in html
     assert 'id="task-add-btn"' in html
     assert "Supprimer" in html
-    assert "filter-btn" in html
+    assert "function addTask" in html

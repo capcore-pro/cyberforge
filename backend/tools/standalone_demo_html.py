@@ -1,5 +1,5 @@
 """
-Démos client — pages HTML autonomes avec JavaScript vanilla (sans conversion JSX).
+Démos client — conversion React (useState todo) → HTML autonome + JavaScript vanilla.
 """
 
 from __future__ import annotations
@@ -13,26 +13,55 @@ from tools.demo_preview_html import (
     escape_html,
     extract_preview_mockup,
 )
+from tools.tailwind_inline import inline_style, pick_class
 
-# Mots-clés / motifs pour détecter une app de gestion de tâches
+# Marqueur de version — les démos sans ce tag sont régénérées à l'unlock
+TASK_PREVIEW_MARKER = "cf-preview:v2-react-todo"
+
 _TASK_HINTS = re.compile(
     r"(tâche|taches|todo|todos|task|tasks|checklist|to-do|gestionnaire\s+de\s+tâches|"
     r"liste\s+de\s+tâches|ajouter.*tâche|supprimer.*tâche|cocher)",
     re.I,
 )
-_TASK_CODE_HINTS = re.compile(
-    r"(useState\s*\(\s*\[\s*\]|addTask|removeTask|toggleTask|setTasks|"
-    r"tasks\.map|task\.completed|type=[\"']checkbox[\"'])",
+_REACT_TASK_MARKERS = re.compile(
+    r"(useState\s*\(|addTask|toggleTask|deleteTask|removeTask|setTasks|"
+    r"tasks\.map|task\.completed|completed\s*:)",
     re.I,
 )
 
 
+def is_fresh_task_preview_html(html: str | None) -> bool:
+    if not html:
+        return False
+    return TASK_PREVIEW_MARKER in html and "function addTask" in html
+
+
+def is_react_task_app(sources: str) -> bool:
+    """Détecte une app React todo (useState + add/toggle/delete)."""
+    if not re.search(r"useState", sources):
+        return False
+    has_tasks = bool(
+        re.search(
+            r"useState\s*\(\s*\[\s*|"
+            r"\[\s*tasks\s*,\s*setTasks|"
+            r"const\s*\[\s*tasks\s*,",
+            sources,
+            re.I,
+        )
+    )
+    has_add = bool(re.search(r"\baddTask\b", sources))
+    has_list = bool(re.search(r"tasks\.map\s*\(", sources))
+    has_toggle = bool(
+        re.search(r"\b(toggleTask|toggleComplete|toggleDone)\b", sources)
+        or re.search(r"task\.completed|\.done", sources)
+    )
+    has_delete = bool(re.search(r"\b(deleteTask|removeTask)\b", sources))
+    return has_tasks and has_add and has_list and (has_toggle or has_delete)
+
+
 def classify_demo_kind(sources: str, title: str = "") -> str:
-    """
-    Retourne « tasks » pour une app todo, sinon « showcase » (maquette extraite du texte).
-    """
     blob = f"{title}\n{sources}"
-    if _TASK_HINTS.search(blob) or _TASK_CODE_HINTS.search(sources):
+    if is_react_task_app(sources) or _TASK_HINTS.search(blob) or _REACT_TASK_MARKERS.search(sources):
         return "tasks"
     return "showcase"
 
@@ -46,7 +75,7 @@ def _extract_task_title(sources: str, fallback: str) -> str:
     return fallback
 
 
-def _extract_subtitle(sources: str, title: str) -> str:
+def _extract_subtitle(sources: str) -> str | None:
     for pattern in (
         r"<p[^>]*>([^<]{8,120})</p>",
         r"subtitle[\"']?\s*:\s*[\"']([^\"']+)[\"']",
@@ -54,22 +83,120 @@ def _extract_subtitle(sources: str, title: str) -> str:
         match = re.search(pattern, sources, re.I)
         if match:
             return match.group(1).strip()
-    return "Organisez et suivez vos tâches au quotidien."
+    return None
+
+
+def _extract_input_placeholder(sources: str) -> str:
+    match = re.search(
+        r"<input[^>]*placeholder\s*=\s*(?:\"([^\"]+)\"|'([^']+)'|\{`([^`]+)`\})",
+        sources,
+        re.I,
+    )
+    if match:
+        return (match.group(1) or match.group(2) or match.group(3) or "").strip()
+    return "Nouvelle tâche…"
+
+
+def _extract_add_button_label(sources: str) -> str:
+    match = re.search(
+        r"<button[^>]*(?:onClick\s*=\s*\{?\s*addTask|type\s*=\s*[\"']submit[\"'])[^>]*>"
+        r"([\s\S]*?)</button>",
+        sources,
+        re.I,
+    )
+    if match:
+        label = re.sub(r"<[^>]+>", "", match.group(1)).strip()
+        if label and len(label) < 40:
+            return label
+    return "Ajouter"
+
+
+def _detect_done_field(sources: str) -> str:
+    if re.search(r"task\.completed|completed\s*:|completed\s*\?", sources):
+        return "completed"
+    return "done"
+
+
+def _default_theme() -> dict[str, str]:
+    return {
+        "page": "min-height:100vh;background:#020617;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.5",
+        "shell": "max-width:36rem;margin:0 auto;padding:2rem 1.5rem 3rem",
+        "heading": "font-size:1.75rem;font-weight:800;color:#22d3ee;margin-bottom:0.35rem",
+        "subtitle": "color:#94a3b8;font-size:0.9rem;margin-bottom:1.5rem",
+        "composer": "display:flex;gap:0.5rem;margin-bottom:1.25rem",
+        "input": "flex:1;padding:0.65rem 0.85rem;border-radius:0.5rem;border:1px solid rgba(148,163,184,0.25);background:#0f172a;color:#f1f5f9;font-size:0.95rem",
+        "add_btn": "padding:0.65rem 1rem;border-radius:0.5rem;border:none;font-weight:700;font-size:0.85rem;cursor:pointer;background:linear-gradient(90deg,#7c3aed,#06b6d4);color:#0a0a0f",
+        "list": "list-style:none;display:flex;flex-direction:column;gap:0.5rem",
+        "row": "display:flex;align-items:center;gap:0.65rem;padding:0.75rem 0.85rem;border-radius:0.6rem;background:rgba(15,23,42,0.75);border:1px solid rgba(148,163,184,0.15)",
+        "label": "flex:1;font-size:0.95rem;word-break:break-word",
+        "label_done": "text-decoration:line-through;color:#64748b;opacity:0.65",
+        "delete_btn": "padding:0.4rem 0.7rem;border-radius:0.5rem;border:1px solid rgba(248,113,113,0.35);background:rgba(248,113,113,0.12);color:#fca5a5;font-size:0.8rem;cursor:pointer",
+        "checkbox": "width:1.15rem;height:1.15rem;accent-color:#06b6d4;cursor:pointer;flex-shrink:0",
+        "empty": "text-align:center;padding:2rem 1rem;color:#64748b;font-size:0.9rem;border:1px dashed rgba(148,163,184,0.2);border-radius:0.6rem",
+    }
+
+
+def _theme_from_react_source(sources: str) -> dict[str, str]:
+    theme = _default_theme()
+    page_cls = pick_class(sources, "min-h-screen", "bg-slate-950", "bg-gray-900")
+    shell_cls = pick_class(sources, "max-w-", "mx-auto", "p-8", "px-4")
+    heading_cls = pick_class(sources, "text-2xl", "text-3xl", "font-bold", "text-cyan")
+    input_cls = pick_class(sources, "rounded", "border", "px-", "py-", fallback="")
+    row_cls = pick_class(sources, "rounded", "flex", "items-center", "gap-", "p-4", "border")
+    delete_cls = pick_class(sources, "text-red", "rose", "bg-red", "border-red")
+    done_label_cls = pick_class(sources, "line-through", "opacity-")
+
+    if page_cls:
+        extra = inline_style(sources, "min-h-screen", "bg-slate-950")
+        if extra:
+            theme["page"] = f"{extra};{theme['page']}"
+    if shell_cls:
+        extra = inline_style(sources, "max-w-", "mx-auto")
+        if extra:
+            theme["shell"] = extra
+    if heading_cls:
+        extra = inline_style(sources, "text-2xl", "text-3xl", "font-bold")
+        if extra:
+            theme["heading"] = extra
+    if input_cls:
+        extra = inline_style(sources, "rounded", "border", "px-3", "py-2", "w-full")
+        if extra:
+            theme["input"] = f"flex:1;{extra}"
+    if row_cls:
+        extra = inline_style(sources, "rounded", "flex", "items-center", "gap-2", "border")
+        if extra:
+            theme["row"] = extra
+    if delete_cls:
+        extra = inline_style(sources, "text-red", "rose", "rounded")
+        if extra:
+            theme["delete_btn"] = f"{extra};cursor:pointer"
+    if done_label_cls:
+        extra = inline_style(sources, "line-through", "opacity-")
+        if extra:
+            theme["label_done"] = f"{theme['label']};{extra}"
+
+    return theme
 
 
 def build_task_manager_standalone_html(
     *,
     title: str = "Gestion des tâches",
     subtitle: str | None = None,
+    sources: str = "",
 ) -> str:
     """
-    HTML complet : ajouter, cocher et supprimer des tâches (vanilla JS, aucun React).
+    HTML + JS vanilla reproduisant une app React todo (useState, addTask, toggle, delete).
+    Styles extraits des className Tailwind du source React.
     """
     page_title = escape_html(title.strip() or "Gestion des tâches")
     page_subtitle = escape_html(
-        (subtitle or "Organisez et suivez vos tâches au quotidien.").strip()
+        (subtitle or _extract_subtitle(sources) or "Organisez et suivez vos tâches au quotidien.").strip()
     )
+    placeholder = escape_attr(_extract_input_placeholder(sources))
+    add_label = escape_html(_extract_add_button_label(sources))
+    done_field = _detect_done_field(sources)
     storage_slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", (title or "demo").strip())[:36] or "demo"
+    theme = _theme_from_react_source(sources) if sources.strip() else _default_theme()
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -77,175 +204,46 @@ def build_task_manager_standalone_html(
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{page_title}</title>
-  <style>
-    *,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
-    body{{
-      font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
-      background:#0a0a0f;
-      color:#e2e8f0;
-      min-height:100vh;
-      line-height:1.5;
-    }}
-    .app{{
-      max-width:36rem;
-      margin:0 auto;
-      padding:2rem 1.5rem 3rem;
-      min-height:100vh;
-    }}
-    .app-header{{margin-bottom:1.5rem}}
-    .app-header h1{{
-      font-size:1.75rem;
-      font-weight:800;
-      color:#22d3ee;
-      text-shadow:0 0 20px rgba(34,211,238,.35);
-      margin-bottom:.35rem;
-    }}
-    .app-header p{{color:#94a3b8;font-size:.9rem}}
-    .composer{{
-      display:flex;
-      gap:.5rem;
-      margin-bottom:1.25rem;
-    }}
-    .composer input{{
-      flex:1;
-      padding:.65rem .85rem;
-      border-radius:.5rem;
-      border:1px solid rgba(148,163,184,.25);
-      background:rgba(15,23,42,.85);
-      color:#f1f5f9;
-      font-size:.95rem;
-    }}
-    .composer input:focus{{
-      outline:none;
-      border-color:#22d3ee;
-      box-shadow:0 0 0 2px rgba(34,211,238,.2);
-    }}
-    .btn{{
-      padding:.65rem 1rem;
-      border-radius:.5rem;
-      border:none;
-      font-weight:700;
-      font-size:.85rem;
-      cursor:pointer;
-      transition:opacity .15s,transform .1s;
-    }}
-    .btn:active{{transform:scale(.98)}}
-    .btn-primary{{
-      background:linear-gradient(90deg,#7c3aed,#06b6d4);
-      color:#0a0a0f;
-    }}
-    .btn-ghost{{
-      background:rgba(148,163,184,.12);
-      color:#e2e8f0;
-      border:1px solid rgba(148,163,184,.2);
-    }}
-    .btn-danger{{
-      background:rgba(248,113,113,.12);
-      color:#fca5a5;
-      border:1px solid rgba(248,113,113,.3);
-      padding:.4rem .7rem;
-      font-size:.8rem;
-    }}
-    .btn-danger:hover{{background:rgba(248,113,113,.22)}}
-    .stats{{
-      display:flex;
-      gap:1rem;
-      font-size:.75rem;
-      color:#64748b;
-      margin-bottom:.75rem;
-    }}
-    .stats strong{{color:#94a3b8}}
-    .task-list{{
-      list-style:none;
-      display:flex;
-      flex-direction:column;
-      gap:.5rem;
-    }}
-    .task-item{{
-      display:flex;
-      align-items:center;
-      gap:.65rem;
-      padding:.75rem .85rem;
-      border-radius:.6rem;
-      background:rgba(15,23,42,.75);
-      border:1px solid rgba(148,163,184,.15);
-      animation:fadeIn .2s ease;
-    }}
-    @keyframes fadeIn{{
-      from{{opacity:0;transform:translateY(-4px)}}
-      to{{opacity:1;transform:none}}
-    }}
-    .task-item.done{{
-      opacity:.65;
-      border-color:rgba(34,211,238,.15);
-    }}
-    .task-item.done .task-label{{
-      text-decoration:line-through;
-      color:#64748b;
-    }}
-    .task-check{{
-      width:1.15rem;
-      height:1.15rem;
-      accent-color:#06b6d4;
-      cursor:pointer;
-      flex-shrink:0;
-    }}
-    .task-label{{
-      flex:1;
-      font-size:.95rem;
-      word-break:break-word;
-    }}
-    .empty-row{{
-      text-align:center;
-      padding:2rem 1rem;
-      color:#64748b;
-      font-size:.9rem;
-      border:1px dashed rgba(148,163,184,.2);
-      border-radius:.6rem;
-      list-style:none;
-    }}
-    .filters{{
-      display:flex;
-      gap:.5rem;
-      margin-bottom:1rem;
-      flex-wrap:wrap;
-    }}
-    .filter-btn.active{{
-      border-color:#22d3ee;
-      color:#22d3ee;
-      background:rgba(34,211,238,.1);
-    }}
-  </style>
+  <!-- {TASK_PREVIEW_MARKER} -->
 </head>
-<body>
-  <div class="app" id="task-app">
-    <header class="app-header">
-      <h1>{page_title}</h1>
-      <p>{page_subtitle}</p>
+<body style="{theme["page"]}">
+  <main class="todo-app" id="task-app" style="{theme["shell"]}">
+    <header>
+      <h1 style="{theme["heading"]}">{page_title}</h1>
+      <p style="{theme["subtitle"]}">{page_subtitle}</p>
     </header>
-    <form id="task-form" class="composer" autocomplete="off">
-      <input id="task-input" type="text" placeholder="Nouvelle tâche…" maxlength="200" />
-      <button type="button" id="task-add-btn" class="btn btn-primary">Ajouter</button>
-    </form>
-    <div class="filters">
-      <button type="button" class="btn btn-ghost filter-btn active" data-filter="all">Toutes</button>
-      <button type="button" class="btn btn-ghost filter-btn" data-filter="active">Actives</button>
-      <button type="button" class="btn btn-ghost filter-btn" data-filter="done">Terminées</button>
+    <div style="{theme["composer"]}">
+      <input
+        id="task-input"
+        type="text"
+        style="{theme["input"]}"
+        placeholder="{placeholder}"
+        maxlength="200"
+        autocomplete="off"
+      />
+      <button type="button" id="task-add-btn" style="{theme["add_btn"]}">{add_label}</button>
     </div>
-    <p class="stats" id="task-stats"></p>
-    <ul class="task-list" id="task-list"></ul>
-  </div>
+    <ul id="task-list" style="{theme["list"]}"></ul>
+  </main>
   <script>
 (function () {{
+  var MARKER = "{TASK_PREVIEW_MARKER}";
   var STORAGE_KEY = "cf_demo_tasks_{storage_slug}";
+  var DONE_KEY = "{done_field}";
   var tasks = [];
-  var filter = "all";
 
-  var form = document.getElementById("task-form");
   var input = document.getElementById("task-input");
   var addBtn = document.getElementById("task-add-btn");
   var listEl = document.getElementById("task-list");
-  var statsEl = document.getElementById("task-stats");
+
+  var THEME = {{
+    row: "{escape_attr(theme["row"])}",
+    label: "{escape_attr(theme["label"])}",
+    labelDone: "{escape_attr(theme["label_done"])}",
+    deleteBtn: "{escape_attr(theme["delete_btn"])}",
+    checkbox: "{escape_attr(theme["checkbox"])}",
+    empty: "{escape_attr(theme["empty"])}"
+  }};
 
   function uid() {{
     return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
@@ -256,11 +254,12 @@ def build_task_manager_standalone_html(
     return raw
       .filter(function (t) {{ return t && typeof t.text === "string" && t.text.trim(); }})
       .map(function (t) {{
-        return {{
-          id: typeof t.id === "string" ? t.id : uid(),
+        var item = {{
+          id: typeof t.id === "string" || typeof t.id === "number" ? String(t.id) : uid(),
           text: String(t.text).trim(),
-          done: Boolean(t.done),
         }};
+        item[DONE_KEY] = Boolean(t[DONE_KEY] || t.done || t.completed);
+        return item;
       }});
   }}
 
@@ -271,60 +270,53 @@ def build_task_manager_standalone_html(
     }} catch (e) {{}}
   }}
 
-  function setFilterAll() {{
-    filter = "all";
-    document.querySelectorAll(".filter-btn").forEach(function (btn) {{
-      btn.classList.toggle("active", btn.getAttribute("data-filter") === "all");
-    }});
-  }}
-
   function save() {{
     try {{ localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); }} catch (e) {{}}
   }}
 
-  function visibleTasks() {{
-    if (filter === "active") return tasks.filter(function (t) {{ return !t.done; }});
-    if (filter === "done") return tasks.filter(function (t) {{ return t.done; }});
-    return tasks;
+  function toggleTask(id) {{
+    tasks = tasks.map(function (t) {{
+      if (t.id !== id) return t;
+      var next = {{ id: t.id, text: t.text }};
+      next[DONE_KEY] = !t[DONE_KEY];
+      return next;
+    }});
+    save();
+    render();
   }}
 
-  function updateStats() {{
-    var total = tasks.length;
-    var done = tasks.filter(function (t) {{ return t.done; }}).length;
-    statsEl.innerHTML = "<strong>" + (total - done) + "</strong> active(s) · <strong>" +
-      done + "</strong> terminée(s) · <strong>" + total + "</strong> au total";
+  function deleteTask(id) {{
+    tasks = tasks.filter(function (t) {{ return t.id !== id; }});
+    save();
+    render();
   }}
 
   function buildTaskRow(task) {{
     var li = document.createElement("li");
-    li.classList.add("task-item");
-    if (task.done) li.classList.add("done");
+    li.style.cssText = THEME.row;
+    if (task[DONE_KEY]) li.style.opacity = "0.85";
     li.dataset.id = task.id;
 
     var check = document.createElement("input");
     check.type = "checkbox";
-    check.classList.add("task-check");
-    check.checked = task.done;
+    check.style.cssText = THEME.checkbox;
+    check.checked = !!task[DONE_KEY];
     check.setAttribute("aria-label", "Marquer terminée");
     check.addEventListener("change", function () {{
-      task.done = check.checked;
-      save();
-      render();
+      toggleTask(task.id);
     }});
 
     var label = document.createElement("span");
-    label.classList.add("task-label");
+    label.style.cssText = task[DONE_KEY] ? THEME.labelDone : THEME.label;
     label.textContent = task.text;
 
     var del = document.createElement("button");
     del.type = "button";
-    del.classList.add("btn", "btn-danger");
+    del.style.cssText = THEME.deleteBtn;
     del.textContent = "Supprimer";
     del.setAttribute("aria-label", "Supprimer la tâche");
     del.addEventListener("click", function () {{
-      tasks = tasks.filter(function (t) {{ return t.id !== task.id; }});
-      save();
-      render();
+      deleteTask(task.id);
     }});
 
     li.appendChild(check);
@@ -335,41 +327,32 @@ def build_task_manager_standalone_html(
 
   function render() {{
     if (!listEl) return;
-    var items = visibleTasks();
     var fragment = document.createDocumentFragment();
-
-    if (!items.length) {{
-      var emptyRow = document.createElement("li");
-      emptyRow.classList.add("empty-row");
-      emptyRow.textContent = "Aucune tâche — ajoutez-en une ci-dessus.";
-      fragment.appendChild(emptyRow);
+    if (!tasks.length) {{
+      var empty = document.createElement("li");
+      empty.style.cssText = THEME.empty;
+      empty.textContent = "Aucune tâche — ajoutez-en une ci-dessus.";
+      fragment.appendChild(empty);
     }} else {{
-      items.forEach(function (task) {{
+      tasks.forEach(function (task) {{
         fragment.appendChild(buildTaskRow(task));
       }});
     }}
-
     listEl.replaceChildren(fragment);
-    if (statsEl) updateStats();
   }}
 
   function addTask() {{
-    var text = (input.value || "").trim();
-    if (text.length < 1) return;
-    tasks.unshift({{ id: uid(), text: text, done: false }});
-    input.value = "";
-    setFilterAll();
+    var text = (input && input.value ? input.value : "").trim();
+    if (!text.length) return;
+    var item = {{ id: uid(), text: text }};
+    item[DONE_KEY] = false;
+    tasks.unshift(item);
+    if (input) input.value = "";
     save();
     render();
-    input.focus();
+    if (input) input.focus();
   }}
 
-  if (form) {{
-    form.addEventListener("submit", function (e) {{
-      e.preventDefault();
-      addTask();
-    }});
-  }}
   if (addBtn) addBtn.addEventListener("click", addTask);
   if (input) {{
     input.addEventListener("keydown", function (e) {{
@@ -379,16 +362,6 @@ def build_task_manager_standalone_html(
       }}
     }});
   }}
-
-  document.querySelectorAll(".filter-btn").forEach(function (btn) {{
-    btn.addEventListener("click", function () {{
-      filter = btn.getAttribute("data-filter") || "all";
-      document.querySelectorAll(".filter-btn").forEach(function (b) {{
-        b.classList.toggle("active", b === btn);
-      }});
-      render();
-    }});
-  }});
 
   load();
   render();
@@ -403,7 +376,6 @@ def build_showcase_standalone_html(
     *,
     title: str = "Démo CyberForge",
 ) -> str:
-    """Maquette HTML lisible extraite du texte source (pas de JSX converti)."""
     mockup = extract_preview_mockup(sources, default_title=title)
     return build_mockup_preview_html(mockup)
 
@@ -413,13 +385,11 @@ def build_standalone_demo_html(
     *,
     title: str = "Démo CyberForge",
 ) -> str:
-    """
-    Point d'entrée : HTML autonome selon le type d'app détecté.
-    """
     kind = classify_demo_kind(sources, title)
     if kind == "tasks":
         return build_task_manager_standalone_html(
             title=_extract_task_title(sources, title),
-            subtitle=_extract_subtitle(sources, title),
+            subtitle=_extract_subtitle(sources),
+            sources=sources,
         )
     return build_showcase_standalone_html(sources, title=title)

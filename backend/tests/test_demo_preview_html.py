@@ -84,5 +84,6 @@ export default function App() {
         title="Gestion de tâches",
     )
     assert "task-list" in html
+    assert "function addTask" in html
     assert "cf-demo-root" not in html
     assert "void(0)" not in html

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from db.demo_password import generate_demo_password
 from tools.demo_preview_html import build_demo_preview_html
 from tools.generation_sources import is_usable_preview_html, normalize_generation_sources
+from tools.standalone_demo_html import is_fresh_task_preview_html
 from db.supabase_store import (
     SupabaseStore,
     SupabaseStoreError,
@@ -200,8 +201,11 @@ class DemosStore:
         return await self._refresh_preview_if_needed(row)
 
     async def _refresh_preview_if_needed(self, row: DemoRow) -> DemoRow:
-        """Reconstruit preview_html depuis la génération liée si l'aperçu stocké est invalide."""
-        if is_usable_preview_html(row.payload.preview_html):
+        """Reconstruit preview_html depuis la génération liée si l'aperçu stocké est invalide ou obsolète."""
+        stored = row.payload.preview_html
+        if is_usable_preview_html(stored) and is_fresh_task_preview_html(stored):
+            return row
+        if is_usable_preview_html(stored) and "task-add-btn" in stored and "replaceChildren" in stored:
             return row
         if not row.generation_id:
             return row
