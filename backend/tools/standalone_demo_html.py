@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # Marqueur de version — les démos sans ce tag sont régénérées à l'unlock
 TASK_PREVIEW_MARKER = "cf-preview:v2-react-todo"
 PREMIUM_PREVIEW_MARKER = "cf-preview:v3-premium-saas"
+STATIC_VANILLA_PREVIEW_MARKER = "cf-preview:v4-static-vanilla"
 
 _TASK_HINTS = re.compile(
     r"(tâche|taches|todo|todos|task|tasks|checklist|to-do|gestionnaire\s+de\s+tâches|"
@@ -142,13 +143,73 @@ def build_task_manager_standalone_html(
     return html_out
 
 
+def _looks_like_react_source(sources: str) -> bool:
+    return bool(
+        re.search(
+            r"(import\s+[\w{]|export\s+(default\s+)?(function|const)|"
+            r"useState\s*\(|useEffect\s*\(|className\s*=)",
+            sources,
+        )
+    )
+
+
+def _is_usable_static_vanilla_html(html: str) -> bool:
+    """HTML autonome exploitable (pas de JSX/React visible, contenu suffisant)."""
+    if not html or len(html) < 600:
+        return False
+    lower = html.lower()
+    if "<html" not in lower or "<body" not in lower:
+        return False
+    if re.search(r"\b(import\s+|export\s+default|useState\s*\()", html):
+        return False
+    if re.search(r"id=[\"']cf-demo-root[\"']", html, re.I):
+        inner = re.search(
+            r'id=["\']cf-demo-root["\']>([\s\S]*?)</div>',
+            html,
+            re.I,
+        )
+        if inner and len(inner.group(1).strip()) < 40:
+            return False
+    return True
+
+
 def build_showcase_standalone_html(
     sources: str,
     *,
     title: str = "Démo CyberForge",
 ) -> str:
-    mockup = extract_preview_mockup(sources, default_title=title)
-    return build_mockup_preview_html(mockup)
+    """
+    Convertit le TSX en HTML statique ; repli UI premium si la conversion échoue.
+    Ne jamais afficher le code source React brut dans l'aperçu.
+    """
+    if _looks_like_react_source(sources):
+        try:
+            from tools.tsx_static_html import build_static_site_html
+
+            static_html = build_static_site_html(sources, title=title)
+            if _is_usable_static_vanilla_html(static_html):
+                if STATIC_VANILLA_PREVIEW_MARKER not in static_html:
+                    static_html = static_html.replace(
+                        "<body>",
+                        f"<body><!-- {STATIC_VANILLA_PREVIEW_MARKER} -->",
+                        1,
+                    )
+                _log_html_structure("build_showcase_static_vanilla", static_html)
+                return static_html
+        except Exception:
+            logger.exception(
+                "[standalone_demo_html] conversion TSX→HTML échouée, repli premium"
+            )
+
+    from tools.premium_task_saas_html import build_premium_task_manager_html
+
+    html_out = build_premium_task_manager_html(
+        title=title,
+        subtitle=_extract_subtitle(sources),
+        sources=sources,
+    )
+    _log_html_structure("build_showcase_premium_fallback", html_out)
+    return html_out
 
 
 def _extract_head_inner_html(html: str) -> str:

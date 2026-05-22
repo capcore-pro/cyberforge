@@ -318,7 +318,7 @@ class CoreMindAgent(BaseAgent):
         )
 
         start = time.perf_counter()
-        generation = await codegen.generate_code(enriched, tier)
+        generation = await codegen.generate_code(enriched, tier, demo_html=True)
         duration_ms = int((time.perf_counter() - start) * 1000)
 
         output_chars = len(generation.code) + sum(

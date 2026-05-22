@@ -2,6 +2,7 @@
 
 from tools.cloudflare_pages import (
     REDIRECTS_MANIFEST_PATH,
+    ROOT_STUB_MANIFEST_PATH,
     _file_digest,
     _validate_manifest_covers_uploads,
     apply_deploy_cache_bust,
@@ -9,6 +10,7 @@ from tools.cloudflare_pages import (
     pages_asset_path_for_token,
     pages_asset_path_legacy_for_token,
     public_demo_url_for_token,
+    sanitize_manifest_entries,
 )
 
 
@@ -27,10 +29,23 @@ def test_pages_slug_avoids_manifest_path_starting_with_dash() -> None:
     )
 
 
-def test_build_pages_manifest_includes_redirects() -> None:
+def test_build_pages_manifest_includes_redirects_no_stub_by_default() -> None:
     manifest = build_pages_manifest({"udemo.html": "deadbeef"})
     assert REDIRECTS_MANIFEST_PATH in manifest
     assert manifest["/udemo.html"] == "deadbeef"
+    assert ROOT_STUB_MANIFEST_PATH not in manifest
+
+
+def test_sanitize_manifest_entries_drops_obsolete_paths() -> None:
+    entries = sanitize_manifest_entries(
+        {
+            "uabc.html": "aaa",
+            "d/abc/index.html": "bbb",
+            "index.html": "ccc",
+            "d/nested/too/deep/index.html": "ddd",
+        }
+    )
+    assert entries == {"uabc.html": "aaa", "d/abc/index.html": "bbb"}
 
 
 def test_validate_manifest_covers_uploads() -> None:

@@ -132,7 +132,12 @@ def test_showcase_fallback_for_landing() -> None:
     """
     html = build_standalone_demo_html(tsx, title="Café du port")
     assert classify_demo_kind(tsx, "Café") == "showcase"
-    assert "mock-hero" in html or "mock-section" in html
+    assert "export default" not in html
+    assert (
+        "cf-demo-root" in html
+        or "saas-shell" in html
+        or "mock-hero" in html
+    )
     assert "onclick=" not in html.lower()
 
 

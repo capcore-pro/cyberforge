@@ -34,10 +34,13 @@ ROOT_STUB_ASSET_PATH = "index.html"
 ROOT_STUB_MANIFEST_PATH = "/index.html"
 REDIRECTS_ASSET_PATH = "_redirects"
 REDIRECTS_MANIFEST_PATH = "/_redirects"
-# Anciens liens /d/{token}/ → fichier plat /u{token}.html (préfixe u évite /-xxx.html).
+# Proxy interne (200) : évite le fallback SPA sur /index.html pour les chemins /d/{token}/.
 _REDIRECTS_BODY = (
-    b"/d/:token /u:token.html 301\n"
-    b"/d/:token/ /u:token.html 301\n"
+    b"/d/:token /u:token.html 200\n"
+    b"/d/:token/ /u:token.html 200\n"
+)
+_VALID_MANIFEST_PATH = re.compile(
+    r"^u[a-zA-Z0-9_-]+\.html$|^d/[a-zA-Z0-9_-]+/index\.html$"
 )
 # TEMP DEBUG — print() stderr vers console uvicorn (retirer après diagnostic).
 CF_PAGES_DEBUG_PRINT = False
@@ -191,12 +194,32 @@ def demo_content_digest(token: str, html: str) -> tuple[str, str]:
     return asset_path, _file_digest(asset_path, html.encode("utf-8"))
 
 
-def build_pages_manifest(entries: dict[str, str]) -> dict[str, str]:
-    """Manifest complet : stub racine, redirects, entrées path → hash."""
-    manifest: dict[str, str] = {
-        ROOT_STUB_MANIFEST_PATH: _root_stub_digest(),
-        REDIRECTS_MANIFEST_PATH: _redirects_digest(),
-    }
+def sanitize_manifest_entries(entries: dict[str, str]) -> dict[str, str]:
+    """Ne garde que les chemins démo valides (évite entrées Supabase obsolètes)."""
+    cleaned: dict[str, str] = {}
+    for path, digest in entries.items():
+        if path == ROOT_STUB_ASSET_PATH:
+            continue
+        if not isinstance(path, str) or not isinstance(digest, str):
+            continue
+        p = path.strip()
+        d = digest.strip()
+        if not p or not d:
+            continue
+        if _VALID_MANIFEST_PATH.match(p):
+            cleaned[p] = d
+    return cleaned
+
+
+def build_pages_manifest(
+    entries: dict[str, str],
+    *,
+    include_root_stub: bool = False,
+) -> dict[str, str]:
+    """Manifest : redirects + entrées démo ; stub racine optionnel (désactivé par défaut)."""
+    manifest: dict[str, str] = {REDIRECTS_MANIFEST_PATH: _redirects_digest()}
+    if include_root_stub:
+        manifest[ROOT_STUB_MANIFEST_PATH] = _root_stub_digest()
     for path, digest in entries.items():
         manifest[_manifest_path(path)] = digest
     return manifest
@@ -907,10 +930,10 @@ async def deploy_demo_to_cyberforge_demos(
         digest=digest,
         manifest_path=manifest_path,
     )
-    entries = dict(other_manifest_entries)
+    entries = sanitize_manifest_entries(other_manifest_entries)
     entries[asset_path] = digest
     entries[legacy_path] = legacy_digest
-    manifest = build_pages_manifest(entries)
+    manifest = build_pages_manifest(entries, include_root_stub=False)
     _log_deploy_step(
         "0/5 deploy_demo",
         "hash calculé (cache-bust actif)",
@@ -926,8 +949,6 @@ async def deploy_demo_to_cyberforge_demos(
         legacy_path: body,
         REDIRECTS_ASSET_PATH: _REDIRECTS_BODY,
     }
-    if ROOT_STUB_ASSET_PATH not in other_manifest_entries:
-        upload_files[ROOT_STUB_ASSET_PATH] = _ROOT_STUB_HTML
 
     _validate_manifest_covers_uploads(manifest, upload_files)
     _save_deploy_manifest_snapshot(
@@ -999,13 +1020,12 @@ async def _verify_deployed_demo_live(url: str) -> None:
         )
         return
     if is_stub or not has_toggle:
-        logger.error(
-            "[Cloudflare Pages] verify_live: STUB ou HTML incomplet servi — "
-            "vérifier manifest (legacy d/{token}/index.html) et redéployer. "
-            "url=%s bytes=%s",
-            url,
-            size,
+        msg = (
+            f"Cloudflare sert le stub ou un HTML incomplet ({url}, {size} octets). "
+            "Recréez la démo après redémarrage du backend."
         )
+        logger.error("[Cloudflare Pages] verify_live: %s", msg)
+        raise CloudflarePagesError(msg)
 
 
 async def remove_demo_from_cyberforge_demos(
@@ -1015,7 +1035,10 @@ async def remove_demo_from_cyberforge_demos(
     remaining_manifest_entries: dict[str, str],
 ) -> CloudflareDeployResult:
     """Retire une démo du manifest (lien 404) sans re-uploader son HTML."""
-    manifest = build_pages_manifest(remaining_manifest_entries)
+    manifest = build_pages_manifest(
+        sanitize_manifest_entries(remaining_manifest_entries),
+        include_root_stub=False,
+    )
     return await _deploy_with_manifest(
         account_id=account_id,
         api_token=api_token,

@@ -25,6 +25,17 @@ Règles strictes :
 - JSON compact uniquement :
 {"summary":"1 phrase FR","code":"…contenu App.tsx…","files":[{"path":"src/App.tsx","content":"…"}],"stack":["react","typescript","tailwind"]}
 Le champ code = contenu de files[0]. Reste minimal et fonctionnel."""
+
+CODEGEN_DEMO_HTML_PROMPT = """Tu es CoreMindAI (CyberForge). Génère un livrable DÉMO client en HTML/CSS/JS vanilla autonome.
+Règles strictes :
+- UN seul fichier : index.html (document complet <!DOCTYPE html>, ≤ 200 lignes).
+- PAS de React, JSX, TypeScript, import/export, npm, CDN externes.
+- CSS dans <style> dans <head>, interactions simples en <script> vanilla (querySelector, addEventListener).
+- UI soignée, responsive (mobile-first), thème sombre cyber (violet/cyan), textes en français.
+- Pas de texte hors JSON, pas de markdown.
+- JSON compact uniquement :
+{"summary":"1 phrase FR","code":"…HTML complet…","files":[{"path":"index.html","content":"<!DOCTYPE html>…"}],"stack":["html","css","javascript"]}
+Le champ code = contenu de files[0]."""
 MAX_USER_PROMPT_CHARS = 2500
 
 
@@ -66,6 +77,7 @@ class CodeGenService:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
+        self._active_system_prompt = CODEGEN_SYSTEM_PROMPT
 
     def is_configured(self) -> bool:
         return len(self._available_specs(CodeGenComplexity.ELEVEE)) > 0
@@ -81,10 +93,16 @@ class CodeGenService:
         self,
         prompt: str,
         complexity: CodeGenComplexity = CodeGenComplexity.MOYENNE,
+        *,
+        demo_html: bool = False,
     ) -> CodeGenerateResult:
         trimmed = prompt.strip()
         if len(trimmed) < 3:
             raise CodeGenServiceError("Le prompt doit contenir au moins 3 caractères.")
+
+        self._active_system_prompt = (
+            CODEGEN_DEMO_HTML_PROMPT if demo_html else CODEGEN_SYSTEM_PROMPT
+        )
 
         specs = self._generation_specs(complexity)
         if not specs:
@@ -186,7 +204,7 @@ class CodeGenService:
                 "temperature": 0.2,
                 "max_tokens": self._max_output_tokens(),
                 "messages": [
-                    {"role": "system", "content": CODEGEN_SYSTEM_PROMPT},
+                    {"role": "system", "content": self._active_system_prompt},
                     {"role": "user", "content": prompt},
                 ],
             }
@@ -211,7 +229,7 @@ class CodeGenService:
         )
         body, content_headers = _utf8_json_body(
             {
-                "systemInstruction": {"parts": [{"text": CODEGEN_SYSTEM_PROMPT}]},
+                "systemInstruction": {"parts": [{"text": self._active_system_prompt}]},
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
                     "temperature": 0.2,
@@ -246,7 +264,7 @@ class CodeGenService:
             {
                 "model": model,
                 "max_tokens": self._max_output_tokens(),
-                "system": CODEGEN_SYSTEM_PROMPT,
+                "system": self._active_system_prompt,
                 "messages": [{"role": "user", "content": prompt}],
             }
         )
