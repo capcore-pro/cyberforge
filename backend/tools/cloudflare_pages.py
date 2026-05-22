@@ -78,13 +78,17 @@ def pages_project_name_for_token(token: str) -> str:
     return CYBERFORGE_DEMOS_PROJECT
 
 
+def pages_token_slug(token: str) -> str:
+    """Segment URL /d/{slug}/ — identique au token nettoyé (sans préfixe u)."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
+
+
 def pages_slug_for_token(token: str) -> str:
     """
-    Identifiant fichier URL-safe (préfixe u) — évite un chemin manifest /-token.html
+    Nom de fichier plat (préfixe u) — évite un chemin manifest /-token.html
     que Pages/CDN route mal.
     """
-    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
-    return f"u{sanitized}"
+    return f"u{pages_token_slug(token)}"
 
 
 def pages_asset_path_for_token(token: str) -> str:
@@ -93,9 +97,8 @@ def pages_asset_path_for_token(token: str) -> str:
 
 
 def pages_asset_path_legacy_for_token(token: str) -> str:
-    """Ancien chemin imbriqué — conservé pour liens déjà partagés."""
-    slug = pages_slug_for_token(token)
-    return f"d/{slug}/index.html"
+    """Chemin /d/{token}/index.html — doit correspondre aux liens partagés."""
+    return f"d/{pages_token_slug(token)}/index.html"
 
 
 def pages_manifest_path_for_token(token: str) -> str:
@@ -223,6 +226,7 @@ def _save_deploy_manifest_snapshot(
     payload = {
         "token": token,
         "slug": pages_slug_for_token(token),
+        "token_slug": pages_token_slug(token),
         "primary_asset_path": asset_path,
         "legacy_asset_path": legacy_path,
         "primary_digest": digest,
@@ -942,13 +946,66 @@ async def deploy_demo_to_cyberforge_demos(
         manifest=manifest,
         upload_files=upload_files,
     )
+    live_url = public_demo_url_for_token(token)
+    await _verify_deployed_demo_live(live_url)
     return CloudflareDeployResult(
         project_name=result.project_name,
         deployment_id=result.deployment_id,
-        url=public_demo_url_for_token(token),
+        url=live_url,
         asset_path=asset_path,
         content_hash=digest,
     )
+
+
+async def _verify_deployed_demo_live(url: str) -> None:
+    """
+    Vérifie que Pages sert bien le HTML démo (pas le stub index.html).
+
+    Si le chemin manifest ne correspond pas à l'URL publique, Pages renvoie
+    le stub racine (~179 octets, sans cf-password-toggle).
+    """
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            follow_redirects=True,
+        ) as client:
+            resp = await client.get(url)
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "[Cloudflare Pages] verify_live: requête impossible | url=%s | err=%s",
+            url,
+            exc,
+        )
+        return
+
+    body = resp.text
+    size = len(resp.content)
+    has_toggle = "cf-password-toggle" in body
+    is_stub = "CyberForge Demos" in body and size < 600
+    logger.info(
+        "[Cloudflare Pages] verify_live | url=%s | status=%s | bytes=%s | "
+        "toggle=%s | stub=%s",
+        url,
+        resp.status_code,
+        size,
+        has_toggle,
+        is_stub,
+    )
+    if resp.status_code != 200:
+        logger.error(
+            "[Cloudflare Pages] verify_live: HTTP %s pour %s",
+            resp.status_code,
+            url,
+        )
+        return
+    if is_stub or not has_toggle:
+        logger.error(
+            "[Cloudflare Pages] verify_live: STUB ou HTML incomplet servi — "
+            "vérifier manifest (legacy d/{token}/index.html) et redéployer. "
+            "url=%s bytes=%s",
+            url,
+            size,
+        )
 
 
 async def remove_demo_from_cyberforge_demos(

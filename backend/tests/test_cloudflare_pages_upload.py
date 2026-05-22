@@ -14,13 +14,16 @@ from tools.cloudflare_pages import (
 
 def test_pages_asset_paths_flat_and_legacy() -> None:
     assert pages_asset_path_for_token("abc") == "uabc.html"
-    assert pages_asset_path_legacy_for_token("abc") == "d/uabc/index.html"
+    assert pages_asset_path_legacy_for_token("abc") == "d/abc/index.html"
     assert public_demo_url_for_token("abc").endswith("/uabc.html")
 
 
 def test_pages_slug_avoids_manifest_path_starting_with_dash() -> None:
     assert pages_asset_path_for_token("-aap88BoxGWL481C0VQfr8") == (
         "u-aap88BoxGWL481C0VQfr8.html"
+    )
+    assert pages_asset_path_legacy_for_token("-aap88BoxGWL481C0VQfr8") == (
+        "d/-aap88BoxGWL481C0VQfr8/index.html"
     )
 
 

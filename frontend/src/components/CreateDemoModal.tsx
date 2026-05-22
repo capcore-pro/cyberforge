@@ -28,7 +28,7 @@ function formatExpiry(iso: string): string {
   }
 }
 
-function buildDemoMailto(created: CreateDemoResponse): string {
+function buildDemoGmailComposeUrl(created: CreateDemoResponse): string {
   const subject = `Votre démo CyberForge — ${created.title}`;
   const body = [
     "Bonjour,",
@@ -38,17 +38,16 @@ function buildDemoMailto(created: CreateDemoResponse): string {
     `Lien : ${created.url}`,
     `Mot de passe : ${created.password}`,
     "",
-    `Page de connexion : ${created.unlock_url}`,
-    "",
     `Validité : jusqu'au ${formatExpiry(created.expires_at)}.`,
     "",
     "Cordialement,",
   ].join("\n");
   const params = new URLSearchParams({
-    subject,
+    view: "cm",
+    su: subject,
     body,
   });
-  return `mailto:?${params.toString()}`;
+  return `https://mail.google.com/mail/?${params.toString()}`;
 }
 
 /**
@@ -213,7 +212,9 @@ export function CreateDemoModal({
 
             <div className="flex flex-col gap-2 sm:flex-row">
               <a
-                href={buildDemoMailto(created)}
+                href={buildDemoGmailComposeUrl(created)}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="cyber-action-btn cyber-action-btn-primary flex-1 text-center no-underline"
               >
                 Envoyer par email

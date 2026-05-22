@@ -54,15 +54,33 @@ def build_premium_task_manager_html(
       background: #0b0f1a;
       -webkit-font-smoothing: antialiased;
     }}
-    .saas-shell {{ display: flex; min-height: 100vh; }}
+    .saas-shell {{
+      display: block;
+      width: 100%;
+      max-width: 100vw;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }}
     .saas-sidebar {{
-      width: 248px;
-      flex-shrink: 0;
-      background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
-      border-right: 1px solid rgba(255,255,255,0.06);
-      display: flex;
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 50;
+      width: min(280px, 88vw);
+      max-width: 88vw;
       flex-direction: column;
       padding: 1.25rem 0;
+      background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+      border-right: 1px solid rgba(255,255,255,0.06);
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      box-shadow: 8px 0 32px rgba(0,0,0,0.45);
+    }}
+    .saas-shell.saas-nav-open .saas-sidebar {{
+      display: flex;
+      transform: translateX(0);
     }}
     .saas-brand {{
       display: flex;
@@ -106,11 +124,19 @@ def build_premium_task_manager_html(
       border-top: 1px solid rgba(255,255,255,0.06);
       font-size: 0.75rem; color: #64748b;
     }}
-    .saas-main {{ flex: 1; display: flex; flex-direction: column; min-width: 0; }}
+    .saas-main {{
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 100vh;
+    }}
     .saas-topbar {{
-      height: 60px;
+      height: 56px;
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 1.75rem;
+      padding: 0 1rem;
+      width: 100%;
       background: rgba(15,23,42,0.85);
       border-bottom: 1px solid rgba(255,255,255,0.06);
       backdrop-filter: blur(12px);
@@ -120,7 +146,7 @@ def build_premium_task_manager_html(
       min-width: 0; flex: 1;
     }}
     .saas-menu-btn {{
-      display: none;
+      display: flex;
       align-items: center; justify-content: center;
       width: 40px; height: 40px;
       border-radius: 10px;
@@ -140,12 +166,15 @@ def build_premium_task_manager_html(
     }}
     .saas-sidebar-backdrop {{
       display: none;
-      position: fixed; inset: 0;
+      position: fixed;
+      inset: 0;
       background: rgba(0,0,0,0.55);
       z-index: 40;
     }}
+    .saas-shell.saas-nav-open .saas-sidebar-backdrop {{ display: block; }}
     .saas-topbar-title {{ font-size: 1.05rem; font-weight: 600; color: #f1f5f9; }}
-    .saas-topbar-right {{ display: flex; align-items: center; gap: 1rem; }}
+    .saas-topbar-right {{ display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }}
+    .saas-user-name, .saas-user-role {{ display: none; }}
     .saas-notif {{
       width: 36px; height: 36px; border-radius: 10px;
       background: rgba(255,255,255,0.04);
@@ -169,8 +198,12 @@ def build_premium_task_manager_html(
     .saas-user-name {{ font-size: 0.8rem; font-weight: 600; color: #f1f5f9; }}
     .saas-user-role {{ font-size: 0.7rem; color: #64748b; }}
     .saas-content {{
-      flex: 1; overflow: auto;
-      padding: 1.5rem 1.75rem 2.5rem;
+      flex: 1;
+      overflow-x: hidden;
+      overflow-y: auto;
+      width: 100%;
+      max-width: 100%;
+      padding: 1rem 1rem 2rem;
       background:
         radial-gradient(900px 400px at 0% 0%, rgba(99,102,241,0.12), transparent 50%),
         #0b0f1a;
@@ -181,8 +214,10 @@ def build_premium_task_manager_html(
     .page-title {{ margin: 0; font-size: 1.5rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.02em; }}
     .page-subtitle {{ margin: 0.35rem 0 0; color: #94a3b8; font-size: 0.9rem; }}
     .kpi-grid {{
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 0.75rem; margin-bottom: 1.25rem;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
     }}
     .kpi-card {{
       background: rgba(30,41,59,0.6);
@@ -216,8 +251,10 @@ def build_premium_task_manager_html(
     .activity-text {{ color: #e2e8f0; font-size: 0.875rem; margin: 0; }}
     .activity-time {{ color: #64748b; font-size: 0.75rem; margin-top: 0.2rem; }}
     .stats {{
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 0.75rem; margin-bottom: 1.25rem;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
     }}
     .stat-card {{
       background: rgba(30,41,59,0.6);
@@ -325,8 +362,12 @@ def build_premium_task_manager_html(
       color: #fff; font-weight: 600; cursor: pointer;
     }}
     .composer {{
-      display: flex; gap: 0.65rem; margin-bottom: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      margin-bottom: 1.1rem;
     }}
+    .btn-add {{ width: 100%; }}
     .composer-input {{
       flex: 1; padding: 0.7rem 1rem;
       border-radius: 12px;
@@ -373,44 +414,37 @@ def build_premium_task_manager_html(
     .empty-state {{
       text-align: center; padding: 2rem; color: #64748b; font-size: 0.9rem;
     }}
-    @media (max-width: 767px) {{
-      body.saas-nav-open {{ overflow: hidden; }}
-      .saas-shell {{ display: block; width: 100%; }}
-      .saas-menu-btn {{ display: flex; }}
-      .saas-topbar {{ padding: 0 1rem; }}
+    body.saas-nav-open {{ overflow: hidden; }}
+    @media (min-width: 768px) {{
+      .saas-shell {{ display: flex; }}
       .saas-sidebar {{
-        position: fixed;
-        top: 0; left: 0; bottom: 0;
-        z-index: 50;
-        width: min(280px, 88vw);
-        max-width: 88vw;
-        transform: translateX(-100%);
-        transition: transform 0.25s ease;
+        display: flex;
+        position: static;
+        width: 248px;
+        max-width: none;
+        flex-shrink: 0;
+        transform: none;
+        transition: none;
         box-shadow: none;
-        visibility: hidden;
       }}
       .saas-shell.saas-nav-open .saas-sidebar {{
-        transform: translateX(0);
-        visibility: visible;
-        box-shadow: 8px 0 32px rgba(0,0,0,0.45);
+        transform: none;
       }}
-      .saas-sidebar-backdrop {{
-        display: none;
-        position: fixed;
-        inset: 0;
-        z-index: 40;
+      .saas-sidebar-backdrop,
+      .saas-shell.saas-nav-open .saas-sidebar-backdrop {{
+        display: none !important;
       }}
-      .saas-shell.saas-nav-open .saas-sidebar-backdrop {{ display: block; }}
-      .saas-main {{
-        width: 100%;
-        max-width: 100%;
-        min-height: 100vh;
+      .saas-menu-btn {{ display: none; }}
+      .saas-topbar {{
+        height: 60px;
+        padding: 0 1.75rem;
       }}
-      .saas-content {{ padding: 1rem 1rem 2rem; }}
-      .saas-user-name, .saas-user-role {{ display: none; }}
-      .kpi-grid, .stats {{ grid-template-columns: 1fr; }}
-      .composer {{ flex-direction: column; }}
-      .btn-add {{ width: 100%; }}
+      .saas-topbar-right {{ gap: 1rem; }}
+      .saas-user-name, .saas-user-role {{ display: block; }}
+      .saas-content {{ padding: 1.5rem 1.75rem 2.5rem; }}
+      .kpi-grid, .stats {{ grid-template-columns: repeat(3, 1fr); }}
+      .composer {{ flex-direction: row; }}
+      .btn-add {{ width: auto; }}
     }}
   </style>
 </head>
