@@ -47,11 +47,12 @@ export function normalizeRunResponse(
       )
     : [];
 
-  const isTaskflow =
+  const isPremiumPipeline =
     generation.provider === "cyberforge" &&
-    generation.model === "taskflow-premium";
+    (generation.model === "cyberforge-premium" ||
+      generation.model === "taskflow-premium");
 
-  if (isTaskflow && code.trim()) {
+  if (isPremiumPipeline && code.trim()) {
     files = [{ path: "index.html", content: code }];
   } else {
     const unwrapped = unwrapGenerationPayload(files, code);
@@ -77,10 +78,13 @@ export function normalizeRunResponse(
   const analysis = normalizeAnalysis(raw.analysis, raw.metrics);
   const metrics = normalizeMetrics(raw.metrics, analysis);
 
-  const preview_html =
+  let preview_html =
     typeof raw.preview_html === "string" && raw.preview_html.trim()
       ? raw.preview_html.trim()
       : null;
+  if (!preview_html && isPremiumPipeline && code.trim().includes("saas-shell")) {
+    preview_html = code.trim();
+  }
 
   return {
     ...raw,

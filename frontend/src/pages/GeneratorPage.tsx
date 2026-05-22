@@ -118,6 +118,14 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const isRunning = phase === "running";
   const hasOutput = files.length > 0 && displayedCode.length > 0;
 
+  function resolvePreviewHtml(run: CoreMindRunResponse | null): string | null {
+    const fromServer = run?.preview_html?.trim();
+    if (fromServer?.includes("saas-shell")) return fromServer;
+    const code = run?.generation.code?.trim();
+    if (code?.includes("saas-shell")) return code;
+    return fromServer || null;
+  }
+
   async function handleGenerate(event?: React.SyntheticEvent) {
     event?.preventDefault();
     const trimmed = prompt.trim();
@@ -161,9 +169,9 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       setCloudSaved(Boolean(normalized.persistence?.project_id));
       refreshHistory();
       setResult(normalized);
-      const serverPreview = normalized.preview_html?.trim();
-      if (serverPreview) {
-        setPreviewHtml(serverPreview);
+      const preview = resolvePreviewHtml(normalized);
+      if (preview) {
+        setPreviewHtml(preview);
       }
       setActiveFile(0);
       setPhase("done");
@@ -180,10 +188,10 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   async function handlePreview() {
     if (!hasOutput) return;
     setActionError(null);
-    const html = result?.preview_html?.trim();
-    if (!html || !html.includes("saas-shell")) {
+    const html = resolvePreviewHtml(result);
+    if (!html) {
       setActionError(
-        "Aperçu indisponible — relancez une génération (pipeline TaskFlow).",
+        "Aperçu indisponible — relancez une génération pour reconstruire l’aperçu TaskFlow.",
       );
       return;
     }

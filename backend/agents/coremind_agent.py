@@ -23,6 +23,7 @@ from tools.codegen_service import (
     CodeGenerateResult,
     complexity_from_score,
 )
+from agents.demo_quality import preview_html_from_generation
 from tools.demo_pipeline import build_client_demo_document
 from tools.demo_template_service import TEMPLATE_MODEL, TEMPLATE_PROVIDER
 from tools.pricing import estimate_cost_usd
@@ -342,7 +343,11 @@ class CoreMindAgent(BaseAgent):
             settings=self._settings,
         )
         generation = document.generation
-        preview_html = document.html
+        preview_html = preview_html_from_generation(
+            generation,
+            title=type_label,
+            user_prompt=enriched,
+        )
         pipeline_info = DemoPipelineSummary(
             template=document.seed.template,
             seed_personalized=document.seed.llm_personalized,
