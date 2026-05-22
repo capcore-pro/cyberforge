@@ -34,16 +34,19 @@ ROOT_STUB_ASSET_PATH = "index.html"
 ROOT_STUB_MANIFEST_PATH = "/index.html"
 REDIRECTS_ASSET_PATH = "_redirects"
 REDIRECTS_MANIFEST_PATH = "/_redirects"
-# Anciens liens /d/{token}/ → fichier plat /{token}.html (évite le fallback SPA sur /index.html).
+# Anciens liens /d/{token}/ → fichier plat /u{token}.html (préfixe u évite /-xxx.html).
 _REDIRECTS_BODY = (
-    b"/d/:token /:token.html 301\n"
-    b"/d/:token/ /:token.html 301\n"
+    b"/d/:token /u:token.html 301\n"
+    b"/d/:token/ /u:token.html 301\n"
 )
 # TEMP DEBUG — print() stderr vers console uvicorn (retirer après diagnostic).
 CF_PAGES_DEBUG_PRINT = False
 
 # Copie locale du dernier HTML envoyé à l'API upload Cloudflare (diagnostic).
 LAST_CF_UPLOAD_HTML = Path(__file__).resolve().parent.parent / "_last_cf_upload.html"
+LAST_CF_DEPLOY_MANIFEST = (
+    Path(__file__).resolve().parent.parent / "_last_cf_deploy_manifest.json"
+)
 
 _HTML_MARKERS = (
     "cf-password-toggle",
@@ -76,8 +79,12 @@ def pages_project_name_for_token(token: str) -> str:
 
 
 def pages_slug_for_token(token: str) -> str:
-    """Identifiant URL-safe dérivé du token de démo."""
-    return re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
+    """
+    Identifiant fichier URL-safe (préfixe u) — évite un chemin manifest /-token.html
+    que Pages/CDN route mal.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
+    return f"u{sanitized}"
 
 
 def pages_asset_path_for_token(token: str) -> str:
@@ -190,6 +197,88 @@ def build_pages_manifest(entries: dict[str, str]) -> dict[str, str]:
     for path, digest in entries.items():
         manifest[_manifest_path(path)] = digest
     return manifest
+
+
+def _save_deploy_manifest_snapshot(
+    *,
+    token: str,
+    manifest: dict[str, str],
+    upload_files: dict[str, bytes],
+    asset_path: str,
+    legacy_path: str,
+    digest: str,
+) -> None:
+    """Persiste le manifest exact + métadonnées du dernier déploiement (diagnostic)."""
+    upload_meta: dict[str, dict[str, object]] = {}
+    for path, body in upload_files.items():
+        manifest_key = _manifest_path(path)
+        expected = _file_digest(path, body)
+        upload_meta[path] = {
+            "manifest_key": manifest_key,
+            "bytes": len(body),
+            "digest_computed": expected,
+            "digest_in_manifest": manifest.get(manifest_key),
+            "manifest_match": manifest.get(manifest_key) == expected,
+        }
+    payload = {
+        "token": token,
+        "slug": pages_slug_for_token(token),
+        "primary_asset_path": asset_path,
+        "legacy_asset_path": legacy_path,
+        "primary_digest": digest,
+        "public_url": public_demo_url_for_token(token),
+        "manifest": manifest,
+        "upload_files": sorted(upload_files.keys()),
+        "upload_meta": upload_meta,
+    }
+    manifest_json = json.dumps(manifest, indent=2, ensure_ascii=False)
+    logger.info(
+        "[Cloudflare Pages] manifest déploiement | token=%s | paths=%s | json=%s",
+        token,
+        sorted(manifest.keys()),
+        manifest_json,
+    )
+    try:
+        LAST_CF_DEPLOY_MANIFEST.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        logger.info(
+            "[Cloudflare Pages] manifest sauvegardé | file=%s",
+            LAST_CF_DEPLOY_MANIFEST,
+        )
+    except OSError as exc:
+        logger.warning(
+            "[Cloudflare Pages] impossible d'écrire %s: %s",
+            LAST_CF_DEPLOY_MANIFEST,
+            exc,
+        )
+
+
+def _validate_manifest_covers_uploads(
+    manifest: dict[str, str],
+    upload_files: dict[str, bytes],
+) -> None:
+    """Vérifie que chaque fichier uploadé est référencé avec le bon hash dans le manifest."""
+    for path, body in upload_files.items():
+        manifest_key = _manifest_path(path)
+        expected = _file_digest(path, body)
+        actual = manifest.get(manifest_key)
+        if actual != expected:
+            raise CloudflarePagesError(
+                f"Manifest incohérent pour {manifest_key}: "
+                f"attendu {expected}, manifest {actual!r}."
+            )
+    primary_html_paths = [
+        p for p in upload_files if p.endswith(".html") and p != ROOT_STUB_ASSET_PATH
+    ]
+    if not primary_html_paths:
+        return
+    for path in primary_html_paths:
+        if manifest.get(_manifest_path(path)) is None:
+            raise CloudflarePagesError(
+                f"Fichier {path} uploadé mais absent du manifest de déploiement."
+            )
 
 
 def _file_extension(file_path: str) -> str:
@@ -724,12 +813,18 @@ async def _deploy_with_manifest(
                     digest=digest,
                     bytes=len(body),
                 )
+                if asset_path == REDIRECTS_ASSET_PATH:
+                    content_type = "text/plain; charset=utf-8"
+                elif asset_path.endswith(".html"):
+                    content_type = "text/html; charset=utf-8"
+                else:
+                    content_type = "application/octet-stream"
                 await _upload_asset(
                     client,
                     upload_jwt=upload_jwt,
                     path=asset_path,
                     body=body,
-                    content_type="text/html; charset=utf-8",
+                    content_type=content_type,
                     digest=digest,
                 )
             unique_digests = sorted(set(manifest.values()))
@@ -829,6 +924,16 @@ async def deploy_demo_to_cyberforge_demos(
     }
     if ROOT_STUB_ASSET_PATH not in other_manifest_entries:
         upload_files[ROOT_STUB_ASSET_PATH] = _ROOT_STUB_HTML
+
+    _validate_manifest_covers_uploads(manifest, upload_files)
+    _save_deploy_manifest_snapshot(
+        token=token,
+        manifest=manifest,
+        upload_files=upload_files,
+        asset_path=asset_path,
+        legacy_path=legacy_path,
+        digest=digest,
+    )
 
     result = await _deploy_with_manifest(
         account_id=account_id,

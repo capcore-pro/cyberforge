@@ -3,6 +3,7 @@
 from tools.cloudflare_pages import (
     REDIRECTS_MANIFEST_PATH,
     _file_digest,
+    _validate_manifest_covers_uploads,
     apply_deploy_cache_bust,
     build_pages_manifest,
     pages_asset_path_for_token,
@@ -12,15 +13,29 @@ from tools.cloudflare_pages import (
 
 
 def test_pages_asset_paths_flat_and_legacy() -> None:
-    assert pages_asset_path_for_token("abc") == "abc.html"
-    assert pages_asset_path_legacy_for_token("abc") == "d/abc/index.html"
-    assert public_demo_url_for_token("abc").endswith("/abc.html")
+    assert pages_asset_path_for_token("abc") == "uabc.html"
+    assert pages_asset_path_legacy_for_token("abc") == "d/uabc/index.html"
+    assert public_demo_url_for_token("abc").endswith("/uabc.html")
+
+
+def test_pages_slug_avoids_manifest_path_starting_with_dash() -> None:
+    assert pages_asset_path_for_token("-aap88BoxGWL481C0VQfr8") == (
+        "u-aap88BoxGWL481C0VQfr8.html"
+    )
 
 
 def test_build_pages_manifest_includes_redirects() -> None:
-    manifest = build_pages_manifest({"demo.html": "deadbeef"})
+    manifest = build_pages_manifest({"udemo.html": "deadbeef"})
     assert REDIRECTS_MANIFEST_PATH in manifest
-    assert manifest["/demo.html"] == "deadbeef"
+    assert manifest["/udemo.html"] == "deadbeef"
+
+
+def test_validate_manifest_covers_uploads() -> None:
+    path = pages_asset_path_for_token("abc")
+    body = b"<html></html>"
+    digest = _file_digest(path, body)
+    manifest = build_pages_manifest({path: digest})
+    _validate_manifest_covers_uploads(manifest, {path: body})
 
 
 def test_apply_deploy_cache_bust_changes_digest() -> None:
