@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import logging
 import re
 import secrets
 import time
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -282,6 +284,34 @@ def _save_deploy_manifest_snapshot(
         )
 
 
+def build_deploy_zip(files: dict[str, bytes]) -> bytes:
+    """Archive ZIP en mémoire pour Direct Upload (u{token}.html + _redirects, etc.)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(files):
+            archive.writestr(path, files[path])
+    return buf.getvalue()
+
+
+def files_from_deploy_zip(zip_bytes: bytes) -> dict[str, bytes]:
+    """Extrait les fichiers d'une archive de déploiement."""
+    out: dict[str, bytes] = {}
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+        for name in archive.namelist():
+            if name.endswith("/"):
+                continue
+            out[name] = archive.read(name)
+    return out
+
+
+def _content_type_for_asset(path: str) -> str:
+    if path == REDIRECTS_ASSET_PATH:
+        return "text/plain; charset=utf-8"
+    if path.endswith(".html"):
+        return "text/html; charset=utf-8"
+    return "application/octet-stream"
+
+
 def _validate_manifest_covers_uploads(
     manifest: dict[str, str],
     upload_files: dict[str, bytes],
@@ -551,55 +581,46 @@ async def _get_upload_token(
     return jwt.strip()
 
 
-async def _upload_asset(
+async def _upload_assets_batch(
     client: httpx.AsyncClient,
     *,
     upload_jwt: str,
-    path: str,
-    body: bytes,
-    content_type: str,
-    digest: str,
+    manifest: dict[str, str],
+    upload_files: dict[str, bytes],
 ) -> None:
-    step = "3/5 upload_asset"
+    """Envoie tous les fichiers du ZIP en un seul POST /pages/assets/upload."""
+    step = "3/5 upload_zip_assets"
     url = f"{API_BASE}/pages/assets/upload"
-    payload = [
-        {
-            "key": digest,
-            "value": base64.b64encode(body).decode("ascii"),
-            "metadata": {"contentType": content_type},
-            "base64": True,
-        }
-    ]
+    payload: list[dict[str, object]] = []
+    for path, body in upload_files.items():
+        manifest_key = _manifest_path(path)
+        digest = manifest.get(manifest_key) or _file_digest(path, body)
+        payload.append(
+            {
+                "key": digest,
+                "value": base64.b64encode(body).decode("ascii"),
+                "metadata": {"contentType": _content_type_for_asset(path)},
+                "base64": True,
+            }
+        )
+    if not payload:
+        return
     _log_deploy_step(
         step,
-        "début POST",
-        path=path,
-        digest=digest,
-        bytes=len(body),
-        content_type=content_type,
+        "début POST batch",
+        file_count=len(payload),
+        paths=sorted(upload_files.keys()),
+        zip_bytes=sum(len(b) for b in upload_files.values()),
         url=url,
     )
     started = time.monotonic()
-    _debug_print(
-        step,
-        phase="request",
-        url=url,
-        request_body=payload,
-    )
     resp = await client.post(
         url,
         headers={"Authorization": f"Bearer {upload_jwt}"},
         json=payload,
     )
-    _debug_print(
-        step,
-        phase="response",
-        http_status=resp.status_code,
-        url=str(resp.request.url) if resp.request else url,
-        response=resp,
-    )
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    result = _check_response(resp, "upload_asset")
+    result = _check_response(resp, "upload_assets_batch")
     _log_deploy_step(
         step,
         "OK",
@@ -657,12 +678,12 @@ async def _create_deployment(
     api_token: str,
     project_name: str,
     manifest: dict[str, str],
+    zip_bytes: bytes | None = None,
 ) -> str:
     """
-    Crée le déploiement (Direct Upload).
+    Crée le déploiement (Direct Upload) avec archive ZIP + manifest.
 
-    Le manifest doit être envoyé en multipart/form-data (comme Wrangler),
-    pas en application/x-www-form-urlencoded.
+    Le manifest est envoyé en multipart/form-data (comme Wrangler).
     """
     url = (
         f"{API_BASE}/accounts/{account_id}/pages/projects/"
@@ -670,12 +691,18 @@ async def _create_deployment(
     )
     step = "4/5 create_deployment"
     manifest_json = json.dumps(manifest)
+    multipart_files: dict[str, tuple] = {
+        "manifest": (None, manifest_json, "application/json"),
+    }
+    if zip_bytes:
+        multipart_files["file"] = ("deployment.zip", zip_bytes, "application/zip")
     _log_deploy_step(
         step,
         "début POST multipart",
         project=project_name,
         manifest=manifest,
         manifest_bytes=len(manifest_json.encode("utf-8")),
+        zip_bytes=len(zip_bytes) if zip_bytes else 0,
         url=url,
     )
     started = time.monotonic()
@@ -687,14 +714,13 @@ async def _create_deployment(
             "multipart": True,
             "manifest": manifest,
             "manifest_json": manifest_json,
+            "zip_bytes": len(zip_bytes) if zip_bytes else 0,
         },
     )
     resp = await client.post(
         url,
         headers=_api_headers(api_token),
-        files={
-            "manifest": (None, manifest_json, "application/json"),
-        },
+        files=multipart_files,
     )
     _debug_print(
         step,
@@ -787,18 +813,21 @@ async def _deploy_with_manifest(
     manifest: dict[str, str],
     upload_files: dict[str, bytes],
 ) -> CloudflareDeployResult:
-    """Direct Upload : upload fichiers listés + déploiement manifest fusionné."""
+    """Direct Upload : ZIP en mémoire → batch upload assets → déploiement multipart."""
     files = dict(upload_files)
     if REDIRECTS_ASSET_PATH not in files:
         files[REDIRECTS_ASSET_PATH] = _REDIRECTS_BODY
 
+    zip_bytes = build_deploy_zip(files)
     _log_deploy_step(
         "0/5 deploy_start",
-        "préparation",
+        "préparation ZIP",
         algo=HASH_ALGO_VERSION,
         project=project_name,
         manifest_paths=len(manifest),
         upload_count=len(files),
+        zip_bytes=len(zip_bytes),
+        zip_entries=sorted(files.keys()),
     )
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
@@ -817,43 +846,29 @@ async def _deploy_with_manifest(
                 project_name=project_name,
             )
             for asset_path, body in files.items():
+                if not (asset_path.endswith(".html") or "index.html" in asset_path):
+                    continue
                 manifest_key = _manifest_path(asset_path)
                 digest = manifest.get(manifest_key) or _file_digest(asset_path, body)
-                if asset_path.endswith(".html") or "index.html" in asset_path:
-                    try:
-                        html_text = body.decode("utf-8")
-                        _log_upload_html_snapshot(
-                            asset_path=asset_path,
-                            html=html_text,
-                            digest=digest,
-                            manifest_path=manifest_key,
-                        )
-                    except UnicodeDecodeError:
-                        logger.warning(
-                            "[Cloudflare Pages] upload %s: corps non UTF-8",
-                            asset_path,
-                        )
-                _log_deploy_step(
-                    "3/5 upload_asset",
-                    "envoi corps",
-                    path=asset_path,
-                    digest=digest,
-                    bytes=len(body),
-                )
-                if asset_path == REDIRECTS_ASSET_PATH:
-                    content_type = "text/plain; charset=utf-8"
-                elif asset_path.endswith(".html"):
-                    content_type = "text/html; charset=utf-8"
-                else:
-                    content_type = "application/octet-stream"
-                await _upload_asset(
-                    client,
-                    upload_jwt=upload_jwt,
-                    path=asset_path,
-                    body=body,
-                    content_type=content_type,
-                    digest=digest,
-                )
+                try:
+                    html_text = body.decode("utf-8")
+                    _log_upload_html_snapshot(
+                        asset_path=asset_path,
+                        html=html_text,
+                        digest=digest,
+                        manifest_path=manifest_key,
+                    )
+                except UnicodeDecodeError:
+                    logger.warning(
+                        "[Cloudflare Pages] upload %s: corps non UTF-8",
+                        asset_path,
+                    )
+            await _upload_assets_batch(
+                client,
+                upload_jwt=upload_jwt,
+                manifest=manifest,
+                upload_files=files,
+            )
             unique_digests = sorted(set(manifest.values()))
             if unique_digests:
                 await _upsert_hashes(client, upload_jwt=upload_jwt, digests=unique_digests)
@@ -863,6 +878,7 @@ async def _deploy_with_manifest(
                 api_token=api_token,
                 project_name=project_name,
                 manifest=manifest,
+                zip_bytes=zip_bytes,
             )
             live_url = await _wait_deployment_ready(
                 client,
@@ -918,11 +934,9 @@ async def deploy_demo_to_cyberforge_demos(
     other_manifest_entries : chemins actifs path relatif → hash (hors cette démo).
     """
     asset_path = pages_asset_path_for_token(token)
-    legacy_path = pages_asset_path_legacy_for_token(token)
     html_fresh = apply_deploy_cache_bust(html)
     body = html_fresh.encode("utf-8")
     digest = _file_digest(asset_path, body)
-    legacy_digest = _file_digest(legacy_path, body)
     manifest_path = _manifest_path(asset_path)
     _log_upload_html_snapshot(
         asset_path=asset_path,
@@ -932,21 +946,17 @@ async def deploy_demo_to_cyberforge_demos(
     )
     entries = sanitize_manifest_entries(other_manifest_entries)
     entries[asset_path] = digest
-    entries[legacy_path] = legacy_digest
     manifest = build_pages_manifest(entries, include_root_stub=False)
     _log_deploy_step(
         "0/5 deploy_demo",
-        "hash calculé (cache-bust actif)",
+        "ZIP Direct Upload (cache-bust actif)",
         asset_path=asset_path,
-        legacy_path=legacy_path,
         digest=digest,
-        legacy_digest=legacy_digest,
         manifest_paths=sorted(manifest.keys()),
         manifest_entry=manifest.get(manifest_path),
     )
     upload_files = {
         asset_path: body,
-        legacy_path: body,
         REDIRECTS_ASSET_PATH: _REDIRECTS_BODY,
     }
 
@@ -956,7 +966,7 @@ async def deploy_demo_to_cyberforge_demos(
         manifest=manifest,
         upload_files=upload_files,
         asset_path=asset_path,
-        legacy_path=legacy_path,
+        legacy_path="",
         digest=digest,
     )
 

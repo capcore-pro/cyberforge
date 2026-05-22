@@ -1,5 +1,5 @@
 """
-AutoFixAI — corrige les livrables HTML défectueux (régénération vanilla, repli TaskFlow).
+AutoFixAI — corrige les livrables HTML défectueux (repli TaskFlow immédiat ou régénération).
 """
 
 from __future__ import annotations
@@ -23,11 +23,21 @@ MAX_FIX_ATTEMPTS = 3
 TASKFLOW_FALLBACK_PROVIDER = "cyberforge"
 TASKFLOW_FALLBACK_MODEL = "taskflow-premium"
 
+# Repli TaskFlow immédiat (sans tentatives LLM) pour ces défauts.
+_IMMEDIATE_TASKFLOW_CODES = frozenset(
+    {"visible_source", "broken_js", "render_error", "empty_elements"}
+)
+
+
+def needs_immediate_taskflow_fallback(report: BugHuntReport) -> bool:
+    """True si le livrable ne doit pas passer par des régénérations LLM."""
+    return bool(_IMMEDIATE_TASKFLOW_CODES.intersection(report.issue_codes))
+
 
 class AutoFixAgent(BaseAgent):
     """
-    Relance la génération HTML vanilla si BugHunter signale des défauts.
-    Après MAX_FIX_ATTEMPTS échecs, applique le template TaskFlow premium.
+    Applique TaskFlow premium dès que du code source / rendu cassé est détecté.
+    Sinon, tente jusqu'à MAX_FIX_ATTEMPTS régénérations HTML vanilla.
     """
 
     @property
@@ -60,6 +70,38 @@ class AutoFixAgent(BaseAgent):
             f"{issues_text}\n"
         )
 
+    def _apply_taskflow_fallback(
+        self,
+        *,
+        user_prompt: str,
+        title: str,
+        attempts: int,
+        reason: str,
+    ) -> tuple[CodeGenerateResult, int, BugHuntReport]:
+        hunter = BugHunterAgent(self._settings)
+        fallback_html = build_task_manager_standalone_html(
+            title=title,
+            subtitle="Démo interactive — interface TaskFlow (repli qualité).",
+            sources=user_prompt[:8000],
+        )
+        fallback_report = hunter.analyze_html(fallback_html)
+        logger.info(
+            "[AutoFixAI] repli TaskFlow premium | reason=%s | attempts=%s | ok=%s",
+            reason,
+            attempts,
+            fallback_report.ok,
+        )
+        return (
+            code_result_from_html(
+                fallback_html,
+                summary=f"Template TaskFlow premium ({reason}).",
+                model=TASKFLOW_FALLBACK_MODEL,
+                provider=TASKFLOW_FALLBACK_PROVIDER,
+            ),
+            attempts,
+            fallback_report,
+        )
+
     async def repair(
         self,
         *,
@@ -69,10 +111,20 @@ class AutoFixAgent(BaseAgent):
         initial_report: BugHuntReport,
     ) -> tuple[CodeGenerateResult, int, BugHuntReport]:
         """
-        Tente jusqu'à MAX_FIX_ATTEMPTS régénérations, puis repli TaskFlow.
-
-        Retourne (generation finale, nombre de tentatives effectuées, dernier rapport).
+        Repli TaskFlow immédiat si code source visible, sinon régénérations LLM.
         """
+        if needs_immediate_taskflow_fallback(initial_report):
+            logger.info(
+                "[AutoFixAI] repli immédiat (sans LLM) | issues=%s",
+                initial_report.issue_codes,
+            )
+            return self._apply_taskflow_fallback(
+                user_prompt=user_prompt,
+                title=title,
+                attempts=0,
+                reason="code source ou rendu cassé détecté",
+            )
+
         codegen = CodeGenService(self._settings)
         hunter = BugHunterAgent(self._settings)
         last_report = initial_report
@@ -97,6 +149,13 @@ class AutoFixAgent(BaseAgent):
 
             html = preview_html_from_generation(generation, title=title)
             last_report = hunter.analyze_html(html)
+            if needs_immediate_taskflow_fallback(last_report):
+                return self._apply_taskflow_fallback(
+                    user_prompt=user_prompt,
+                    title=title,
+                    attempts=attempt,
+                    reason="régénération encore défectueuse",
+                )
             if last_report.ok:
                 logger.info("[AutoFixAI] HTML validé après tentative %s", attempt)
                 return (
@@ -117,24 +176,11 @@ class AutoFixAgent(BaseAgent):
             "[AutoFixAI] échec après %s tentatives — repli TaskFlow premium",
             MAX_FIX_ATTEMPTS,
         )
-        fallback_html = build_task_manager_standalone_html(
+        return self._apply_taskflow_fallback(
+            user_prompt=user_prompt,
             title=title,
-            subtitle="Démo interactive — interface TaskFlow (repli qualité).",
-            sources=user_prompt[:8000],
-        )
-        fallback_report = hunter.analyze_html(fallback_html)
-        return (
-            code_result_from_html(
-                fallback_html,
-                summary=(
-                    "Template TaskFlow premium appliqué après échec des corrections "
-                    f"({MAX_FIX_ATTEMPTS} tentatives)."
-                ),
-                model=TASKFLOW_FALLBACK_MODEL,
-                provider=TASKFLOW_FALLBACK_PROVIDER,
-            ),
-            MAX_FIX_ATTEMPTS,
-            fallback_report,
+            attempts=MAX_FIX_ATTEMPTS,
+            reason=f"échec après {MAX_FIX_ATTEMPTS} tentatives",
         )
 
     async def run(self, prompt: str, **kwargs: Any) -> str:

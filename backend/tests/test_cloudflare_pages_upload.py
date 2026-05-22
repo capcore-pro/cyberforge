@@ -1,12 +1,15 @@
 """Tests déploiement Cloudflare — cache-bust et marqueurs HTML."""
 
 from tools.cloudflare_pages import (
+    REDIRECTS_ASSET_PATH,
     REDIRECTS_MANIFEST_PATH,
     ROOT_STUB_MANIFEST_PATH,
     _file_digest,
     _validate_manifest_covers_uploads,
     apply_deploy_cache_bust,
+    build_deploy_zip,
     build_pages_manifest,
+    files_from_deploy_zip,
     pages_asset_path_for_token,
     pages_asset_path_legacy_for_token,
     public_demo_url_for_token,
@@ -63,6 +66,15 @@ def test_apply_deploy_cache_bust_changes_digest() -> None:
     d2 = _file_digest(path, apply_deploy_cache_bust(html).encode())
     assert d1 != d2
     assert "cf-deploy:" in apply_deploy_cache_bust(html)
+
+
+def test_build_deploy_zip_roundtrip() -> None:
+    path = pages_asset_path_for_token("demo1")
+    files = {path: b"<html>ok</html>", REDIRECTS_ASSET_PATH: b"/d/:token /u:token.html 200\n"}
+    zip_bytes = build_deploy_zip(files)
+    assert zip_bytes[:2] == b"PK"
+    restored = files_from_deploy_zip(zip_bytes)
+    assert restored == files
 
 
 def test_gate_markers_in_busted_html() -> None:

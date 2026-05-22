@@ -151,11 +151,21 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
         return;
       }
 
-      const entry = saveGenerationToHistory(trimmed, projectType, response.data);
+      const normalized = normalizeRunResponse(response.data);
+      if (!normalized) {
+        setPhase("error");
+        setError("Réponse backend invalide (génération vide).");
+        return;
+      }
+      const entry = saveGenerationToHistory(trimmed, projectType, normalized);
       setLastSavedId(entry.id);
-      setCloudSaved(Boolean(response.data.persistence?.project_id));
+      setCloudSaved(Boolean(normalized.persistence?.project_id));
       refreshHistory();
-      setResult(response.data);
+      setResult(normalized);
+      const serverPreview = normalized.preview_html?.trim();
+      if (serverPreview) {
+        setPreviewHtml(serverPreview);
+      }
       setActiveFile(0);
       setPhase("done");
     } catch (err) {

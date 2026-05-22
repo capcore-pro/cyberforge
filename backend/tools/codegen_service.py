@@ -26,7 +26,9 @@ Règles strictes :
 {"summary":"1 phrase FR","code":"…contenu App.tsx…","files":[{"path":"src/App.tsx","content":"…"}],"stack":["react","typescript","tailwind"]}
 Le champ code = contenu de files[0]. Reste minimal et fonctionnel."""
 
-CODEGEN_DEMO_HTML_PROMPT = """Tu es CoreMindAI (CyberForge). Génère un livrable DÉMO client en HTML/CSS/JS vanilla autonome.
+CODEGEN_DEMO_HTML_PROMPT = """**GÉNÈRE UNIQUEMENT DU HTML/CSS/JS VANILLA PUR. INTERDIT : React, JSX, Tailwind classes, className, useState, import, export, const =>, template literals JSX. OBLIGATOIRE : style CSS inline ou balise style, JS vanilla avec getElementById/addEventListener.**
+
+Tu es CoreMindAI (CyberForge). Génère un livrable DÉMO client en HTML/CSS/JS vanilla autonome.
 Règles strictes :
 - UN seul fichier : index.html (document complet <!DOCTYPE html>, ≤ 200 lignes).
 - PAS de React, JSX, TypeScript, import/export, npm, CDN externes.
@@ -36,6 +38,15 @@ Règles strictes :
 - JSON compact uniquement :
 {"summary":"1 phrase FR","code":"…HTML complet…","files":[{"path":"index.html","content":"<!DOCTYPE html>…"}],"stack":["html","css","javascript"]}
 Le champ code = contenu de files[0]."""
+
+DEMO_SEED_SYSTEM_PROMPT = """Tu personnalises une démo SaaS CyberForge. NE GÉNÈRE AUCUN HTML, CSS, JS, React ni JSX.
+Choisis le template et fournis uniquement des données seed en JSON compact :
+{"template":"taskflow","title":"titre page FR","subtitle":"sous-titre FR","brand_name":"nom produit","brand_tag":"tagline courte","user_name":"Prénom Nom","user_role":"rôle","tasks":[{"text":"tâche FR","completed":false}]}
+Règles :
+- template doit être "taskflow" (seul template disponible).
+- 3 à 6 tâches réalistes en français, liées au prompt utilisateur.
+- Pas de markdown, pas de texte hors JSON."""
+
 MAX_USER_PROMPT_CHARS = 2500
 
 
@@ -128,6 +139,46 @@ class CodeGenService:
 
         raise CodeGenServiceError(
             "Tous les modèles ont échoué : " + " | ".join(errors[:4])
+        )
+
+    async def generate_demo_seed(
+        self,
+        prompt: str,
+        *,
+        project_type_label: str = "Démo client",
+    ) -> dict[str, Any]:
+        """Personnalise titre / marque / tâches seed — jamais de HTML."""
+        trimmed = prompt.strip()
+        if len(trimmed) < 3:
+            raise CodeGenServiceError("Le prompt doit contenir au moins 3 caractères.")
+
+        self._active_system_prompt = DEMO_SEED_SYSTEM_PROMPT
+        specs = self._available_specs(CodeGenComplexity.FAIBLE)
+        if not specs:
+            raise CodeGenServiceError(LLM_KEYS_UNAVAILABLE_MSG)
+
+        user_msg = (
+            f"Type de projet : {project_type_label.strip()}\n\n"
+            f"Demande client :\n{_trim_prompt(trimmed)}"
+        )
+        timeout = self._http_timeout()
+        errors: list[str] = []
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for spec in specs:
+                try:
+                    text = await spec.call(user_msg, spec.model, client)
+                    return _parse_json_response(text)
+                except httpx.TimeoutException:
+                    limit = self._settings.coremind_llm_timeout_seconds
+                    errors.append(
+                        f"{spec.provider_id}/{spec.model}: timeout ({limit:.0f}s)"
+                    )
+                except Exception as exc:
+                    errors.append(f"{spec.provider_id}/{spec.model}: {exc}")
+
+        raise CodeGenServiceError(
+            "Personnalisation seed échouée : " + " | ".join(errors[:4])
         )
 
     def _available_specs(self, complexity: CodeGenComplexity) -> list[_ProviderSpec]:

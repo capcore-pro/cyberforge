@@ -4,6 +4,8 @@ Template HTML premium — app SaaS fictive (sidebar, navigation multi-pages, tâ
 
 from __future__ import annotations
 
+import json
+
 from tools.demo_preview_html import escape_attr, escape_html
 from tools.standalone_demo_html import (
     TASK_PREVIEW_MARKER,
@@ -15,12 +17,42 @@ from tools.standalone_demo_html import (
 
 PREMIUM_PREVIEW_MARKER = "cf-preview:v3-premium-saas"
 
+_DEFAULT_SEED_TASKS: tuple[tuple[str, bool], ...] = (
+    ("Finaliser la proposition client Acme Corp", False),
+    ("Revoir le planning sprint Q2 avec l'équipe produit", False),
+    ("Préparer la démo investisseurs (jeudi 14h)", True),
+    ("Valider les maquettes onboarding mobile", False),
+    ("Envoyer le compte-rendu réunion partenaires", False),
+)
+
+
+def _format_seed_tasks_js(tasks: tuple[tuple[str, bool], ...]) -> str:
+    lines: list[str] = []
+    for index, (text, completed) in enumerate(tasks, start=1):
+        lines.append(
+            "    { id: "
+            + json.dumps(f"seed-{index}")
+            + ", text: "
+            + json.dumps(text, ensure_ascii=False)
+            + ", completed: "
+            + ("true" if completed else "false")
+            + " },"
+        )
+    return "\n".join(lines)
+
 
 def build_premium_task_manager_html(
     *,
     title: str = "Gestion des tâches",
     subtitle: str | None = None,
     sources: str = "",
+    brand_name: str = "TaskFlow",
+    brand_tag: str = "Workspace Pro",
+    user_name: str = "Alex Martin",
+    user_role: str = "Chef de projet",
+    user_initials: str | None = None,
+    sidebar_foot: str = "Plan Pro · 12 sièges",
+    seed_tasks: tuple[tuple[str, bool], ...] | None = None,
 ) -> str:
     page_title = escape_html(title.strip() or "Gestion des tâches")
     page_subtitle = escape_html(
@@ -30,10 +62,24 @@ def build_premium_task_manager_html(
             or "Planifiez, priorisez et terminez vos actions en un seul endroit."
         ).strip()
     )
+    brand = escape_html(brand_name.strip() or "TaskFlow")
+    brand_tag_html = escape_html(brand_tag.strip() or "Workspace Pro")
+    user = escape_html(user_name.strip() or "Alex Martin")
+    role = escape_html(user_role.strip() or "Chef de projet")
+    initials = escape_html(
+        (user_initials or "").strip()
+        or "".join(w[0] for w in user_name.split()[:2]).upper()[:2]
+        or "AM"
+    )
+    foot = escape_html(sidebar_foot.strip() or "Plan Pro · 12 sièges")
+    tasks = seed_tasks if seed_tasks else _DEFAULT_SEED_TASKS
+    seed_tasks_js = _format_seed_tasks_js(tasks)
     placeholder = escape_attr(_extract_input_placeholder(sources))
     add_label = escape_html(_extract_add_button_label(sources))
     done_field = _detect_done_field(sources)
-    storage_slug = __import__("re").sub(r"[^a-zA-Z0-9_-]+", "_", (title or "demo").strip())[:36] or "demo"
+    storage_slug = __import__("re").sub(
+        r"[^a-zA-Z0-9_-]+", "_", (brand_name or title or "demo").strip()
+    )[:36] or "demo"
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -457,8 +503,8 @@ def build_premium_task_manager_html(
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
         </div>
         <div>
-          <div class="saas-brand-name">TaskFlow</div>
-          <div class="saas-brand-tag">Workspace Pro</div>
+          <div class="saas-brand-name">{brand}</div>
+          <div class="saas-brand-tag">{brand_tag_html}</div>
         </div>
       </div>
       <nav class="saas-nav" id="saas-nav">
@@ -468,7 +514,7 @@ def build_premium_task_manager_html(
         <div class="saas-nav-item" data-nav="team" role="button" tabindex="0"><span class="saas-nav-dot"></span><span class="nav-label">Équipe</span></div>
         <div class="saas-nav-item" data-nav="settings" role="button" tabindex="0"><span class="saas-nav-dot"></span><span class="nav-label">Paramètres</span></div>
       </nav>
-      <div class="saas-sidebar-foot">Plan Pro · 12 sièges</div>
+      <div class="saas-sidebar-foot">{foot}</div>
     </aside>
     <div class="saas-main">
       <header class="saas-topbar">
@@ -488,10 +534,10 @@ def build_premium_task_manager_html(
         <div class="saas-topbar-right">
           <div class="saas-notif" title="Notifications">🔔</div>
           <div class="saas-user">
-            <div class="saas-avatar">AM</div>
+            <div class="saas-avatar">{initials}</div>
             <div>
-              <div class="saas-user-name">Alex Martin</div>
-              <div class="saas-user-role">Chef de projet</div>
+              <div class="saas-user-name">{user}</div>
+              <div class="saas-user-role">{role}</div>
             </div>
           </div>
         </div>
@@ -780,11 +826,7 @@ def build_premium_task_manager_html(
   var STORAGE_KEY = "cf_tasks_{storage_slug}";
   var DONE_KEY = "{done_field}";
   var SEED_TASKS = [
-    {{ id: "seed-1", text: "Finaliser la proposition client Acme Corp", completed: false }},
-    {{ id: "seed-2", text: "Revoir le planning sprint Q2 avec l'équipe produit", completed: false }},
-    {{ id: "seed-3", text: "Préparer la démo investisseurs (jeudi 14h)", completed: true }},
-    {{ id: "seed-4", text: "Valider les maquettes onboarding mobile", completed: false }},
-    {{ id: "seed-5", text: "Envoyer le compte-rendu réunion partenaires", completed: false }}
+{seed_tasks_js}
   ];
   var tasks = [];
   var listEl = document.getElementById("task-list");

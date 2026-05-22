@@ -5,6 +5,7 @@ Routes démos client — création de liens partagés (usage interne / générat
 from __future__ import annotations
 
 import logging
+import re
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -30,6 +31,7 @@ from tools.cloudflare_pages import (
     remove_demo_from_cyberforge_demos,
 )
 from tools.demo_preview_html import collect_standalone_sources
+from tools.demo_template_service import DemoTemplateService
 from tools.standalone_demo_html import build_standalone_demo_html, wrap_with_password_gate
 
 logger = logging.getLogger(__name__)
@@ -115,9 +117,36 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
 
     try:
         sources, static_html = collect_standalone_sources(files, code=body.code)
-        if static_html:
+        react_sources = bool(
+            sources
+            and re.search(
+                r"\.(tsx|jsx)$|export\s+default|useState\s*\(",
+                sources,
+                re.I,
+            )
+        )
+        if static_html and not react_sources:
             preview_html = wrap_with_password_gate(
                 static_html,
+                demo_password,
+                title=title,
+            )
+        elif react_sources or not static_html:
+            seed_prompt = "\n".join(
+                p
+                for p in (
+                    body.summary or "",
+                    body.project_type or "",
+                    title,
+                )
+                if p.strip()
+            )
+            generation = await DemoTemplateService().build_client_demo_generation(
+                user_prompt=seed_prompt or title,
+                project_type_label=body.project_type or title,
+            )
+            preview_html = wrap_with_password_gate(
+                generation.code,
                 demo_password,
                 title=title,
             )

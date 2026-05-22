@@ -14,9 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agents.auto_fix_agent import AutoFixAgent
 from agents.base_agent import BaseAgent
-from agents.bug_hunter_agent import BugHunterAgent
 from agents.demo_quality import preview_html_from_generation
 from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG
 from tools.codegen_service import (
@@ -26,6 +24,7 @@ from tools.codegen_service import (
     CodeGenerateResult,
     complexity_from_score,
 )
+from tools.demo_template_service import DemoTemplateService, TEMPLATE_MODEL, TEMPLATE_PROVIDER
 from tools.pricing import estimate_cost_usd
 
 logger = logging.getLogger(__name__)
@@ -322,12 +321,10 @@ class CoreMindAgent(BaseAgent):
         prompt: str,
         project_type_hint: ProjectType | None = None,
     ) -> CoreMindRunResult:
-        """Analyse le prompt, sélectionne le modèle et génère le code."""
+        """Analyse le prompt puis assemble une démo client via template premium (pas de HTML LLM)."""
         analysis = await self.analyze(prompt, project_type_hint)
         tier = CodeGenComplexity(analysis.complexity.value)
         codegen = CodeGenService(self._settings)
-        if not codegen.is_configured():
-            raise CodeGenServiceError(LLM_KEYS_UNAVAILABLE_MSG)
 
         type_label = PROJECT_TYPE_LABELS.get(
             project_type_hint or analysis.project_type,
@@ -340,68 +337,46 @@ class CoreMindAgent(BaseAgent):
         )
 
         start = time.perf_counter()
-        generation = await codegen.generate_code(enriched, tier, demo_html=True)
-
-        hunter = BugHunterAgent(self._settings)
-        bug_report = hunter.analyze_generation(generation, title=type_label)
-        logger.info(
-            "[CoreMindAI] BugHunterAI | ok=%s | issues=%s | html_bytes=%s",
-            bug_report.ok,
-            bug_report.issue_codes,
-            bug_report.html_bytes,
+        template_svc = DemoTemplateService(self._settings)
+        generation = await template_svc.build_client_demo_generation(
+            user_prompt=enriched,
+            project_type_label=type_label,
         )
 
-        quality = DemoQualitySummary(ok=bug_report.ok, issue_codes=bug_report.issue_codes)
-        if not bug_report.ok:
-            logger.info(
-                "[CoreMindAI] AutoFixAI déclenché | issues=%s",
-                bug_report.issue_codes,
-            )
-            autofix = AutoFixAgent(self._settings)
-            generation, fix_attempts, final_report = await autofix.repair(
-                user_prompt=enriched,
-                tier=tier,
-                title=type_label,
-                initial_report=bug_report,
-            )
-            quality.fix_attempts = fix_attempts
-            quality.autofix_applied = True
-            quality.ok = final_report.ok
-            quality.issue_codes = final_report.issue_codes
-            quality.taskflow_fallback = (
-                generation.provider == "cyberforge"
-                and generation.model == "taskflow-premium"
-            )
-            logger.info(
-                "[CoreMindAI] AutoFixAI terminé | ok=%s | attempts=%s | taskflow_fallback=%s | "
-                "final_issues=%s | provider=%s | model=%s",
-                quality.ok,
-                quality.fix_attempts,
-                quality.taskflow_fallback,
-                quality.issue_codes,
-                generation.provider,
-                generation.model,
-            )
-        else:
-            logger.info("[CoreMindAI] AutoFixAI non déclenché — livrable accepté par BugHunterAI")
-
+        quality = DemoQualitySummary(
+            ok=True,
+            issue_codes=[],
+            taskflow_fallback=True,
+        )
         preview_html = preview_html_from_generation(generation, title=type_label)
         logger.info(
-            "[CoreMindAI] demo_quality=%s | preview_html_bytes=%s",
+            "[CoreMindAI] démo template TaskFlow | demo_quality=%s | preview_html_bytes=%s | "
+            "provider=%s | model=%s",
             json.dumps(quality.model_dump(), ensure_ascii=False),
             len(preview_html.encode("utf-8")),
+            generation.provider,
+            generation.model,
         )
 
         duration_ms = int((time.perf_counter() - start) * 1000)
 
-        output_chars = len(generation.code) + sum(
-            len(f.content) for f in generation.files
+        seed_input_chars = len(enriched) if codegen.is_configured() else 0
+        output_chars = len(generation.code)
+        cost = (
+            estimate_cost_usd(
+                generation.provider,
+                generation.model,
+                seed_input_chars,
+                output_chars,
+            )
+            if generation.provider != TEMPLATE_PROVIDER
+            else 0.0
         )
-        cost = estimate_cost_usd(
-            generation.provider,
-            generation.model,
-            len(enriched),
-            output_chars,
+
+        planned = (
+            codegen.planned_models(tier)
+            if codegen.is_configured()
+            else [f"{TEMPLATE_PROVIDER} · {TEMPLATE_MODEL} (template préfabriqué)"]
         )
 
         metrics = GenerationMetrics(
@@ -418,7 +393,7 @@ class CoreMindAgent(BaseAgent):
             analysis=analysis,
             generation=generation,
             metrics=metrics,
-            planned_models=codegen.planned_models(tier),
+            planned_models=planned,
             demo_quality=quality,
             preview_html=preview_html,
         )
