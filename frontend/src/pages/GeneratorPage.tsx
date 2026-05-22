@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { API_PREFIX } from "@shared/constants";
-import type {
-  ComplexityLevel,
-  CoreMindRunResponse,
-  PipelineStepEvent,
-  ProjectType,
-} from "@shared/types";
+import type { ComplexityLevel, PipelineStepEvent } from "@shared/types";
 import { useBackendHealth } from "@/context/BackendHealthContext";
+import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import { usePipelineActivity } from "@/context/PipelineActivityContext";
 import { CodeHighlight } from "@/components/CodeHighlight";
 import { CodeOutputActions } from "@/components/CodeOutputActions";
@@ -14,14 +9,8 @@ import { CustomizePanel, cloneCustomization } from "@/components/CustomizePanel"
 import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
-import {
-  PipelineProgress,
-  applyPipelineStepEvent,
-  initialPipelineSteps,
-  type PipelineStepState,
-} from "@/components/PipelineProgress";
+import { PipelineProgress, initialPipelineSteps } from "@/components/PipelineProgress";
 import { apiErrorMessage } from "@/lib/api-errors";
-import { apiRequest } from "@/lib/api-client";
 import {
   pipelineStreamErrorMessage,
   streamCoremindRun,
@@ -52,8 +41,6 @@ import { fetchTaskflowPreviewHtml } from "@/lib/preview-html-api";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { projectTitleFromPrompt } from "@/lib/project-title";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
-
-type FlowPhase = "idle" | "running" | "done" | "error";
 
 const COMPLEXITY_STYLES: Record<ComplexityLevel, string> = {
   faible: "text-green-400 border-green-400/40 bg-green-400/10",
@@ -87,33 +74,32 @@ interface GeneratorPageProps {
  */
 export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const { status: backendStatus } = useBackendHealth();
-  const [prompt, setPrompt] = useState("");
-  const [projectType, setProjectType] = useState<ProjectType>("site_web");
-  const [phase, setPhase] = useState<FlowPhase>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [result, setResult] = useState<CoreMindRunResponse | null>(null);
-  const [activeFile, setActiveFile] = useState(0);
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const {
+    prompt,
+    projectType,
+    phase,
+    error,
+    actionError,
+    result,
+    activeFile,
+    previewHtml,
+    livePreviewHtml,
+    customizeOpen,
+    customization,
+    baselineCustomization,
+    lastSavedId,
+    cloudSaved,
+    pipelineSteps,
+    patch,
+    applyPipelineStep,
+  } = useGeneratorSession();
   const [copyLabel, setCopyLabel] = useState("Copier le code");
   const [history, setHistory] = useState<GenerationHistoryEntry[]>([]);
-  const [lastSavedId, setLastSavedId] = useState<string | null>(null);
-  const [cloudSaved, setCloudSaved] = useState(false);
   const [demoModalOpen, setDemoModalOpen] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [demoCreated, setDemoCreated] = useState<CreateDemoResponse | null>(null);
-  const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [customization, setCustomization] = useState<DemoCustomization | null>(
-    null,
-  );
-  const [livePreviewHtml, setLivePreviewHtml] = useState<string | null>(null);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
-  const [pipelineSteps, setPipelineSteps] = useState<PipelineStepState[]>(
-    initialPipelineSteps,
-  );
-  const [baselineCustomization, setBaselineCustomization] =
-    useState<DemoCustomization | null>(null);
   const [customizeSaveBusy, setCustomizeSaveBusy] = useState(false);
   const { dispatchPipelineEvent } = usePipelineActivity();
 
@@ -127,12 +113,13 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
   useEffect(() => {
     if (backendStatus === "offline" && phase === "running") {
-      setPhase("error");
-      setError(
-        "Connexion au backend perdue. Attendez la reconnexion (bandeau orange) puis réessayez.",
-      );
+      patch({
+        phase: "error",
+        error:
+          "Connexion au backend perdue. Attendez la reconnexion (bandeau orange) puis réessayez.",
+      });
     }
-  }, [backendStatus, phase]);
+  }, [backendStatus, phase, patch]);
 
   const files =
     result && (result.generation.files?.length ?? 0) > 0
@@ -143,9 +130,9 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
   useEffect(() => {
     if (files.length > 0 && activeFile >= files.length) {
-      setActiveFile(0);
+      patch({ activeFile: 0 });
     }
-  }, [activeFile, files.length]);
+  }, [activeFile, files.length, patch]);
 
   const activePath = files[activeFile]?.path ?? "output";
   const displayedCode =
@@ -154,7 +141,9 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const isRunning = phase === "running";
   const hasOutput = files.length > 0 && displayedCode.length > 0;
 
-  function resolvePreviewHtml(run: CoreMindRunResponse | null): string | null {
+  function resolvePreviewHtml(
+    run: typeof result,
+  ): string | null {
     if (livePreviewHtml?.includes("saas-shell")) return livePreviewHtml;
     const fromServer = run?.preview_html?.trim();
     if (fromServer?.includes("saas-shell")) return fromServer;
@@ -189,7 +178,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
           project_type_label: result.analysis.project_type_label,
         });
         if (!cancelled && html) {
-          setLivePreviewHtml(html);
+          patch({ livePreviewHtml: html });
         }
         if (!cancelled) setPreviewRefreshing(false);
       })();
@@ -198,7 +187,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [customizeOpen, customization, result, prompt]);
+  }, [customizeOpen, customization, result, prompt, patch]);
 
   const refreshPreviewFromSeed = useCallback(
     async (seed: ReturnType<typeof mergeCustomizationIntoSeed>) => {
@@ -208,41 +197,44 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
         project_type_label: result.analysis.project_type_label,
       });
       if (html) {
-        setLivePreviewHtml(html);
+        patch({ livePreviewHtml: html });
       }
       return html;
     },
-    [result, prompt],
+    [result, prompt, patch],
   );
 
   async function handleCustomizationSave() {
     if (!result?.generation.demo_seed || !customization) return;
     setCustomizeSaveBusy(true);
-    setActionError(null);
+    patch({ actionError: null });
     try {
       const seed = mergeCustomizationIntoSeed(
         result.generation.demo_seed,
         customization,
       );
       const html = await refreshPreviewFromSeed(seed);
-      setResult({
-        ...result,
-        generation: {
-          ...result.generation,
-          demo_seed: seed,
-          ...(html
-            ? {
-                code: html,
-                files: [{ path: "index.html", content: html }],
-              }
-            : {}),
+      patch({
+        result: {
+          ...result,
+          generation: {
+            ...result.generation,
+            demo_seed: seed,
+            ...(html
+              ? {
+                  code: html,
+                  files: [{ path: "index.html", content: html }],
+                }
+              : {}),
+          },
+          ...(html ? { preview_html: html } : {}),
         },
-        ...(html ? { preview_html: html } : {}),
       });
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Échec de la sauvegarde.",
-      );
+      patch({
+        actionError:
+          err instanceof Error ? err.message : "Échec de la sauvegarde.",
+      });
     } finally {
       setCustomizeSaveBusy(false);
     }
@@ -250,29 +242,33 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
   function handleCustomizationReset() {
     if (!baselineCustomization) return;
-    setCustomization(cloneCustomization(baselineCustomization));
+    patch({
+      customization: cloneCustomization(baselineCustomization),
+    });
   }
 
   async function handleGenerate(event?: React.SyntheticEvent) {
     event?.preventDefault();
     const trimmed = prompt.trim();
     if (trimmed.length < 3) {
-      setError("Décrivez votre projet en au moins 3 caractères.");
+      patch({ error: "Décrivez votre projet en au moins 3 caractères." });
       return;
     }
 
-    setPhase("running");
-    setError(null);
-    setActionError(null);
-    setResult(null);
-    setPreviewHtml(null);
-    setCustomizeOpen(false);
-    setCustomization(null);
-    setLivePreviewHtml(null);
-    setPipelineSteps(initialPipelineSteps());
+    patch({
+      phase: "running",
+      error: null,
+      actionError: null,
+      result: null,
+      previewHtml: null,
+      customizeOpen: false,
+      customization: null,
+      livePreviewHtml: null,
+      pipelineSteps: initialPipelineSteps(),
+    });
 
     const onStep = (event: PipelineStepEvent) => {
-      setPipelineSteps((prev) => applyPipelineStepEvent(prev, event));
+      applyPipelineStep(event);
       dispatchPipelineEvent(event);
     };
 
@@ -283,88 +279,95 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       );
 
       if (!response.ok || !response.data) {
-        setPhase("error");
-        setError(
-          pipelineStreamErrorMessage(
+        patch({
+          phase: "error",
+          error: pipelineStreamErrorMessage(
             response,
             "Backend injoignable ou clés LLM manquantes — configurez-les dans Paramètres.",
           ),
-        );
+        });
         return;
       }
 
       const normalized = normalizeRunResponse(response.data);
       if (!normalized) {
-        setPhase("error");
-        setError("Réponse backend invalide (génération vide).");
+        patch({
+          phase: "error",
+          error: "Réponse backend invalide (génération vide).",
+        });
         return;
       }
       const entry = saveGenerationToHistory(trimmed, projectType, normalized);
-      setLastSavedId(entry.id);
-      setCloudSaved(Boolean(normalized.persistence?.project_id));
       refreshHistory();
-      setResult(normalized);
       const custom = customizationFromSeed(
         normalized.generation.demo_seed,
         projectTitleFromPrompt(trimmed),
       );
-      setBaselineCustomization(cloneCustomization(custom));
-      setCustomization(custom);
-      setCustomizeOpen(true);
       const serverPreview = normalized.preview_html?.trim();
-      if (serverPreview?.includes("saas-shell")) {
-        setPreviewHtml(serverPreview);
-        setLivePreviewHtml(serverPreview);
-      }
-      setActiveFile(0);
-      setPhase("done");
+      patch({
+        lastSavedId: entry.id,
+        cloudSaved: Boolean(normalized.persistence?.project_id),
+        result: normalized,
+        baselineCustomization: cloneCustomization(custom),
+        customization: custom,
+        customizeOpen: true,
+        activeFile: 0,
+        phase: "done",
+        ...(serverPreview?.includes("saas-shell")
+          ? { previewHtml: serverPreview, livePreviewHtml: serverPreview }
+          : {}),
+      });
     } catch (err) {
-      setPhase("error");
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Erreur inattendue pendant la génération.",
-      );
+      patch({
+        phase: "error",
+        error:
+          err instanceof Error
+            ? err.message
+            : "Erreur inattendue pendant la génération.",
+      });
     }
   }
 
   async function handlePreview() {
     if (!hasOutput) return;
-    setActionError(null);
+    patch({ actionError: null });
     const html = resolvePreviewHtml(result);
     if (!html) {
-      setActionError(
-        "Aperçu indisponible — relancez une génération pour reconstruire l’aperçu TaskFlow.",
-      );
+      patch({
+        actionError:
+          "Aperçu indisponible — relancez une génération pour reconstruire l’aperçu TaskFlow.",
+      });
       return;
     }
-    setPreviewHtml(html);
+    patch({ previewHtml: html });
   }
 
   async function handleCopy() {
     if (!displayedCode) return;
-    setActionError(null);
+    patch({ actionError: null });
     try {
       await copyTextToClipboard(displayedCode);
       setCopyLabel("Copié !");
       window.setTimeout(() => setCopyLabel("Copier le code"), 2000);
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Échec de la copie dans le presse-papiers.",
-      );
+      patch({
+        actionError:
+          err instanceof Error ? err.message : "Échec de la copie dans le presse-papiers.",
+      });
     }
   }
 
   function handleExportZip() {
     if (!hasOutput) return;
-    setActionError(null);
+    patch({ actionError: null });
     try {
       const name = zipFilenameFromPrompt(prompt || "projet");
       downloadProjectZip(files, name);
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Échec de l'export ZIP.",
-      );
+      patch({
+        actionError:
+          err instanceof Error ? err.message : "Échec de l'export ZIP.",
+      });
     }
   }
 
@@ -372,56 +375,55 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     try {
       const normalized = normalizeRunResponse(entry.result);
       if (!normalized) {
-        setActionError(
-          "Entrée d'historique invalide ou incomplète — supprimez-la et relancez une génération.",
-        );
+        patch({
+          actionError:
+            "Entrée d'historique invalide ou incomplète — supprimez-la et relancez une génération.",
+        });
         return;
       }
       const safeType = PROJECT_TYPE_OPTIONS.some((o) => o.id === entry.projectType)
         ? entry.projectType
         : "site_web";
-      setPrompt(entry.prompt);
-      setProjectType(safeType);
-      setActiveFile(0);
-      setResult(normalized);
-      setPhase("done");
-      setError(null);
-      setActionError(null);
       const restoredCustom = customizationFromSeed(
         normalized.generation.demo_seed,
         projectTitleFromPrompt(entry.prompt),
       );
-      setBaselineCustomization(cloneCustomization(restoredCustom));
-      setCustomization(restoredCustom);
-      setCustomizeOpen(true);
       const restored = normalized.preview_html?.trim();
-      if (restored?.includes("saas-shell")) {
-        setPreviewHtml(restored);
-        setLivePreviewHtml(restored);
-      } else {
-        setPreviewHtml(null);
-        setLivePreviewHtml(null);
-      }
+      patch({
+        prompt: entry.prompt,
+        projectType: safeType,
+        activeFile: 0,
+        result: normalized,
+        phase: "done",
+        error: null,
+        actionError: null,
+        baselineCustomization: cloneCustomization(restoredCustom),
+        customization: restoredCustom,
+        customizeOpen: true,
+        previewHtml: restored?.includes("saas-shell") ? restored : null,
+        livePreviewHtml: restored?.includes("saas-shell") ? restored : null,
+      });
     } catch (err) {
       console.error("[CyberForge] Restaurer", err);
-      setActionError(
-        err instanceof Error
-          ? err.message
-          : "Impossible de restaurer cette entrée.",
-      );
+      patch({
+        actionError:
+          err instanceof Error
+            ? err.message
+            : "Impossible de restaurer cette entrée.",
+      });
     }
   }
 
   function handleRemoveHistory(id: string) {
     removeGenerationFromHistory(id);
     refreshHistory();
-    if (lastSavedId === id) setLastSavedId(null);
+    if (lastSavedId === id) patch({ lastSavedId: null });
   }
 
   function handleClearHistory() {
     clearGenerationHistory();
     refreshHistory();
-    setLastSavedId(null);
+    patch({ lastSavedId: null });
   }
 
   function openDemoModal() {
@@ -501,7 +503,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                 key={option.id}
                 type="button"
                 disabled={isRunning}
-                onClick={() => setProjectType(option.id)}
+                onClick={() => patch({ projectType: option.id })}
                 className={`cyber-type-pill ${
                   projectType === option.id ? "cyber-type-pill-active" : ""
                 }`}
@@ -526,7 +528,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
             </span>
             <textarea
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={(e) => patch({ prompt: e.target.value })}
               rows={6}
               placeholder={EXAMPLE_PROMPT}
               className="cyber-prompt-field"
@@ -559,8 +561,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
               type="button"
               className="rounded-md border border-cyber-border px-3 py-2 text-xs text-cyber-muted hover:border-cyber-accent hover:text-cyber-text"
               onClick={() => {
-                setPrompt(EXAMPLE_PROMPT);
-                setProjectType("site_web");
+                patch({ prompt: EXAMPLE_PROMPT, projectType: "site_web" });
               }}
               disabled={isRunning}
             >
@@ -571,11 +572,16 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                 type="button"
                 className="rounded-md border border-cyber-border px-3 py-2 text-xs text-cyber-muted hover:border-cyber-violet"
                 onClick={() => {
-                  setResult(null);
-                  setError(null);
-                  setActionError(null);
-                  setPhase("idle");
-                  setPreviewHtml(null);
+                  patch({
+                    result: null,
+                    error: null,
+                    actionError: null,
+                    phase: "idle",
+                    previewHtml: null,
+                    livePreviewHtml: null,
+                    customizeOpen: false,
+                    customization: null,
+                  });
                 }}
               >
                 Nouveau projet
@@ -657,7 +663,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                 type="button"
                 className={`cyber-action-btn ${customizeOpen ? "border-cyber-accent text-cyber-neon" : ""}`}
                 disabled={!hasOutput}
-                onClick={() => setCustomizeOpen((open) => !open)}
+                onClick={() => patch({ customizeOpen: !customizeOpen })}
               >
                 Personnaliser
               </button>
@@ -680,7 +686,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
             {customizeOpen && customization ? (
               <CustomizePanel
                 value={customization}
-                onChange={setCustomization}
+                onChange={(next) => patch({ customization: next })}
                 previewHtml={livePreviewHtml ?? previewHtml}
                 previewLoading={previewRefreshing}
                 onSave={() => void handleCustomizationSave()}
@@ -688,7 +694,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                 saveBusy={customizeSaveBusy}
                 onOpenFullPreview={() => {
                   const html = livePreviewHtml ?? previewHtml;
-                  if (html) setPreviewHtml(html);
+                  if (html) patch({ previewHtml: html });
                 }}
               />
             ) : null}
@@ -699,7 +705,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                   <button
                     key={file.path}
                     type="button"
-                    onClick={() => setActiveFile(index)}
+                    onClick={() => patch({ activeFile: index })}
                     className={`rounded border px-2 py-1 font-mono text-[10px] ${
                       index === activeFile
                         ? "border-cyber-accent bg-cyber-accent/10 text-cyber-neon"
@@ -740,7 +746,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       {previewHtml ? (
         <GeneratorPreviewModal
           html={previewHtml}
-          onClose={() => setPreviewHtml(null)}
+          onClose={() => patch({ previewHtml: null })}
         />
       ) : null}
 

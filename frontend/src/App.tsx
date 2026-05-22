@@ -3,6 +3,8 @@ import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import { BackendHealthProvider } from "@/context/BackendHealthContext";
+import { AgentsStatusProvider } from "@/context/AgentsStatusContext";
+import { GeneratorSessionProvider } from "@/context/GeneratorSessionContext";
 import { PipelineActivityProvider } from "@/context/PipelineActivityContext";
 import { getPublicDemoToken } from "@/lib/demo-route";
 import type { AppPage } from "./lib/navigation";
@@ -48,13 +50,17 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BackendHealthProvider>
-        <PipelineActivityProvider>
-          <Layout>
-            <AppShell currentPage={page} onNavigate={setPage}>
-              {renderPage()}
-            </AppShell>
-          </Layout>
-        </PipelineActivityProvider>
+        <AgentsStatusProvider>
+          <GeneratorSessionProvider>
+            <PipelineActivityProvider>
+              <Layout>
+                <AppShell currentPage={page} onNavigate={setPage}>
+                  {renderPage()}
+                </AppShell>
+              </Layout>
+            </PipelineActivityProvider>
+          </GeneratorSessionProvider>
+        </AgentsStatusProvider>
       </BackendHealthProvider>
     </ErrorBoundary>
   );

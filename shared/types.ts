@@ -17,6 +17,23 @@ export interface AgentInfo {
   enabled: boolean;
 }
 
+/** Statut d'un agent — GET /api/agents/status */
+export interface AgentStatusItem {
+  id: string;
+  name: string;
+  description: string;
+  status: "active" | "standby";
+  in_pipeline: boolean;
+}
+
+/** Réponse GET /api/agents/status */
+export interface AgentsStatusResponse {
+  total_agents: number;
+  active_count: number;
+  pipeline_agent_ids: string[];
+  agents: AgentStatusItem[];
+}
+
 /** Types de projet détectés par CoreMindAI */
 export type ProjectType =
   | "site_web"

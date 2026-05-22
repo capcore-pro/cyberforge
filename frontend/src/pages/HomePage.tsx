@@ -5,10 +5,10 @@ import {
   type BackendConnectionStatus,
 } from "@/context/BackendHealthContext";
 import {
-  PIPELINE_AGENT_IDS,
-  usePipelineActivity,
-  type AgentRuntimeStatus,
-} from "@/context/PipelineActivityContext";
+  useAgentsStatus,
+  type AgentDisplayStatus,
+} from "@/context/AgentsStatusContext";
+import { usePipelineActivity } from "@/context/PipelineActivityContext";
 
 interface AgentDef {
   id: string;
@@ -102,7 +102,7 @@ function AgentCard({
   runtimeStatus,
 }: {
   agent: AgentDef;
-  runtimeStatus: AgentRuntimeStatus;
+  runtimeStatus: AgentDisplayStatus;
 }) {
   const accentBorder =
     agent.accent === "cyan"
@@ -129,9 +129,7 @@ function AgentCard({
         </span>
         <span
           className={`text-[10px] font-bold uppercase tracking-wider ${
-            isActive
-              ? "text-green-400 animate-pulse"
-              : "text-cyber-muted"
+            isActive ? "text-green-400" : "text-cyber-muted"
           }`}
         >
           {isActive ? "actif" : "standby"}
@@ -155,7 +153,8 @@ interface HomePageProps {
  */
 export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
   const { status: backendStatus, health } = useBackendHealth();
-  const { getAgentStatus, pipelineRunning } = usePipelineActivity();
+  const { getAgentStatus, activeCount, totalAgents } = useAgentsStatus();
+  const { pipelineRunning } = usePipelineActivity();
 
   const apiBaseUrl =
     import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
@@ -232,7 +231,7 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
             <p className="text-lg font-semibold text-cyber-text">{statusLabel}</p>
             <p className="text-sm text-cyber-muted">{statusSub}</p>
           </div>
-          <div className="col-span-full grid gap-3 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="col-span-full grid gap-3 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-5">
             <StatusMetric
               label="Backend FastAPI"
               value={
@@ -254,6 +253,12 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
               value={health?.version ? `v${health.version}` : "—"}
               sub={health?.app ?? apiBaseUrl}
             />
+            <StatusMetric
+              label="Agents pipeline"
+              value={`${activeCount} / ${totalAgents}`}
+              sub="LangGraph · ACTIF permanent"
+              highlight={activeCount >= 4}
+            />
           </div>
         </div>
       </section>
@@ -268,10 +273,10 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
               Écosystème agents
             </h2>
             <p className="mt-1 text-xs text-cyber-muted">
-              Huit modules spécialisés
+              {activeCount} / {totalAgents} agents ACTIF via le pipeline LangGraph
               {pipelineRunning
-                ? " — pipeline LangGraph en cours (Architect → CoreMind → BugHunter → AutoFix)"
-                : " — statut temps réel pendant les générations"}
+                ? " — génération en cours sur le Générateur"
+                : " — ArchitectAI, CoreMindAI, BugHunterAI, AutoFixAI toujours opérationnels"}
             </p>
           </div>
         </div>
@@ -280,11 +285,7 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
             <AgentCard
               key={agent.id}
               agent={agent}
-              runtimeStatus={
-                (PIPELINE_AGENT_IDS as readonly string[]).includes(agent.id)
-                  ? getAgentStatus(agent.id)
-                  : "standby"
-              }
+              runtimeStatus={getAgentStatus(agent.id)}
             />
           ))}
         </div>
