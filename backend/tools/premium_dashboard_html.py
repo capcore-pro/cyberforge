@@ -21,7 +21,16 @@ def build_premium_dashboard_html(
     brand_tag: str = "Business Intelligence",
     user_name: str = "Alex Martin",
     user_role: str = "Data Lead",
+    kpis: list[dict[str, str | bool]] | None = None,
+    chart_bars: list[dict[str, str | int]] | None = None,
+    sectors: list[dict[str, str]] | None = None,
 ) -> str:
+    from tools.premium_demo_data import (
+        DASHBOARD_CHART,
+        DASHBOARD_KPIS,
+        DASHBOARD_SECTORS,
+    )
+
     page_title = escape_html(title)
     sub = escape_html(subtitle or "Vue consolidée de vos indicateurs clés.")
     brand = escape_html(brand_name)
@@ -29,6 +38,29 @@ def build_premium_dashboard_html(
     user = escape_html(user_name)
     role = escape_html(user_role)
     initials = escape_html(user_initials(user_name))
+
+    kpi_list = list(kpis or DASHBOARD_KPIS)
+    kpi_html = "\n".join(
+        f"""        <div class="cf-card"><div class="cf-kpi-label">{escape_html(str(k.get("label") or ""))}</div>
+          <div class="cf-kpi-value">{escape_html(str(k.get("value") or ""))}</div>
+          <div class="cf-kpi-trend" style="color:{'#4ade80' if k.get('up', True) else '#94a3b8'};">{escape_html(str(k.get("trend") or ""))}</div></div>"""
+        for k in kpi_list[:4]
+    )
+
+    bars = list(chart_bars or DASHBOARD_CHART)
+    chart_html = "\n".join(
+        f'          <div class="cf-bar" style="height:{int(b.get("height", 50))}%" title="{escape_html(str(b.get("month") or ""))}"></div>'
+        for b in bars[:6]
+    )
+
+    sector_rows = list(sectors or DASHBOARD_SECTORS)
+    table_html = "\n".join(
+        f"""            <tr><td>{escape_html(str(s.get("sector") or ""))}</td>
+              <td>{escape_html(str(s.get("revenue") or ""))}</td>
+              <td style="color:#4ade80;">{escape_html(str(s.get("growth") or ""))}</td>
+              <td>{escape_html(str(s.get("share") or ""))}</td></tr>"""
+        for s in sector_rows[:6]
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -80,7 +112,7 @@ def build_premium_dashboard_html(
     th {{ color: #64748b; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; }}
   </style>
 </head>
-<body>
+<body class="{DASHBOARD_MARKER}">
   <div class="cf-shell cf-with-sidebar" id="cf-shell">
     <div class="cf-sidebar-backdrop"></div>
     <aside class="cf-sidebar">
@@ -99,30 +131,20 @@ def build_premium_dashboard_html(
         <span style="font-size:0.8rem;">{user} · {role}</span>
       </header>
       <div class="cf-kpi-grid">
-        <div class="cf-card"><div class="cf-kpi-label">Revenus (Mois)</div><div class="cf-kpi-value">48 250 €</div><div class="cf-kpi-trend">+12,4 %</div></div>
-        <div class="cf-card"><div class="cf-kpi-label">Utilisateurs actifs</div><div class="cf-kpi-value">3 842</div><div class="cf-kpi-trend">+8,1 %</div></div>
-        <div class="cf-card"><div class="cf-kpi-label">Taux conversion</div><div class="cf-kpi-value">4,2 %</div><div class="cf-kpi-trend">+0,6 pt</div></div>
-        <div class="cf-card"><div class="cf-kpi-label">Churn</div><div class="cf-kpi-value">1,8 %</div><div class="cf-kpi-trend" style="color:#4ade80;">-0,3 pt</div></div>
+{kpi_html}
       </div>
       <div class="cf-chart-wrap">
-        <h3 style="margin:0 0 0.75rem;padding:0 0.25rem;font-size:0.9rem;color:#f8fafc;">Performance mensuelle</h3>
-        <div class="cf-chart" role="img" aria-label="Graphique en barres">
-          <div class="cf-bar" style="height:45%"></div>
-          <div class="cf-bar" style="height:62%"></div>
-          <div class="cf-bar" style="height:55%"></div>
-          <div class="cf-bar" style="height:78%"></div>
-          <div class="cf-bar" style="height:70%"></div>
-          <div class="cf-bar" style="height:92%"></div>
+        <h3 style="margin:0 0 0.75rem;padding:0 0.25rem;font-size:0.9rem;color:#f8fafc;">Chiffre d'affaires — 6 derniers mois</h3>
+        <div class="cf-chart" role="img" aria-label="Graphique ventes">
+{chart_html}
         </div>
       </div>
       <div class="cf-table-wrap">
-        <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:#f8fafc;">Top campagnes</h3>
+        <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:#f8fafc;">Performance par secteur</h3>
         <table>
-          <thead><tr><th>Campagne</th><th>Leads</th><th>Coût</th><th>ROI</th></tr></thead>
+          <thead><tr><th>Secteur</th><th>CA</th><th>Croissance</th><th>Part</th></tr></thead>
           <tbody>
-            <tr><td>Search Brand FR</td><td>412</td><td>2 140 €</td><td style="color:#4ade80;">320 %</td></tr>
-            <tr><td>LinkedIn ABM</td><td>186</td><td>3 800 €</td><td style="color:#4ade80;">185 %</td></tr>
-            <tr><td>Newsletter Q2</td><td>98</td><td>420 €</td><td style="color:#4ade80;">240 %</td></tr>
+{table_html}
           </tbody>
         </table>
       </div>

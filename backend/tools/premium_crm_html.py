@@ -24,7 +24,9 @@ def build_premium_crm_html(
     user_name: str = "Alex Martin",
     user_role: str = "Account Executive",
     contacts: list[dict[str, str]] | None = None,
+    pipeline: list[dict[str, str]] | None = None,
 ) -> str:
+    from tools.premium_demo_data import CRM_PIPELINE
     page_title = escape_html(title)
     sub = escape_html(subtitle or "Gérez contacts, opportunités et relances.")
     brand = escape_html(brand_name)
@@ -82,12 +84,21 @@ def build_premium_crm_html(
             "company": str(row.get("company") or company),
             "contact": str(row.get("role_line") or role_line),
             "email": str(row.get("email") or email),
+            "deal_value": str(row.get("deal_value") or ""),
         }
 
     first = rows[0]
     d_company = escape_html(str(first.get("company") or brand_name))
     d_contact = escape_html(str(first.get("role_line") or first.get("person") or user_name))
     d_email = escape_html(str(first.get("email") or "contact@demo.fr"))
+    d_deal = escape_html(str(first.get("deal_value") or "18 400 €"))
+
+    pipe_rows = list(pipeline or CRM_PIPELINE)
+    pipeline_html = "\n".join(
+        f"""            <div class="cf-pipe-col"><div class="cf-pipe-title">{escape_html(str(p.get("stage") or ""))}</div>
+              <div class="cf-deal" style="border-color:{escape_html(str(p.get("color") or "#6366f1"))};">{escape_html(str(p.get("deal") or ""))}</div></div>"""
+        for p in pipe_rows[:4]
+    )
 
     contacts_html = "\n".join(contact_items)
     details_json = json.dumps(details_map, ensure_ascii=False)
@@ -195,16 +206,13 @@ def build_premium_crm_html(
           <div class="cf-detail-label">Email</div>
           <div class="cf-detail-value" id="d-email">{d_email}</div>
           <div class="cf-detail-label">Valeur opportunité</div>
-          <div class="cf-detail-value" style="color:#4ade80;">24 800 €</div>
+          <div class="cf-detail-value" id="d-deal" style="color:#4ade80;">{d_deal}</div>
           <button type="button" class="cf-btn cf-btn-primary" style="width:100%;margin-top:0.5rem;">Planifier un appel</button>
         </div>
         <div class="cf-card">
           <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:#f8fafc;">Pipeline</h3>
           <div class="cf-pipeline">
-            <div class="cf-pipe-col"><div class="cf-pipe-title">Lead</div><div class="cf-deal">Studio Nova · 8k€</div></div>
-            <div class="cf-pipe-col"><div class="cf-pipe-title">Qualif</div><div class="cf-deal">GreenTech · 15k€</div></div>
-            <div class="cf-pipe-col"><div class="cf-pipe-title">Proposition</div><div class="cf-deal">{d_company} · 24k€</div></div>
-            <div class="cf-pipe-col"><div class="cf-pipe-title">Gagné</div><div class="cf-deal" style="border-color:#4ade80;">LogiPro · 12k€</div></div>
+{pipeline_html}
           </div>
         </div>
       </div>
@@ -223,6 +231,7 @@ def build_premium_crm_html(
           document.getElementById("d-company").textContent = d.company;
           document.getElementById("d-contact").textContent = d.contact;
           if (d.email) document.getElementById("d-email").textContent = d.email;
+          if (d.deal_value) document.getElementById("d-deal").textContent = d.deal_value;
         }}
       }});
     }});

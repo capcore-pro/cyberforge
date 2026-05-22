@@ -23,22 +23,29 @@ def build_premium_landing_html(
     user_name: str = "Alex Martin",
     user_role: str = "Fondateur",
     hero_cta: str = "Démarrer gratuitement",
-    feature_1: str = "Déploiement en 48 h",
-    feature_2: str = "Sécurité entreprise",
-    feature_3: str = "Support prioritaire 24/7",
+    features: tuple[str, ...] | list[str] | None = None,
+    testimonials: list[dict[str, str]] | None = None,
 ) -> str:
+    from tools.premium_demo_data import LANDING_FEATURES, LANDING_TESTIMONIALS
+
     page_title = escape_html(title)
     sub = escape_html(subtitle or "La solution moderne pour accélérer votre croissance.")
     brand = escape_html(brand_name)
     tag = escape_html(brand_tag)
     cta = escape_html(hero_cta)
-    f1, f2, f3 = map(escape_html, (feature_1, feature_2, feature_3))
-    t1_quote = escape_html(
-        f"{brand_name} a transformé notre acquisition client en trois mois."
-    )
-    t2_quote = escape_html("Interface claire, onboarding fluide, équipe conquise.")
-    t1_author = escape_html("Sophie Laurent")
-    t2_author = escape_html("Marc Dubois")
+    feats = tuple(features or LANDING_FEATURES)
+    f1 = escape_html(feats[0] if len(feats) > 0 else "Déploiement rapide")
+    f2 = escape_html(feats[1] if len(feats) > 1 else "Sécurité entreprise")
+    f3 = escape_html(feats[2] if len(feats) > 2 else "Support prioritaire")
+    tests = list(testimonials or LANDING_TESTIMONIALS)
+    t1 = tests[0] if tests else {}
+    t2 = tests[1] if len(tests) > 1 else tests[0] if tests else {}
+    t1_quote = escape_html(str(t1.get("quote") or f"{brand_name} accélère votre croissance."))
+    t2_quote = escape_html(str(t2.get("quote") or "Interface claire et onboarding fluide."))
+    t1_author = escape_html(str(t1.get("author") or "Jean Dupont"))
+    t2_author = escape_html(str(t2.get("author") or "Marie Martin"))
+    t1_role = escape_html(str(t1.get("role") or "Directeur général"))
+    t2_role = escape_html(str(t2.get("role") or "Directrice marketing"))
     initials = escape_html(user_initials(user_name))
 
     return f"""<!DOCTYPE html>
@@ -144,11 +151,11 @@ def build_premium_landing_html(
     <section class="cf-testimonials" id="temoignages">
       <div class="cf-card">
         <p class="cf-testimonial-quote">« {t1_quote} »</p>
-        <div class="cf-testimonial-author">— {t1_author}, Directrice marketing</div>
+        <div class="cf-testimonial-author">— {t1_author}, {t1_role}</div>
       </div>
       <div class="cf-card">
         <p class="cf-testimonial-quote">« {t2_quote} »</p>
-        <div class="cf-testimonial-author">— {t2_author}, CEO startup B2B</div>
+        <div class="cf-testimonial-author">— {t2_author}, {t2_role}</div>
       </div>
     </section>
 

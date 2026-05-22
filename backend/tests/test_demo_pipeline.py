@@ -19,9 +19,10 @@ def test_pipeline_single_index_html() -> None:
     )
     assert doc.generation.files[0].path == INDEX_HTML_PATH
     assert doc.html == doc.generation.code
+    assert doc.template == "reservation"
     assert TEMPLATE_MARKERS[doc.template] in doc.html
     assert "export default" not in doc.html
-    assert any("réservation" in t[0].lower() for t in doc.seed.tasks)
+    assert "Jean Dupont" in doc.html
 
 
 def test_pipeline_landing_template() -> None:

@@ -9,6 +9,7 @@ from tools.demo_template_service import (
     TEMPLATE_INVOICE,
     TEMPLATE_LANDING,
     TEMPLATE_MARKERS,
+    TEMPLATE_RESERVATION,
     TEMPLATE_TASKFLOW,
     DemoTemplateService,
     build_html_from_seed,
@@ -36,6 +37,10 @@ def test_detect_template_landing() -> None:
     assert detect_template_from_prompt("Landing page marketing hero témoignages") == TEMPLATE_LANDING
 
 
+def test_detect_template_reservation() -> None:
+    assert detect_template_from_prompt("Application de réservation de tables") == TEMPLATE_RESERVATION
+
+
 def test_heuristic_seed_reservation_tasks() -> None:
     seed = heuristic_demo_seed(
         "Application de réservation de tables pour restaurant",
@@ -50,9 +55,9 @@ def test_heuristic_seed_restaurant_tasks() -> None:
         "Site pour mon restaurant italien avec réservations",
         project_type_label="Site web",
     )
-    assert seed.template == TEMPLATE_TASKFLOW
+    assert seed.template == TEMPLATE_RESERVATION
     assert "restaurant" in seed.brand_name.lower() or "Restaurant" in seed.brand_name
-    assert len(seed.tasks) >= 3
+    assert "Jean Dupont" in build_html_from_seed(seed)
 
 
 def test_crm_html_has_no_template_placeholders() -> None:
@@ -61,6 +66,16 @@ def test_crm_html_has_no_template_placeholders() -> None:
     assert TEMPLATE_MARKERS[TEMPLATE_CRM] in html
     assert "{contact.name}" not in html
     assert "saas-shell" not in html
+    assert "Jean Dupont" in html
+    assert "Marie Martin" in html
+
+
+def test_default_tasks_are_professional_not_acme() -> None:
+    seed = heuristic_demo_seed("Application web interne", project_type_label="SaaS")
+    assert seed.template == TEMPLATE_TASKFLOW
+    joined = " ".join(t[0] for t in seed.tasks)
+    assert "Acme Corp" not in joined
+    assert "comité de direction" in joined.lower() or "reporting" in joined.lower()
 
 
 def test_build_html_all_templates_valid() -> None:
@@ -70,6 +85,7 @@ def test_build_html_all_templates_valid() -> None:
         TEMPLATE_CRM: ("CRM contacts pipeline commercial", "SaaS"),
         TEMPLATE_DASHBOARD: ("Dashboard analytics KPIs", "SaaS dashboard"),
         TEMPLATE_INVOICE: ("Facturation devis TVA", "Application web"),
+        TEMPLATE_RESERVATION: ("Réservation créneaux restaurant", "Application web"),
     }
     for template, (prompt, label) in prompts.items():
         seed = heuristic_demo_seed(prompt, project_type_label=label)

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import json
+
 from tools.premium_base import (
     CYBERFORGE_PREVIEW_MARKER,
     PREMIUM_BASE_CSS,
-    escape_attr,
     escape_html,
-    shell_nav_script,
     user_initials,
 )
 
@@ -22,7 +22,10 @@ def build_premium_invoice_html(
     brand_tag: str = "Comptabilité simplifiée",
     user_name: str = "Alex Martin",
     user_role: str = "Responsable finance",
+    invoices: list[dict[str, str | float | int]] | None = None,
 ) -> str:
+    from tools.premium_demo_data import INVOICES
+
     page_title = escape_html(title)
     sub = escape_html(subtitle or "Émettez et suivez vos factures en quelques clics.")
     brand = escape_html(brand_name)
@@ -30,6 +33,39 @@ def build_premium_invoice_html(
     user = escape_html(user_name)
     role = escape_html(user_role)
     initials = escape_html(user_initials(user_name))
+
+    inv_list = list(invoices or INVOICES)
+    row_html: list[str] = []
+    inv_map: dict[str, dict[str, object]] = {}
+    for idx, inv in enumerate(inv_list[:6]):
+        iid = str(inv.get("id") or idx)
+        number = escape_html(str(inv.get("number") or f"FAC-{iid}"))
+        client = escape_html(str(inv.get("client") or ""))
+        ht = float(inv.get("ht") or 0)
+        ttc = ht * 1.2
+        status = escape_html(str(inv.get("status") or ""))
+        badge = escape_html(str(inv.get("badge_class") or "cf-badge"))
+        active = " active" if idx == 0 else ""
+        row_html.append(
+            f"""        <div class="cf-inv-row{active}" data-inv="{escape_html(iid)}">
+          <div><strong>{number}</strong><br/><span style="font-size:0.75rem;color:#64748b;">{client}</span></div>
+          <div><span class="{badge}">{status}</span><br/>{escape_html(f"{ttc:,.0f}".replace(",", " "))} € TTC</div>
+        </div>"""
+        )
+        inv_map[iid] = {
+            "client": str(inv.get("client") or ""),
+            "ht": ht,
+            "number": str(inv.get("number") or ""),
+        }
+
+    first = inv_list[0] if inv_list else {}
+    first_ht = float(first.get("ht") or 3800)
+    first_tva = first_ht * 0.2
+    first_ttc = first_ht + first_tva
+    first_client = escape_html(str(first.get("client") or "Client démo"))
+    inv_json = json.dumps(inv_map, ensure_ascii=False)
+
+    rows = "\n".join(row_html)
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -78,7 +114,7 @@ def build_premium_invoice_html(
     .cf-totals .grand {{ font-size: 1.25rem; font-weight: 700; color: #f8fafc; margin-top: 0.5rem; }}
   </style>
 </head>
-<body>
+<body class="{INVOICE_MARKER}">
   <div class="cf-shell" id="cf-shell">
     <header class="cf-topbar">
       <button type="button" class="cf-menu-btn" aria-label="Menu" style="visibility:hidden">☰</button>
@@ -93,41 +129,31 @@ def build_premium_invoice_html(
     <div class="cf-invoice-layout">
       <div class="cf-card">
         <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:#f8fafc;">Factures</h3>
-        <div class="cf-inv-row active" data-inv="2026-042">
-          <div><strong>FAC-2026-042</strong><br/><span style="font-size:0.75rem;color:#64748b;">Acme Industries</span></div>
-          <div><span class="cf-badge">Payée</span><br/>4 560 €</div>
-        </div>
-        <div class="cf-inv-row" data-inv="2026-043">
-          <div><strong>FAC-2026-043</strong><br/><span style="font-size:0.75rem;color:#64748b;">GreenTech SAS</span></div>
-          <div><span class="cf-badge cf-badge-pending">En attente</span><br/>2 880 €</div>
-        </div>
-        <div class="cf-inv-row" data-inv="2026-044">
-          <div><strong>FAC-2026-044</strong><br/><span style="font-size:0.75rem;color:#64748b;">Studio Nova</span></div>
-          <div><span class="cf-badge cf-badge-pending">Brouillon</span><br/>1 200 €</div>
-        </div>
+{rows}
       </div>
       <div class="cf-card cf-form">
         <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:#f8fafc;">Nouvelle facture</h3>
         <label>Client</label>
-        <input type="text" value="Acme Industries" id="inv-client" />
+        <input type="text" value="{first_client}" id="inv-client" />
         <label>Description</label>
-        <input type="text" value="Prestation conseil — Avril 2026" />
+        <input type="text" value="Prestation conseil — Mai 2026" />
         <label>Montant HT (€)</label>
-        <input type="number" value="3800" id="inv-ht" />
+        <input type="number" value="{int(first_ht)}" id="inv-ht" />
         <label>Taux TVA</label>
         <select id="inv-tva"><option value="20" selected>20 %</option><option value="10">10 %</option></select>
         <button type="button" class="cf-btn cf-btn-primary" style="width:100%;" id="inv-calc">Calculer les totaux</button>
       </div>
       <div class="cf-card cf-totals" id="inv-totals">
         <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:#f8fafc;">Récapitulatif</h3>
-        <div class="line"><span>Total HT</span><span id="t-ht">3 800,00 €</span></div>
-        <div class="line"><span>TVA (20 %)</span><span id="t-tva">760,00 €</span></div>
-        <div class="line grand"><span>Total TTC</span><span id="t-ttc">4 560,00 €</span></div>
+        <div class="line"><span>Total HT</span><span id="t-ht">{first_ht:,.2f} €</span></div>
+        <div class="line"><span>TVA (20 %)</span><span id="t-tva">{first_tva:,.2f} €</span></div>
+        <div class="line grand"><span>Total TTC</span><span id="t-ttc">{first_ttc:,.2f} €</span></div>
         <button type="button" class="cf-btn cf-btn-ghost" style="width:100%;margin-top:1rem;">Télécharger PDF</button>
       </div>
     </div>
   </div>
   <script>
+    var invoices = {inv_json};
     function fmt(n) {{ return n.toLocaleString("fr-FR", {{ minimumFractionDigits: 2 }}) + " €"; }}
     function recalc() {{
       var ht = parseFloat(document.getElementById("inv-ht").value) || 0;
@@ -144,6 +170,12 @@ def build_premium_invoice_html(
       row.addEventListener("click", function() {{
         document.querySelectorAll(".cf-inv-row").forEach(function(r) {{ r.classList.remove("active"); }});
         row.classList.add("active");
+        var inv = invoices[row.getAttribute("data-inv")];
+        if (inv) {{
+          document.getElementById("inv-client").value = inv.client;
+          document.getElementById("inv-ht").value = inv.ht;
+          recalc();
+        }}
       }});
     }});
   </script>

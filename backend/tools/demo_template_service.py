@@ -19,8 +19,22 @@ from tools.codegen_service import (
 )
 from tools.premium_crm_html import CRM_MARKER, build_premium_crm_html
 from tools.premium_dashboard_html import DASHBOARD_MARKER, build_premium_dashboard_html
+from tools.premium_demo_data import (
+    CRM_CONTACTS,
+    CRM_PIPELINE,
+    DASHBOARD_CHART,
+    DASHBOARD_KPIS,
+    DASHBOARD_SECTORS,
+    DEFAULT_PROFESSIONAL_TASKS,
+    INVOICES,
+    LANDING_FEATURES,
+    LANDING_TESTIMONIALS,
+    RESERVATION_SLOTS,
+    RESERVATION_TASKS,
+)
 from tools.premium_invoice_html import INVOICE_MARKER, build_premium_invoice_html
 from tools.premium_landing_page_html import LANDING_MARKER, build_premium_landing_html
+from tools.premium_reservation_html import RESERVATION_MARKER, build_premium_reservation_html
 from tools.premium_task_saas_html import PREMIUM_PREVIEW_MARKER, build_premium_task_manager_html
 
 logger = logging.getLogger(__name__)
@@ -30,6 +44,7 @@ TEMPLATE_LANDING = "landing"
 TEMPLATE_CRM = "crm"
 TEMPLATE_DASHBOARD = "dashboard"
 TEMPLATE_INVOICE = "invoice"
+TEMPLATE_RESERVATION = "reservation"
 
 VALID_TEMPLATES = frozenset(
     {
@@ -38,6 +53,7 @@ VALID_TEMPLATES = frozenset(
         TEMPLATE_CRM,
         TEMPLATE_DASHBOARD,
         TEMPLATE_INVOICE,
+        TEMPLATE_RESERVATION,
     }
 )
 
@@ -47,6 +63,7 @@ TEMPLATE_MARKERS: dict[str, str] = {
     TEMPLATE_CRM: CRM_MARKER,
     TEMPLATE_DASHBOARD: DASHBOARD_MARKER,
     TEMPLATE_INVOICE: INVOICE_MARKER,
+    TEMPLATE_RESERVATION: RESERVATION_MARKER,
 }
 
 TEMPLATE_LABELS: dict[str, str] = {
@@ -55,6 +72,7 @@ TEMPLATE_LABELS: dict[str, str] = {
     TEMPLATE_CRM: "CRM",
     TEMPLATE_DASHBOARD: "Dashboard analytics",
     TEMPLATE_INVOICE: "Facturation",
+    TEMPLATE_RESERVATION: "Réservations",
 }
 
 TEMPLATE_PROVIDER = "cyberforge"
@@ -65,13 +83,7 @@ _DEFAULT_TAG = "Démo premium"
 _DEFAULT_USER = "Alex Martin"
 _DEFAULT_ROLE = "Utilisateur"
 
-_DEFAULT_TASKS: tuple[tuple[str, bool], ...] = (
-    ("Finaliser la proposition client Acme Corp", False),
-    ("Revoir le planning sprint Q2 avec l'équipe produit", False),
-    ("Préparer la démo investisseurs (jeudi 14h)", True),
-    ("Valider les maquettes onboarding mobile", False),
-    ("Envoyer le compte-rendu réunion partenaires", False),
-)
+_DEFAULT_TASKS = DEFAULT_PROFESSIONAL_TASKS
 
 
 @dataclass(frozen=True)
@@ -138,6 +150,16 @@ def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") ->
         "site vitrine",
         "landing page",
     )
+    reservation_kw = (
+        "réservation",
+        "reservation",
+        "booking",
+        "créneau",
+        "creneau",
+        "créneaux",
+        "planning tables",
+        "planning restaurant",
+    )
     task_kw = (
         "tâche",
         "tache",
@@ -153,11 +175,18 @@ def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") ->
         TEMPLATE_CRM: sum(1 for k in crm_kw if k in blob),
         TEMPLATE_DASHBOARD: sum(1 for k in dashboard_kw if k in blob),
         TEMPLATE_LANDING: sum(1 for k in landing_kw if k in blob),
+        TEMPLATE_RESERVATION: sum(1 for k in reservation_kw if k in blob),
         TEMPLATE_TASKFLOW: sum(1 for k in task_kw if k in blob),
     }
 
     if re.search(r"\bcrm\b", blob, re.IGNORECASE):
         scores[TEMPLATE_CRM] += 8
+    if re.search(
+        r"\b(réservation|reservation|booking|créneau|creneau)\b",
+        blob,
+        re.IGNORECASE,
+    ):
+        scores[TEMPLATE_RESERVATION] += 8
 
     if "landing_page" in blob or "site_web" in blob:
         scores[TEMPLATE_LANDING] += 2
@@ -169,11 +198,23 @@ def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") ->
         scores[TEMPLATE_DASHBOARD],
         scores[TEMPLATE_INVOICE],
         scores[TEMPLATE_LANDING],
+        scores[TEMPLATE_RESERVATION],
     )
     if "application_web" in blob and specialized == 0 and scores[TEMPLATE_LANDING] == 0:
         scores[TEMPLATE_TASKFLOW] += 1
 
-    best = max(scores.items(), key=lambda x: (x[1], x[0] == TEMPLATE_CRM))
+    priority = (
+        TEMPLATE_CRM,
+        TEMPLATE_RESERVATION,
+        TEMPLATE_INVOICE,
+        TEMPLATE_DASHBOARD,
+        TEMPLATE_LANDING,
+        TEMPLATE_TASKFLOW,
+    )
+    best = max(
+        scores.items(),
+        key=lambda x: (x[1], priority.index(x[0]) if x[0] in priority else 99),
+    )
     if best[1] > 0:
         return best[0]
     return TEMPLATE_TASKFLOW
@@ -234,6 +275,7 @@ def _brand_from_prompt(prompt: str, template: str) -> str:
         TEMPLATE_CRM: "RelateCRM",
         TEMPLATE_DASHBOARD: "InsightHub",
         TEMPLATE_INVOICE: "BillForge",
+        TEMPLATE_RESERVATION: "BookTable",
         TEMPLATE_TASKFLOW: "TaskFlow",
     }
     for kw in (
@@ -261,6 +303,7 @@ def _subtitle_for_template(template: str, brand: str) -> str:
         TEMPLATE_CRM: f"Pilotez votre pipeline commercial avec {brand}.",
         TEMPLATE_DASHBOARD: f"Visualisez vos KPIs en temps réel avec {brand}.",
         TEMPLATE_INVOICE: f"Facturation simple et conforme avec {brand}.",
+        TEMPLATE_RESERVATION: f"Gérez vos créneaux et tables avec {brand}.",
         TEMPLATE_TASKFLOW: f"Organisez votre travail avec {brand} — espace collaboratif premium.",
     }
     return subs.get(template, f"Démo interactive {brand}.")
@@ -268,30 +311,14 @@ def _subtitle_for_template(template: str, brand: str) -> str:
 
 def _tasks_from_prompt(prompt: str) -> tuple[tuple[str, bool], ...]:
     lower = prompt.lower()
-    if (
-        "réservation" in lower
-        or "reservation" in lower
-        or "booking" in lower
-    ):
-        return (
-            ("Confirmer les réservations du vendredi soir", False),
-            ("Mettre à jour le plan de salle (12 couverts)", False),
-            ("Relancer les no-shows de la semaine dernière", True),
-            ("Préparer le menu dégustation week-end", False),
-            ("Synchroniser les créneaux en ligne", False),
-        )
+    if detect_template_from_prompt(prompt) == TEMPLATE_RESERVATION:
+        return RESERVATION_TASKS
     if "restaurant" in lower or "café" in lower or "menu" in lower:
         return (
             ("Mettre à jour la carte des desserts", False),
             ("Confirmer les réservations du week-end", False),
             ("Commander les produits frais", True),
             ("Former l'équipe salle sur le POS", False),
-        )
-    if "crm" in lower or "commercial" in lower:
-        return (
-            ("Relancer les leads inbound", False),
-            ("Préparer proposition Acme Corp", False),
-            ("Mettre à jour le pipeline Q2", True),
         )
     return _DEFAULT_TASKS
 
@@ -379,56 +406,15 @@ def seed_from_dict(
 
 
 def _crm_contacts_from_seed(seed: DemoSeedData) -> list[dict[str, str]]:
-    """Contacts CRM — noms réels injectés (jamais de placeholder type {contact.name})."""
-    brand = seed.brand_name
-    defaults = [
-        {
-            "id": "1",
-            "company": brand,
-            "person": "Marie Dupont",
-            "status": "Lead chaud",
-            "email": f"marie.dupont@{_slug_domain(brand)}.fr",
-            "role_line": "Marie Dupont — Directrice achats",
-        },
-        {
-            "id": "2",
-            "company": "GreenTech SAS",
-            "person": "Paul Martin",
-            "status": "Négociation",
-            "email": "p.martin@greentech.fr",
-            "role_line": "Paul Martin — CTO",
-        },
-        {
-            "id": "3",
-            "company": "Studio Nova",
-            "person": "Léa Bernard",
-            "status": "Qualification",
-            "email": "lea@studio-nova.fr",
-            "role_line": "Léa Bernard — Fondatrice",
-        },
-    ]
-    if not seed.tasks:
-        return defaults
-    contacts: list[dict[str, str]] = []
-    statuses = ("Lead chaud", "Négociation", "Qualification", "À relancer")
-    for idx, (text, _) in enumerate(seed.tasks[:3]):
-        person = _clip(text.split("—")[0].strip(), 48) or f"Contact {idx + 1}"
-        contacts.append(
-            {
-                "id": str(idx + 1),
-                "company": brand if idx == 0 else f"Compte {idx + 1}",
-                "person": person,
-                "status": statuses[idx % len(statuses)],
-                "email": f"contact{idx + 1}@{_slug_domain(brand)}.fr",
-                "role_line": f"{person} — {text[:60]}",
-            }
-        )
-    return contacts or defaults
+    """Contacts CRM fictifs (Jean Dupont, Marie Martin, entreprises, statuts pipeline)."""
+    contacts = [dict(c) for c in CRM_CONTACTS]
+    if contacts:
+        contacts[0] = {**contacts[0], "company": seed.brand_name}
+    return contacts
 
 
-def _slug_domain(brand: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "", brand.lower())
-    return slug[:24] or "demo"
+def _reservation_bookings_from_seed(seed: DemoSeedData) -> list[dict[str, str | int]]:
+    return [dict(b) for b in RESERVATION_SLOTS]
 
 
 def build_html_from_seed(seed: DemoSeedData) -> str:
@@ -441,17 +427,35 @@ def build_html_from_seed(seed: DemoSeedData) -> str:
         user_name=seed.user_name,
         user_role=seed.user_role,
     )
-    if seed.template == TEMPLATE_LANDING:
-        return build_premium_landing_html(**common)
     if seed.template == TEMPLATE_CRM:
         return build_premium_crm_html(
             **common,
             contacts=_crm_contacts_from_seed(seed),
+            pipeline=[dict(p) for p in CRM_PIPELINE],
         )
     if seed.template == TEMPLATE_DASHBOARD:
-        return build_premium_dashboard_html(**common)
+        return build_premium_dashboard_html(
+            **common,
+            kpis=[dict(k) for k in DASHBOARD_KPIS],
+            chart_bars=[dict(b) for b in DASHBOARD_CHART],
+            sectors=[dict(s) for s in DASHBOARD_SECTORS],
+        )
     if seed.template == TEMPLATE_INVOICE:
-        return build_premium_invoice_html(**common)
+        return build_premium_invoice_html(
+            **common,
+            invoices=[dict(i) for i in INVOICES],
+        )
+    if seed.template == TEMPLATE_RESERVATION:
+        return build_premium_reservation_html(
+            **common,
+            bookings=_reservation_bookings_from_seed(seed),
+        )
+    if seed.template == TEMPLATE_LANDING:
+        return build_premium_landing_html(
+            **common,
+            features=LANDING_FEATURES,
+            testimonials=[dict(t) for t in LANDING_TESTIMONIALS],
+        )
     return build_premium_task_manager_html(
         **common,
         user_initials=_initials(seed.user_name),
