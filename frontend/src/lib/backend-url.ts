@@ -1,11 +1,15 @@
-import { API_PREFIX, DEFAULT_API_BASE_URL } from "@shared/constants";
+import {
+  API_PREFIX,
+  DEFAULT_API_BASE_URL,
+  normalizeBackendBaseUrl,
+} from "@shared/constants";
 import type { ApiResponsePayload } from "@shared/ipc";
 
 /** URL de base du backend FastAPI, sans slash final ni suffixe /api. */
 export function getBackendBaseUrl(): string {
   const raw =
     import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
-  return raw.replace(/\/+$/, "").replace(/\/api$/, "");
+  return normalizeBackendBaseUrl(raw);
 }
 
 /** Construit une URL absolue vers une route API backend. */

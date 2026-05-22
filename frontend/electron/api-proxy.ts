@@ -1,12 +1,15 @@
 import type { ApiRequestPayload, ApiResponsePayload } from "@shared/ipc";
-import { DEFAULT_API_BASE_URL } from "@shared/constants";
+import {
+  DEFAULT_API_BASE_URL,
+  normalizeBackendBaseUrl,
+} from "@shared/constants";
 
 /** Résout l'URL de base du backend depuis l'environnement du processus main. */
 export function resolveApiBaseUrl(): string {
   const fromEnv =
     process.env.VITE_API_BASE_URL?.trim() || process.env.BACKEND_URL?.trim();
   if (fromEnv) {
-    return fromEnv.replace(/\/$/, "");
+    return normalizeBackendBaseUrl(fromEnv);
   }
   return DEFAULT_API_BASE_URL;
 }

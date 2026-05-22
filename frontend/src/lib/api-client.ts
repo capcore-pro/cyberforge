@@ -1,4 +1,8 @@
-import { DEFAULT_API_BASE_URL, API_PREFIX } from "@shared/constants";
+import {
+  API_PREFIX,
+  DEFAULT_API_BASE_URL,
+  normalizeBackendBaseUrl,
+} from "@shared/constants";
 import type { ApiRequestPayload, ApiResponsePayload } from "@shared/ipc";
 
 const DEFAULT_GET_TIMEOUT_MS = 15_000;
@@ -24,7 +28,9 @@ function resolveFetchBaseUrl(): string {
   if (useViteDevProxy()) {
     return "";
   }
-  return import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+  const raw =
+    import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+  return normalizeBackendBaseUrl(raw);
 }
 
 function resolveTimeoutMs(payload: ApiRequestPayload): number {

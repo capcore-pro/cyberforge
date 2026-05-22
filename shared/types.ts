@@ -93,6 +93,10 @@ export interface DemoSeedPayload {
   user_role?: string;
   tasks?: DemoSeedTask[];
   llm_personalized?: boolean;
+  /** Couleur principale (#RRGGBB) pour l'aperçu / démo TaskFlow. */
+  primary_color?: string;
+  /** Logo client (data URL PNG/JPG) affiché dans le header de la démo. */
+  logo_data_url?: string | null;
 }
 
 export interface CoreMindGenerateResponse {

@@ -50,6 +50,29 @@ def preview_html_from_generation(
     return html
 
 
+def preview_html_from_seed_dict(
+    seed_data: dict[str, object],
+    *,
+    title: str = "Démo CyberForge",
+    user_prompt: str = "",
+) -> str:
+    """Aperçu TaskFlow à partir d'une seed JSON (personnalisation temps réel)."""
+    seed = align_seed_template(
+        seed_from_dict(
+            seed_data,
+            prompt=user_prompt,
+            project_type_label=title,
+        ),
+        user_prompt or title,
+        project_type_label=title,
+    )
+    preview_seed = replace(seed, template=TEMPLATE_TASKFLOW)
+    html = build_html_from_seed(preview_seed)
+    if not is_valid_demo_html(html, TEMPLATE_TASKFLOW):
+        raise ValueError("Aperçu TaskFlow invalide (saas-shell manquant).")
+    return html
+
+
 def code_result_from_html(
     html: str,
     *,

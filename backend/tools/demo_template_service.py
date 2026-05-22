@@ -99,6 +99,8 @@ class DemoSeedData:
     user_role: str
     tasks: tuple[tuple[str, bool], ...]
     llm_personalized: bool = False
+    primary_color: str = ""
+    logo_data_url: str = ""
 
 
 def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") -> str:
@@ -357,7 +359,20 @@ def seed_as_dict(seed: DemoSeedData) -> dict[str, object]:
             {"text": text, "completed": completed} for text, completed in seed.tasks
         ],
         "llm_personalized": seed.llm_personalized,
+        "primary_color": seed.primary_color,
+        "logo_data_url": seed.logo_data_url,
     }
+
+
+def _normalize_logo_data_url(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    s = value.strip()
+    if not s.startswith("data:image/"):
+        return ""
+    if "png" not in s[:30].lower() and "jpeg" not in s[:30].lower() and "jpg" not in s[:30].lower():
+        return ""
+    return s[:600_000]
 
 
 def seed_from_dict(
@@ -402,6 +417,8 @@ def seed_from_dict(
         user_role=_clip(str(data.get("user_role") or _DEFAULT_ROLE), 48),
         tasks=tuple(tasks),
         llm_personalized=bool(data.get("llm_personalized")),
+        primary_color=_clip(str(data.get("primary_color") or ""), 16),
+        logo_data_url=_normalize_logo_data_url(data.get("logo_data_url")),
     )
 
 
@@ -460,6 +477,8 @@ def build_html_from_seed(seed: DemoSeedData) -> str:
         **common,
         user_initials=_initials(seed.user_name),
         seed_tasks=seed.tasks,
+        primary_color=seed.primary_color or None,
+        logo_data_url=seed.logo_data_url or None,
     )
 
 
@@ -595,4 +614,6 @@ def _parse_seed_payload(
         user_role=_clip(str(data.get("user_role") or _DEFAULT_ROLE), 48),
         tasks=tuple(tasks),
         llm_personalized=True,
+        primary_color=_clip(str(data.get("primary_color") or ""), 16),
+        logo_data_url=_normalize_logo_data_url(data.get("logo_data_url")),
     )

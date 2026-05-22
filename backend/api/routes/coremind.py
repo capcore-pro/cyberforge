@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.coremind_agent import CoreMindAgent, CoreMindAnalysis, CoreMindRunResult, ProjectType
+from agents.demo_quality import preview_html_from_seed_dict
 from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG
 from db.supabase_store import PersistenceResult, SupabaseStoreError, get_supabase_store
 from tools.codegen_service import CodeGenService, CodeGenServiceError, CodeGenerateResult
@@ -49,6 +50,18 @@ class CoreMindRunResponse(CoreMindRunResult):
     persistence: PersistenceResult | None = None
 
 
+class PreviewHtmlRequest(BaseModel):
+    """Seed + contexte pour régénérer l'aperçu TaskFlow (panneau Personnaliser)."""
+
+    demo_seed: dict = Field(..., description="Seed sérialisée du projet")
+    prompt: str | None = Field(default=None, max_length=8000)
+    project_type_label: str | None = Field(default=None, max_length=200)
+
+
+class PreviewHtmlResponse(BaseModel):
+    html: str = Field(..., min_length=100)
+
+
 class CoreMindGenerateRequest(BaseModel):
     """Corps de requête pour la génération de code CoreMindAI."""
 
@@ -83,6 +96,20 @@ async def generate_code_with_coremind(
         return await agent.generate_code(body.prompt)
     except CodeGenServiceError as exc:
         raise _codegen_http_error(exc) from exc
+
+
+@router.post("/agents/coremind/preview-html", response_model=PreviewHtmlResponse)
+async def preview_demo_html(body: PreviewHtmlRequest) -> PreviewHtmlResponse:
+    """Régénère l'aperçu TaskFlow premium avec la seed personnalisée."""
+    try:
+        html = preview_html_from_seed_dict(
+            body.demo_seed,
+            title=body.project_type_label or "Démo client",
+            user_prompt=(body.prompt or "").strip(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return PreviewHtmlResponse(html=html)
 
 
 @router.post("/agents/coremind/run", response_model=CoreMindRunResponse)

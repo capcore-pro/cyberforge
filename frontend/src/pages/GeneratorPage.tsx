@@ -4,6 +4,7 @@ import type { ComplexityLevel, CoreMindRunResponse, ProjectType } from "@shared/
 import { useBackendHealth } from "@/context/BackendHealthContext";
 import { CodeHighlight } from "@/components/CodeHighlight";
 import { CodeOutputActions } from "@/components/CodeOutputActions";
+import { CustomizePanel } from "@/components/CustomizePanel";
 import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
@@ -26,6 +27,12 @@ import {
   clearGenerationHistory,
   type GenerationHistoryEntry,
 } from "@/lib/generation-history";
+import {
+  customizationFromSeed,
+  mergeCustomizationIntoSeed,
+  type DemoCustomization,
+} from "@/lib/demo-customization";
+import { fetchTaskflowPreviewHtml } from "@/lib/preview-html-api";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { projectTitleFromPrompt } from "@/lib/project-title";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
@@ -80,6 +87,12 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [demoCreated, setDemoCreated] = useState<CreateDemoResponse | null>(null);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [customization, setCustomization] = useState<DemoCustomization | null>(
+    null,
+  );
+  const [livePreviewHtml, setLivePreviewHtml] = useState<string | null>(null);
+  const [previewRefreshing, setPreviewRefreshing] = useState(false);
 
   const refreshHistory = useCallback(() => {
     setHistory(listGenerationHistory());
@@ -119,12 +132,50 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const hasOutput = files.length > 0 && displayedCode.length > 0;
 
   function resolvePreviewHtml(run: CoreMindRunResponse | null): string | null {
+    if (livePreviewHtml?.includes("saas-shell")) return livePreviewHtml;
     const fromServer = run?.preview_html?.trim();
     if (fromServer?.includes("saas-shell")) return fromServer;
     const code = run?.generation.code?.trim();
     if (code?.includes("saas-shell")) return code;
     return fromServer || null;
   }
+
+  const effectiveDemoSeed = useCallback(() => {
+    if (!result?.generation.demo_seed) return null;
+    if (!customization) return result.generation.demo_seed;
+    return mergeCustomizationIntoSeed(
+      result.generation.demo_seed,
+      customization,
+    );
+  }, [result, customization]);
+
+  useEffect(() => {
+    if (!customizeOpen || !customization || !result?.generation.demo_seed) {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setPreviewRefreshing(true);
+        const seed = mergeCustomizationIntoSeed(
+          result.generation.demo_seed,
+          customization,
+        );
+        const html = await fetchTaskflowPreviewHtml(seed, {
+          prompt: prompt.trim(),
+          project_type_label: result.analysis.project_type_label,
+        });
+        if (!cancelled && html) {
+          setLivePreviewHtml(html);
+        }
+        if (!cancelled) setPreviewRefreshing(false);
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [customizeOpen, customization, result, prompt]);
 
   async function handleGenerate(event?: React.SyntheticEvent) {
     event?.preventDefault();
@@ -139,6 +190,9 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     setActionError(null);
     setResult(null);
     setPreviewHtml(null);
+    setCustomizeOpen(false);
+    setCustomization(null);
+    setLivePreviewHtml(null);
 
     try {
       const response = await apiRequest<CoreMindRunResponse>({
@@ -169,9 +223,16 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       setCloudSaved(Boolean(normalized.persistence?.project_id));
       refreshHistory();
       setResult(normalized);
-      const preview = resolvePreviewHtml(normalized);
-      if (preview) {
-        setPreviewHtml(preview);
+      const custom = customizationFromSeed(
+        normalized.generation.demo_seed,
+        projectTitleFromPrompt(trimmed),
+      );
+      setCustomization(custom);
+      setCustomizeOpen(true);
+      const serverPreview = normalized.preview_html?.trim();
+      if (serverPreview?.includes("saas-shell")) {
+        setPreviewHtml(serverPreview);
+        setLivePreviewHtml(serverPreview);
       }
       setActiveFile(0);
       setPhase("done");
@@ -244,7 +305,21 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       setPhase("done");
       setError(null);
       setActionError(null);
-      setPreviewHtml(null);
+      setCustomization(
+        customizationFromSeed(
+          normalized.generation.demo_seed,
+          projectTitleFromPrompt(entry.prompt),
+        ),
+      );
+      setCustomizeOpen(true);
+      const restored = normalized.preview_html?.trim();
+      if (restored?.includes("saas-shell")) {
+        setPreviewHtml(restored);
+        setLivePreviewHtml(restored);
+      } else {
+        setPreviewHtml(null);
+        setLivePreviewHtml(null);
+      }
     } catch (err) {
       console.error("[CyberForge] Restaurer", err);
       setActionError(
@@ -294,7 +369,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       code: result.generation.code,
       generation_id: result.persistence?.generation_id ?? null,
       prompt: prompt.trim(),
-      demo_seed: result.generation.demo_seed ?? null,
+      demo_seed: effectiveDemoSeed() ?? result.generation.demo_seed ?? null,
     });
     setDemoBusy(false);
     if (!response.ok || !response.data) {
@@ -498,6 +573,14 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
               />
               <button
                 type="button"
+                className={`cyber-action-btn ${customizeOpen ? "border-cyber-accent text-cyber-neon" : ""}`}
+                disabled={!hasOutput}
+                onClick={() => setCustomizeOpen((open) => !open)}
+              >
+                Personnaliser
+              </button>
+              <button
+                type="button"
                 className="cyber-action-btn cyber-action-btn-primary"
                 disabled={!hasOutput}
                 onClick={openDemoModal}
@@ -510,6 +593,19 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
               <p className="rounded border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-300">
                 {actionError}
               </p>
+            ) : null}
+
+            {customizeOpen && customization ? (
+              <CustomizePanel
+                value={customization}
+                onChange={setCustomization}
+                previewHtml={livePreviewHtml ?? previewHtml}
+                previewLoading={previewRefreshing}
+                onOpenFullPreview={() => {
+                  const html = livePreviewHtml ?? previewHtml;
+                  if (html) setPreviewHtml(html);
+                }}
+              />
             ) : null}
 
             {files.length > 1 ? (

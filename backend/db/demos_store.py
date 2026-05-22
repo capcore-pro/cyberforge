@@ -208,6 +208,30 @@ class DemosStore:
                 entries[path.strip()] = digest.strip()
         return entries
 
+    async def find_by_generation_id(self, generation_id: str) -> DemoRow | None:
+        """Démo client liée à une génération Supabase (au plus une)."""
+        if not self.is_configured() or not generation_id.strip():
+            return None
+
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={
+                    "generation_id": f"eq.{generation_id}",
+                    "select": "*",
+                    "limit": "1",
+                },
+            )
+            _raise_for_status(
+                resp, "find_demo_by_generation", "GET", url, self._supabase
+            )
+            rows = resp.json()
+            if not isinstance(rows, list) or not rows:
+                return None
+            return _demo_from_row(rows[0])
+
     async def get_by_id(self, demo_id: str) -> DemoRow | None:
         if not self.is_configured():
             return None

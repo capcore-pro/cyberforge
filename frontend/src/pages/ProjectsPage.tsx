@@ -1,20 +1,35 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_PREFIX } from "@shared/constants";
 import type {
+  DemoSeedPayload,
   GenerationRecord,
   ProjectDetailResponse,
   ProjectRecord,
 } from "@shared/types";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
+import { CustomizePanel } from "@/components/CustomizePanel";
+import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
 import { ProjectPreviewThumbnail } from "@/components/ProjectPreviewThumbnail";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { apiRequest } from "@/lib/api-client";
 import {
+  customizationFromSeed,
+  mergeCustomizationIntoSeed,
+  type DemoCustomization,
+} from "@/lib/demo-customization";
+import {
   createClientDemo,
+  deleteClientDemo,
+  findDemoIdByGeneration,
   type CreateDemoResponse,
   type DemoDuration,
 } from "@/lib/demos-api";
+import { fetchTaskflowPreviewHtml } from "@/lib/preview-html-api";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
+import {
+  deleteProject,
+  fetchProjectDemoSeed,
+} from "@/lib/projects-api";
 
 function formatDate(iso: string): string {
   try {
@@ -47,6 +62,17 @@ function filesFromGeneration(gen: GenerationRecord) {
   return [];
 }
 
+function isTaskflowHtml(html: string | null | undefined): boolean {
+  return Boolean(html?.includes("saas-shell"));
+}
+
+interface CustomizeSession {
+  project: ProjectRecord;
+  generation: GenerationRecord;
+  baseSeed: DemoSeedPayload;
+  customization: DemoCustomization;
+}
+
 /**
  * Page Projets — cartes avec titre, date, miniature visuelle et création de démo.
  */
@@ -54,9 +80,22 @@ export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ProjectDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+
+  const [customizeSession, setCustomizeSession] =
+    useState<CustomizeSession | null>(null);
+  const [customizeBusy, setCustomizeBusy] = useState(false);
+  const [livePreviewHtml, setLivePreviewHtml] = useState<string | null>(null);
+  const [previewRefreshing, setPreviewRefreshing] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<ProjectRecord | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const [demoModalOpen, setDemoModalOpen] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
@@ -71,18 +110,19 @@ export function ProjectsPage() {
   const loadProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setActionError(null);
     try {
+      const listPath = `${API_PREFIX}/projects`;
       const response = await apiRequest<ProjectRecord[]>({
         method: "GET",
-        path: `${API_PREFIX}/projects`,
+        path: listPath,
       });
       if (!response.ok) {
-        setError(
-          apiErrorMessage(
-            response,
-            "Impossible de charger les projets. Vérifiez Supabase dans backend/.env.",
-          ),
-        );
+        const fallback =
+          response.status === 404
+            ? `Route introuvable : GET ${listPath}. Vérifiez que le backend tourne sur le port 8002 (VITE_API_BASE_URL sans suffixe /api).`
+            : "Impossible de charger les projets. Vérifiez Supabase dans backend/.env.";
+        setError(apiErrorMessage(response, fallback));
         return;
       }
       setProjects(Array.isArray(response.data) ? response.data : []);
@@ -110,6 +150,189 @@ export function ProjectsPage() {
     });
     if (!response.ok) return null;
     return response.data ?? null;
+  }
+
+  async function latestGenerationFor(
+    project: ProjectRecord,
+  ): Promise<GenerationRecord | null> {
+    const data = await fetchProjectDetail(project.id);
+    return data?.generations?.[0] ?? null;
+  }
+
+  async function resolvePreviewHtml(
+    project: ProjectRecord,
+    generation: GenerationRecord,
+    baseSeed: DemoSeedPayload,
+  ): Promise<string | null> {
+    const stored =
+      generation.preview_html?.trim() || project.preview_html?.trim() || null;
+    if (isTaskflowHtml(stored)) return stored;
+
+    const code = generation.code?.trim();
+    if (isTaskflowHtml(code)) return code;
+
+    return fetchTaskflowPreviewHtml(baseSeed, {
+      prompt: project.prompt,
+      project_type_label: projectTypeLabel(project.project_type),
+    });
+  }
+
+  async function handlePreview(project: ProjectRecord) {
+    setActionError(null);
+    setPreviewBusy(true);
+    try {
+      const generation = await latestGenerationFor(project);
+      if (!generation) {
+        setActionError("Aucune génération — impossible d’afficher l’aperçu.");
+        return;
+      }
+      const seedResp = await fetchProjectDemoSeed(project.id);
+      if (!seedResp.ok || !seedResp.data) {
+        setActionError(
+          apiErrorMessage(seedResp, "Impossible de reconstruire l’aperçu."),
+        );
+        return;
+      }
+      const html = await resolvePreviewHtml(project, generation, seedResp.data);
+      if (!html) {
+        setActionError(
+          "Aperçu indisponible — relancez une génération depuis le Générateur.",
+        );
+        return;
+      }
+      setPreviewHtml(html);
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : "Erreur inattendue lors de l’aperçu.",
+      );
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  async function handleCustomize(project: ProjectRecord) {
+    setActionError(null);
+    setCustomizeBusy(true);
+    setCustomizeSession(null);
+    setLivePreviewHtml(null);
+    try {
+      const generation = await latestGenerationFor(project);
+      if (!generation) {
+        setActionError("Aucune génération — personnalisation indisponible.");
+        return;
+      }
+      const seedResp = await fetchProjectDemoSeed(project.id);
+      if (!seedResp.ok || !seedResp.data) {
+        setActionError(
+          apiErrorMessage(seedResp, "Impossible de charger la seed du projet."),
+        );
+        return;
+      }
+      const customization = customizationFromSeed(
+        seedResp.data,
+        project.title,
+      );
+      setCustomizeSession({
+        project,
+        generation,
+        baseSeed: seedResp.data,
+        customization,
+      });
+      const html = await resolvePreviewHtml(
+        project,
+        generation,
+        mergeCustomizationIntoSeed(seedResp.data, customization),
+      );
+      if (html) setLivePreviewHtml(html);
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : "Erreur inattendue lors de l’ouverture du panneau.",
+      );
+    } finally {
+      setCustomizeBusy(false);
+    }
+  }
+
+  function closeCustomize() {
+    setCustomizeSession(null);
+    setLivePreviewHtml(null);
+    setPreviewRefreshing(false);
+  }
+
+  useEffect(() => {
+    if (!customizeSession) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setPreviewRefreshing(true);
+        const seed = mergeCustomizationIntoSeed(
+          customizeSession.baseSeed,
+          customizeSession.customization,
+        );
+        const html = await fetchTaskflowPreviewHtml(seed, {
+          prompt: customizeSession.project.prompt,
+          project_type_label: projectTypeLabel(
+            customizeSession.project.project_type,
+          ),
+        });
+        if (!cancelled && html) setLivePreviewHtml(html);
+        if (!cancelled) setPreviewRefreshing(false);
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [customizeSession]);
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setActionError(null);
+    try {
+      const generation = await latestGenerationFor(deleteTarget);
+      if (generation) {
+        const demoLookup = await findDemoIdByGeneration(generation.id);
+        const demoId = demoLookup.data?.demo_id;
+        if (demoId) {
+          const demoDel = await deleteClientDemo(demoId);
+          if (!demoDel.ok) {
+            setActionError(
+              apiErrorMessage(
+                demoDel,
+                "Impossible de supprimer la démo client liée.",
+              ),
+            );
+            return;
+          }
+        }
+      }
+      const projDel = await deleteProject(deleteTarget.id);
+      if (!projDel.ok) {
+        setActionError(
+          apiErrorMessage(projDel, "Impossible de supprimer le projet."),
+        );
+        return;
+      }
+      if (expandedId === deleteTarget.id) {
+        setExpandedId(null);
+        setDetail(null);
+      }
+      setDeleteTarget(null);
+      await loadProjects();
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : "Erreur inattendue lors de la suppression.",
+      );
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   async function toggleProject(projectId: string) {
@@ -193,6 +416,7 @@ export function ProjectsPage() {
 
     setDemoBusy(true);
     setDemoError(null);
+    const seedResp = await fetchProjectDemoSeed(demoProject.id);
     const response = await createClientDemo({
       duration,
       title: demoProject.title,
@@ -202,6 +426,8 @@ export function ProjectsPage() {
       project_type: demoProject.project_type,
       code: demoGeneration.code,
       generation_id: demoGeneration.id,
+      prompt: demoProject.prompt,
+      demo_seed: seedResp.ok ? seedResp.data : null,
     });
     setDemoBusy(false);
 
@@ -216,6 +442,8 @@ export function ProjectsPage() {
     }
     setDemoCreated(response.data);
   }
+
+  const cardBusy = previewBusy || customizeBusy;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -239,6 +467,12 @@ export function ProjectsPage() {
           Actualiser
         </button>
       </header>
+
+      {actionError ? (
+        <section className="cyber-panel border-amber-400/30 p-4">
+          <p className="text-xs text-amber-300">{actionError}</p>
+        </section>
+      ) : null}
 
       {loading ? (
         <section className="cyber-panel p-8 text-center">
@@ -294,6 +528,32 @@ export function ProjectsPage() {
                   </div>
 
                   <div className="flex flex-col gap-2 p-4">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        className="cyber-action-btn w-full text-center text-[11px]"
+                        disabled={cardBusy}
+                        onClick={() => void handlePreview(project)}
+                      >
+                        {previewBusy ? "…" : "Prévisualiser"}
+                      </button>
+                      <button
+                        type="button"
+                        className="cyber-action-btn w-full text-center text-[11px]"
+                        disabled={cardBusy}
+                        onClick={() => void handleCustomize(project)}
+                      >
+                        {customizeBusy ? "…" : "Personnaliser"}
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full rounded border border-red-400/40 bg-red-950/30 px-3 py-2 text-center text-[11px] text-red-300 transition hover:border-red-400/70 hover:bg-red-950/50 disabled:opacity-50"
+                        disabled={cardBusy || deleteBusy}
+                        onClick={() => setDeleteTarget(project)}
+                      >
+                        Supprimer
+                      </button>
+                    </div>
                     <button
                       type="button"
                       className="cyber-action-btn w-full text-center"
@@ -381,6 +641,87 @@ export function ProjectsPage() {
             );
           })}
         </ul>
+      ) : null}
+
+      {previewHtml ? (
+        <GeneratorPreviewModal
+          html={previewHtml}
+          onClose={() => setPreviewHtml(null)}
+        />
+      ) : null}
+
+      {customizeSession ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Personnaliser le projet"
+        >
+          <div className="my-auto w-full max-w-4xl">
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={closeCustomize}
+                className="rounded border border-cyber-border bg-cyber-surface px-3 py-1 text-xs text-cyber-muted hover:border-cyber-violet hover:text-cyber-text"
+              >
+                Fermer
+              </button>
+            </div>
+            <CustomizePanel
+              value={customizeSession.customization}
+              onChange={(next) =>
+                setCustomizeSession((prev) =>
+                  prev ? { ...prev, customization: next } : prev,
+                )
+              }
+              previewHtml={livePreviewHtml}
+              previewLoading={previewRefreshing}
+              onOpenFullPreview={() => {
+                if (livePreviewHtml) setPreviewHtml(livePreviewHtml);
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {deleteTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-project-title"
+        >
+          <div className="w-full max-w-md rounded-lg border border-red-400/30 bg-cyber-surface p-5 shadow-lg">
+            <h2
+              id="delete-project-title"
+              className="text-sm font-semibold text-cyber-text"
+            >
+              Supprimer ce projet ?
+            </h2>
+            <p className="mt-2 text-xs text-cyber-muted">
+              « {deleteTarget.title} » sera retiré de l’historique. Si une démo
+              client Cloudflare est liée, elle sera également supprimée.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded border border-cyber-border px-3 py-1.5 text-xs text-cyber-muted hover:text-cyber-text"
+                disabled={deleteBusy}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="rounded border border-red-400/50 bg-red-950/40 px-3 py-1.5 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
+                disabled={deleteBusy}
+                onClick={() => void confirmDelete()}
+              >
+                {deleteBusy ? "Suppression…" : "Supprimer"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <CreateDemoModal

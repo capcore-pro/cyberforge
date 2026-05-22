@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 
 from tools.demo_preview_html import escape_attr, escape_html
+from tools.premium_theme import build_primary_theme_css
 from tools.standalone_demo_html import (
     TASK_PREVIEW_MARKER,
     _detect_done_field,
@@ -53,6 +54,8 @@ def build_premium_task_manager_html(
     user_initials: str | None = None,
     sidebar_foot: str = "Plan Pro · 12 sièges",
     seed_tasks: tuple[tuple[str, bool], ...] | None = None,
+    primary_color: str | None = None,
+    logo_data_url: str | None = None,
 ) -> str:
     page_title = escape_html(title.strip() or "Gestion des tâches")
     page_subtitle = escape_html(
@@ -80,6 +83,21 @@ def build_premium_task_manager_html(
     storage_slug = __import__("re").sub(
         r"[^a-zA-Z0-9_-]+", "_", (brand_name or title or "demo").strip()
     )[:36] or "demo"
+
+    logo_src = (logo_data_url or "").strip()
+    if logo_src.startswith("data:image/"):
+        logo_html = (
+            f'<div class="saas-logo saas-logo-img" aria-hidden="true">'
+            f'<img src="{escape_attr(logo_src[:600_000])}" alt="" '
+            f'style="width:100%;height:100%;object-fit:contain;border-radius:12px;display:block" />'
+            f"</div>"
+        )
+    else:
+        logo_html = """<div class="saas-logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+        </div>"""
+
+    theme_css = build_primary_theme_css(primary_color)
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -492,6 +510,12 @@ def build_premium_task_manager_html(
       .composer {{ flex-direction: row; }}
       .btn-add {{ width: auto; }}
     }}
+    .saas-logo-img {{
+      background: transparent !important;
+      box-shadow: none !important;
+      overflow: hidden;
+    }}
+{theme_css}
   </style>
 </head>
 <body>
@@ -499,9 +523,7 @@ def build_premium_task_manager_html(
     <div class="saas-sidebar-backdrop" id="saas-sidebar-backdrop" aria-hidden="true"></div>
     <aside class="saas-sidebar" id="saas-sidebar" aria-label="Navigation">
       <div class="saas-brand">
-        <div class="saas-logo" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
-        </div>
+        {logo_html}
         <div>
           <div class="saas-brand-name">{brand}</div>
           <div class="saas-brand-tag">{brand_tag_html}</div>

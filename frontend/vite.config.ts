@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
 import path from "node:path";
 import fs from "node:fs";
+import { electronCspPlugin } from "./vite-csp-plugin";
 
 // .env à la racine du monorepo (voir docs/ARCHITECTURE.md)
 const monorepoRoot = path.resolve(__dirname, "..");
@@ -45,6 +46,7 @@ export default defineConfig(({ mode }) => {
   return {
   envDir: monorepoRoot,
   plugins: [
+    electronCspPlugin(),
     react(),
     electron({
       main: {

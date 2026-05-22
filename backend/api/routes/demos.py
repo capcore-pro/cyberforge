@@ -224,6 +224,28 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
     )
 
 
+class DemoIdResponse(BaseModel):
+    demo_id: str | None = None
+
+
+@router.get(
+    "/demos/by-generation/{generation_id}",
+    response_model=DemoIdResponse,
+)
+async def demo_id_for_generation(generation_id: str) -> DemoIdResponse:
+    """Identifiant de la démo client liée à une génération, si elle existe."""
+    store = get_demos_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
+
+    try:
+        row = await store.find_by_generation_id(generation_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(exc, "GET /demos/by-generation/{id}") from exc
+
+    return DemoIdResponse(demo_id=row.id if row else None)
+
+
 @router.delete("/demos/{demo_id}", response_model=DeleteDemoResponse)
 async def delete_client_demo(demo_id: str) -> DeleteDemoResponse:
     """Supprime la démo en base et retire son HTML du projet Pages cyberforge-demos."""

@@ -26,6 +26,8 @@ export interface DemoSeedPayload {
   user_name?: string;
   user_role?: string;
   tasks?: DemoSeedTask[];
+  primary_color?: string;
+  logo_data_url?: string | null;
 }
 
 export interface CreateDemoPayload {
@@ -81,6 +83,22 @@ export async function createClientDemo(body: CreateDemoPayload) {
     path: `${API_PREFIX}/demos`,
     body,
   });
+}
+
+export async function findDemoIdByGeneration(generationId: string) {
+  return apiRequest<{ demo_id: string | null }>({
+    method: "GET",
+    path: `${API_PREFIX}/demos/by-generation/${generationId}`,
+  });
+}
+
+export async function deleteClientDemo(demoId: string) {
+  return apiRequest<{ id: string; deleted: boolean; cloudflare_redeployed: boolean }>(
+    {
+      method: "DELETE",
+      path: `${API_PREFIX}/demos/${demoId}`,
+    },
+  );
 }
 
 /** Métadonnées démo — appel direct vers http://127.0.0.1:8002/api/public/demos/{token}/meta */

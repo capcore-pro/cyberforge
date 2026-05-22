@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from agents.coremind_agent import PROJECT_TYPE_LABELS, ProjectType
 from db.supabase_store import (
     GenerationRow,
     ProjectDetailResponse,
@@ -14,6 +15,7 @@ from db.supabase_store import (
     SupabaseStoreError,
     get_supabase_store,
 )
+from tools.demo_template_service import heuristic_demo_seed, seed_as_dict
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,32 @@ async def list_projects() -> list[ProjectRow]:
         ) from exc
 
 
+@router.get("/projects/{project_id}/demo-seed")
+async def get_project_demo_seed(project_id: str) -> dict[str, object]:
+    """Seed TaskFlow reconstruite depuis le prompt du projet (panneau Personnaliser)."""
+    store = get_supabase_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail=_not_configured_detail(store))
+
+    try:
+        detail = await store.get_project(project_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(
+            exc, f"GET /api/projects/{project_id}/demo-seed"
+        ) from exc
+
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    try:
+        ptype = ProjectType(detail.project.project_type)
+    except ValueError:
+        ptype = ProjectType.site_web
+    label = PROJECT_TYPE_LABELS.get(ptype, detail.project.project_type)
+    seed = heuristic_demo_seed(detail.project.prompt, project_type_label=label)
+    return seed_as_dict(seed)
+
+
 @router.get("/projects/{project_id}", response_model=ProjectDetailResponse)
 async def get_project(project_id: str) -> ProjectDetailResponse:
     """Détail d'un projet et de ses générations."""
@@ -96,3 +124,30 @@ async def get_project(project_id: str) -> ProjectDetailResponse:
     if detail is None:
         raise HTTPException(status_code=404, detail="Projet introuvable.")
     return detail
+
+
+@router.delete("/projects/{project_id}")
+async def delete_project(project_id: str) -> dict[str, bool]:
+    """Supprime le projet Supabase et ses générations."""
+    store = get_supabase_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail=_not_configured_detail(store))
+
+    try:
+        existing = await store.get_project(project_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(
+            exc, f"DELETE /api/projects/{project_id}"
+        ) from exc
+
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    try:
+        await store.delete_project(project_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(
+            exc, f"DELETE /api/projects/{project_id}"
+        ) from exc
+
+    return {"deleted": True}

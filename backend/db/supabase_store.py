@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from agents.coremind_agent import PROJECT_TYPE_LABELS, CoreMindRunResult, ProjectType
 from config import Settings, get_settings, plain_secret_str
+from tools.project_title import clean_project_title
 from tools.demo_preview_html import build_demo_preview_html
 
 logger = logging.getLogger(__name__)
@@ -215,7 +216,7 @@ class SupabaseStore:
             result: list[ProjectRow] = []
             for row in projects:
                 project_id = str(row["id"])
-                title = str(row["title"])
+                title = clean_project_title(str(row["title"]))
                 count, latest_model, latest_cost, preview_html = (
                     await self._project_card_stats(client, project_id, title)
                 )
@@ -258,7 +259,7 @@ class SupabaseStore:
                 return None
 
             row = rows[0]
-            title = str(row["title"])
+            title = clean_project_title(str(row["title"]))
             count, latest_model, latest_cost, preview_html = (
                 await self._project_card_stats(client, project_id, title)
             )
@@ -298,6 +299,26 @@ class SupabaseStore:
                 if isinstance(g, dict)
             ]
             return ProjectDetailResponse(project=project, generations=generations)
+
+    async def delete_project(self, project_id: str) -> bool:
+        """Supprime un projet (les générations sont supprimées en cascade)."""
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.delete(
+                f"{self._rest_url()}/projects",
+                headers=self._headers("return=minimal"),
+                params={"id": f"eq.{project_id}"},
+            )
+            _raise_for_status(
+                resp,
+                "delete_project",
+                "DELETE",
+                f"{self._rest_url()}/projects",
+                self,
+            )
+        return True
 
     async def _find_or_create_project(
         self,
@@ -611,11 +632,8 @@ def _hint_for_status(status: int, body: str) -> str:
     return "Consultez response_body pour le détail PostgREST."
 
 
-def _title_from_prompt(prompt: str, max_len: int = 80) -> str:
-    line = prompt.strip().split("\n", 1)[0]
-    if len(line) <= max_len:
-        return line
-    return line[: max_len - 1].rstrip() + "…"
+def _title_from_prompt(prompt: str, max_len: int = 50) -> str:
+    return clean_project_title(prompt, max_len=max_len)
 
 
 def _resolve_preview_html(

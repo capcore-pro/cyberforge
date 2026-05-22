@@ -11,7 +11,12 @@ export function apiErrorMessage(
 export function formatApiErrorDetail(data: unknown): string {
   if (data === null || data === undefined) return "";
 
-  if (typeof data === "string") return data;
+  if (typeof data === "string") {
+    if (data === "Not Found") {
+      return "Route API introuvable (404). Vérifiez VITE_API_BASE_URL (sans /api final) et redémarrez le backend.";
+    }
+    return data;
+  }
 
   if (Array.isArray(data)) {
     return data.map((item) => formatApiErrorDetail(item)).filter(Boolean).join("\n");

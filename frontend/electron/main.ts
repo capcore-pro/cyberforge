@@ -1,5 +1,5 @@
 import "./load-env.js";
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, session, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerIpcHandlers } from "./ipc-handlers";
@@ -53,6 +53,19 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // En dev, ne pas imposer de CSP au niveau session (Vite injecte des scripts inline).
+  if (isDev) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const headers = { ...details.responseHeaders };
+      for (const key of Object.keys(headers)) {
+        if (key.toLowerCase() === "content-security-policy") {
+          delete headers[key];
+        }
+      }
+      callback({ responseHeaders: headers });
+    });
+  }
+
   registerIpcHandlers();
   createWindow();
 
