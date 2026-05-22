@@ -100,7 +100,12 @@ class DemoSeedData:
     tasks: tuple[tuple[str, bool], ...]
     llm_personalized: bool = False
     primary_color: str = ""
+    secondary_color: str = ""
     logo_data_url: str = ""
+    user_initials: str = ""
+    stat_total: int | None = None
+    stat_active: int | None = None
+    stat_done: int | None = None
 
 
 def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") -> str:
@@ -360,7 +365,16 @@ def seed_as_dict(seed: DemoSeedData) -> dict[str, object]:
         ],
         "llm_personalized": seed.llm_personalized,
         "primary_color": seed.primary_color,
+        "secondary_color": seed.secondary_color,
         "logo_data_url": seed.logo_data_url,
+        "user_initials": seed.user_initials,
+        "stats": {
+            "total": seed.stat_total,
+            "active": seed.stat_active,
+            "done": seed.stat_done,
+        }
+        if seed.stat_total is not None
+        else None,
     }
 
 
@@ -407,18 +421,41 @@ def seed_from_dict(
     if len(tasks) < 3:
         tasks = list(_tasks_from_prompt(f"{prompt} {title}"))
 
+    stat_total: int | None = None
+    stat_active: int | None = None
+    stat_done: int | None = None
+    stats_raw = data.get("stats")
+    if isinstance(stats_raw, dict):
+        try:
+            if stats_raw.get("total") is not None:
+                stat_total = max(0, int(stats_raw["total"]))
+            if stats_raw.get("active") is not None:
+                stat_active = max(0, int(stats_raw["active"]))
+            if stats_raw.get("done") is not None:
+                stat_done = max(0, int(stats_raw["done"]))
+        except (TypeError, ValueError):
+            pass
+
+    user_name = _clip(str(data.get("user_name") or _DEFAULT_USER), 48)
+    initials = _clip(str(data.get("user_initials") or ""), 8) or _initials(user_name)
+
     return DemoSeedData(
         template=template,
         title=title,
         subtitle=_clip(str(data.get("subtitle") or _subtitle_for_template(template, title)), 140),
         brand_name=_clip(str(data.get("brand_name") or _DEFAULT_BRAND), 40),
         brand_tag=_clip(str(data.get("brand_tag") or _DEFAULT_TAG), 48),
-        user_name=_clip(str(data.get("user_name") or _DEFAULT_USER), 48),
+        user_name=user_name,
         user_role=_clip(str(data.get("user_role") or _DEFAULT_ROLE), 48),
         tasks=tuple(tasks),
         llm_personalized=bool(data.get("llm_personalized")),
         primary_color=_clip(str(data.get("primary_color") or ""), 16),
+        secondary_color=_clip(str(data.get("secondary_color") or ""), 16),
         logo_data_url=_normalize_logo_data_url(data.get("logo_data_url")),
+        user_initials=initials,
+        stat_total=stat_total,
+        stat_active=stat_active,
+        stat_done=stat_done,
     )
 
 
@@ -475,10 +512,14 @@ def build_html_from_seed(seed: DemoSeedData) -> str:
         )
     return build_premium_task_manager_html(
         **common,
-        user_initials=_initials(seed.user_name),
+        user_initials=seed.user_initials or _initials(seed.user_name),
         seed_tasks=seed.tasks,
         primary_color=seed.primary_color or None,
+        secondary_color=seed.secondary_color or None,
         logo_data_url=seed.logo_data_url or None,
+        stat_total=seed.stat_total,
+        stat_active=seed.stat_active,
+        stat_done=seed.stat_done,
     )
 
 

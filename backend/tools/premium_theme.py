@@ -23,11 +23,20 @@ def sanitize_primary_color(value: str | None, *, default: str = _DEFAULT_PRIMARY
 
 def build_primary_theme_css(primary_color: str | None) -> str:
     """Surcharges accent (boutons, nav active, logo sans image uploadée)."""
+    return build_theme_css(primary_color, None)
+
+
+def build_theme_css(
+    primary_color: str | None,
+    secondary_color: str | None = None,
+) -> str:
+    """Couleur principale + secondaire pour dégradés et accents."""
     primary = sanitize_primary_color(primary_color)
+    secondary = sanitize_primary_color(secondary_color, default="#22d3ee")
     return f"""
-    :root {{ --cf-primary: {primary}; }}
+    :root {{ --cf-primary: {primary}; --cf-secondary: {secondary}; }}
     .saas-logo:not(.saas-logo-img) {{
-      background: linear-gradient(135deg, {primary}, #22d3ee) !important;
+      background: linear-gradient(135deg, {primary}, {secondary}) !important;
       box-shadow: 0 6px 20px color-mix(in srgb, {primary} 38%, transparent) !important;
     }}
     .saas-nav-item.active {{
@@ -42,7 +51,10 @@ def build_primary_theme_css(primary_color: str | None) -> str:
     .btn-add {{
       background: linear-gradient(135deg, {primary}, color-mix(in srgb, {primary} 70%, #312e81)) !important;
     }}
-    .progress-fill {{ background: linear-gradient(90deg, {primary}, #22d3ee) !important; }}
+    .progress-fill {{ background: linear-gradient(90deg, {primary}, {secondary}) !important; }}
+    .team-avatar, .saas-user-avatar {{
+      background: linear-gradient(135deg, {primary}, {secondary}) !important;
+    }}
     .cf-btn-primary, .cf-btn.cf-btn-primary {{
       background: linear-gradient(135deg, {primary}, color-mix(in srgb, {primary} 75%, #312e81)) !important;
       box-shadow: 0 4px 18px color-mix(in srgb, {primary} 42%, transparent) !important;

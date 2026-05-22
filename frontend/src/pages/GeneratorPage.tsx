@@ -7,9 +7,10 @@ import type {
   ProjectType,
 } from "@shared/types";
 import { useBackendHealth } from "@/context/BackendHealthContext";
+import { usePipelineActivity } from "@/context/PipelineActivityContext";
 import { CodeHighlight } from "@/components/CodeHighlight";
 import { CodeOutputActions } from "@/components/CodeOutputActions";
-import { CustomizePanel } from "@/components/CustomizePanel";
+import { CustomizePanel, cloneCustomization } from "@/components/CustomizePanel";
 import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
@@ -111,6 +112,10 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStepState[]>(
     initialPipelineSteps,
   );
+  const [baselineCustomization, setBaselineCustomization] =
+    useState<DemoCustomization | null>(null);
+  const [customizeSaveBusy, setCustomizeSaveBusy] = useState(false);
+  const { dispatchPipelineEvent } = usePipelineActivity();
 
   const refreshHistory = useCallback(() => {
     setHistory(listGenerationHistory());
@@ -195,6 +200,59 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     };
   }, [customizeOpen, customization, result, prompt]);
 
+  const refreshPreviewFromSeed = useCallback(
+    async (seed: ReturnType<typeof mergeCustomizationIntoSeed>) => {
+      if (!result) return null;
+      const html = await fetchTaskflowPreviewHtml(seed, {
+        prompt: prompt.trim(),
+        project_type_label: result.analysis.project_type_label,
+      });
+      if (html) {
+        setLivePreviewHtml(html);
+      }
+      return html;
+    },
+    [result, prompt],
+  );
+
+  async function handleCustomizationSave() {
+    if (!result?.generation.demo_seed || !customization) return;
+    setCustomizeSaveBusy(true);
+    setActionError(null);
+    try {
+      const seed = mergeCustomizationIntoSeed(
+        result.generation.demo_seed,
+        customization,
+      );
+      const html = await refreshPreviewFromSeed(seed);
+      setResult({
+        ...result,
+        generation: {
+          ...result.generation,
+          demo_seed: seed,
+          ...(html
+            ? {
+                code: html,
+                files: [{ path: "index.html", content: html }],
+              }
+            : {}),
+        },
+        ...(html ? { preview_html: html } : {}),
+      });
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Échec de la sauvegarde.",
+      );
+    } finally {
+      setCustomizeSaveBusy(false);
+    }
+  }
+
+  function handleCustomizationReset() {
+    if (!baselineCustomization) return;
+    setCustomization(cloneCustomization(baselineCustomization));
+  }
+
   async function handleGenerate(event?: React.SyntheticEvent) {
     event?.preventDefault();
     const trimmed = prompt.trim();
@@ -215,6 +273,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
     const onStep = (event: PipelineStepEvent) => {
       setPipelineSteps((prev) => applyPipelineStepEvent(prev, event));
+      dispatchPipelineEvent(event);
     };
 
     try {
@@ -249,6 +308,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
         normalized.generation.demo_seed,
         projectTitleFromPrompt(trimmed),
       );
+      setBaselineCustomization(cloneCustomization(custom));
       setCustomization(custom);
       setCustomizeOpen(true);
       const serverPreview = normalized.preview_html?.trim();
@@ -327,12 +387,12 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       setPhase("done");
       setError(null);
       setActionError(null);
-      setCustomization(
-        customizationFromSeed(
-          normalized.generation.demo_seed,
-          projectTitleFromPrompt(entry.prompt),
-        ),
+      const restoredCustom = customizationFromSeed(
+        normalized.generation.demo_seed,
+        projectTitleFromPrompt(entry.prompt),
       );
+      setBaselineCustomization(cloneCustomization(restoredCustom));
+      setCustomization(restoredCustom);
       setCustomizeOpen(true);
       const restored = normalized.preview_html?.trim();
       if (restored?.includes("saas-shell")) {
@@ -623,6 +683,9 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                 onChange={setCustomization}
                 previewHtml={livePreviewHtml ?? previewHtml}
                 previewLoading={previewRefreshing}
+                onSave={() => void handleCustomizationSave()}
+                onReset={handleCustomizationReset}
+                saveBusy={customizeSaveBusy}
                 onOpenFullPreview={() => {
                   const html = livePreviewHtml ?? previewHtml;
                   if (html) setPreviewHtml(html);

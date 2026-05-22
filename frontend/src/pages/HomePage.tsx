@@ -4,6 +4,11 @@ import {
   useBackendHealth,
   type BackendConnectionStatus,
 } from "@/context/BackendHealthContext";
+import {
+  PIPELINE_AGENT_IDS,
+  usePipelineActivity,
+  type AgentRuntimeStatus,
+} from "@/context/PipelineActivityContext";
 
 interface AgentDef {
   id: string;
@@ -92,7 +97,13 @@ function StatusIndicator({ status }: { status: BackendConnectionStatus }) {
   );
 }
 
-function AgentCard({ agent }: { agent: AgentDef }) {
+function AgentCard({
+  agent,
+  runtimeStatus,
+}: {
+  agent: AgentDef;
+  runtimeStatus: AgentRuntimeStatus;
+}) {
   const accentBorder =
     agent.accent === "cyan"
       ? "group-hover:border-cyber-accent"
@@ -101,10 +112,13 @@ function AgentCard({ agent }: { agent: AgentDef }) {
     agent.accent === "cyan"
       ? "border-cyber-accent/40 bg-cyber-accent/10 text-cyber-neon"
       : "border-cyber-violet/40 bg-cyber-violet/10 text-cyber-violet";
+  const isActive = runtimeStatus === "active";
 
   return (
     <article
-      className={`cyber-agent-card group ${accentBorder}`}
+      className={`cyber-agent-card group ${accentBorder} ${
+        isActive ? "border-cyber-accent/60 shadow-[0_0_16px_rgba(0,255,200,0.12)]" : ""
+      }`}
       aria-label={agent.name}
     >
       <div className="mb-3 flex items-start justify-between gap-2">
@@ -114,11 +128,13 @@ function AgentCard({ agent }: { agent: AgentDef }) {
           {agent.tag}
         </span>
         <span
-          className={`text-[10px] uppercase tracking-wider ${
-            agent.id === "coremind" ? "text-green-400" : "text-cyber-muted"
+          className={`text-[10px] font-bold uppercase tracking-wider ${
+            isActive
+              ? "text-green-400 animate-pulse"
+              : "text-cyber-muted"
           }`}
         >
-          {agent.id === "coremind" ? "actif" : "standby"}
+          {isActive ? "actif" : "standby"}
         </span>
       </div>
       <h3 className="mb-1.5 text-sm font-bold text-cyber-text group-hover:text-cyber-neon">
@@ -139,6 +155,7 @@ interface HomePageProps {
  */
 export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
   const { status: backendStatus, health } = useBackendHealth();
+  const { getAgentStatus, pipelineRunning } = usePipelineActivity();
 
   const apiBaseUrl =
     import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
@@ -251,13 +268,24 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
               Écosystème agents
             </h2>
             <p className="mt-1 text-xs text-cyber-muted">
-              Huit modules spécialisés — CoreMindAI pilote le Générateur
+              Huit modules spécialisés
+              {pipelineRunning
+                ? " — pipeline LangGraph en cours (Architect → CoreMind → BugHunter → AutoFix)"
+                : " — statut temps réel pendant les générations"}
             </p>
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {AGENTS.map((agent) => (
-            <AgentCard key={agent.id} agent={agent} />
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              runtimeStatus={
+                (PIPELINE_AGENT_IDS as readonly string[]).includes(agent.id)
+                  ? getAgentStatus(agent.id)
+                  : "standby"
+              }
+            />
           ))}
         </div>
       </section>

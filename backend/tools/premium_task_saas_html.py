@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from tools.demo_preview_html import escape_attr, escape_html
-from tools.premium_theme import build_primary_theme_css
+from tools.premium_theme import build_theme_css
 from tools.standalone_demo_html import (
     TASK_PREVIEW_MARKER,
     _detect_done_field,
@@ -55,7 +55,11 @@ def build_premium_task_manager_html(
     sidebar_foot: str = "Plan Pro · 12 sièges",
     seed_tasks: tuple[tuple[str, bool], ...] | None = None,
     primary_color: str | None = None,
+    secondary_color: str | None = None,
     logo_data_url: str | None = None,
+    stat_total: int | None = None,
+    stat_active: int | None = None,
+    stat_done: int | None = None,
 ) -> str:
     page_title = escape_html(title.strip() or "Gestion des tâches")
     page_subtitle = escape_html(
@@ -97,7 +101,19 @@ def build_premium_task_manager_html(
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
         </div>"""
 
-    theme_css = build_primary_theme_css(primary_color)
+    theme_css = build_theme_css(primary_color, secondary_color)
+    stat_override_js = "null"
+    if (
+        stat_total is not None
+        and stat_active is not None
+        and stat_done is not None
+    ):
+        stat_override_js = (
+            f'{{"total":{int(stat_total)},"active":{int(stat_active)},"done":{int(stat_done)}}}'
+        )
+    initial_stat_total = int(stat_total) if stat_total is not None else 0
+    initial_stat_active = int(stat_active) if stat_active is not None else 0
+    initial_stat_done = int(stat_done) if stat_done is not None else 0
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -629,9 +645,9 @@ def build_premium_task_manager_html(
             <p class="page-subtitle">{page_subtitle}</p>
           </div>
           <div class="stats">
-            <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="stat-total">0</div></div>
-            <div class="stat-card"><div class="stat-label">En cours</div><div class="stat-value" id="stat-active">0</div></div>
-            <div class="stat-card"><div class="stat-label">Terminées</div><div class="stat-value" id="stat-done">0</div></div>
+            <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="stat-total">{initial_stat_total}</div></div>
+            <div class="stat-card"><div class="stat-label">En cours</div><div class="stat-value" id="stat-active">{initial_stat_active}</div></div>
+            <div class="stat-card"><div class="stat-label">Terminées</div><div class="stat-value" id="stat-done">{initial_stat_done}</div></div>
           </div>
           <div class="panel">
             <div class="composer">
@@ -845,6 +861,7 @@ def build_premium_task_manager_html(
 
   showPage("tasks");
 
+  var STAT_OVERRIDE = {stat_override_js};
   var STORAGE_KEY = "cf_tasks_{storage_slug}";
   var DONE_KEY = "{done_field}";
   var SEED_TASKS = [
@@ -894,11 +911,16 @@ def build_premium_task_manager_html(
   function updateStats() {{
     var total = tasks.length;
     var done = tasks.filter(function (t) {{ return t[DONE_KEY]; }}).length;
+    if (STAT_OVERRIDE) {{
+      total = STAT_OVERRIDE.total;
+      done = STAT_OVERRIDE.done;
+    }}
+    var active = STAT_OVERRIDE ? STAT_OVERRIDE.active : (total - done);
     var elTotal = document.getElementById("stat-total");
     var elActive = document.getElementById("stat-active");
     var elDone = document.getElementById("stat-done");
     if (elTotal) elTotal.textContent = String(total);
-    if (elActive) elActive.textContent = String(total - done);
+    if (elActive) elActive.textContent = String(active);
     if (elDone) elDone.textContent = String(done);
   }}
 

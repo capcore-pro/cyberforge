@@ -83,6 +83,12 @@ export interface DemoSeedTask {
   completed: boolean;
 }
 
+export interface DemoSeedStats {
+  total: number;
+  active: number;
+  done: number;
+}
+
 export interface DemoSeedPayload {
   template?: string;
   title?: string;
@@ -91,12 +97,17 @@ export interface DemoSeedPayload {
   brand_tag?: string;
   user_name?: string;
   user_role?: string;
+  user_initials?: string;
   tasks?: DemoSeedTask[];
   llm_personalized?: boolean;
   /** Couleur principale (#RRGGBB) pour l'aperçu / démo TaskFlow. */
   primary_color?: string;
+  /** Couleur secondaire (#RRGGBB) pour dégradés et accents. */
+  secondary_color?: string;
   /** Logo client (data URL PNG/JPG) affiché dans le header de la démo. */
   logo_data_url?: string | null;
+  /** Stats KPI (Total, En cours, Terminées) — prioritaire sur le calcul live. */
+  stats?: DemoSeedStats | null;
 }
 
 export interface CoreMindGenerateResponse {
