@@ -28,6 +28,29 @@ function formatExpiry(iso: string): string {
   }
 }
 
+function buildDemoMailto(created: CreateDemoResponse): string {
+  const subject = `Votre démo CyberForge — ${created.title}`;
+  const body = [
+    "Bonjour,",
+    "",
+    "Voici l'accès à votre démo interactive :",
+    "",
+    `Lien : ${created.url}`,
+    `Mot de passe : ${created.password}`,
+    "",
+    `Page de connexion : ${created.unlock_url}`,
+    "",
+    `Validité : jusqu'au ${formatExpiry(created.expires_at)}.`,
+    "",
+    "Cordialement,",
+  ].join("\n");
+  const params = new URLSearchParams({
+    subject,
+    body,
+  });
+  return `mailto:?${params.toString()}`;
+}
+
 /**
  * Modal création démo client — durée + affichage lien / mot de passe.
  */
@@ -188,9 +211,21 @@ export function CreateDemoModal({
               <p className="text-xs text-cyber-neon">{copyFeedback}</p>
             ) : null}
 
-            <button type="button" className="cyber-action-btn w-full" onClick={onClose}>
-              Fermer
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <a
+                href={buildDemoMailto(created)}
+                className="cyber-action-btn cyber-action-btn-primary flex-1 text-center no-underline"
+              >
+                Envoyer par email
+              </a>
+              <button
+                type="button"
+                className="cyber-action-btn flex-1"
+                onClick={onClose}
+              >
+                Fermer
+              </button>
+            </div>
           </>
         )}
       </div>

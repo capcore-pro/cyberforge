@@ -148,6 +148,8 @@ def test_password_gate_wraps_demo_inline() -> None:
     assert ".saas-shell" in inner
     wrapped = wrap_with_password_gate(inner, "secret-demo")
     assert "cf-login-error" in wrapped
+    assert "cf-password-toggle" in wrapped
+    assert "cf-password-wrap" in wrapped
     assert "EXPECTED" in wrapped
     head_part = wrapped[: wrapped.lower().find("</head>")]
     assert ".composer-input" in head_part

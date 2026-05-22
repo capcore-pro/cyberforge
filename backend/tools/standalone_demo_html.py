@@ -294,16 +294,51 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
       color: #64748b;
       margin-bottom: 0.4rem;
     }}
+    .cf-password-wrap {{
+      position: relative;
+      margin-bottom: 0.75rem;
+    }}
     .cf-login-input {{
       width: 100%;
-      padding: 0.7rem 0.9rem;
+      padding: 0.7rem 2.75rem 0.7rem 0.9rem;
       border-radius: 0.5rem;
       border: 1px solid rgba(148, 163, 184, 0.3);
       background: #0f172a;
       color: #f1f5f9;
       font-size: 0.95rem;
-      margin-bottom: 0.75rem;
+      margin-bottom: 0;
     }}
+    .cf-password-toggle {{
+      position: absolute;
+      right: 0.25rem;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      border: none;
+      border-radius: 0.35rem;
+      background: rgba(15, 23, 42, 0.85);
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 0;
+      z-index: 2;
+    }}
+    .cf-password-toggle:hover {{
+      color: #22d3ee;
+      background: rgba(34, 211, 238, 0.12);
+    }}
+    .cf-password-toggle svg {{
+      width: 1.15rem;
+      height: 1.15rem;
+      display: block;
+      pointer-events: none;
+    }}
+    .cf-password-toggle .cf-eye-off {{ display: none; }}
+    .cf-password-toggle.cf-visible .cf-eye-on {{ display: none; }}
+    .cf-password-toggle.cf-visible .cf-eye-off {{ display: block; }}
     .cf-login-input:focus {{
       outline: none;
       border-color: #22d3ee;
@@ -336,6 +371,17 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
     #cf-demo-content.cf-unlocked {{ display: block; }}
   </style>
 {demo_styles}
+  <style id="cf-gate-overrides">
+    #cf-login-screen .cf-password-wrap {{ position: relative; overflow: visible; }}
+    #cf-login-screen #cf-password-toggle {{
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }}
+    #cf-login-screen .cf-login-input {{
+      padding-right: 2.75rem !important;
+    }}
+  </style>
 </head>
 <body>
   <div id="cf-login-screen" role="main" aria-label="Accès démo">
@@ -345,14 +391,33 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
       <p class="cf-login-sub">Saisissez le mot de passe fourni pour afficher le livrable client.</p>
       <form id="cf-login-form" autocomplete="off">
         <label class="cf-login-label" for="cf-password-input">Mot de passe</label>
-        <input
-          id="cf-password-input"
-          class="cf-login-input"
-          type="password"
-          placeholder="ex. soleil-bateau-rouge"
-          required
-          autofocus
-        />
+        <div class="cf-password-wrap">
+          <input
+            id="cf-password-input"
+            class="cf-login-input"
+            type="password"
+            placeholder="ex. soleil-bateau-rouge"
+            required
+            autofocus
+          />
+          <button
+            type="button"
+            class="cf-password-toggle"
+            id="cf-password-toggle"
+            aria-label="Afficher le mot de passe"
+            title="Afficher le mot de passe"
+          >
+            <svg class="cf-eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg class="cf-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
+              <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
+        </div>
         <button type="submit" class="cf-login-btn">Accéder à la démo</button>
       </form>
       <p id="cf-login-error" class="cf-login-error" role="alert">Mot de passe incorrect.</p>
@@ -366,9 +431,20 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
   var EXPECTED = {secret};
   var form = document.getElementById("cf-login-form");
   var input = document.getElementById("cf-password-input");
+  var togglePwd = document.getElementById("cf-password-toggle");
   var err = document.getElementById("cf-login-error");
   var login = document.getElementById("cf-login-screen");
   var demo = document.getElementById("cf-demo-content");
+
+  if (togglePwd && input) {{
+    togglePwd.addEventListener("click", function () {{
+      var visible = input.type === "text";
+      input.type = visible ? "password" : "text";
+      togglePwd.classList.toggle("cf-visible", !visible);
+      togglePwd.setAttribute("aria-label", visible ? "Afficher le mot de passe" : "Masquer le mot de passe");
+      togglePwd.setAttribute("title", visible ? "Afficher le mot de passe" : "Masquer le mot de passe");
+    }});
+  }}
 
   function showError() {{
     if (err) err.classList.add("cf-visible");

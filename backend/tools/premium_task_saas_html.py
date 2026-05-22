@@ -115,6 +115,30 @@ def build_premium_task_manager_html(
       border-bottom: 1px solid rgba(255,255,255,0.06);
       backdrop-filter: blur(12px);
     }}
+    .saas-topbar-left {{
+      display: flex; align-items: center; gap: 0.75rem;
+      min-width: 0; flex: 1;
+    }}
+    .saas-menu-btn {{
+      display: none;
+      align-items: center; justify-content: center;
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05);
+      color: #e2e8f0;
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 0;
+    }}
+    .saas-menu-btn:hover {{ background: rgba(99,102,241,0.2); border-color: rgba(129,140,248,0.35); }}
+    .saas-menu-icon {{ display: block; }}
+    .saas-sidebar-backdrop {{
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 40;
+    }}
     .saas-topbar-title {{ font-size: 1.05rem; font-weight: 600; color: #f1f5f9; }}
     .saas-topbar-right {{ display: flex; align-items: center; gap: 1rem; }}
     .saas-notif {{
@@ -344,18 +368,36 @@ def build_premium_task_manager_html(
     .empty-state {{
       text-align: center; padding: 2rem; color: #64748b; font-size: 0.9rem;
     }}
-    @media (max-width: 900px) {{
-      .saas-sidebar {{ width: 72px; }}
-      .saas-brand-name, .saas-brand-tag, .saas-nav .nav-label,
-      .saas-sidebar-foot {{ display: none; }}
+    @media (max-width: 767px) {{
+      .saas-menu-btn {{ display: flex; }}
+      .saas-topbar {{ padding: 0 1rem; }}
+      .saas-sidebar {{
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        z-index: 50;
+        width: min(280px, 88vw);
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        box-shadow: none;
+      }}
+      .saas-shell.saas-nav-open .saas-sidebar {{
+        transform: translateX(0);
+        box-shadow: 8px 0 32px rgba(0,0,0,0.45);
+      }}
+      .saas-shell.saas-nav-open .saas-sidebar-backdrop {{ display: block; }}
+      .saas-main {{ width: 100%; flex: 1; }}
+      .saas-content {{ padding: 1rem 1rem 2rem; }}
       .saas-user-name, .saas-user-role {{ display: none; }}
       .kpi-grid, .stats {{ grid-template-columns: 1fr; }}
+      .composer {{ flex-direction: column; }}
+      .btn-add {{ width: 100%; }}
     }}
   </style>
 </head>
 <body>
-  <div class="saas-shell">
-    <aside class="saas-sidebar" aria-label="Navigation">
+  <div class="saas-shell" id="saas-shell">
+    <div class="saas-sidebar-backdrop" id="saas-sidebar-backdrop" aria-hidden="true"></div>
+    <aside class="saas-sidebar" id="saas-sidebar" aria-label="Navigation">
       <div class="saas-brand">
         <div class="saas-logo" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
@@ -376,7 +418,21 @@ def build_premium_task_manager_html(
     </aside>
     <div class="saas-main">
       <header class="saas-topbar">
-        <div class="saas-topbar-title" id="topbar-title">Tâches</div>
+        <div class="saas-topbar-left">
+          <button
+            type="button"
+            class="saas-menu-btn"
+            id="saas-menu-btn"
+            aria-label="Ouvrir le menu"
+            aria-expanded="false"
+            aria-controls="saas-sidebar"
+          >
+            <svg class="saas-menu-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          </button>
+          <div class="saas-topbar-title" id="topbar-title">Tâches</div>
+        </div>
         <div class="saas-topbar-right">
           <div class="saas-notif" title="Notifications">🔔</div>
           <div class="saas-user">
@@ -582,9 +638,36 @@ def build_premium_task_manager_html(
   </div>
   <script>
 (function () {{
+  var shell = document.getElementById("saas-shell");
+  var menuBtn = document.getElementById("saas-menu-btn");
+  var backdrop = document.getElementById("saas-sidebar-backdrop");
   var navItems = document.querySelectorAll(".saas-nav-item[data-nav]");
   var sections = document.querySelectorAll(".view-section");
   var topbarTitle = document.getElementById("topbar-title");
+  var mobileMq = window.matchMedia("(max-width: 767px)");
+
+  function isMobileNav() {{
+    return mobileMq.matches;
+  }}
+
+  function setSidebarOpen(open) {{
+    if (!shell) return;
+    shell.classList.toggle("saas-nav-open", open);
+    if (menuBtn) menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (backdrop) backdrop.setAttribute("aria-hidden", open ? "false" : "true");
+  }}
+
+  function closeSidebar() {{
+    setSidebarOpen(false);
+  }}
+
+  function toggleSidebar() {{
+    if (!shell) return;
+    setSidebarOpen(!shell.classList.contains("saas-nav-open"));
+  }}
+
+  if (menuBtn) menuBtn.addEventListener("click", toggleSidebar);
+  if (backdrop) backdrop.addEventListener("click", closeSidebar);
 
   function showPage(name) {{
     navItems.forEach(function (el) {{
@@ -599,6 +682,7 @@ def build_premium_task_manager_html(
     if (topbarTitle && activeSection) {{
       topbarTitle.textContent = activeSection.getAttribute("data-title") || name;
     }}
+    if (isMobileNav()) closeSidebar();
   }}
 
   navItems.forEach(function (el) {{
