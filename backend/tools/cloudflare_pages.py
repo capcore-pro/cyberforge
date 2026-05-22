@@ -293,6 +293,37 @@ def build_deploy_zip(files: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
+def zip_contains_marker(zip_bytes: bytes, marker: str = "cf-password-toggle") -> bool:
+    """Vérifie qu'une archive de déploiement contient le marqueur dans un fichier HTML."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+            for name in archive.namelist():
+                if not name.lower().endswith(".html"):
+                    continue
+                body = archive.read(name).decode("utf-8", errors="replace")
+                if marker in body:
+                    logger.info(
+                        "[Cloudflare Pages] ZIP OK | file=%s | marker=%s | bytes=%s",
+                        name,
+                        marker,
+                        len(body.encode("utf-8")),
+                    )
+                    return True
+    except zipfile.BadZipFile as exc:
+        logger.error("[Cloudflare Pages] ZIP invalide : %s", exc)
+        return False
+    logger.error(
+        "[Cloudflare Pages] ZIP sans marqueur %s | entries=%s",
+        marker,
+        [
+            n
+            for n in zipfile.ZipFile(io.BytesIO(zip_bytes)).namelist()
+            if n.endswith(".html")
+        ],
+    )
+    return False
+
+
 def files_from_deploy_zip(zip_bytes: bytes) -> dict[str, bytes]:
     """Extrait les fichiers d'une archive de déploiement."""
     out: dict[str, bytes] = {}
@@ -819,6 +850,10 @@ async def _deploy_with_manifest(
         files[REDIRECTS_ASSET_PATH] = _REDIRECTS_BODY
 
     zip_bytes = build_deploy_zip(files)
+    if not zip_contains_marker(zip_bytes, "cf-password-toggle"):
+        raise CloudflarePagesError(
+            "ZIP de déploiement sans cf-password-toggle — déploiement annulé."
+        )
     _log_deploy_step(
         "0/5 deploy_start",
         "préparation ZIP",
@@ -959,6 +994,22 @@ async def deploy_demo_to_cyberforge_demos(
         asset_path: body,
         REDIRECTS_ASSET_PATH: _REDIRECTS_BODY,
     }
+
+    if "cf-password-toggle" not in html_fresh:
+        raise CloudflarePagesError(
+            "HTML de démo sans cf-password-toggle avant déploiement Cloudflare."
+        )
+
+    pre_zip = build_deploy_zip(upload_files)
+    if not zip_contains_marker(pre_zip, "cf-password-toggle"):
+        raise CloudflarePagesError(
+            "ZIP pré-upload sans cf-password-toggle — vérifiez wrap_with_password_gate."
+        )
+    logger.info(
+        "[Cloudflare Pages] deploy_demo ZIP validé | token=%s | zip_bytes=%s | toggle=True",
+        token,
+        len(pre_zip),
+    )
 
     _validate_manifest_covers_uploads(manifest, upload_files)
     _save_deploy_manifest_snapshot(

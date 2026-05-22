@@ -11,6 +11,15 @@ from tools.demo_template_service import (
 )
 
 
+def test_heuristic_seed_reservation_tasks() -> None:
+    seed = heuristic_demo_seed(
+        "Application de réservation de tables pour restaurant",
+        project_type_label="Application web",
+    )
+    assert any("réservation" in t[0].lower() for t in seed.tasks)
+    assert "Acme Corp" not in " ".join(t[0] for t in seed.tasks)
+
+
 def test_heuristic_seed_restaurant_tasks() -> None:
     seed = heuristic_demo_seed(
         "Site pour mon restaurant italien avec réservations",

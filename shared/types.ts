@@ -78,6 +78,23 @@ export interface CoreMindGenerateRequest {
 }
 
 /** Réponse POST /api/agents/coremind/generate */
+export interface DemoSeedTask {
+  text: string;
+  completed: boolean;
+}
+
+export interface DemoSeedPayload {
+  template?: string;
+  title?: string;
+  subtitle?: string;
+  brand_name?: string;
+  brand_tag?: string;
+  user_name?: string;
+  user_role?: string;
+  tasks?: DemoSeedTask[];
+  llm_personalized?: boolean;
+}
+
 export interface CoreMindGenerateResponse {
   summary: string;
   code: string;
@@ -85,6 +102,7 @@ export interface CoreMindGenerateResponse {
   stack: string[];
   model: string;
   provider: string;
+  demo_seed?: DemoSeedPayload | null;
 }
 
 /** Identifiants Supabase après sauvegarde */
@@ -94,13 +112,12 @@ export interface PersistenceResult {
   storage: string;
 }
 
-/** Qualité livrable (BugHunterAI / AutoFixAI) */
-export interface DemoQualitySummary {
-  ok: boolean;
-  issue_codes: string[];
-  fix_attempts: number;
-  autofix_applied: boolean;
-  taskflow_fallback: boolean;
+/** Pipeline démo unique (TaskFlow + seed) */
+export interface DemoPipelineSummary {
+  template: string;
+  seed_personalized: boolean;
+  html_bytes: number;
+  single_file: string;
 }
 
 /** Réponse POST /api/agents/coremind/run — flow complet */
@@ -110,7 +127,7 @@ export interface CoreMindRunResponse {
   metrics: GenerationMetrics;
   planned_models: string[];
   persistence?: PersistenceResult | null;
-  demo_quality?: DemoQualitySummary | null;
+  demo_pipeline?: DemoPipelineSummary | null;
   /** HTML aperçu serveur (aligné sur le livrable corrigé) */
   preview_html?: string | null;
 }

@@ -15,7 +15,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agents.base_agent import BaseAgent
-from agents.demo_quality import preview_html_from_generation
 from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG
 from tools.codegen_service import (
     CodeGenComplexity,
@@ -24,7 +23,8 @@ from tools.codegen_service import (
     CodeGenerateResult,
     complexity_from_score,
 )
-from tools.demo_template_service import DemoTemplateService, TEMPLATE_MODEL, TEMPLATE_PROVIDER
+from tools.demo_pipeline import PIPELINE_TEMPLATE, build_client_demo_document
+from tools.demo_template_service import TEMPLATE_MODEL, TEMPLATE_PROVIDER
 from tools.pricing import estimate_cost_usd
 
 logger = logging.getLogger(__name__)
@@ -235,14 +235,13 @@ class GenerationMetrics(BaseModel):
     project_type_selected: str | None = None
 
 
-class DemoQualitySummary(BaseModel):
-    """Résultat BugHunterAI / AutoFixAI après génération."""
+class DemoPipelineSummary(BaseModel):
+    """Métadonnées pipeline démo unique (TaskFlow + seed)."""
 
-    ok: bool = True
-    issue_codes: list[str] = Field(default_factory=list)
-    fix_attempts: int = 0
-    autofix_applied: bool = False
-    taskflow_fallback: bool = False
+    template: str = PIPELINE_TEMPLATE
+    seed_personalized: bool = False
+    html_bytes: int = 0
+    single_file: str = "index.html"
 
 
 class CoreMindRunResult(BaseModel):
@@ -255,10 +254,10 @@ class CoreMindRunResult(BaseModel):
         default_factory=list,
         description="Modèles configurés tentés par ordre de coût",
     )
-    demo_quality: DemoQualitySummary | None = None
+    demo_pipeline: DemoPipelineSummary | None = None
     preview_html: str | None = Field(
         default=None,
-        description="HTML aperçu aligné sur le livrable final (post BugHunter/AutoFix)",
+        description="HTML TaskFlow unique (identique au fichier index.html livré)",
     )
 
 
@@ -337,25 +336,26 @@ class CoreMindAgent(BaseAgent):
         )
 
         start = time.perf_counter()
-        template_svc = DemoTemplateService(self._settings)
-        generation = await template_svc.build_client_demo_generation(
-            user_prompt=enriched,
+        document = await build_client_demo_document(
+            enriched,
             project_type_label=type_label,
+            settings=self._settings,
         )
-
-        quality = DemoQualitySummary(
-            ok=True,
-            issue_codes=[],
-            taskflow_fallback=True,
+        generation = document.generation
+        preview_html = document.html
+        pipeline_info = DemoPipelineSummary(
+            template=PIPELINE_TEMPLATE,
+            seed_personalized=document.seed.llm_personalized,
+            html_bytes=document.html_bytes,
         )
-        preview_html = preview_html_from_generation(generation, title=type_label)
         logger.info(
-            "[CoreMindAI] démo template TaskFlow | demo_quality=%s | preview_html_bytes=%s | "
-            "provider=%s | model=%s",
-            json.dumps(quality.model_dump(), ensure_ascii=False),
-            len(preview_html.encode("utf-8")),
-            generation.provider,
-            generation.model,
+            "[CoreMindAI] DemoPipeline | template=%s | brand=%s | tasks=%s | "
+            "preview_html_bytes=%s | seed_ia=%s",
+            pipeline_info.template,
+            document.seed.brand_name,
+            len(document.seed.tasks),
+            pipeline_info.html_bytes,
+            pipeline_info.seed_personalized,
         )
 
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -394,7 +394,7 @@ class CoreMindAgent(BaseAgent):
             generation=generation,
             metrics=metrics,
             planned_models=planned,
-            demo_quality=quality,
+            demo_pipeline=pipeline_info,
             preview_html=preview_html,
         )
 

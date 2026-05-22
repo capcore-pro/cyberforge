@@ -94,10 +94,10 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
     agent = CoreMindAgent()
     try:
         result = await agent.run_flow(body.prompt, body.project_type)
-        if result.demo_quality is not None:
+        if result.demo_pipeline is not None:
             logger.info(
-                "POST /agents/coremind/run — demo_quality=%s",
-                result.demo_quality.model_dump(),
+                "POST /agents/coremind/run — demo_pipeline=%s",
+                result.demo_pipeline.model_dump(),
             )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

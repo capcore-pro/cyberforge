@@ -27,7 +27,6 @@ import {
   type GenerationHistoryEntry,
 } from "@/lib/generation-history";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
-import { openCodePreview } from "@/lib/preview";
 import { projectTitleFromPrompt } from "@/lib/project-title";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
 
@@ -181,21 +180,14 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   async function handlePreview() {
     if (!hasOutput) return;
     setActionError(null);
-    try {
-      const serverPreview = result?.preview_html?.trim();
-      if (serverPreview) {
-        setPreviewHtml(serverPreview);
-        return;
-      }
-      await openCodePreview(files, {
-        title: "Prévisualisation CyberForge",
-        onIframe: (html) => setPreviewHtml(html),
-      });
-    } catch (err) {
+    const html = result?.preview_html?.trim();
+    if (!html || !html.includes("saas-shell")) {
       setActionError(
-        err instanceof Error ? err.message : "Impossible d'ouvrir l'aperçu visuel.",
+        "Aperçu indisponible — relancez une génération (pipeline TaskFlow).",
       );
+      return;
     }
+    setPreviewHtml(html);
   }
 
   async function handleCopy() {
@@ -287,12 +279,14 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     const response = await createClientDemo({
       duration,
       title: projectTitleFromPrompt(prompt),
-      files: files.map((f) => ({ path: f.path, content: f.content })),
+      files: [{ path: "index.html", content: result.generation.code }],
       stack: result.generation.stack,
       summary: result.generation.summary,
       project_type: result.analysis.project_type,
       code: result.generation.code,
       generation_id: result.persistence?.generation_id ?? null,
+      prompt: prompt.trim(),
+      demo_seed: result.generation.demo_seed ?? null,
     });
     setDemoBusy(false);
     if (!response.ok || !response.data) {

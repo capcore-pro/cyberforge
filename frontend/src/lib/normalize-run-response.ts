@@ -47,12 +47,27 @@ export function normalizeRunResponse(
       )
     : [];
 
-  const unwrapped = unwrapGenerationPayload(files, code);
-  code = unwrapped.code;
-  files = unwrapped.files.length > 0 ? unwrapped.files : files;
+  const isTaskflow =
+    generation.provider === "cyberforge" &&
+    generation.model === "taskflow-premium";
 
-  if (!files.length && code.trim()) {
-    files = [{ path: "src/App.tsx", content: code }];
+  if (isTaskflow && code.trim()) {
+    files = [{ path: "index.html", content: code }];
+  } else {
+    const unwrapped = unwrapGenerationPayload(files, code);
+    code = unwrapped.code;
+    files = unwrapped.files.length > 0 ? unwrapped.files : files;
+    if (!files.length && code.trim()) {
+      const isHtml =
+        code.trimStart().toLowerCase().startsWith("<!") ||
+        /<html[\s>]/i.test(code.slice(0, 800));
+      files = [
+        {
+          path: isHtml ? "index.html" : "src/App.tsx",
+          content: code,
+        },
+      ];
+    }
   }
   if (!code && files.length > 0) {
     code = files[0].content;
@@ -62,8 +77,14 @@ export function normalizeRunResponse(
   const analysis = normalizeAnalysis(raw.analysis, raw.metrics);
   const metrics = normalizeMetrics(raw.metrics, analysis);
 
+  const preview_html =
+    typeof raw.preview_html === "string" && raw.preview_html.trim()
+      ? raw.preview_html.trim()
+      : null;
+
   return {
     ...raw,
+    preview_html,
     analysis,
     generation: {
       ...generation,
@@ -77,6 +98,10 @@ export function normalizeRunResponse(
         typeof generation.provider === "string"
           ? generation.provider
           : metrics.provider,
+      demo_seed:
+        generation.demo_seed && typeof generation.demo_seed === "object"
+          ? generation.demo_seed
+          : null,
     },
     metrics,
     planned_models: Array.isArray(raw.planned_models)

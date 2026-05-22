@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field
 
-from agents.coremind_agent import CoreMindRunResult, ProjectType
+from agents.coremind_agent import PROJECT_TYPE_LABELS, CoreMindRunResult, ProjectType
 from config import Settings, get_settings, plain_secret_str
 from tools.demo_preview_html import build_demo_preview_html
 
@@ -370,11 +370,15 @@ class SupabaseStore:
         project_title = _title_from_prompt(prompt)
         preview_html = run_result.preview_html
         if not preview_html:
-            preview_html = build_demo_preview_html(
-                norm_files,
-                title=project_title,
-                code=norm_code,
+            from tools.demo_pipeline import build_client_demo_document
+
+            document = await build_client_demo_document(
+                prompt,
+                project_type_label=PROJECT_TYPE_LABELS.get(
+                    project_type, project_type.value
+                ),
             )
+            preview_html = document.html
 
         payload = {
             "project_id": project_id,

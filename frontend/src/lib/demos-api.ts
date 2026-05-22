@@ -12,6 +12,22 @@ export interface DemoFileInput {
   content: string;
 }
 
+export interface DemoSeedTask {
+  text: string;
+  completed: boolean;
+}
+
+export interface DemoSeedPayload {
+  template?: string;
+  title?: string;
+  subtitle?: string;
+  brand_name?: string;
+  brand_tag?: string;
+  user_name?: string;
+  user_role?: string;
+  tasks?: DemoSeedTask[];
+}
+
 export interface CreateDemoPayload {
   duration: DemoDuration;
   title?: string;
@@ -21,6 +37,10 @@ export interface CreateDemoPayload {
   project_type?: string | null;
   code?: string | null;
   generation_id?: string | null;
+  /** Prompt utilisateur original pour personnaliser la seed TaskFlow. */
+  prompt?: string | null;
+  /** Seed sérialisée renvoyée par CoreMind (évite les tâches génériques Acme). */
+  demo_seed?: DemoSeedPayload | null;
 }
 
 export interface CreateDemoResponse {

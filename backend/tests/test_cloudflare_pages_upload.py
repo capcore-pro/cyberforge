@@ -14,7 +14,9 @@ from tools.cloudflare_pages import (
     pages_asset_path_legacy_for_token,
     public_demo_url_for_token,
     sanitize_manifest_entries,
+    zip_contains_marker,
 )
+from tools.standalone_demo_html import build_task_manager_standalone_html, wrap_with_password_gate
 
 
 def test_pages_asset_paths_flat_and_legacy() -> None:
@@ -66,6 +68,14 @@ def test_apply_deploy_cache_bust_changes_digest() -> None:
     d2 = _file_digest(path, apply_deploy_cache_bust(html).encode())
     assert d1 != d2
     assert "cf-deploy:" in apply_deploy_cache_bust(html)
+
+
+def test_zip_contains_password_toggle_after_gate() -> None:
+    inner = build_task_manager_standalone_html(title="Test", sources="")
+    gated = wrap_with_password_gate(inner, "secret-demo", title="Test")
+    path = pages_asset_path_for_token("tok1")
+    zip_bytes = build_deploy_zip({path: gated.encode("utf-8"), REDIRECTS_ASSET_PATH: b"/d/:token /u:token.html 200\n"})
+    assert zip_contains_marker(zip_bytes, "cf-password-toggle")
 
 
 def test_build_deploy_zip_roundtrip() -> None:

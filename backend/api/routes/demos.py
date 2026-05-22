@@ -1,11 +1,10 @@
 """
-Routes démos client — création de liens partagés (usage interne / générateur).
+Routes démos client — pipeline unique TaskFlow → Cloudflare.
 """
 
 from __future__ import annotations
 
 import logging
-import re
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -30,9 +29,11 @@ from tools.cloudflare_pages import (
     public_demo_url_for_token,
     remove_demo_from_cyberforge_demos,
 )
-from tools.demo_preview_html import collect_standalone_sources
-from tools.demo_template_service import DemoTemplateService
-from tools.standalone_demo_html import build_standalone_demo_html, wrap_with_password_gate
+from tools.demo_pipeline import (
+    build_client_demo_document,
+    client_demo_from_seed_dict,
+    wrap_demo_for_cloudflare,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +48,17 @@ class DemoFileInput(BaseModel):
 class CreateDemoRequest(BaseModel):
     duration: DemoDuration
     title: str | None = Field(default=None, max_length=200)
-    files: list[DemoFileInput] = Field(..., min_length=1)
+    files: list[DemoFileInput] = Field(
+        default_factory=list,
+        description="Ignoré pour le HTML — conservé pour compat API.",
+    )
     stack: list[str] = Field(default_factory=list)
     summary: str | None = Field(default=None, max_length=4000)
     project_type: str | None = Field(default=None, max_length=64)
     code: str | None = Field(default=None, max_length=500_000)
     generation_id: str | None = None
+    prompt: str | None = Field(default=None, max_length=8000)
+    demo_seed: dict | None = None
 
 
 class CreateDemoResponse(BaseModel):
@@ -64,6 +70,12 @@ class CreateDemoResponse(BaseModel):
     expires_at: str
     duration_hours: int
     title: str
+
+
+class DeleteDemoResponse(BaseModel):
+    id: str
+    deleted: bool
+    cloudflare_redeployed: bool
 
 
 def _unlock_demo_url(token: str) -> str:
@@ -81,9 +93,17 @@ def _http_error_from_supabase(exc: SupabaseStoreError, route: str) -> HTTPExcept
     return HTTPException(status_code=status, detail=detail)
 
 
+def _seed_prompt(body: CreateDemoRequest, title: str) -> str:
+    return "\n".join(
+        p.strip()
+        for p in (body.prompt or "", body.summary or "", body.project_type or "", title)
+        if p and p.strip()
+    )
+
+
 @router.post("/demos", response_model=CreateDemoResponse)
 async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
-    """Crée une démo client, déploie sur Cloudflare Pages si configuré dans .env."""
+    """Crée une démo : pipeline TaskFlow → gate → ZIP Cloudflare."""
     store = get_demos_store()
     if not store.is_configured():
         raise HTTPException(
@@ -107,86 +127,39 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
     if credentials is None:
         raise HTTPException(status_code=503, detail="Cloudflare non configuré.")
 
-    files = [{"path": f.path.strip(), "content": f.content} for f in body.files]
-    if not files:
-        raise HTTPException(status_code=422, detail="Au moins un fichier est requis.")
-
     title = (body.title or "").strip() or "Démo CyberForge"
     demo_token = DemosStore._new_token()
     demo_password = generate_demo_password()
 
     try:
-        sources, static_html = collect_standalone_sources(files, code=body.code)
-        react_sources = bool(
-            sources
-            and re.search(
-                r"\.(tsx|jsx)$|export\s+default|useState\s*\(",
-                sources,
-                re.I,
-            )
-        )
-        if static_html and not react_sources:
-            preview_html = wrap_with_password_gate(
-                static_html,
-                demo_password,
-                title=title,
-            )
-        elif react_sources or not static_html:
-            seed_prompt = "\n".join(
-                p
-                for p in (
-                    body.summary or "",
-                    body.project_type or "",
-                    title,
-                )
-                if p.strip()
-            )
-            generation = await DemoTemplateService().build_client_demo_generation(
-                user_prompt=seed_prompt or title,
+        if body.demo_seed:
+            document = client_demo_from_seed_dict(body.demo_seed)
+        else:
+            document = await build_client_demo_document(
+                _seed_prompt(body, title) or title,
                 project_type_label=body.project_type or title,
             )
-            preview_html = wrap_with_password_gate(
-                generation.code,
-                demo_password,
-                title=title,
-            )
-        elif sources:
-            preview_html = build_standalone_demo_html(
-                sources,
-                title=title,
-                password=demo_password,
-            )
-        else:
-            preview_html = build_standalone_demo_html(
-                "",
-                title=title,
-                password=demo_password,
-            )
-    except Exception as exc:
+        preview_html = wrap_demo_for_cloudflare(
+            document,
+            demo_password,
+            title=title,
+        )
+        logger.info(
+            "POST /demos — DemoPipeline | brand=%s | tasks=%s | gated_bytes=%s",
+            document.seed.brand_name,
+            len(document.seed.tasks),
+            len(preview_html.encode("utf-8")),
+        )
+    except (ValueError, Exception) as exc:
         raise HTTPException(
             status_code=422,
-            detail=f"Impossible de générer l'aperçu HTML : {exc}",
+            detail=f"Pipeline démo : {exc}",
         ) from exc
 
     try:
         other_entries = await store.list_cloudflare_manifest_entries(
             exclude_token=demo_token,
         )
-        markers = {
-            "cf-password-toggle": "cf-password-toggle" in preview_html,
-            "cf-lock-btn": "cf-lock-btn" in preview_html,
-        }
-        logger.info(
-            "POST /demos — HTML avant Cloudflare | bytes=%s | markers=%s",
-            len(preview_html.encode("utf-8")),
-            markers,
-        )
-        if not markers["cf-password-toggle"]:
-            logger.warning(
-                "POST /demos: cf-password-toggle absent du HTML généré — "
-                "redémarrez uvicorn et régénérez la démo."
-            )
-
         deploy = await deploy_demo_to_cyberforge_demos(
             account_id=credentials.account_id,
             api_token=credentials.api_token,
@@ -199,19 +172,15 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
         if not cf_hash:
             _, cf_hash = demo_content_digest(demo_token, preview_html)
         logger.info(
-            "POST /demos — déployé | cf_path=%s | cf_hash=%s | snapshot=%s",
+            "POST /demos — déployé | cf_path=%s | snapshot=%s",
             cf_path,
-            cf_hash,
             LAST_CF_UPLOAD_HTML,
         )
     except CloudflarePagesError as exc:
         logger.exception("Échec déploiement Cloudflare Pages")
         raise HTTPException(
             status_code=502,
-            detail={
-                "message": str(exc),
-                "hint": "Vérifiez le token API (permission Pages Write) et l'Account ID.",
-            },
+            detail={"message": str(exc)},
         ) from exc
 
     payload = DemoPayload(
@@ -234,26 +203,18 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
             password=demo_password,
         )
     except SupabaseStoreError as exc:
-        raise _http_error_from_supabase(exc, "POST /api/demos") from exc
-
-    unlock_url = _unlock_demo_url(created.token)
+        raise _http_error_from_supabase(exc, "POST /demos") from exc
 
     return CreateDemoResponse(
         id=created.id,
         token=created.token,
         password=created.password,
         url=deploy.url,
-        unlock_url=unlock_url,
+        unlock_url=_unlock_demo_url(created.token),
         expires_at=created.expires_at,
         duration_hours=created.duration_hours,
         title=created.title,
     )
-
-
-class DeleteDemoResponse(BaseModel):
-    id: str
-    deleted: bool
-    cloudflare_redeployed: bool
 
 
 @router.delete("/demos/{demo_id}", response_model=DeleteDemoResponse)
@@ -261,15 +222,12 @@ async def delete_client_demo(demo_id: str) -> DeleteDemoResponse:
     """Supprime la démo en base et retire son HTML du projet Pages cyberforge-demos."""
     store = get_demos_store()
     if not store.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail={"message": "Supabase non configuré."},
-        )
+        raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
 
     try:
         row = await store.get_by_id(demo_id)
     except SupabaseStoreError as exc:
-        raise _http_error_from_supabase(exc, "DELETE /api/demos/{id}") from exc
+        raise _http_error_from_supabase(exc, "DELETE /demos/{id}") from exc
 
     if row is None:
         raise HTTPException(status_code=404, detail="Démo introuvable.")
@@ -289,19 +247,12 @@ async def delete_client_demo(demo_id: str) -> DeleteDemoResponse:
                 )
                 cf_redeployed = True
             except CloudflarePagesError as exc:
-                logger.exception("Échec retrait démo Cloudflare Pages")
-                raise HTTPException(
-                    status_code=502,
-                    detail={
-                        "message": str(exc),
-                        "hint": "La démo n'a peut‑être pas été retirée de Pages.",
-                    },
-                ) from exc
+                raise HTTPException(status_code=502, detail={"message": str(exc)}) from exc
 
     try:
         await store.delete_demo(demo_id)
     except SupabaseStoreError as exc:
-        raise _http_error_from_supabase(exc, "DELETE /api/demos/{id}") from exc
+        raise _http_error_from_supabase(exc, "DELETE /demos/{id}") from exc
 
     return DeleteDemoResponse(
         id=demo_id,

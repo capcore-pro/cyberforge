@@ -70,6 +70,10 @@ class CodeGenerateResult(BaseModel):
     stack: list[str] = Field(default_factory=list)
     model: str
     provider: str
+    demo_seed: dict[str, Any] | None = Field(
+        default=None,
+        description="Données seed TaskFlow (titre, marque, tâches) pour aperçu et Cloudflare.",
+    )
 
 
 class CodeGenServiceError(Exception):

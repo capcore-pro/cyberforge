@@ -1,45 +1,32 @@
 """
-Helpers qualité démo — conversion génération ↔ HTML aperçu.
+Compat — délègue au pipeline unique (tools.demo_pipeline).
 """
 
 from __future__ import annotations
 
 from tools.codegen_service import CodeGenerateResult, GeneratedFile
-from tools.demo_template_service import TEMPLATE_MODEL, TEMPLATE_PROVIDER, build_html_from_seed, heuristic_demo_seed
-from tools.standalone_demo_html import build_task_manager_standalone_html
-
-_TEMPLATE_PROVIDERS = frozenset({TEMPLATE_PROVIDER, "cyberforge"})
-
-
-def _is_prefab_template_generation(generation: CodeGenerateResult) -> bool:
-    return (
-        generation.provider in _TEMPLATE_PROVIDERS
-        and generation.model == TEMPLATE_MODEL
-    )
+from tools.demo_pipeline import INDEX_HTML_PATH
+from tools.demo_template_service import (
+    build_html_from_seed,
+    heuristic_demo_seed,
+    seed_from_dict,
+    seed_to_code_result,
+)
 
 
 def preview_html_from_generation(
     generation: CodeGenerateResult,
     *,
     title: str = "Démo CyberForge",
+    user_prompt: str | None = None,
 ) -> str:
-    """HTML d'aperçu — toujours le template premium pour les démos client."""
-    if _is_prefab_template_generation(generation):
-        code = (generation.code or "").strip()
-        if code and "<html" in code.lower():
-            return code
-    files = [{"path": f.path, "content": f.content} for f in generation.files]
-    html_file = next(
-        (f for f in files if f["path"].lower().endswith(".html")),
-        None,
+    """Toujours le HTML TaskFlow du pipeline (jamais JSX / conversion)."""
+    if generation.demo_seed:
+        return build_html_from_seed(seed_from_dict(generation.demo_seed))
+    prompt = (user_prompt or generation.summary or title).strip()
+    return build_html_from_seed(
+        heuristic_demo_seed(prompt, project_type_label=title),
     )
-    if html_file and len(html_file["content"]) > 600:
-        return html_file["content"]
-    seed = heuristic_demo_seed(
-        generation.summary or title,
-        project_type_label=title,
-    )
-    return build_html_from_seed(seed)
 
 
 def code_result_from_html(
@@ -49,11 +36,10 @@ def code_result_from_html(
     model: str,
     provider: str,
 ) -> CodeGenerateResult:
-    """Emballe un HTML final dans CodeGenerateResult."""
     return CodeGenerateResult(
         summary=summary,
         code=html,
-        files=[GeneratedFile(path="index.html", content=html)],
+        files=[GeneratedFile(path=INDEX_HTML_PATH, content=html)],
         stack=["html", "css", "javascript"],
         model=model,
         provider=provider,
