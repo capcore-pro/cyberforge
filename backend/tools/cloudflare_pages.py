@@ -9,8 +9,11 @@ import base64
 import json
 import logging
 import re
+import secrets
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -29,8 +32,25 @@ _ROOT_STUB_HTML = (
 ).encode("utf-8")
 ROOT_STUB_ASSET_PATH = "index.html"
 ROOT_STUB_MANIFEST_PATH = "/index.html"
+REDIRECTS_ASSET_PATH = "_redirects"
+REDIRECTS_MANIFEST_PATH = "/_redirects"
+# Anciens liens /d/{token}/ → fichier plat /{token}.html (évite le fallback SPA sur /index.html).
+_REDIRECTS_BODY = (
+    b"/d/:token /:token.html 301\n"
+    b"/d/:token/ /:token.html 301\n"
+)
 # TEMP DEBUG — print() stderr vers console uvicorn (retirer après diagnostic).
 CF_PAGES_DEBUG_PRINT = False
+
+# Copie locale du dernier HTML envoyé à l'API upload Cloudflare (diagnostic).
+LAST_CF_UPLOAD_HTML = Path(__file__).resolve().parent.parent / "_last_cf_upload.html"
+
+_HTML_MARKERS = (
+    "cf-password-toggle",
+    "cf-eye-on",
+    "cf-lock-btn",
+    "saas-menu-btn",
+)
 
 
 class CloudflarePagesError(Exception):
@@ -46,6 +66,8 @@ class CloudflareDeployResult:
     project_name: str
     deployment_id: str
     url: str
+    asset_path: str | None = None
+    content_hash: str | None = None
 
 
 def pages_project_name_for_token(token: str) -> str:
@@ -53,9 +75,19 @@ def pages_project_name_for_token(token: str) -> str:
     return CYBERFORGE_DEMOS_PROJECT
 
 
+def pages_slug_for_token(token: str) -> str:
+    """Identifiant URL-safe dérivé du token de démo."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
+
+
 def pages_asset_path_for_token(token: str) -> str:
-    """Chemin fichier relatif pour Direct Upload (ex. d/abc/index.html)."""
-    slug = re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
+    """Chemin fichier principal (racine) — servi directement par Pages."""
+    return f"{pages_slug_for_token(token)}.html"
+
+
+def pages_asset_path_legacy_for_token(token: str) -> str:
+    """Ancien chemin imbriqué — conservé pour liens déjà partagés."""
+    slug = pages_slug_for_token(token)
     return f"d/{slug}/index.html"
 
 
@@ -64,14 +96,83 @@ def pages_manifest_path_for_token(token: str) -> str:
 
 
 def public_demo_url_for_token(token: str) -> str:
-    """URL stable du projet Pages + chemin démo."""
+    """URL publique de la démo (fichier plat à la racine du projet Pages)."""
     base = f"https://{CYBERFORGE_DEMOS_PROJECT}.pages.dev"
-    slug = re.sub(r"[^a-zA-Z0-9_-]", "", token.strip()) or "demo"
-    return f"{base}/d/{slug}/"
+    return f"{base}/{pages_asset_path_for_token(token)}"
 
 
 def _root_stub_digest() -> str:
     return _file_digest(ROOT_STUB_ASSET_PATH, _ROOT_STUB_HTML)
+
+
+def _redirects_digest() -> str:
+    return _file_digest(REDIRECTS_ASSET_PATH, _REDIRECTS_BODY)
+
+
+def apply_deploy_cache_bust(html: str) -> str:
+    """
+    Injecte un marqueur unique pour forcer un nouveau hash Cloudflare à chaque déploiement.
+
+    Sans cela, un HTML identique réutilise le même digest et Pages peut servir un asset en cache.
+    """
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%f")[:-3] + "Z"
+    nonce = secrets.token_hex(6)
+    marker = f"<!-- cf-deploy:{stamp}:{nonce} -->"
+    lower = html.lower()
+    end = lower.rfind("</html>")
+    if end >= 0:
+        return html[:end] + marker + html[end:]
+    return html + marker
+
+
+def _html_marker_report(html: str) -> dict[str, bool]:
+    return {name: name in html for name in _HTML_MARKERS}
+
+
+def _log_upload_html_snapshot(
+    *,
+    asset_path: str,
+    html: str,
+    digest: str,
+    manifest_path: str,
+) -> None:
+    """Journalise et sauvegarde le HTML exact uploadé vers Cloudflare."""
+    encoded = html.encode("utf-8")
+    markers = _html_marker_report(html)
+    logger.info(
+        "[Cloudflare Pages] upload_html | path=%s | manifest=%s | digest=%s | bytes=%s | markers=%s",
+        asset_path,
+        manifest_path,
+        digest,
+        len(encoded),
+        markers,
+    )
+    for name, present in markers.items():
+        if not present:
+            logger.warning(
+                "[Cloudflare Pages] upload_html: marqueur ABSENT — %s", name
+            )
+    for needle in ("cf-password-toggle", "cf-lock-btn"):
+        idx = html.find(needle)
+        if idx >= 0:
+            snippet = html[max(0, idx - 60) : idx + 140].replace("\n", " ")
+            logger.info(
+                "[Cloudflare Pages] upload_html snippet | %s | …%s…",
+                needle,
+                snippet,
+            )
+    try:
+        LAST_CF_UPLOAD_HTML.write_text(html, encoding="utf-8")
+        logger.info(
+            "[Cloudflare Pages] upload_html sauvegardé | file=%s",
+            LAST_CF_UPLOAD_HTML,
+        )
+    except OSError as exc:
+        logger.warning(
+            "[Cloudflare Pages] impossible d'écrire %s: %s",
+            LAST_CF_UPLOAD_HTML,
+            exc,
+        )
 
 
 def demo_content_digest(token: str, html: str) -> tuple[str, str]:
@@ -81,8 +182,11 @@ def demo_content_digest(token: str, html: str) -> tuple[str, str]:
 
 
 def build_pages_manifest(entries: dict[str, str]) -> dict[str, str]:
-    """Manifest complet : stub racine + entrées path → hash."""
-    manifest: dict[str, str] = {ROOT_STUB_MANIFEST_PATH: _root_stub_digest()}
+    """Manifest complet : stub racine, redirects, entrées path → hash."""
+    manifest: dict[str, str] = {
+        ROOT_STUB_MANIFEST_PATH: _root_stub_digest(),
+        REDIRECTS_MANIFEST_PATH: _redirects_digest(),
+    }
     for path, digest in entries.items():
         manifest[_manifest_path(path)] = digest
     return manifest
@@ -568,13 +672,17 @@ async def _deploy_with_manifest(
     upload_files: dict[str, bytes],
 ) -> CloudflareDeployResult:
     """Direct Upload : upload fichiers listés + déploiement manifest fusionné."""
+    files = dict(upload_files)
+    if REDIRECTS_ASSET_PATH not in files:
+        files[REDIRECTS_ASSET_PATH] = _REDIRECTS_BODY
+
     _log_deploy_step(
         "0/5 deploy_start",
         "préparation",
         algo=HASH_ALGO_VERSION,
         project=project_name,
         manifest_paths=len(manifest),
-        upload_count=len(upload_files),
+        upload_count=len(files),
     )
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
@@ -592,10 +700,30 @@ async def _deploy_with_manifest(
                 api_token=api_token,
                 project_name=project_name,
             )
-            for asset_path, body in upload_files.items():
-                digest = manifest.get(_manifest_path(asset_path))
-                if not digest:
-                    digest = _file_digest(asset_path, body)
+            for asset_path, body in files.items():
+                manifest_key = _manifest_path(asset_path)
+                digest = manifest.get(manifest_key) or _file_digest(asset_path, body)
+                if asset_path.endswith(".html") or "index.html" in asset_path:
+                    try:
+                        html_text = body.decode("utf-8")
+                        _log_upload_html_snapshot(
+                            asset_path=asset_path,
+                            html=html_text,
+                            digest=digest,
+                            manifest_path=manifest_key,
+                        )
+                    except UnicodeDecodeError:
+                        logger.warning(
+                            "[Cloudflare Pages] upload %s: corps non UTF-8",
+                            asset_path,
+                        )
+                _log_deploy_step(
+                    "3/5 upload_asset",
+                    "envoi corps",
+                    path=asset_path,
+                    digest=digest,
+                    bytes=len(body),
+                )
                 await _upload_asset(
                     client,
                     upload_jwt=upload_jwt,
@@ -650,6 +778,8 @@ async def _deploy_with_manifest(
         project_name=project_name,
         deployment_id=deployment_id,
         url=live_url.rstrip("/"),
+        asset_path=None,
+        content_hash=None,
     )
 
 
@@ -666,12 +796,37 @@ async def deploy_demo_to_cyberforge_demos(
     other_manifest_entries : chemins actifs path relatif → hash (hors cette démo).
     """
     asset_path = pages_asset_path_for_token(token)
-    body = html.encode("utf-8")
+    legacy_path = pages_asset_path_legacy_for_token(token)
+    html_fresh = apply_deploy_cache_bust(html)
+    body = html_fresh.encode("utf-8")
     digest = _file_digest(asset_path, body)
+    legacy_digest = _file_digest(legacy_path, body)
+    manifest_path = _manifest_path(asset_path)
+    _log_upload_html_snapshot(
+        asset_path=asset_path,
+        html=html_fresh,
+        digest=digest,
+        manifest_path=manifest_path,
+    )
     entries = dict(other_manifest_entries)
     entries[asset_path] = digest
+    entries[legacy_path] = legacy_digest
     manifest = build_pages_manifest(entries)
-    upload_files = {asset_path: body}
+    _log_deploy_step(
+        "0/5 deploy_demo",
+        "hash calculé (cache-bust actif)",
+        asset_path=asset_path,
+        legacy_path=legacy_path,
+        digest=digest,
+        legacy_digest=legacy_digest,
+        manifest_paths=sorted(manifest.keys()),
+        manifest_entry=manifest.get(manifest_path),
+    )
+    upload_files = {
+        asset_path: body,
+        legacy_path: body,
+        REDIRECTS_ASSET_PATH: _REDIRECTS_BODY,
+    }
     if ROOT_STUB_ASSET_PATH not in other_manifest_entries:
         upload_files[ROOT_STUB_ASSET_PATH] = _ROOT_STUB_HTML
 
@@ -685,7 +840,9 @@ async def deploy_demo_to_cyberforge_demos(
     return CloudflareDeployResult(
         project_name=result.project_name,
         deployment_id=result.deployment_id,
-        url=public_demo_url_for_token(token).rstrip("/"),
+        url=public_demo_url_for_token(token),
+        asset_path=asset_path,
+        content_hash=digest,
     )
 
 

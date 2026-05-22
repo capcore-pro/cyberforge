@@ -132,7 +132,12 @@ def build_premium_task_manager_html(
       padding: 0;
     }}
     .saas-menu-btn:hover {{ background: rgba(99,102,241,0.2); border-color: rgba(129,140,248,0.35); }}
-    .saas-menu-icon {{ display: block; }}
+    .saas-menu-icon {{
+      display: block;
+      font-size: 1.35rem;
+      line-height: 1;
+      font-weight: 600;
+    }}
     .saas-sidebar-backdrop {{
       display: none;
       position: fixed; inset: 0;
@@ -369,6 +374,8 @@ def build_premium_task_manager_html(
       text-align: center; padding: 2rem; color: #64748b; font-size: 0.9rem;
     }}
     @media (max-width: 767px) {{
+      body.saas-nav-open {{ overflow: hidden; }}
+      .saas-shell {{ display: block; width: 100%; }}
       .saas-menu-btn {{ display: flex; }}
       .saas-topbar {{ padding: 0 1rem; }}
       .saas-sidebar {{
@@ -376,16 +383,29 @@ def build_premium_task_manager_html(
         top: 0; left: 0; bottom: 0;
         z-index: 50;
         width: min(280px, 88vw);
+        max-width: 88vw;
         transform: translateX(-100%);
         transition: transform 0.25s ease;
         box-shadow: none;
+        visibility: hidden;
       }}
       .saas-shell.saas-nav-open .saas-sidebar {{
         transform: translateX(0);
+        visibility: visible;
         box-shadow: 8px 0 32px rgba(0,0,0,0.45);
       }}
+      .saas-sidebar-backdrop {{
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+      }}
       .saas-shell.saas-nav-open .saas-sidebar-backdrop {{ display: block; }}
-      .saas-main {{ width: 100%; flex: 1; }}
+      .saas-main {{
+        width: 100%;
+        max-width: 100%;
+        min-height: 100vh;
+      }}
       .saas-content {{ padding: 1rem 1rem 2rem; }}
       .saas-user-name, .saas-user-role {{ display: none; }}
       .kpi-grid, .stats {{ grid-template-columns: 1fr; }}
@@ -427,9 +447,7 @@ def build_premium_task_manager_html(
             aria-expanded="false"
             aria-controls="saas-sidebar"
           >
-            <svg class="saas-menu-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M4 6h16M4 12h16M4 18h16"/>
-            </svg>
+            <span class="saas-menu-icon" aria-hidden="true">☰</span>
           </button>
           <div class="saas-topbar-title" id="topbar-title">Tâches</div>
         </div>
@@ -653,7 +671,11 @@ def build_premium_task_manager_html(
   function setSidebarOpen(open) {{
     if (!shell) return;
     shell.classList.toggle("saas-nav-open", open);
-    if (menuBtn) menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    document.body.classList.toggle("saas-nav-open", open && isMobileNav());
+    if (menuBtn) {{
+      menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      menuBtn.setAttribute("aria-label", open ? "Fermer le menu" : "Ouvrir le menu");
+    }}
     if (backdrop) backdrop.setAttribute("aria-hidden", open ? "false" : "true");
   }}
 
@@ -668,6 +690,15 @@ def build_premium_task_manager_html(
 
   if (menuBtn) menuBtn.addEventListener("click", toggleSidebar);
   if (backdrop) backdrop.addEventListener("click", closeSidebar);
+  if (typeof mobileMq.addEventListener === "function") {{
+    mobileMq.addEventListener("change", function () {{
+      if (!isMobileNav()) closeSidebar();
+    }});
+  }} else if (typeof mobileMq.addListener === "function") {{
+    mobileMq.addListener(function () {{
+      if (!isMobileNav()) closeSidebar();
+    }});
+  }}
 
   function showPage(name) {{
     navItems.forEach(function (el) {{

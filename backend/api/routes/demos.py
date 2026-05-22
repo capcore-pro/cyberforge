@@ -22,8 +22,10 @@ from security.cloudflare_env import cloudflare_configured, get_cloudflare_creden
 from tools.cloudflare_pages import (
     CYBERFORGE_DEMOS_PROJECT,
     CloudflarePagesError,
+    LAST_CF_UPLOAD_HTML,
     demo_content_digest,
     deploy_demo_to_cyberforge_demos,
+    pages_asset_path_for_token,
     public_demo_url_for_token,
     remove_demo_from_cyberforge_demos,
 )
@@ -141,6 +143,21 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
         other_entries = await store.list_cloudflare_manifest_entries(
             exclude_token=demo_token,
         )
+        markers = {
+            "cf-password-toggle": "cf-password-toggle" in preview_html,
+            "cf-lock-btn": "cf-lock-btn" in preview_html,
+        }
+        logger.info(
+            "POST /demos — HTML avant Cloudflare | bytes=%s | markers=%s",
+            len(preview_html.encode("utf-8")),
+            markers,
+        )
+        if not markers["cf-password-toggle"]:
+            logger.warning(
+                "POST /demos: cf-password-toggle absent du HTML généré — "
+                "redémarrez uvicorn et régénérez la démo."
+            )
+
         deploy = await deploy_demo_to_cyberforge_demos(
             account_id=credentials.account_id,
             api_token=credentials.api_token,
@@ -148,7 +165,16 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
             html=preview_html,
             other_manifest_entries=other_entries,
         )
-        cf_path, cf_hash = demo_content_digest(demo_token, preview_html)
+        cf_path = deploy.asset_path or pages_asset_path_for_token(demo_token)
+        cf_hash = deploy.content_hash
+        if not cf_hash:
+            _, cf_hash = demo_content_digest(demo_token, preview_html)
+        logger.info(
+            "POST /demos — déployé | cf_path=%s | cf_hash=%s | snapshot=%s",
+            cf_path,
+            cf_hash,
+            LAST_CF_UPLOAD_HTML,
+        )
     except CloudflarePagesError as exc:
         logger.exception("Échec déploiement Cloudflare Pages")
         raise HTTPException(

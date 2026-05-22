@@ -367,8 +367,34 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
       border: 1px solid rgba(248, 113, 113, 0.45);
     }}
     .cf-login-error.cf-visible {{ display: block; }}
-    #cf-demo-content {{ display: none; min-height: 100vh; }}
+    #cf-demo-content {{ display: none; min-height: 100vh; position: relative; }}
     #cf-demo-content.cf-unlocked {{ display: block; }}
+    .cf-lock-btn {{
+      display: none;
+      position: fixed;
+      top: 0.65rem;
+      right: 0.65rem;
+      z-index: 10000;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.4rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.88);
+      color: #94a3b8;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }}
+    .cf-lock-btn:hover {{
+      color: #e2e8f0;
+      border-color: rgba(34, 211, 238, 0.45);
+      background: rgba(30, 41, 59, 0.95);
+    }}
+    #cf-demo-content.cf-unlocked .cf-lock-btn {{ display: inline-flex; }}
   </style>
 {demo_styles}
   <style id="cf-gate-overrides">
@@ -424,6 +450,9 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
     </div>
   </div>
   <div id="cf-demo-content" aria-hidden="true">
+    <button type="button" id="cf-lock-btn" class="cf-lock-btn" title="Verrouiller et effacer les données locales">
+      Verrouiller
+    </button>
 {demo_inner}
   </div>
   <script>
@@ -435,6 +464,7 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
   var err = document.getElementById("cf-login-error");
   var login = document.getElementById("cf-login-screen");
   var demo = document.getElementById("cf-demo-content");
+  var lockBtn = document.getElementById("cf-lock-btn");
 
   if (togglePwd && input) {{
     togglePwd.addEventListener("click", function () {{
@@ -454,6 +484,35 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
     }}
   }}
 
+  function clearDemoLocalStorage() {{
+    try {{
+      var toRemove = [];
+      for (var i = 0; i < localStorage.length; i++) {{
+        var key = localStorage.key(i);
+        if (key && (key.indexOf("cf_tasks_") === 0 || key.indexOf("cf_") === 0)) {{
+          toRemove.push(key);
+        }}
+      }}
+      toRemove.forEach(function (key) {{ localStorage.removeItem(key); }});
+    }} catch (e) {{}}
+  }}
+
+  function lock() {{
+    clearDemoLocalStorage();
+    if (demo) {{
+      demo.classList.remove("cf-unlocked");
+      demo.setAttribute("aria-hidden", "true");
+    }}
+    if (login) login.style.display = "";
+    if (err) err.classList.remove("cf-visible");
+    if (input) {{
+      input.value = "";
+      input.type = "password";
+      if (togglePwd) togglePwd.classList.remove("cf-visible");
+      input.focus();
+    }}
+  }}
+
   function unlock() {{
     if (login) login.style.display = "none";
     if (demo) {{
@@ -462,6 +521,8 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
     }}
     if (err) err.classList.remove("cf-visible");
   }}
+
+  if (lockBtn) lockBtn.addEventListener("click", lock);
 
   if (form) {{
     form.addEventListener("submit", function (e) {{

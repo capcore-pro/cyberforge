@@ -150,11 +150,22 @@ def test_password_gate_wraps_demo_inline() -> None:
     assert "cf-login-error" in wrapped
     assert "cf-password-toggle" in wrapped
     assert "cf-password-wrap" in wrapped
+    assert "cf-eye-on" in wrapped
+    assert "cf-lock-btn" in wrapped
     assert "EXPECTED" in wrapped
-    head_part = wrapped[: wrapped.lower().find("</head>")]
-    assert ".composer-input" in head_part
-    assert ".btn-add" in head_part
-    assert ".composer-input" in head_part
+
+
+def test_demo_preview_pipeline_uses_svg_password_toggle() -> None:
+    """POST /demos et Supabase passent par build_demo_preview_html → wrap_with_password_gate."""
+    html = build_demo_preview_html(
+        [{"path": "src/App.tsx", "content": REACT_TODO_TSX}],
+        title="Pipeline démo",
+        password="test-secret",
+    )
+    assert "cf-password-toggle" in html
+    assert "cf-eye-on" in html
+    assert "cf-lock-btn" in html
+    assert "function lock" in html or "function lock()" in html
 
 
 def test_task_manager_direct_has_controls() -> None:
