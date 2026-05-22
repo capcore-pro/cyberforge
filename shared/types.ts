@@ -94,6 +94,15 @@ export interface PersistenceResult {
   storage: string;
 }
 
+/** Qualité livrable (BugHunterAI / AutoFixAI) */
+export interface DemoQualitySummary {
+  ok: boolean;
+  issue_codes: string[];
+  fix_attempts: number;
+  autofix_applied: boolean;
+  taskflow_fallback: boolean;
+}
+
 /** Réponse POST /api/agents/coremind/run — flow complet */
 export interface CoreMindRunResponse {
   analysis: CoreMindResponse;
@@ -101,6 +110,9 @@ export interface CoreMindRunResponse {
   metrics: GenerationMetrics;
   planned_models: string[];
   persistence?: PersistenceResult | null;
+  demo_quality?: DemoQualitySummary | null;
+  /** HTML aperçu serveur (aligné sur le livrable corrigé) */
+  preview_html?: string | null;
 }
 
 /** Projet enregistré dans Supabase */

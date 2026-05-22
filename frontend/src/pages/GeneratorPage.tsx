@@ -172,6 +172,11 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     if (!hasOutput) return;
     setActionError(null);
     try {
+      const serverPreview = result?.preview_html?.trim();
+      if (serverPreview) {
+        setPreviewHtml(serverPreview);
+        return;
+      }
       await openCodePreview(files, {
         title: "Prévisualisation CyberForge",
         onIframe: (html) => setPreviewHtml(html),

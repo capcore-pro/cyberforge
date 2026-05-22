@@ -5,6 +5,8 @@ Analyse heuristique (sans appel LLM) ; extensible via clés API configurées.
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 import time
 from enum import Enum
@@ -12,7 +14,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agents.auto_fix_agent import AutoFixAgent
 from agents.base_agent import BaseAgent
+from agents.bug_hunter_agent import BugHunterAgent
+from agents.demo_quality import preview_html_from_generation
 from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG
 from tools.codegen_service import (
     CodeGenComplexity,
@@ -22,6 +27,8 @@ from tools.codegen_service import (
     complexity_from_score,
 )
 from tools.pricing import estimate_cost_usd
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectType(str, Enum):
@@ -229,6 +236,16 @@ class GenerationMetrics(BaseModel):
     project_type_selected: str | None = None
 
 
+class DemoQualitySummary(BaseModel):
+    """Résultat BugHunterAI / AutoFixAI après génération."""
+
+    ok: bool = True
+    issue_codes: list[str] = Field(default_factory=list)
+    fix_attempts: int = 0
+    autofix_applied: bool = False
+    taskflow_fallback: bool = False
+
+
 class CoreMindRunResult(BaseModel):
     """Flow complet : analyse + sélection de modèles + génération."""
 
@@ -238,6 +255,11 @@ class CoreMindRunResult(BaseModel):
     planned_models: list[str] = Field(
         default_factory=list,
         description="Modèles configurés tentés par ordre de coût",
+    )
+    demo_quality: DemoQualitySummary | None = None
+    preview_html: str | None = Field(
+        default=None,
+        description="HTML aperçu aligné sur le livrable final (post BugHunter/AutoFix)",
     )
 
 
@@ -319,6 +341,57 @@ class CoreMindAgent(BaseAgent):
 
         start = time.perf_counter()
         generation = await codegen.generate_code(enriched, tier, demo_html=True)
+
+        hunter = BugHunterAgent(self._settings)
+        bug_report = hunter.analyze_generation(generation, title=type_label)
+        logger.info(
+            "[CoreMindAI] BugHunterAI | ok=%s | issues=%s | html_bytes=%s",
+            bug_report.ok,
+            bug_report.issue_codes,
+            bug_report.html_bytes,
+        )
+
+        quality = DemoQualitySummary(ok=bug_report.ok, issue_codes=bug_report.issue_codes)
+        if not bug_report.ok:
+            logger.info(
+                "[CoreMindAI] AutoFixAI déclenché | issues=%s",
+                bug_report.issue_codes,
+            )
+            autofix = AutoFixAgent(self._settings)
+            generation, fix_attempts, final_report = await autofix.repair(
+                user_prompt=enriched,
+                tier=tier,
+                title=type_label,
+                initial_report=bug_report,
+            )
+            quality.fix_attempts = fix_attempts
+            quality.autofix_applied = True
+            quality.ok = final_report.ok
+            quality.issue_codes = final_report.issue_codes
+            quality.taskflow_fallback = (
+                generation.provider == "cyberforge"
+                and generation.model == "taskflow-premium"
+            )
+            logger.info(
+                "[CoreMindAI] AutoFixAI terminé | ok=%s | attempts=%s | taskflow_fallback=%s | "
+                "final_issues=%s | provider=%s | model=%s",
+                quality.ok,
+                quality.fix_attempts,
+                quality.taskflow_fallback,
+                quality.issue_codes,
+                generation.provider,
+                generation.model,
+            )
+        else:
+            logger.info("[CoreMindAI] AutoFixAI non déclenché — livrable accepté par BugHunterAI")
+
+        preview_html = preview_html_from_generation(generation, title=type_label)
+        logger.info(
+            "[CoreMindAI] demo_quality=%s | preview_html_bytes=%s",
+            json.dumps(quality.model_dump(), ensure_ascii=False),
+            len(preview_html.encode("utf-8")),
+        )
+
         duration_ms = int((time.perf_counter() - start) * 1000)
 
         output_chars = len(generation.code) + sum(
@@ -346,6 +419,8 @@ class CoreMindAgent(BaseAgent):
             generation=generation,
             metrics=metrics,
             planned_models=codegen.planned_models(tier),
+            demo_quality=quality,
+            preview_html=preview_html,
         )
 
 

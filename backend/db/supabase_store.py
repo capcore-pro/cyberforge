@@ -368,11 +368,13 @@ class SupabaseStore:
         files = [{"path": f.path, "content": f.content} for f in gen.files]
         norm_files, norm_code = normalize_generation_sources(files, gen.code)
         project_title = _title_from_prompt(prompt)
-        preview_html = build_demo_preview_html(
-            norm_files,
-            title=project_title,
-            code=norm_code,
-        )
+        preview_html = run_result.preview_html
+        if not preview_html:
+            preview_html = build_demo_preview_html(
+                norm_files,
+                title=project_title,
+                code=norm_code,
+            )
 
         payload = {
             "project_id": project_id,
