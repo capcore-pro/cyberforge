@@ -1,36 +1,69 @@
 """
 Démos client — templates premium préfabriqués (pas de génération HTML par LLM).
 
-Le LLM ne choisit que le template et personnalise les données seed (titre, marque, tâches).
+Le LLM choisit le template et personnalise les données seed (titre, marque, tâches).
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from config import Settings, get_settings
 from tools.codegen_service import (
-    CodeGenComplexity,
     CodeGenService,
     CodeGenServiceError,
     CodeGenerateResult,
     GeneratedFile,
 )
-from tools.premium_task_saas_html import build_premium_task_manager_html
+from tools.premium_crm_html import CRM_MARKER, build_premium_crm_html
+from tools.premium_dashboard_html import DASHBOARD_MARKER, build_premium_dashboard_html
+from tools.premium_invoice_html import INVOICE_MARKER, build_premium_invoice_html
+from tools.premium_landing_page_html import LANDING_MARKER, build_premium_landing_html
+from tools.premium_task_saas_html import PREMIUM_PREVIEW_MARKER, build_premium_task_manager_html
 
 logger = logging.getLogger(__name__)
 
 TEMPLATE_TASKFLOW = "taskflow"
-TEMPLATE_PROVIDER = "cyberforge"
-TEMPLATE_MODEL = "taskflow-premium"
+TEMPLATE_LANDING = "landing"
+TEMPLATE_CRM = "crm"
+TEMPLATE_DASHBOARD = "dashboard"
+TEMPLATE_INVOICE = "invoice"
 
-_DEFAULT_BRAND = "TaskFlow"
-_DEFAULT_TAG = "Workspace Pro"
+VALID_TEMPLATES = frozenset(
+    {
+        TEMPLATE_TASKFLOW,
+        TEMPLATE_LANDING,
+        TEMPLATE_CRM,
+        TEMPLATE_DASHBOARD,
+        TEMPLATE_INVOICE,
+    }
+)
+
+TEMPLATE_MARKERS: dict[str, str] = {
+    TEMPLATE_TASKFLOW: "saas-shell",
+    TEMPLATE_LANDING: LANDING_MARKER,
+    TEMPLATE_CRM: CRM_MARKER,
+    TEMPLATE_DASHBOARD: DASHBOARD_MARKER,
+    TEMPLATE_INVOICE: INVOICE_MARKER,
+}
+
+TEMPLATE_LABELS: dict[str, str] = {
+    TEMPLATE_TASKFLOW: "TaskFlow",
+    TEMPLATE_LANDING: "Landing page",
+    TEMPLATE_CRM: "CRM",
+    TEMPLATE_DASHBOARD: "Dashboard analytics",
+    TEMPLATE_INVOICE: "Facturation",
+}
+
+TEMPLATE_PROVIDER = "cyberforge"
+TEMPLATE_MODEL = "cyberforge-premium"
+
+_DEFAULT_BRAND = "CyberForge"
+_DEFAULT_TAG = "Démo premium"
 _DEFAULT_USER = "Alex Martin"
-_DEFAULT_ROLE = "Chef de projet"
+_DEFAULT_ROLE = "Utilisateur"
 
 _DEFAULT_TASKS: tuple[tuple[str, bool], ...] = (
     ("Finaliser la proposition client Acme Corp", False),
@@ -56,6 +89,126 @@ class DemoSeedData:
     llm_personalized: bool = False
 
 
+def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") -> str:
+    """Sélectionne le template premium selon le prompt et le type de projet."""
+    blob = f"{project_type_label}\n{prompt}".lower()
+
+    invoice_kw = (
+        "facture",
+        "facturation",
+        "invoice",
+        "tva",
+        "devis",
+        "billing",
+        "comptabilité",
+        "comptabilite",
+    )
+    crm_kw = (
+        "crm",
+        "contact",
+        "contacts",
+        "client",
+        "clients",
+        "pipeline",
+        "commercial",
+        "prospect",
+        "opportunit",
+        "vente",
+        "sales",
+    )
+    dashboard_kw = (
+        "dashboard",
+        "analytics",
+        "analytique",
+        "kpi",
+        "graphique",
+        "statistique",
+        "reporting",
+        "tableau de bord",
+        "metrics",
+    )
+    landing_kw = (
+        "landing",
+        "page d'accueil",
+        "vitrine",
+        "marketing",
+        "hero",
+        "présentation",
+        "presentation",
+        "site vitrine",
+        "landing page",
+    )
+    task_kw = (
+        "tâche",
+        "tache",
+        "todo",
+        "taskflow",
+        "gestion de projet",
+        "projet",
+        "kanban",
+    )
+
+    scores: dict[str, int] = {
+        TEMPLATE_INVOICE: sum(1 for k in invoice_kw if k in blob),
+        TEMPLATE_CRM: sum(1 for k in crm_kw if k in blob),
+        TEMPLATE_DASHBOARD: sum(1 for k in dashboard_kw if k in blob),
+        TEMPLATE_LANDING: sum(1 for k in landing_kw if k in blob),
+        TEMPLATE_TASKFLOW: sum(1 for k in task_kw if k in blob),
+    }
+
+    if re.search(r"\bcrm\b", blob, re.IGNORECASE):
+        scores[TEMPLATE_CRM] += 8
+
+    if "landing_page" in blob or "site_web" in blob:
+        scores[TEMPLATE_LANDING] += 2
+    if "saas_dashboard" in blob or "dashboard" in project_type_label.lower():
+        scores[TEMPLATE_DASHBOARD] += 2
+
+    specialized = max(
+        scores[TEMPLATE_CRM],
+        scores[TEMPLATE_DASHBOARD],
+        scores[TEMPLATE_INVOICE],
+        scores[TEMPLATE_LANDING],
+    )
+    if "application_web" in blob and specialized == 0 and scores[TEMPLATE_LANDING] == 0:
+        scores[TEMPLATE_TASKFLOW] += 1
+
+    best = max(scores.items(), key=lambda x: (x[1], x[0] == TEMPLATE_CRM))
+    if best[1] > 0:
+        return best[0]
+    return TEMPLATE_TASKFLOW
+
+
+def align_seed_template(
+    seed: DemoSeedData,
+    prompt: str,
+    *,
+    project_type_label: str = "",
+) -> DemoSeedData:
+    """Le prompt utilisateur prime sur le champ template seed (ex. LLM → taskflow)."""
+    detected = detect_template_from_prompt(
+        prompt,
+        project_type_label=project_type_label,
+    )
+    if seed.template == detected:
+        return seed
+    logger.info(
+        "[DemoTemplate] template corrigé | seed=%s → détecté=%s",
+        seed.template,
+        detected,
+    )
+    return replace(
+        seed,
+        template=detected,
+        subtitle=_subtitle_for_template(detected, seed.brand_name),
+        brand_tag=(
+            seed.brand_tag
+            if detected == TEMPLATE_TASKFLOW
+            else f"{TEMPLATE_LABELS[detected]} Pro"
+        ),
+    )
+
+
 def _initials(name: str) -> str:
     parts = [p for p in re.split(r"\s+", name.strip()) if p]
     if len(parts) >= 2:
@@ -72,10 +225,17 @@ def _clip(text: str, max_len: int) -> str:
     return t[: max_len - 1].rstrip() + "…"
 
 
-def _brand_from_prompt(prompt: str) -> str:
+def _brand_from_prompt(prompt: str, template: str) -> str:
     quoted = re.search(r"[«\"']([^«\"']{2,40})[»\"']", prompt)
     if quoted:
         return _clip(quoted.group(1), 32)
+    defaults = {
+        TEMPLATE_LANDING: "NovaLaunch",
+        TEMPLATE_CRM: "RelateCRM",
+        TEMPLATE_DASHBOARD: "InsightHub",
+        TEMPLATE_INVOICE: "BillForge",
+        TEMPLATE_TASKFLOW: "TaskFlow",
+    }
     for kw in (
         "restaurant",
         "café",
@@ -86,14 +246,75 @@ def _brand_from_prompt(prompt: str) -> str:
         "saas",
         "boutique",
         "clinique",
-        "école",
     ):
         if kw in prompt.lower():
-            return kw.capitalize() + " Pro"
+            return _clip(kw.capitalize() + " Pro", 32)
     words = re.findall(r"[A-Za-zÀ-ÿ]{3,}", prompt)
     if words:
         return _clip(words[0].capitalize(), 28)
-    return _DEFAULT_BRAND
+    return defaults.get(template, _DEFAULT_BRAND)
+
+
+def _subtitle_for_template(template: str, brand: str) -> str:
+    subs = {
+        TEMPLATE_LANDING: f"Découvrez {brand} — la plateforme qui convertit vos visiteurs en clients.",
+        TEMPLATE_CRM: f"Pilotez votre pipeline commercial avec {brand}.",
+        TEMPLATE_DASHBOARD: f"Visualisez vos KPIs en temps réel avec {brand}.",
+        TEMPLATE_INVOICE: f"Facturation simple et conforme avec {brand}.",
+        TEMPLATE_TASKFLOW: f"Organisez votre travail avec {brand} — espace collaboratif premium.",
+    }
+    return subs.get(template, f"Démo interactive {brand}.")
+
+
+def _tasks_from_prompt(prompt: str) -> tuple[tuple[str, bool], ...]:
+    lower = prompt.lower()
+    if (
+        "réservation" in lower
+        or "reservation" in lower
+        or "booking" in lower
+    ):
+        return (
+            ("Confirmer les réservations du vendredi soir", False),
+            ("Mettre à jour le plan de salle (12 couverts)", False),
+            ("Relancer les no-shows de la semaine dernière", True),
+            ("Préparer le menu dégustation week-end", False),
+            ("Synchroniser les créneaux en ligne", False),
+        )
+    if "restaurant" in lower or "café" in lower or "menu" in lower:
+        return (
+            ("Mettre à jour la carte des desserts", False),
+            ("Confirmer les réservations du week-end", False),
+            ("Commander les produits frais", True),
+            ("Former l'équipe salle sur le POS", False),
+        )
+    if "crm" in lower or "commercial" in lower:
+        return (
+            ("Relancer les leads inbound", False),
+            ("Préparer proposition Acme Corp", False),
+            ("Mettre à jour le pipeline Q2", True),
+        )
+    return _DEFAULT_TASKS
+
+
+def heuristic_demo_seed(prompt: str, *, project_type_label: str) -> DemoSeedData:
+    """Personnalisation locale sans LLM."""
+    clean = prompt.strip()
+    template = detect_template_from_prompt(clean, project_type_label=project_type_label)
+    title = _clip(clean.split("\n")[0] if clean else project_type_label, 72)
+    if len(title) < 4:
+        title = TEMPLATE_LABELS.get(template, "Démo client")
+    brand = _brand_from_prompt(clean, template)
+    return DemoSeedData(
+        template=template,
+        title=title,
+        subtitle=_subtitle_for_template(template, brand),
+        brand_name=brand,
+        brand_tag=_DEFAULT_TAG if template == TEMPLATE_TASKFLOW else f"{TEMPLATE_LABELS[template]} Pro",
+        user_name=_DEFAULT_USER,
+        user_role=_DEFAULT_ROLE,
+        tasks=_tasks_from_prompt(clean),
+        llm_personalized=False,
+    )
 
 
 def seed_as_dict(seed: DemoSeedData) -> dict[str, object]:
@@ -112,103 +333,20 @@ def seed_as_dict(seed: DemoSeedData) -> dict[str, object]:
     }
 
 
-def seed_from_dict(data: dict[str, object]) -> DemoSeedData:
-    tasks_raw = data.get("tasks")
-    tasks: list[tuple[str, bool]] = []
-    if isinstance(tasks_raw, list):
-        for item in tasks_raw:
-            if not isinstance(item, dict):
-                continue
-            text = str(item.get("text") or "").strip()
-            if not text:
-                continue
-            completed = bool(
-                item.get("completed") or item.get("done") or item.get("checked")
-            )
-            tasks.append((_clip(text, 140), completed))
-    if len(tasks) < 3:
-        tasks = list(_tasks_from_prompt(str(data.get("title") or "")))
-    return DemoSeedData(
-        template=str(data.get("template") or TEMPLATE_TASKFLOW),
-        title=_clip(str(data.get("title") or "Démo client"), 72),
-        subtitle=_clip(str(data.get("subtitle") or ""), 140),
-        brand_name=_clip(str(data.get("brand_name") or _DEFAULT_BRAND), 40),
-        brand_tag=_clip(str(data.get("brand_tag") or _DEFAULT_TAG), 48),
-        user_name=_clip(str(data.get("user_name") or _DEFAULT_USER), 48),
-        user_role=_clip(str(data.get("user_role") or _DEFAULT_ROLE), 48),
-        tasks=tuple(tasks) if tasks else _DEFAULT_TASKS,
-        llm_personalized=bool(data.get("llm_personalized")),
+def seed_from_dict(
+    data: dict[str, object],
+    *,
+    prompt: str = "",
+    project_type_label: str = "",
+) -> DemoSeedData:
+    title = _clip(str(data.get("title") or "Démo client"), 72)
+    detected = detect_template_from_prompt(
+        f"{prompt}\n{title}",
+        project_type_label=project_type_label,
     )
-
-
-def _tasks_from_prompt(prompt: str) -> tuple[tuple[str, bool], ...]:
-    lower = prompt.lower()
-    if (
-        "réservation" in lower
-        or "reservation" in lower
-        or "booking" in lower
-        or "table" in lower
-    ):
-        return (
-            ("Confirmer les réservations du vendredi soir", False),
-            ("Mettre à jour le plan de salle (12 couverts)", False),
-            ("Relancer les no-shows de la semaine dernière", True),
-            ("Préparer le menu dégustation week-end", False),
-            ("Synchroniser les créneaux OpenTable", False),
-        )
-    if "restaurant" in lower or "café" in lower or "menu" in lower:
-        return (
-            ("Mettre à jour la carte des desserts", False),
-            ("Confirmer les réservations du week-end", False),
-            ("Commander les produits frais (fournisseur BioMarché)", True),
-            ("Former l'équipe salle sur le nouveau POS", False),
-            ("Préparer la soirée événement vendredi", False),
-        )
-    if "immobilier" in lower or "agence" in lower:
-        return (
-            ("Relancer les leads visite appartement Marais", False),
-            ("Signer le mandat exclusif rue de Rivoli", False),
-            ("Préparer le dossier financement client Dubois", True),
-            ("Publier les annonces neuf Q2", False),
-        )
-    if "e-commerce" in lower or "boutique" in lower or "shop" in lower:
-        return (
-            ("Lancer la campagne soldes printemps", False),
-            ("Optimiser les fiches produits best-sellers", False),
-            ("Traiter les retours SAV en attente", True),
-            ("Synchroniser le stock entrepôt", False),
-        )
-    return _DEFAULT_TASKS
-
-
-def heuristic_demo_seed(prompt: str, *, project_type_label: str) -> DemoSeedData:
-    """Personnalisation locale sans LLM."""
-    clean = prompt.strip()
-    title = _clip(clean.split("\n")[0] if clean else project_type_label, 72)
-    if len(title) < 4:
-        title = project_type_label or "Démo client"
-    brand = _brand_from_prompt(clean)
-    subtitle = _clip(
-        f"Espace de travail {brand} — démo interactive adaptée à votre projet.",
-        120,
-    )
-    return DemoSeedData(
-        template=TEMPLATE_TASKFLOW,
-        title=title,
-        subtitle=subtitle,
-        brand_name=brand,
-        brand_tag="Workspace Pro",
-        user_name=_DEFAULT_USER,
-        user_role=_DEFAULT_ROLE,
-        tasks=_tasks_from_prompt(clean),
-        llm_personalized=False,
-    )
-
-
-def _parse_seed_payload(data: dict) -> DemoSeedData:
-    template = str(data.get("template") or TEMPLATE_TASKFLOW).strip().lower()
-    if template != TEMPLATE_TASKFLOW:
-        template = TEMPLATE_TASKFLOW
+    template = str(data.get("template") or "").strip().lower()
+    if template not in VALID_TEMPLATES or template != detected:
+        template = detected
 
     tasks_raw = data.get("tasks") or []
     tasks: list[tuple[str, bool]] = []
@@ -223,38 +361,107 @@ def _parse_seed_payload(data: dict) -> DemoSeedData:
                 item.get("completed") or item.get("done") or item.get("checked")
             )
             tasks.append((_clip(text, 140), completed))
-    title = _clip(str(data.get("title") or "Démo client"), 72)
+
     if len(tasks) < 3:
-        tasks = list(_tasks_from_prompt(title))
+        tasks = list(_tasks_from_prompt(f"{prompt} {title}"))
 
     return DemoSeedData(
         template=template,
         title=title,
-        subtitle=_clip(
-            str(data.get("subtitle") or "Planifiez et pilotez votre activité."),
-            140,
-        ),
+        subtitle=_clip(str(data.get("subtitle") or _subtitle_for_template(template, title)), 140),
         brand_name=_clip(str(data.get("brand_name") or _DEFAULT_BRAND), 40),
         brand_tag=_clip(str(data.get("brand_tag") or _DEFAULT_TAG), 48),
         user_name=_clip(str(data.get("user_name") or _DEFAULT_USER), 48),
         user_role=_clip(str(data.get("user_role") or _DEFAULT_ROLE), 48),
         tasks=tuple(tasks),
-        llm_personalized=True,
+        llm_personalized=bool(data.get("llm_personalized")),
     )
 
 
+def _crm_contacts_from_seed(seed: DemoSeedData) -> list[dict[str, str]]:
+    """Contacts CRM — noms réels injectés (jamais de placeholder type {contact.name})."""
+    brand = seed.brand_name
+    defaults = [
+        {
+            "id": "1",
+            "company": brand,
+            "person": "Marie Dupont",
+            "status": "Lead chaud",
+            "email": f"marie.dupont@{_slug_domain(brand)}.fr",
+            "role_line": "Marie Dupont — Directrice achats",
+        },
+        {
+            "id": "2",
+            "company": "GreenTech SAS",
+            "person": "Paul Martin",
+            "status": "Négociation",
+            "email": "p.martin@greentech.fr",
+            "role_line": "Paul Martin — CTO",
+        },
+        {
+            "id": "3",
+            "company": "Studio Nova",
+            "person": "Léa Bernard",
+            "status": "Qualification",
+            "email": "lea@studio-nova.fr",
+            "role_line": "Léa Bernard — Fondatrice",
+        },
+    ]
+    if not seed.tasks:
+        return defaults
+    contacts: list[dict[str, str]] = []
+    statuses = ("Lead chaud", "Négociation", "Qualification", "À relancer")
+    for idx, (text, _) in enumerate(seed.tasks[:3]):
+        person = _clip(text.split("—")[0].strip(), 48) or f"Contact {idx + 1}"
+        contacts.append(
+            {
+                "id": str(idx + 1),
+                "company": brand if idx == 0 else f"Compte {idx + 1}",
+                "person": person,
+                "status": statuses[idx % len(statuses)],
+                "email": f"contact{idx + 1}@{_slug_domain(brand)}.fr",
+                "role_line": f"{person} — {text[:60]}",
+            }
+        )
+    return contacts or defaults
+
+
+def _slug_domain(brand: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "", brand.lower())
+    return slug[:24] or "demo"
+
+
 def build_html_from_seed(seed: DemoSeedData) -> str:
-    """Assemble le HTML premium à partir du template TaskFlow."""
-    return build_premium_task_manager_html(
+    """Assemble le HTML premium selon le template choisi."""
+    common = dict(
         title=seed.title,
         subtitle=seed.subtitle,
         brand_name=seed.brand_name,
         brand_tag=seed.brand_tag,
         user_name=seed.user_name,
         user_role=seed.user_role,
+    )
+    if seed.template == TEMPLATE_LANDING:
+        return build_premium_landing_html(**common)
+    if seed.template == TEMPLATE_CRM:
+        return build_premium_crm_html(
+            **common,
+            contacts=_crm_contacts_from_seed(seed),
+        )
+    if seed.template == TEMPLATE_DASHBOARD:
+        return build_premium_dashboard_html(**common)
+    if seed.template == TEMPLATE_INVOICE:
+        return build_premium_invoice_html(**common)
+    return build_premium_task_manager_html(
+        **common,
         user_initials=_initials(seed.user_name),
         seed_tasks=seed.tasks,
     )
+
+
+def is_valid_demo_html(html: str, template: str) -> bool:
+    marker = TEMPLATE_MARKERS.get(template, "saas-shell")
+    return marker in html and len(html) > 800
 
 
 def seed_to_code_result(seed: DemoSeedData, *, summary: str) -> CodeGenerateResult:
@@ -286,7 +493,8 @@ class DemoTemplateService:
         codegen = CodeGenService(self._settings)
         if not codegen.is_configured():
             logger.info(
-                "[DemoTemplate] LLM indisponible — seed heuristique | title=%s",
+                "[DemoTemplate] seed heuristique | template=%s | title=%s",
+                seed.template,
                 seed.title,
             )
             return seed
@@ -295,12 +503,11 @@ class DemoTemplateService:
                 prompt,
                 project_type_label=project_type_label,
             )
-            parsed = _parse_seed_payload(data)
+            parsed = _parse_seed_payload(data, fallback_prompt=prompt)
             logger.info(
-                "[DemoTemplate] seed LLM | template=%s | brand=%s | tasks=%s",
+                "[DemoTemplate] seed LLM | template=%s | brand=%s",
                 parsed.template,
                 parsed.brand_name,
-                len(parsed.tasks),
             )
             return parsed
         except CodeGenServiceError as exc:
@@ -319,14 +526,69 @@ class DemoTemplateService:
                 user_prompt,
                 project_type_label=project_type_label,
             )
+        label = TEMPLATE_LABELS.get(seed.template, seed.template)
         summary = (
-            f"Démo {seed.brand_name} — template TaskFlow premium"
-            + (" (données personnalisées par IA)" if seed.llm_personalized else "")
+            f"Démo {seed.brand_name} — {label}"
+            + (" (seed IA)" if seed.llm_personalized else "")
             + "."
         )
         logger.info(
-            "[DemoTemplate] HTML préfabriqué | template=%s | bytes≈%s",
+            "[DemoTemplate] HTML | template=%s | bytes≈%s",
             seed.template,
             len(build_html_from_seed(seed).encode("utf-8")),
         )
         return seed_to_code_result(seed, summary=summary)
+
+
+def _parse_seed_payload(
+    data: dict,
+    *,
+    fallback_prompt: str = "",
+    project_type_label: str = "",
+) -> DemoSeedData:
+    title = _clip(str(data.get("title") or "Démo client"), 72)
+    template = detect_template_from_prompt(
+        f"{fallback_prompt}\n{title}",
+        project_type_label=project_type_label,
+    )
+
+    tasks_raw = data.get("tasks") or []
+    tasks: list[tuple[str, bool]] = []
+    if isinstance(tasks_raw, list):
+        for item in tasks_raw[:8]:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text") or "").strip()
+            if text:
+                tasks.append(
+                    (
+                        _clip(text, 140),
+                        bool(
+                            item.get("completed")
+                            or item.get("done")
+                            or item.get("checked")
+                        ),
+                    )
+                )
+
+    brand = _clip(str(data.get("brand_name") or _DEFAULT_BRAND), 40)
+    if len(tasks) < 3:
+        tasks = list(_tasks_from_prompt(f"{fallback_prompt} {title}"))
+
+    return DemoSeedData(
+        template=template,
+        title=title,
+        subtitle=_clip(
+            str(data.get("subtitle") or _subtitle_for_template(template, brand)),
+            140,
+        ),
+        brand_name=brand,
+        brand_tag=_clip(
+            str(data.get("brand_tag") or f"{TEMPLATE_LABELS[template]} Pro"),
+            48,
+        ),
+        user_name=_clip(str(data.get("user_name") or _DEFAULT_USER), 48),
+        user_role=_clip(str(data.get("user_role") or _DEFAULT_ROLE), 48),
+        tasks=tuple(tasks),
+        llm_personalized=True,
+    )

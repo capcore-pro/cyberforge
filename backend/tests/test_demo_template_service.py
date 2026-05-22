@@ -4,11 +4,36 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from tools.demo_template_service import (
+    TEMPLATE_CRM,
+    TEMPLATE_DASHBOARD,
+    TEMPLATE_INVOICE,
+    TEMPLATE_LANDING,
+    TEMPLATE_MARKERS,
+    TEMPLATE_TASKFLOW,
     DemoTemplateService,
     build_html_from_seed,
+    detect_template_from_prompt,
     heuristic_demo_seed,
+    is_valid_demo_html,
     seed_to_code_result,
 )
+
+
+def test_detect_template_invoice() -> None:
+    assert detect_template_from_prompt("Application de facturation avec TVA") == TEMPLATE_INVOICE
+
+
+def test_detect_template_crm() -> None:
+    assert detect_template_from_prompt("CRM pipeline commercial contacts") == TEMPLATE_CRM
+    assert detect_template_from_prompt("CRM") == TEMPLATE_CRM
+
+
+def test_detect_template_dashboard() -> None:
+    assert detect_template_from_prompt("Dashboard analytics KPIs", project_type_label="SaaS dashboard") == TEMPLATE_DASHBOARD
+
+
+def test_detect_template_landing() -> None:
+    assert detect_template_from_prompt("Landing page marketing hero témoignages") == TEMPLATE_LANDING
 
 
 def test_heuristic_seed_reservation_tasks() -> None:
@@ -25,18 +50,35 @@ def test_heuristic_seed_restaurant_tasks() -> None:
         "Site pour mon restaurant italien avec réservations",
         project_type_label="Site web",
     )
-    assert seed.template == "taskflow"
+    assert seed.template == TEMPLATE_TASKFLOW
     assert "restaurant" in seed.brand_name.lower() or "Restaurant" in seed.brand_name
     assert len(seed.tasks) >= 3
 
 
-def test_build_html_taskflow_markers() -> None:
-    seed = heuristic_demo_seed("App SaaS gestion de tâches", project_type_label="SaaS")
+def test_crm_html_has_no_template_placeholders() -> None:
+    seed = heuristic_demo_seed("CRM gestion clients", project_type_label="SaaS")
     html = build_html_from_seed(seed)
-    assert "saas-shell" in html
-    assert seed.brand_name in html
-    assert "export default" not in html
-    assert "import React" not in html
+    assert TEMPLATE_MARKERS[TEMPLATE_CRM] in html
+    assert "{contact.name}" not in html
+    assert "saas-shell" not in html
+
+
+def test_build_html_all_templates_valid() -> None:
+    prompts = {
+        TEMPLATE_TASKFLOW: ("App SaaS gestion de tâches", "SaaS"),
+        TEMPLATE_LANDING: ("Landing page vitrine marketing", "Site web"),
+        TEMPLATE_CRM: ("CRM contacts pipeline commercial", "SaaS"),
+        TEMPLATE_DASHBOARD: ("Dashboard analytics KPIs", "SaaS dashboard"),
+        TEMPLATE_INVOICE: ("Facturation devis TVA", "Application web"),
+    }
+    for template, (prompt, label) in prompts.items():
+        seed = heuristic_demo_seed(prompt, project_type_label=label)
+        assert seed.template == template
+        html = build_html_from_seed(seed)
+        assert TEMPLATE_MARKERS[template] in html
+        assert is_valid_demo_html(html, template)
+        assert "export default" not in html
+        assert "import React" not in html
 
 
 def test_build_client_demo_generation_no_html_llm() -> None:
@@ -63,14 +105,16 @@ def test_build_client_demo_generation_no_html_llm() -> None:
                 project_type_label="Site web",
             )
         )
-    assert result.model == "taskflow-premium"
+    assert result.model == "cyberforge-premium"
     assert result.provider == "cyberforge"
     assert "saas-shell" in result.code
     assert not any(f.path.endswith(".tsx") for f in result.files)
 
 
 def test_seed_to_code_result_index_html_only() -> None:
-    seed = heuristic_demo_seed("Dashboard", project_type_label="SaaS")
+    seed = heuristic_demo_seed("Dashboard analytics", project_type_label="SaaS")
+    assert seed.template == TEMPLATE_DASHBOARD
     gen = seed_to_code_result(seed, summary="test")
     assert gen.files[0].path == "index.html"
     assert gen.files[0].content.startswith("<!DOCTYPE")
+    assert TEMPLATE_MARKERS[TEMPLATE_DASHBOARD] in gen.code

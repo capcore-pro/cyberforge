@@ -23,7 +23,7 @@ from tools.codegen_service import (
     CodeGenerateResult,
     complexity_from_score,
 )
-from tools.demo_pipeline import PIPELINE_TEMPLATE, build_client_demo_document
+from tools.demo_pipeline import build_client_demo_document
 from tools.demo_template_service import TEMPLATE_MODEL, TEMPLATE_PROVIDER
 from tools.pricing import estimate_cost_usd
 
@@ -236,9 +236,9 @@ class GenerationMetrics(BaseModel):
 
 
 class DemoPipelineSummary(BaseModel):
-    """Métadonnées pipeline démo unique (TaskFlow + seed)."""
+    """Métadonnées pipeline démo unique (template premium + seed)."""
 
-    template: str = PIPELINE_TEMPLATE
+    template: str = "taskflow"
     seed_personalized: bool = False
     html_bytes: int = 0
     single_file: str = "index.html"
@@ -257,7 +257,7 @@ class CoreMindRunResult(BaseModel):
     demo_pipeline: DemoPipelineSummary | None = None
     preview_html: str | None = Field(
         default=None,
-        description="HTML TaskFlow unique (identique au fichier index.html livré)",
+        description="HTML premium unique (identique au fichier index.html livré)",
     )
 
 
@@ -344,7 +344,7 @@ class CoreMindAgent(BaseAgent):
         generation = document.generation
         preview_html = document.html
         pipeline_info = DemoPipelineSummary(
-            template=PIPELINE_TEMPLATE,
+            template=document.seed.template,
             seed_personalized=document.seed.llm_personalized,
             html_bytes=document.html_bytes,
         )

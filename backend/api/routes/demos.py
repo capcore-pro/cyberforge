@@ -131,13 +131,20 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
     demo_token = DemosStore._new_token()
     demo_password = generate_demo_password()
 
+    seed_prompt = _seed_prompt(body, title) or title
+    project_label = body.project_type or title
+
     try:
         if body.demo_seed:
-            document = client_demo_from_seed_dict(body.demo_seed)
+            document = client_demo_from_seed_dict(
+                body.demo_seed,
+                prompt=seed_prompt,
+                project_type_label=project_label,
+            )
         else:
             document = await build_client_demo_document(
-                _seed_prompt(body, title) or title,
-                project_type_label=body.project_type or title,
+                seed_prompt,
+                project_type_label=project_label,
             )
         preview_html = wrap_demo_for_cloudflare(
             document,
@@ -145,9 +152,9 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
             title=title,
         )
         logger.info(
-            "POST /demos — DemoPipeline | brand=%s | tasks=%s | gated_bytes=%s",
+            "POST /demos — DemoPipeline | template=%s | brand=%s | gated_bytes=%s",
+            document.seed.template,
             document.seed.brand_name,
-            len(document.seed.tasks),
             len(preview_html.encode("utf-8")),
         )
     except (ValueError, Exception) as exc:

@@ -40,11 +40,17 @@ Règles strictes :
 Le champ code = contenu de files[0]."""
 
 DEMO_SEED_SYSTEM_PROMPT = """Tu personnalises une démo SaaS CyberForge. NE GÉNÈRE AUCUN HTML, CSS, JS, React ni JSX.
-Choisis le template et fournis uniquement des données seed en JSON compact :
+Choisis le template le plus adapté au prompt et fournis uniquement des données seed en JSON compact :
 {"template":"taskflow","title":"titre page FR","subtitle":"sous-titre FR","brand_name":"nom produit","brand_tag":"tagline courte","user_name":"Prénom Nom","user_role":"rôle","tasks":[{"text":"tâche FR","completed":false}]}
+Templates disponibles (champ template) :
+- "taskflow" : gestion de tâches / projets / kanban
+- "landing" : page vitrine marketing (hero, features, témoignages)
+- "crm" : contacts, fiche client, pipeline commercial
+- "dashboard" : analytics, KPIs, graphiques, tableaux
+- "invoice" : facturation, devis, TVA, liste factures
 Règles :
-- template doit être "taskflow" (seul template disponible).
-- 3 à 6 tâches réalistes en français, liées au prompt utilisateur.
+- Choisis template selon la demande (CRM si le client parle de CRM, contacts, pipeline, etc.).
+- 3 à 6 entrées tasks réalistes en français (tâches, relances, KPIs ou lignes facture selon le contexte).
 - Pas de markdown, pas de texte hors JSON."""
 
 MAX_USER_PROMPT_CHARS = 2500

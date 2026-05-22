@@ -1,5 +1,5 @@
 """
-Pipeline unique démo client — TaskFlow premium + seed → un seul index.html.
+Pipeline unique démo client — templates premium + seed → un seul index.html.
 
 Point d'entrée pour CoreMind, POST /demos, aperçu local et Cloudflare.
 Pas de génération HTML par LLM, pas de conversion JSX, pas de BugHunter.
@@ -13,9 +13,12 @@ from dataclasses import dataclass
 from config import Settings, get_settings
 from tools.codegen_service import CodeGenerateResult
 from tools.demo_template_service import (
+    TEMPLATE_LABELS,
     DemoSeedData,
     DemoTemplateService,
+    align_seed_template,
     build_html_from_seed,
+    is_valid_demo_html,
     seed_as_dict,
     seed_from_dict,
     seed_to_code_result,
@@ -24,7 +27,6 @@ from tools.standalone_demo_html import wrap_with_password_gate
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_TEMPLATE = "taskflow"
 INDEX_HTML_PATH = "index.html"
 
 
@@ -33,12 +35,16 @@ class ClientDemoDocument:
     """
     Livrable démo unique.
 
-    html : document TaskFlow plain (sans gate) — aperçu local + base Cloudflare.
+    html : document premium plain (sans gate) — aperçu local + base Cloudflare.
     """
 
     html: str
     seed: DemoSeedData
     generation: CodeGenerateResult
+
+    @property
+    def template(self) -> str:
+        return self.seed.template
 
     @property
     def html_bytes(self) -> int:
@@ -56,40 +62,69 @@ async def build_client_demo_document(
     seed: DemoSeedData | None = None,
 ) -> ClientDemoDocument:
     """
-    Produit le HTML final TaskFlow à partir du prompt (seed LLM ou heuristique).
+    Produit le HTML final premium à partir du prompt (seed LLM ou heuristique).
     """
     svc = DemoTemplateService(settings)
+    prompt = user_prompt.strip()
     resolved = seed or await svc.resolve_seed(
-        user_prompt.strip(),
+        prompt,
+        project_type_label=project_type_label,
+    )
+    resolved = align_seed_template(
+        resolved,
+        prompt,
         project_type_label=project_type_label,
     )
     html = build_html_from_seed(resolved)
-    if "saas-shell" not in html or len(html) < 1000:
-        raise ValueError("Pipeline démo : HTML TaskFlow invalide.")
+    if not is_valid_demo_html(html, resolved.template):
+        raise ValueError(
+            f"Pipeline démo : HTML invalide pour le template « {resolved.template} »."
+        )
 
+    label = TEMPLATE_LABELS.get(resolved.template, resolved.template)
     summary = (
-        f"Démo {resolved.brand_name} — TaskFlow premium"
+        f"Démo {resolved.brand_name} — {label}"
         + (" (seed IA)" if resolved.llm_personalized else " (seed locale)")
     )
     generation = seed_to_code_result(resolved, summary=summary + ".")
 
     logger.info(
-        "[DemoPipeline] document prêt | brand=%s | tasks=%s | bytes=%s | seed_ia=%s",
+        "[DemoPipeline] document prêt | template=%s | brand=%s | bytes=%s | seed_ia=%s",
+        resolved.template,
         resolved.brand_name,
-        len(resolved.tasks),
         len(html.encode("utf-8")),
         resolved.llm_personalized,
     )
     return ClientDemoDocument(html=html, seed=resolved, generation=generation)
 
 
-def client_demo_from_seed_dict(data: dict[str, object]) -> ClientDemoDocument:
+def client_demo_from_seed_dict(
+    data: dict[str, object],
+    *,
+    prompt: str = "",
+    project_type_label: str = "",
+) -> ClientDemoDocument:
     """Reconstruit le document à partir d'une seed sérialisée (POST /demos)."""
-    resolved = seed_from_dict(data)
+    resolved = seed_from_dict(
+        data,
+        prompt=prompt,
+        project_type_label=project_type_label,
+    )
+    if prompt.strip() or project_type_label.strip():
+        resolved = align_seed_template(
+            resolved,
+            prompt,
+            project_type_label=project_type_label,
+        )
     html = build_html_from_seed(resolved)
+    if not is_valid_demo_html(html, resolved.template):
+        raise ValueError(
+            f"Pipeline démo : HTML invalide pour le template « {resolved.template} »."
+        )
+    label = TEMPLATE_LABELS.get(resolved.template, resolved.template)
     generation = seed_to_code_result(
         resolved,
-        summary=f"Démo {resolved.brand_name} — TaskFlow premium.",
+        summary=f"Démo {resolved.brand_name} — {label}.",
     )
     return ClientDemoDocument(html=html, seed=resolved, generation=generation)
 
