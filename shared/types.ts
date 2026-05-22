@@ -124,6 +124,27 @@ export interface DemoPipelineSummary {
   single_file: string;
 }
 
+/** Identifiants des agents du pipeline LangGraph */
+export type PipelineAgentId =
+  | "architect"
+  | "coremind"
+  | "bughunter"
+  | "autofix"
+  | "finalize";
+
+export type PipelineStepPhase = "start" | "done" | "error";
+
+/** Événement SSE step_* pendant POST /api/agents/coremind/run/stream */
+export interface PipelineStepEvent {
+  type: `step_${PipelineStepPhase}` | "pipeline_start" | "pipeline_end" | "result" | "error";
+  agent?: PipelineAgentId;
+  agent_name?: string;
+  message?: string;
+  ok?: boolean;
+  template?: string;
+  loop?: number;
+}
+
 /** Réponse POST /api/agents/coremind/run — flow complet */
 export interface CoreMindRunResponse {
   analysis: CoreMindResponse;

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_PREFIX } from "@shared/constants";
-import type { ComplexityLevel, CoreMindRunResponse, ProjectType } from "@shared/types";
+import type {
+  ComplexityLevel,
+  CoreMindRunResponse,
+  PipelineStepEvent,
+  ProjectType,
+} from "@shared/types";
 import { useBackendHealth } from "@/context/BackendHealthContext";
 import { CodeHighlight } from "@/components/CodeHighlight";
 import { CodeOutputActions } from "@/components/CodeOutputActions";
@@ -8,8 +13,18 @@ import { CustomizePanel } from "@/components/CustomizePanel";
 import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
+import {
+  PipelineProgress,
+  applyPipelineStepEvent,
+  initialPipelineSteps,
+  type PipelineStepState,
+} from "@/components/PipelineProgress";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { apiRequest } from "@/lib/api-client";
+import {
+  pipelineStreamErrorMessage,
+  streamCoremindRun,
+} from "@/lib/pipeline-stream";
 import {
   createClientDemo,
   type CreateDemoResponse,
@@ -93,6 +108,9 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   );
   const [livePreviewHtml, setLivePreviewHtml] = useState<string | null>(null);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
+  const [pipelineSteps, setPipelineSteps] = useState<PipelineStepState[]>(
+    initialPipelineSteps,
+  );
 
   const refreshHistory = useCallback(() => {
     setHistory(listGenerationHistory());
@@ -193,18 +211,22 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     setCustomizeOpen(false);
     setCustomization(null);
     setLivePreviewHtml(null);
+    setPipelineSteps(initialPipelineSteps());
+
+    const onStep = (event: PipelineStepEvent) => {
+      setPipelineSteps((prev) => applyPipelineStepEvent(prev, event));
+    };
 
     try {
-      const response = await apiRequest<CoreMindRunResponse>({
-        method: "POST",
-        path: `${API_PREFIX}/agents/coremind/run`,
-        body: { prompt: trimmed, project_type: projectType },
-      });
+      const response = await streamCoremindRun(
+        { prompt: trimmed, project_type: projectType },
+        { onStep },
+      );
 
       if (!response.ok || !response.data) {
         setPhase("error");
         setError(
-          apiErrorMessage(
+          pipelineStreamErrorMessage(
             response,
             "Backend injoignable ou clés LLM manquantes — configurez-les dans Paramètres.",
           ),
@@ -394,9 +416,9 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
           Générateur
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
-          Un prompt, un type de projet : CoreMindAI analyse la complexité, choisit
-          le modèle le moins cher et enregistre chaque génération dans l'historique
-          local.
+          Un prompt, un type de projet : le pipeline LangGraph enchaîne ArchitectAI,
+          CoreMindAI, BugHunterAI et AutoFixAI (jusqu'à 2 corrections), avec
+          progression en temps réel.
           {isElectronPreviewAvailable()
             ? " L'aperçu visuel s'ouvre dans une fenêtre Electron (maquette HTML)."
             : " L'aperçu visuel s'affiche en maquette HTML dans une iframe."}
@@ -637,10 +659,11 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       ) : null}
 
       {isRunning ? (
-        <section className="cyber-panel border-cyber-accent/30 p-6 text-center">
-          <p className="text-sm text-cyber-neon animate-pulse">
-            CoreMindAI analyse, sélectionne le modèle optimal et génère votre code…
+        <section className="cyber-panel border-cyber-accent/30 space-y-4 p-5">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-violet">
+            Pipeline LangGraph
           </p>
+          <PipelineProgress steps={pipelineSteps} />
         </section>
       ) : null}
 

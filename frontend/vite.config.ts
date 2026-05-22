@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
 import path from "node:path";
@@ -7,9 +7,27 @@ import { electronCspPlugin } from "./vite-csp-plugin";
 
 // .env à la racine du monorepo (voir docs/ARCHITECTURE.md)
 const monorepoRoot = path.resolve(__dirname, "..");
+const DEV_PORT = 5173;
+const DEFAULT_BACKEND_TARGET = "http://127.0.0.1:8002";
 
-/** Charge VITE_* depuis backend/.env pour le dev server (fichier non couvert par envDir). */
-function loadBackendViteEnv(): void {
+/** Racine backend sans slash final ni suffixe /api. */
+function normalizeBackendTarget(raw: string): string {
+  return raw.trim().replace(/\/+$/, "").replace(/\/api$/i, "");
+}
+
+function parseEnvValue(raw: string): string {
+  let value = raw.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+  return value;
+}
+
+/** Charge VITE_* et BACKEND_* depuis backend/.env (non couvert par envDir seul). */
+function loadBackendEnv(): void {
   const envPath = path.join(monorepoRoot, "backend", ".env");
   if (!fs.existsSync(envPath)) return;
   const text = fs.readFileSync(envPath, "utf8");
@@ -19,20 +37,42 @@ function loadBackendViteEnv(): void {
     const eq = trimmed.indexOf("=");
     if (eq <= 0) continue;
     const key = trimmed.slice(0, eq).trim();
-    if (!key.startsWith("VITE_")) continue;
+    const allowed =
+      key.startsWith("VITE_") ||
+      key === "BACKEND_URL" ||
+      key === "BACKEND_HOST" ||
+      key === "BACKEND_PORT";
+    if (!allowed) continue;
     if (process.env[key] !== undefined) continue;
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    process.env[key] = value;
+    process.env[key] = parseEnvValue(trimmed.slice(eq + 1));
   }
 }
 
-loadBackendViteEnv();
+function resolveBackendProxyTarget(): string {
+  const fromVite = process.env.VITE_API_BASE_URL?.trim();
+  if (fromVite) return normalizeBackendTarget(fromVite);
+
+  const backendUrl = process.env.BACKEND_URL?.trim();
+  if (backendUrl) return normalizeBackendTarget(backendUrl);
+
+  const host = process.env.BACKEND_HOST?.trim() || "127.0.0.1";
+  const port = process.env.BACKEND_PORT?.trim() || "8002";
+  return `http://${host}:${port}`;
+}
+
+/** Proxy /api → FastAPI (dev + preview). */
+function createApiProxy(target: string): Record<string, ProxyOptions> {
+  return {
+    "/api": {
+      target,
+      changeOrigin: true,
+      secure: false,
+      ws: true,
+    },
+  };
+}
+
+loadBackendEnv();
 
 const resolveAlias = {
   "@": path.resolve(__dirname, "src"),
@@ -42,35 +82,40 @@ const resolveAlias = {
 // Configuration Vite : React côté renderer, Electron pour le processus principal
 export default defineConfig(({ mode }) => {
   loadEnv(mode, monorepoRoot, "VITE_");
+  const backendTarget = resolveBackendProxyTarget() || DEFAULT_BACKEND_TARGET;
+  const apiProxy = createApiProxy(backendTarget);
 
   return {
-  envDir: monorepoRoot,
-  plugins: [
-    electronCspPlugin(),
-    react(),
-    electron({
-      main: {
-        entry: "electron/main.ts",
-        vite: { resolve: { alias: resolveAlias } },
-      },
-      preload: {
-        input: path.join(__dirname, "electron/preload.ts"),
-        vite: { resolve: { alias: resolveAlias } },
-      },
-    }),
-  ],
-  resolve: {
-    alias: resolveAlias,
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      "/api": {
-        target: "http://127.0.0.1:8002",
-        changeOrigin: true,
-      },
+    envDir: monorepoRoot,
+    plugins: [
+      electronCspPlugin(),
+      react(),
+      electron({
+        main: {
+          entry: "electron/main.ts",
+          vite: { resolve: { alias: resolveAlias } },
+        },
+        preload: {
+          input: path.join(__dirname, "electron/preload.ts"),
+          vite: { resolve: { alias: resolveAlias } },
+        },
+      }),
+    ],
+    resolve: {
+      alias: resolveAlias,
     },
-  },
-  appType: "spa",
-};
+    server: {
+      port: DEV_PORT,
+      strictPort: true,
+      host: true,
+      proxy: apiProxy,
+    },
+    preview: {
+      port: DEV_PORT,
+      strictPort: true,
+      host: true,
+      proxy: apiProxy,
+    },
+    appType: "spa",
+  };
 });

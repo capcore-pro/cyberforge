@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.coremind_agent import CoreMindAgent, CoreMindAnalysis, CoreMindRunResult, ProjectType
+from agents.pipeline_graph import run_generation_pipeline
 from agents.demo_quality import preview_html_from_seed_dict
 from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG
 from db.supabase_store import PersistenceResult, SupabaseStoreError, get_supabase_store
@@ -118,9 +119,11 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
     Flow complet CoreMindAI : analyse → sélection du modèle → génération de code.
     Enregistre automatiquement dans Supabase si configuré.
     """
-    agent = CoreMindAgent()
     try:
-        result = await agent.run_flow(body.prompt, body.project_type)
+        result = await run_generation_pipeline(
+            body.prompt,
+            project_type_hint=body.project_type,
+        )
         if result.demo_pipeline is not None:
             logger.info(
                 "POST /agents/coremind/run — demo_pipeline=%s",

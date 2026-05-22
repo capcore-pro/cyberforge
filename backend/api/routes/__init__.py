@@ -2,12 +2,13 @@
 
 from fastapi import APIRouter
 
-from api.routes import coremind, demos, health, projects, public_demos, secrets
+from api.routes import coremind, demos, health, pipeline_stream, projects, public_demos, secrets
 
 # (router, prefix OpenAPI)
 API_ROUTERS: list[tuple[APIRouter, str]] = [
     (health.router, "/api"),
     (coremind.router, "/api"),
+    (pipeline_stream.router, "/api"),
     (projects.router, "/api"),
     (secrets.router, "/api"),
     (demos.router, "/api"),
