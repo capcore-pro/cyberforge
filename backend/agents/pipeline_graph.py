@@ -158,6 +158,7 @@ async def coremind_node(
     seed: DemoSeedData = await svc.resolve_seed(
         enriched,
         project_type_label=type_label,
+        template_hint=plan.template,
     )
     seed = replace(
         seed,

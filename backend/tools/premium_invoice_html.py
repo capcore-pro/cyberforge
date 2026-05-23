@@ -103,6 +103,7 @@ def build_premium_invoice_html(
       background: rgba(74,222,128,0.15); color: #4ade80;
     }}
     .cf-badge-pending {{ background: rgba(251,191,36,0.15); color: #fbbf24; }}
+    .cf-badge-overdue {{ background: rgba(248,113,113,0.15); color: #f87171; }}
     .cf-form label {{ display: block; font-size: 0.7rem; color: #64748b; margin-bottom: 0.25rem; }}
     .cf-form input, .cf-form select {{
       width: 100%; padding: 0.5rem 0.65rem; margin-bottom: 0.75rem;

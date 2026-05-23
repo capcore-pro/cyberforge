@@ -52,7 +52,7 @@ class CoreMindRunResponse(CoreMindRunResult):
 
 
 class PreviewHtmlRequest(BaseModel):
-    """Seed + contexte pour régénérer l'aperçu TaskFlow (panneau Personnaliser)."""
+    """Seed + contexte pour régénérer l'aperçu premium (panneau Personnaliser)."""
 
     demo_seed: dict = Field(..., description="Seed sérialisée du projet")
     prompt: str | None = Field(default=None, max_length=8000)
@@ -101,7 +101,7 @@ async def generate_code_with_coremind(
 
 @router.post("/agents/coremind/preview-html", response_model=PreviewHtmlResponse)
 async def preview_demo_html(body: PreviewHtmlRequest) -> PreviewHtmlResponse:
-    """Régénère l'aperçu TaskFlow premium avec la seed personnalisée."""
+    """Régénère l'aperçu premium (template de la seed) avec personnalisation."""
     try:
         html = preview_html_from_seed_dict(
             body.demo_seed,

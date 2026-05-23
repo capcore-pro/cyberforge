@@ -8,7 +8,7 @@ CRM_CONTACTS: tuple[dict[str, str], ...] = (
         "id": "1",
         "company": "Logis Pro",
         "person": "Jean Dupont",
-        "status": "Proposition",
+        "status": "Prospect",
         "email": "jean.dupont@logispro.fr",
         "role_line": "Jean Dupont — Directeur commercial",
         "deal_value": "18 400 €",
@@ -17,7 +17,7 @@ CRM_CONTACTS: tuple[dict[str, str], ...] = (
         "id": "2",
         "company": "Média Santé",
         "person": "Marie Martin",
-        "status": "Négociation",
+        "status": "Client",
         "email": "marie.martin@mediasante.fr",
         "role_line": "Marie Martin — Responsable achats",
         "deal_value": "12 750 €",
@@ -26,7 +26,7 @@ CRM_CONTACTS: tuple[dict[str, str], ...] = (
         "id": "3",
         "company": "Alpine Retail",
         "person": "Thomas Leroy",
-        "status": "Lead qualifié",
+        "status": "Prospect",
         "email": "t.leroy@alpineretail.fr",
         "role_line": "Thomas Leroy — Chef de projet IT",
         "deal_value": "9 200 €",
@@ -35,18 +35,18 @@ CRM_CONTACTS: tuple[dict[str, str], ...] = (
         "id": "4",
         "company": "FinTech Plus",
         "person": "Sophie Bernard",
-        "status": "Gagné",
+        "status": "Perdu",
         "email": "s.bernard@fintechplus.fr",
         "role_line": "Sophie Bernard — COO",
-        "deal_value": "31 500 €",
+        "deal_value": "—",
     },
 )
 
 CRM_PIPELINE: tuple[dict[str, str], ...] = (
-    {"stage": "Lead", "deal": "Hôtel Riviera · 6k€", "color": "#6366f1"},
-    {"stage": "Qualif", "deal": "Marie Martin · 12k€", "color": "#6366f1"},
-    {"stage": "Proposition", "deal": "Jean Dupont · 18k€", "color": "#6366f1"},
-    {"stage": "Gagné", "deal": "Sophie Bernard · 31k€", "color": "#4ade80"},
+    {"stage": "Prospect", "deal": "Jean Dupont · 18k€", "color": "#6366f1"},
+    {"stage": "Prospect", "deal": "Thomas Leroy · 9k€", "color": "#6366f1"},
+    {"stage": "Client", "deal": "Marie Martin · 12k€", "color": "#4ade80"},
+    {"stage": "Perdu", "deal": "Sophie Bernard", "color": "#f87171"},
 )
 
 # —— Dashboard analytics ——
@@ -96,8 +96,8 @@ INVOICES: tuple[dict[str, str | float | int], ...] = (
         "number": "FAC-2026-1044",
         "client": "Thomas Leroy — Alpine Retail",
         "ht": 1580.0,
-        "status": "Brouillon",
-        "badge_class": "cf-badge cf-badge-pending",
+        "status": "En retard",
+        "badge_class": "cf-badge cf-badge-overdue",
     },
     {
         "id": "2026-1045",

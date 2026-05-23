@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 from tools.demo_template_service import (
     TEMPLATE_CRM,
     TEMPLATE_DASHBOARD,
-    TEMPLATE_INVOICE,
+    TEMPLATE_FACTURATION,
     TEMPLATE_LANDING,
     TEMPLATE_MARKERS,
     TEMPLATE_RESERVATION,
@@ -21,7 +21,7 @@ from tools.demo_template_service import (
 
 
 def test_detect_template_invoice() -> None:
-    assert detect_template_from_prompt("Application de facturation avec TVA") == TEMPLATE_INVOICE
+    assert detect_template_from_prompt("Application de facturation avec TVA") == TEMPLATE_FACTURATION
 
 
 def test_detect_template_crm() -> None:
@@ -84,7 +84,7 @@ def test_build_html_all_templates_valid() -> None:
         TEMPLATE_LANDING: ("Landing page vitrine marketing", "Site web"),
         TEMPLATE_CRM: ("CRM contacts pipeline commercial", "SaaS"),
         TEMPLATE_DASHBOARD: ("Dashboard analytics KPIs", "SaaS dashboard"),
-        TEMPLATE_INVOICE: ("Facturation devis TVA", "Application web"),
+        TEMPLATE_FACTURATION: ("Facturation devis TVA", "Application web"),
         TEMPLATE_RESERVATION: ("Réservation créneaux restaurant", "Application web"),
     }
     for template, (prompt, label) in prompts.items():

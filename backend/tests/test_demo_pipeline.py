@@ -46,7 +46,7 @@ def test_pipeline_cloudflare_gate_has_toggle() -> None:
 
 
 def test_detect_template_from_prompt_keywords() -> None:
-    assert detect_template_from_prompt("facture TVA devis") == "invoice"
+    assert detect_template_from_prompt("facture TVA devis") == "facturation"
     assert detect_template_from_prompt("CRM pipeline contacts") == "crm"
     assert detect_template_from_prompt("CRM") == "crm"
 

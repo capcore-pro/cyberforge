@@ -17,8 +17,22 @@ from tools.codegen_service import (
     CodeGenerateResult,
     GeneratedFile,
 )
-from tools.premium_crm_html import CRM_MARKER, build_premium_crm_html
-from tools.premium_dashboard_html import DASHBOARD_MARKER, build_premium_dashboard_html
+from tools.crm_template import MARKER as CRM_MARKER, TEMPLATE_ID as CRM_TEMPLATE_ID, build_html as build_crm_html
+from tools.dashboard_template import (
+    MARKER as DASHBOARD_MARKER,
+    TEMPLATE_ID as DASHBOARD_TEMPLATE_ID,
+    build_html as build_dashboard_html,
+)
+from tools.facturation_template import (
+    MARKER as INVOICE_MARKER,
+    TEMPLATE_ID as FACTURATION_TEMPLATE_ID,
+    build_html as build_invoice_html,
+)
+from tools.landing_template import (
+    MARKER as LANDING_MARKER,
+    TEMPLATE_ID as LANDING_TEMPLATE_ID,
+    build_html as build_landing_html,
+)
 from tools.premium_demo_data import (
     CRM_CONTACTS,
     CRM_PIPELINE,
@@ -32,18 +46,21 @@ from tools.premium_demo_data import (
     RESERVATION_SLOTS,
     RESERVATION_TASKS,
 )
-from tools.premium_invoice_html import INVOICE_MARKER, build_premium_invoice_html
-from tools.premium_landing_page_html import LANDING_MARKER, build_premium_landing_html
 from tools.premium_reservation_html import RESERVATION_MARKER, build_premium_reservation_html
-from tools.premium_task_saas_html import PREMIUM_PREVIEW_MARKER, build_premium_task_manager_html
+from tools.taskflow_template import (
+    MARKER as TASKFLOW_MARKER,
+    TEMPLATE_ID as TASKFLOW_TEMPLATE_ID,
+    build_html as build_taskflow_html,
+)
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_TASKFLOW = "taskflow"
-TEMPLATE_LANDING = "landing"
-TEMPLATE_CRM = "crm"
-TEMPLATE_DASHBOARD = "dashboard"
-TEMPLATE_INVOICE = "invoice"
+TEMPLATE_TASKFLOW = TASKFLOW_TEMPLATE_ID
+TEMPLATE_LANDING = LANDING_TEMPLATE_ID
+TEMPLATE_CRM = CRM_TEMPLATE_ID
+TEMPLATE_DASHBOARD = DASHBOARD_TEMPLATE_ID
+TEMPLATE_FACTURATION = FACTURATION_TEMPLATE_ID
+TEMPLATE_INVOICE = TEMPLATE_FACTURATION  # alias rétrocompat
 TEMPLATE_RESERVATION = "reservation"
 
 VALID_TEMPLATES = frozenset(
@@ -52,17 +69,19 @@ VALID_TEMPLATES = frozenset(
         TEMPLATE_LANDING,
         TEMPLATE_CRM,
         TEMPLATE_DASHBOARD,
-        TEMPLATE_INVOICE,
+        TEMPLATE_FACTURATION,
+        "invoice",
         TEMPLATE_RESERVATION,
     }
 )
 
 TEMPLATE_MARKERS: dict[str, str] = {
-    TEMPLATE_TASKFLOW: "saas-shell",
+    TEMPLATE_TASKFLOW: TASKFLOW_MARKER,
     TEMPLATE_LANDING: LANDING_MARKER,
     TEMPLATE_CRM: CRM_MARKER,
     TEMPLATE_DASHBOARD: DASHBOARD_MARKER,
-    TEMPLATE_INVOICE: INVOICE_MARKER,
+    TEMPLATE_FACTURATION: INVOICE_MARKER,
+    "invoice": INVOICE_MARKER,
     TEMPLATE_RESERVATION: RESERVATION_MARKER,
 }
 
@@ -71,9 +90,19 @@ TEMPLATE_LABELS: dict[str, str] = {
     TEMPLATE_LANDING: "Landing page",
     TEMPLATE_CRM: "CRM",
     TEMPLATE_DASHBOARD: "Dashboard analytics",
-    TEMPLATE_INVOICE: "Facturation",
+    TEMPLATE_FACTURATION: "Facturation",
     TEMPLATE_RESERVATION: "Réservations",
 }
+
+
+def normalize_template_id(template: str) -> str:
+    """Unifie les alias (invoice → facturation)."""
+    t = (template or "").strip().lower()
+    if t == "invoice":
+        return TEMPLATE_FACTURATION
+    if t in VALID_TEMPLATES:
+        return t
+    return TEMPLATE_TASKFLOW
 
 TEMPLATE_PROVIDER = "cyberforge"
 TEMPLATE_MODEL = "cyberforge-premium"
@@ -178,7 +207,7 @@ def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") ->
     )
 
     scores: dict[str, int] = {
-        TEMPLATE_INVOICE: sum(1 for k in invoice_kw if k in blob),
+        TEMPLATE_FACTURATION: sum(1 for k in invoice_kw if k in blob),
         TEMPLATE_CRM: sum(1 for k in crm_kw if k in blob),
         TEMPLATE_DASHBOARD: sum(1 for k in dashboard_kw if k in blob),
         TEMPLATE_LANDING: sum(1 for k in landing_kw if k in blob),
@@ -203,7 +232,7 @@ def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") ->
     specialized = max(
         scores[TEMPLATE_CRM],
         scores[TEMPLATE_DASHBOARD],
-        scores[TEMPLATE_INVOICE],
+        scores[TEMPLATE_FACTURATION],
         scores[TEMPLATE_LANDING],
         scores[TEMPLATE_RESERVATION],
     )
@@ -213,7 +242,7 @@ def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") ->
     priority = (
         TEMPLATE_CRM,
         TEMPLATE_RESERVATION,
-        TEMPLATE_INVOICE,
+        TEMPLATE_FACTURATION,
         TEMPLATE_DASHBOARD,
         TEMPLATE_LANDING,
         TEMPLATE_TASKFLOW,
@@ -281,7 +310,7 @@ def _brand_from_prompt(prompt: str, template: str) -> str:
         TEMPLATE_LANDING: "NovaLaunch",
         TEMPLATE_CRM: "RelateCRM",
         TEMPLATE_DASHBOARD: "InsightHub",
-        TEMPLATE_INVOICE: "BillForge",
+        TEMPLATE_FACTURATION: "BillForge",
         TEMPLATE_RESERVATION: "BookTable",
         TEMPLATE_TASKFLOW: "TaskFlow",
     }
@@ -309,17 +338,55 @@ def _subtitle_for_template(template: str, brand: str) -> str:
         TEMPLATE_LANDING: f"Découvrez {brand} — la plateforme qui convertit vos visiteurs en clients.",
         TEMPLATE_CRM: f"Pilotez votre pipeline commercial avec {brand}.",
         TEMPLATE_DASHBOARD: f"Visualisez vos KPIs en temps réel avec {brand}.",
-        TEMPLATE_INVOICE: f"Facturation simple et conforme avec {brand}.",
+        TEMPLATE_FACTURATION: f"Facturation simple et conforme avec {brand}.",
         TEMPLATE_RESERVATION: f"Gérez vos créneaux et tables avec {brand}.",
         TEMPLATE_TASKFLOW: f"Organisez votre travail avec {brand} — espace collaboratif premium.",
     }
     return subs.get(template, f"Démo interactive {brand}.")
 
 
-def _tasks_from_prompt(prompt: str) -> tuple[tuple[str, bool], ...]:
+_CRM_SEED_TASKS: tuple[tuple[str, bool], ...] = (
+    ("Qualifier les nouveaux prospects du salon", False),
+    ("Relancer les fiches en statut Prospect", False),
+    ("Préparer la revue pipeline hebdomadaire", True),
+    ("Mettre à jour les comptes clients actifs", False),
+)
+
+_DASHBOARD_SEED_TASKS: tuple[tuple[str, bool], ...] = (
+    ("Consolider les KPIs du trimestre", False),
+    ("Valider le graphique CA vs objectifs", False),
+    ("Partager le rapport analytics à la direction", True),
+    ("Configurer les alertes sur la marge", False),
+)
+
+_FACTURATION_SEED_TASKS: tuple[tuple[str, bool], ...] = (
+    ("Relancer les factures en retard", False),
+    ("Émettre les factures en attente de validation", False),
+    ("Rapprocher les paiements du mois", True),
+    ("Exporter le journal des ventes TVA", False),
+)
+
+_LANDING_SEED_TASKS: tuple[tuple[str, bool], ...] = (
+    ("Finaliser le hero et le message principal", False),
+    ("Ajuster les sections features et CTA", False),
+    ("Publier la landing sur le domaine client", True),
+    ("Configurer le suivi des conversions", False),
+)
+
+
+def _tasks_for_template(template: str, prompt: str) -> tuple[tuple[str, bool], ...]:
     lower = prompt.lower()
-    if detect_template_from_prompt(prompt) == TEMPLATE_RESERVATION:
+    template = normalize_template_id(template)
+    if template == TEMPLATE_RESERVATION:
         return RESERVATION_TASKS
+    if template == TEMPLATE_CRM:
+        return _CRM_SEED_TASKS
+    if template == TEMPLATE_DASHBOARD:
+        return _DASHBOARD_SEED_TASKS
+    if template == TEMPLATE_FACTURATION:
+        return _FACTURATION_SEED_TASKS
+    if template == TEMPLATE_LANDING:
+        return _LANDING_SEED_TASKS
     if "restaurant" in lower or "café" in lower or "menu" in lower:
         return (
             ("Mettre à jour la carte des desserts", False),
@@ -328,6 +395,10 @@ def _tasks_from_prompt(prompt: str) -> tuple[tuple[str, bool], ...]:
             ("Former l'équipe salle sur le POS", False),
         )
     return _DEFAULT_TASKS
+
+
+def _tasks_from_prompt(prompt: str) -> tuple[tuple[str, bool], ...]:
+    return _tasks_for_template(detect_template_from_prompt(prompt), prompt)
 
 
 def heuristic_demo_seed(prompt: str, *, project_type_label: str) -> DemoSeedData:
@@ -346,7 +417,7 @@ def heuristic_demo_seed(prompt: str, *, project_type_label: str) -> DemoSeedData
         brand_tag=_DEFAULT_TAG if template == TEMPLATE_TASKFLOW else f"{TEMPLATE_LABELS[template]} Pro",
         user_name=_DEFAULT_USER,
         user_role=_DEFAULT_ROLE,
-        tasks=_tasks_from_prompt(clean),
+        tasks=_tasks_for_template(template, clean),
         llm_personalized=False,
     )
 
@@ -400,8 +471,8 @@ def seed_from_dict(
         f"{prompt}\n{title}",
         project_type_label=project_type_label,
     )
-    template = str(data.get("template") or "").strip().lower()
-    if template not in VALID_TEMPLATES or template != detected:
+    template = normalize_template_id(str(data.get("template") or ""))
+    if template != detected:
         template = detected
 
     tasks_raw = data.get("tasks") or []
@@ -419,7 +490,7 @@ def seed_from_dict(
             tasks.append((_clip(text, 140), completed))
 
     if len(tasks) < 3:
-        tasks = list(_tasks_from_prompt(f"{prompt} {title}"))
+        tasks = list(_tasks_for_template(template, f"{prompt} {title}"))
 
     stat_total: int | None = None
     stat_active: int | None = None
@@ -481,36 +552,37 @@ def build_html_from_seed(seed: DemoSeedData) -> str:
         user_name=seed.user_name,
         user_role=seed.user_role,
     )
-    if seed.template == TEMPLATE_CRM:
-        return build_premium_crm_html(
+    tpl = normalize_template_id(seed.template)
+    if tpl == TEMPLATE_CRM:
+        return build_crm_html(
             **common,
             contacts=_crm_contacts_from_seed(seed),
             pipeline=[dict(p) for p in CRM_PIPELINE],
         )
-    if seed.template == TEMPLATE_DASHBOARD:
-        return build_premium_dashboard_html(
+    if tpl == TEMPLATE_DASHBOARD:
+        return build_dashboard_html(
             **common,
             kpis=[dict(k) for k in DASHBOARD_KPIS],
             chart_bars=[dict(b) for b in DASHBOARD_CHART],
             sectors=[dict(s) for s in DASHBOARD_SECTORS],
         )
-    if seed.template == TEMPLATE_INVOICE:
-        return build_premium_invoice_html(
+    if tpl == TEMPLATE_FACTURATION:
+        return build_invoice_html(
             **common,
             invoices=[dict(i) for i in INVOICES],
         )
-    if seed.template == TEMPLATE_RESERVATION:
+    if tpl == TEMPLATE_RESERVATION:
         return build_premium_reservation_html(
             **common,
             bookings=_reservation_bookings_from_seed(seed),
         )
-    if seed.template == TEMPLATE_LANDING:
-        return build_premium_landing_html(
+    if tpl == TEMPLATE_LANDING:
+        return build_landing_html(
             **common,
             features=LANDING_FEATURES,
             testimonials=[dict(t) for t in LANDING_TESTIMONIALS],
         )
-    return build_premium_task_manager_html(
+    return build_taskflow_html(
         **common,
         user_initials=seed.user_initials or _initials(seed.user_name),
         seed_tasks=seed.tasks,
@@ -524,7 +596,7 @@ def build_html_from_seed(seed: DemoSeedData) -> str:
 
 
 def is_valid_demo_html(html: str, template: str) -> bool:
-    marker = TEMPLATE_MARKERS.get(template, "saas-shell")
+    marker = TEMPLATE_MARKERS.get(normalize_template_id(template), TASKFLOW_MARKER)
     return marker in html and len(html) > 800
 
 
@@ -552,8 +624,23 @@ class DemoTemplateService:
         prompt: str,
         *,
         project_type_label: str,
+        template_hint: str | None = None,
     ) -> DemoSeedData:
         seed = heuristic_demo_seed(prompt, project_type_label=project_type_label)
+        if template_hint:
+            hinted = normalize_template_id(template_hint)
+            if seed.template != hinted:
+                seed = replace(
+                    seed,
+                    template=hinted,
+                    subtitle=_subtitle_for_template(hinted, seed.brand_name),
+                    brand_tag=(
+                        seed.brand_tag
+                        if hinted == TEMPLATE_TASKFLOW
+                        else f"{TEMPLATE_LABELS[hinted]} Pro"
+                    ),
+                    tasks=_tasks_for_template(hinted, prompt),
+                )
         codegen = CodeGenService(self._settings)
         if not codegen.is_configured():
             logger.info(
@@ -637,10 +724,10 @@ def _parse_seed_payload(
 
     brand = _clip(str(data.get("brand_name") or _DEFAULT_BRAND), 40)
     if len(tasks) < 3:
-        tasks = list(_tasks_from_prompt(f"{fallback_prompt} {title}"))
+        tasks = list(_tasks_for_template(template, f"{fallback_prompt} {title}"))
 
     return DemoSeedData(
-        template=template,
+        template=normalize_template_id(template),
         title=title,
         subtitle=_clip(
             str(data.get("subtitle") or _subtitle_for_template(template, brand)),

@@ -1,19 +1,18 @@
 """
 Compat — délègue au pipeline unique (tools.demo_pipeline).
+Aperçu local : conserve le template choisi par ArchitectAI / détection prompt.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from tools.codegen_service import CodeGenerateResult, GeneratedFile
 from tools.demo_pipeline import INDEX_HTML_PATH
 from tools.demo_template_service import (
-    TEMPLATE_TASKFLOW,
     align_seed_template,
     build_html_from_seed,
     heuristic_demo_seed,
     is_valid_demo_html,
+    normalize_template_id,
     seed_from_dict,
     seed_to_code_result,
 )
@@ -26,8 +25,8 @@ def preview_html_from_generation(
     user_prompt: str | None = None,
 ) -> str:
     """
-    Aperçu local Générateur — toujours le template TaskFlow premium,
-    personnalisé avec la seed du projet (titre, marque, tâches).
+    Aperçu local Générateur — template premium aligné sur la seed du projet
+    (CRM, dashboard, landing, facturation ou TaskFlow).
     """
     prompt = (user_prompt or generation.summary or title).strip()
     if generation.demo_seed:
@@ -43,10 +42,12 @@ def preview_html_from_generation(
     else:
         seed = heuristic_demo_seed(prompt, project_type_label=title)
 
-    preview_seed = replace(seed, template=TEMPLATE_TASKFLOW)
-    html = build_html_from_seed(preview_seed)
-    if not is_valid_demo_html(html, TEMPLATE_TASKFLOW):
-        raise ValueError("Aperçu TaskFlow invalide (saas-shell manquant).")
+    template = normalize_template_id(seed.template)
+    html = build_html_from_seed(seed)
+    if not is_valid_demo_html(html, template):
+        raise ValueError(
+            f"Aperçu invalide pour le template « {template} » (marqueur manquant)."
+        )
     return html
 
 
@@ -56,7 +57,7 @@ def preview_html_from_seed_dict(
     title: str = "Démo CyberForge",
     user_prompt: str = "",
 ) -> str:
-    """Aperçu TaskFlow à partir d'une seed JSON (personnalisation temps réel)."""
+    """Aperçu premium à partir d'une seed JSON (personnalisation temps réel)."""
     seed = align_seed_template(
         seed_from_dict(
             seed_data,
@@ -66,10 +67,12 @@ def preview_html_from_seed_dict(
         user_prompt or title,
         project_type_label=title,
     )
-    preview_seed = replace(seed, template=TEMPLATE_TASKFLOW)
-    html = build_html_from_seed(preview_seed)
-    if not is_valid_demo_html(html, TEMPLATE_TASKFLOW):
-        raise ValueError("Aperçu TaskFlow invalide (saas-shell manquant).")
+    template = normalize_template_id(seed.template)
+    html = build_html_from_seed(seed)
+    if not is_valid_demo_html(html, template):
+        raise ValueError(
+            f"Aperçu invalide pour le template « {template} » (marqueur manquant)."
+        )
     return html
 
 

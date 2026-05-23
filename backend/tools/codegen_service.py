@@ -43,15 +43,15 @@ DEMO_SEED_SYSTEM_PROMPT = """Tu personnalises une démo SaaS CyberForge. NE GÉN
 Choisis le template le plus adapté au prompt et fournis uniquement des données seed en JSON compact :
 {"template":"taskflow","title":"titre page FR","subtitle":"sous-titre FR","brand_name":"nom produit","brand_tag":"tagline courte","user_name":"Prénom Nom","user_role":"rôle","tasks":[{"text":"tâche FR","completed":false}]}
 Templates disponibles (champ template) :
-- "taskflow" : gestion de tâches / projets (tâches professionnelles génériques)
-- "landing" : page vitrine (titre accrocheur, features, témoignages fictifs)
-- "crm" : contacts fictifs, entreprises, statuts pipeline commercial
-- "dashboard" : chiffres de ventes, graphiques, KPIs sectoriels
-- "invoice" : factures fictives (numéros, clients, montants HT/TVA)
-- "reservation" : créneaux, noms, dates, statuts de réservation
+- "taskflow" : gestion de tâches / projets SaaS (tâches collaboratives)
+- "landing" : page vitrine (hero, features, CTA — tâches de mise en ligne)
+- "crm" : contacts, pipeline (statuts Prospect/Client/Perdu — tâches commerciales)
+- "dashboard" : KPIs, graphiques, analytics (tâches de reporting)
+- "facturation" : factures (Payée/En attente/En retard — tâches comptables)
+- "reservation" : créneaux restaurant (optionnel si réservation explicite)
 Règles :
-- Choisis template selon la demande (CRM si le client parle de CRM, contacts, pipeline, etc.).
-- 3 à 6 entrées tasks réalistes en français (tâches, relances, KPIs ou lignes facture selon le contexte).
+- Respecte le template indiqué dans le prompt (« Template premium : … ») s'il est présent.
+- 3 à 6 entrées tasks réalistes en français, adaptées au métier du template choisi.
 - Pas de markdown, pas de texte hors JSON."""
 
 MAX_USER_PROMPT_CHARS = 2500
