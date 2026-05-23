@@ -7,7 +7,9 @@ from __future__ import annotations
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, cast
+
+from db.clients_store import DemoStatusSlug
 
 import bcrypt
 import httpx
@@ -56,6 +58,9 @@ class DemoRow(BaseModel):
     duration_hours: int
     payload: DemoPayload
     generation_id: str | None = None
+    client_id: str | None = None
+    status: DemoStatusSlug = "envoyee"
+    opened_at: str | None = None
     created_at: str
 
 
@@ -116,6 +121,8 @@ class DemosStore:
         payload: DemoPayload,
         duration: DemoDuration,
         generation_id: str | None = None,
+        client_id: str | None = None,
+        status: DemoStatusSlug = "envoyee",
         token: str | None = None,
         password: str | None = None,
     ) -> DemoCreated:
@@ -138,6 +145,8 @@ class DemosStore:
             "title": title.strip() or "Démo CyberForge",
             "payload": payload.model_dump(),
             "generation_id": generation_id,
+            "client_id": client_id,
+            "status": status,
         }
 
         url = f"{self._rest_url()}/demos"
@@ -354,6 +363,53 @@ class DemosStore:
         )
         return row
 
+    async def record_open(self, token: str) -> DemoRow | None:
+        """Marque la démo comme ouverte (première ouverture depuis « envoyée »)."""
+        row = await self.get_by_token(token)
+        if row is None or self.is_expired(row):
+            return None
+        if row.status not in ("envoyee",):
+            return row
+
+        from datetime import UTC, datetime
+
+        opened_at = datetime.now(UTC).isoformat()
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.patch(
+                url,
+                headers=self._supabase._headers("return=representation"),
+                params={"token": f"eq.{token.strip()}"},
+                json={"status": "ouverte", "opened_at": opened_at},
+            )
+            _raise_for_status(resp, "record_demo_open", "PATCH", url, self._supabase)
+            rows = resp.json()
+            if isinstance(rows, list) and rows:
+                return _demo_from_row(rows[0])
+        return replace_row_open(row, opened_at)
+
+    async def update_status(
+        self,
+        demo_id: str,
+        status: DemoStatusSlug,
+    ) -> DemoRow | None:
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.patch(
+                url,
+                headers=self._supabase._headers("return=representation"),
+                params={"id": f"eq.{demo_id}"},
+                json={"status": status},
+            )
+            _raise_for_status(resp, "update_demo_status", "PATCH", url, self._supabase)
+            rows = resp.json()
+            if not isinstance(rows, list) or not rows:
+                return None
+            return _demo_from_row(rows[0])
+
     async def _fetch_password_hash(self, token: str) -> str | None:
         url = f"{self._rest_url()}/demos"
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -414,6 +470,17 @@ def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoP
     )
 
 
+def _normalize_status(raw: Any) -> DemoStatusSlug:
+    value = str(raw or "envoyee").strip().lower()
+    if value in ("envoyee", "ouverte", "validee", "expiree"):
+        return cast(DemoStatusSlug, value)
+    return "envoyee"
+
+
+def replace_row_open(row: DemoRow, opened_at: str) -> DemoRow:
+    return row.model_copy(update={"status": "ouverte", "opened_at": opened_at})
+
+
 def _demo_from_row(row: dict[str, Any]) -> DemoRow:
     raw_payload = row.get("payload") or {}
     return DemoRow(
@@ -424,6 +491,9 @@ def _demo_from_row(row: dict[str, Any]) -> DemoRow:
         duration_hours=int(row["duration_hours"]),
         payload=_payload_from_storage(raw_payload, title=str(row.get("title") or "Démo CyberForge")),
         generation_id=str(row["generation_id"]) if row.get("generation_id") else None,
+        client_id=str(row["client_id"]) if row.get("client_id") else None,
+        status=_normalize_status(row.get("status")),
+        opened_at=str(row["opened_at"]) if row.get("opened_at") else None,
         created_at=str(row["created_at"]),
     )
 

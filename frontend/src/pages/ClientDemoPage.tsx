@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   fetchDemoMeta,
+  trackDemoOpen,
   unlockClientDemo,
   type DemoUnlockResponse,
 } from "@/lib/demos-api";
@@ -58,6 +59,9 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
     setTitle(response.data.title);
     setExpired(response.data.expired);
     setExpiresAt(response.data.expires_at);
+    if (!response.data.expired) {
+      void trackDemoOpen(token);
+    }
   }, [token]);
 
   useEffect(() => {

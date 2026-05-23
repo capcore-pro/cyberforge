@@ -9,7 +9,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from config import get_settings
+from db.clients_store import MANUAL_DEMO_STATUSES, DemoStatusSlug, get_clients_store
 from db.demo_password import generate_demo_password
 from db.demos_store import (
     DemoDuration,
@@ -18,6 +18,7 @@ from db.demos_store import (
     SupabaseStoreError,
     get_demos_store,
 )
+from tools.demo_urls import unlock_demo_url
 from security.cloudflare_env import cloudflare_configured, get_cloudflare_credentials
 from tools.cloudflare_pages import (
     CYBERFORGE_DEMOS_PROJECT,
@@ -34,6 +35,7 @@ from tools.demo_pipeline import (
     client_demo_from_seed_dict,
     wrap_demo_for_cloudflare,
 )
+from tools.demo_template_service import heuristic_demo_seed, seed_as_dict
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,7 @@ class CreateDemoRequest(BaseModel):
     generation_id: str | None = None
     prompt: str | None = Field(default=None, max_length=8000)
     demo_seed: dict | None = None
+    client_id: str | None = None
 
 
 class CreateDemoResponse(BaseModel):
@@ -78,12 +81,6 @@ class DeleteDemoResponse(BaseModel):
     cloudflare_redeployed: bool
 
 
-def _unlock_demo_url(token: str) -> str:
-    settings = get_settings()
-    base = settings.frontend_public_url.rstrip("/")
-    return f"{base}/demo/{token}"
-
-
 def _http_error_from_supabase(exc: SupabaseStoreError, route: str) -> HTTPException:
     detail = exc.to_http_detail()
     detail["route"] = route
@@ -99,6 +96,36 @@ def _seed_prompt(body: CreateDemoRequest, title: str) -> str:
         for p in (body.prompt or "", body.summary or "", body.project_type or "", title)
         if p and p.strip()
     )
+
+
+async def _seed_with_client_branding(
+    demo_seed: dict | None,
+    *,
+    client_id: str | None,
+) -> dict | None:
+    if not client_id:
+        return demo_seed
+    clients = get_clients_store()
+    if not clients.is_configured():
+        return demo_seed
+    try:
+        client = await clients.get_by_id(client_id)
+    except Exception:
+        return demo_seed
+    if client is None:
+        return demo_seed
+
+    merged: dict = dict(demo_seed) if isinstance(demo_seed, dict) else {}
+    if client.primary_color and not merged.get("primary_color"):
+        merged["primary_color"] = client.primary_color.strip()
+    logo = (client.logo_url or "").strip()
+    if logo.startswith("data:image/") and not merged.get("logo_data_url"):
+        merged["logo_data_url"] = logo
+    if client.company and not merged.get("brand_name"):
+        merged["brand_name"] = client.company
+    elif client.name and not merged.get("brand_name"):
+        merged["brand_name"] = client.name
+    return merged
 
 
 @router.post("/demos", response_model=CreateDemoResponse)
@@ -134,10 +161,28 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
     seed_prompt = _seed_prompt(body, title) or title
     project_label = body.project_type or title
 
+    merged_seed = await _seed_with_client_branding(
+        body.demo_seed,
+        client_id=body.client_id,
+    )
+
     try:
-        if body.demo_seed:
+        if merged_seed:
             document = client_demo_from_seed_dict(
-                body.demo_seed,
+                merged_seed,
+                prompt=seed_prompt,
+                project_type_label=project_label,
+            )
+        elif body.client_id:
+            base_seed = seed_as_dict(
+                heuristic_demo_seed(seed_prompt, project_type_label=project_label)
+            )
+            branded = await _seed_with_client_branding(
+                base_seed,
+                client_id=body.client_id,
+            )
+            document = client_demo_from_seed_dict(
+                branded or base_seed,
                 prompt=seed_prompt,
                 project_type_label=project_label,
             )
@@ -206,6 +251,7 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
             payload=payload,
             duration=body.duration,
             generation_id=body.generation_id,
+            client_id=body.client_id,
             token=demo_token,
             password=demo_password,
         )
@@ -217,7 +263,7 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
         token=created.token,
         password=created.password,
         url=deploy.url,
-        unlock_url=_unlock_demo_url(created.token),
+        unlock_url=unlock_demo_url(created.token),
         expires_at=created.expires_at,
         duration_hours=created.duration_hours,
         title=created.title,
@@ -244,6 +290,75 @@ async def demo_id_for_generation(generation_id: str) -> DemoIdResponse:
         raise _http_error_from_supabase(exc, "GET /demos/by-generation/{id}") from exc
 
     return DemoIdResponse(demo_id=row.id if row else None)
+
+
+class UpdateDemoStatusRequest(BaseModel):
+    status: DemoStatusSlug = Field(
+        ...,
+        description="Statut manuel : validee ou expiree",
+    )
+
+
+class UpdateDemoStatusResponse(BaseModel):
+    id: str
+    status: DemoStatusSlug
+
+
+class DemoOpenResponse(BaseModel):
+    recorded: bool
+    status: DemoStatusSlug
+
+
+@router.get("/demos/{token}/open", response_model=DemoOpenResponse)
+async def track_demo_open(token: str) -> DemoOpenResponse:
+    """Tracking ouverture — passe le statut à « ouverte » si la démo était « envoyée »."""
+    store = get_demos_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
+
+    clean = token.strip()
+    row = await store.get_by_token(clean)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+    if store.is_expired(row):
+        raise HTTPException(status_code=410, detail="Démo expirée.")
+
+    updated = await store.record_open(clean)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+    return DemoOpenResponse(
+        recorded=updated.status == "ouverte",
+        status=updated.status,
+    )
+
+
+@router.patch("/demos/{demo_id}/status", response_model=UpdateDemoStatusResponse)
+async def update_demo_status(
+    demo_id: str,
+    body: UpdateDemoStatusRequest,
+) -> UpdateDemoStatusResponse:
+    """Met à jour manuellement le statut (Validée / Expirée)."""
+    if body.status not in MANUAL_DEMO_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail="Seuls les statuts « validee » et « expiree » sont modifiables manuellement.",
+        )
+
+    store = get_demos_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
+
+    try:
+        existing = await store.get_by_id(demo_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Démo introuvable.")
+        updated = await store.update_status(demo_id, body.status)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(exc, "PATCH /demos/{id}/status") from exc
+
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+    return UpdateDemoStatusResponse(id=updated.id, status=updated.status)
 
 
 @router.delete("/demos/{demo_id}", response_model=DeleteDemoResponse)

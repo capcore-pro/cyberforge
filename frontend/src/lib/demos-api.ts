@@ -43,6 +43,7 @@ export interface CreateDemoPayload {
   prompt?: string | null;
   /** Seed sérialisée renvoyée par CoreMind (évite les tâches génériques Acme). */
   demo_seed?: DemoSeedPayload | null;
+  client_id?: string | null;
 }
 
 export interface CreateDemoResponse {
@@ -113,5 +114,13 @@ export async function unlockClientDemo(token: string, password: string) {
   return fetchBackendJson<DemoUnlockResponse>(url, {
     method: "POST",
     body: { password },
+  });
+}
+
+/** Tracking ouverture — GET /api/public/demos/{token}/open */
+export async function trackDemoOpen(token: string) {
+  const url = buildPublicDemoApiUrl(token, "open");
+  return fetchBackendJson<{ recorded: boolean; status: string }>(url, {
+    method: "GET",
   });
 }

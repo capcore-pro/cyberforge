@@ -21,7 +21,7 @@ export function buildBackendApiUrl(path: string): string {
 /** URL publique démo : GET/POST /api/public/demos/{token}/… */
 export function buildPublicDemoApiUrl(
   token: string,
-  action: "meta" | "unlock",
+  action: "meta" | "unlock" | "open",
 ): string {
   const safeToken = encodeURIComponent(token.trim());
   return buildBackendApiUrl(

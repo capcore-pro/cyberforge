@@ -41,6 +41,11 @@ import { fetchTaskflowPreviewHtml } from "@/lib/preview-html-api";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { projectTitleFromPrompt } from "@/lib/project-title";
 import { PROJECT_TYPE_OPTIONS } from "@/lib/project-types";
+import { fetchClientBranding } from "@/lib/clients-api";
+import {
+  clearSelectedClientId,
+  getSelectedClientId,
+} from "@/lib/selected-client";
 
 const COMPLEXITY_STYLES: Record<ComplexityLevel, string> = {
   faible: "text-green-400 border-green-400/40 bg-green-400/10",
@@ -74,6 +79,23 @@ interface GeneratorPageProps {
  */
 export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const { status: backendStatus } = useBackendHealth();
+
+  useEffect(() => {
+    const id = getSelectedClientId();
+    setLinkedClientId(id);
+    if (!id) {
+      setLinkedClientLabel(null);
+      setLinkedClientPerso(false);
+      return;
+    }
+    void fetchClientBranding(id).then((response) => {
+      if (response.ok && response.data) {
+        const label = response.data.company?.trim() || response.data.name;
+        setLinkedClientLabel(label);
+        setLinkedClientPerso(response.data.kind === "perso");
+      }
+    });
+  }, []);
   const {
     prompt,
     projectType,
@@ -99,6 +121,11 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [demoCreated, setDemoCreated] = useState<CreateDemoResponse | null>(null);
+  const [linkedClientId, setLinkedClientId] = useState<string | null>(() =>
+    getSelectedClientId(),
+  );
+  const [linkedClientLabel, setLinkedClientLabel] = useState<string | null>(null);
+  const [linkedClientPerso, setLinkedClientPerso] = useState(false);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [customizeSaveBusy, setCustomizeSaveBusy] = useState(false);
   const { dispatchPipelineEvent } = usePipelineActivity();
@@ -454,6 +481,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       generation_id: result.persistence?.generation_id ?? null,
       prompt: prompt.trim(),
       demo_seed: effectiveDemoSeed() ?? result.generation.demo_seed ?? null,
+      client_id: linkedClientId,
     });
     setDemoBusy(false);
     if (!response.ok || !response.data) {
@@ -477,6 +505,29 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
         <h1 className="text-2xl font-bold text-cyber-neon md:text-3xl">
           Générateur
         </h1>
+        {linkedClientId && linkedClientLabel ? (
+          <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-lg border border-cyber-violet/30 bg-cyber-violet/10 px-3 py-2 text-xs text-cyber-neon">
+            Démo pour {linkedClientPerso ? "la fiche perso" : "le client"} :{" "}
+            <strong>{linkedClientLabel}</strong>
+            {linkedClientPerso ? (
+              <span className="rounded-full border border-fuchsia-400/40 bg-fuchsia-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-fuchsia-300">
+                Perso
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="text-cyber-muted underline hover:text-cyber-text"
+              onClick={() => {
+                clearSelectedClientId();
+                setLinkedClientId(null);
+                setLinkedClientLabel(null);
+                setLinkedClientPerso(false);
+              }}
+            >
+              Détacher
+            </button>
+          </p>
+        ) : null}
         <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
           Un prompt, un type de projet : le pipeline LangGraph enchaîne ArchitectAI,
           CoreMindAI, BugHunterAI et AutoFixAI (jusqu'à 2 corrections), avec

@@ -43,6 +43,22 @@ async def public_demo_meta(token: str) -> DemoMetaResponse:
     )
 
 
+@router.get("/demos/{token}/open")
+async def public_demo_open(token: str) -> dict[str, object]:
+    """Tracking ouverture client — statut « ouverte »."""
+    store = get_demos_store()
+    clean = token.strip()
+    row = await store.get_by_token(clean)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+    if store.is_expired(row):
+        raise HTTPException(status_code=410, detail="Démo expirée.")
+    updated = await store.record_open(clean)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+    return {"recorded": updated.status == "ouverte", "status": updated.status}
+
+
 @router.post("/demos/{token}/unlock", response_model=DemoUnlockResponse)
 async def public_demo_unlock(
     token: str,
@@ -64,6 +80,8 @@ async def public_demo_unlock(
     unlocked = await store.unlock(clean_token, body.password)
     if unlocked is None:
         raise HTTPException(status_code=401, detail="Mot de passe incorrect.")
+
+    await store.record_open(clean_token)
 
     return DemoUnlockResponse(
         title=unlocked.title,

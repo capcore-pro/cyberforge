@@ -11,6 +11,8 @@ import type { AppPage } from "./lib/navigation";
 import { ClientDemoPage } from "./pages/ClientDemoPage";
 import { GeneratorPage } from "./pages/GeneratorPage";
 import { HomePage } from "./pages/HomePage";
+import { ClientsPage } from "./pages/ClientsPage";
+import { PersoPage } from "./pages/PersoPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -35,6 +37,10 @@ export default function App() {
         return <GeneratorPage onOpenProjects={() => setPage("projects")} />;
       case "projects":
         return <ProjectsPage />;
+      case "clients":
+        return <ClientsPage onOpenGenerator={() => setPage("generator")} />;
+      case "perso":
+        return <PersoPage onOpenGenerator={() => setPage("generator")} />;
       case "settings":
         return <SettingsPage />;
       default:
