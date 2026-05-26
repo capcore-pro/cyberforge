@@ -7,6 +7,16 @@ from __future__ import annotations
 import json
 
 from tools.demo_preview_html import escape_attr, escape_html
+from tools.premium_base import (
+    TEMPLATE_TASKFLOW,
+    assert_scripts_wrapped,
+    premium_contact_modal_html,
+    premium_fonts_link,
+    premium_footer_html,
+    premium_interaction_scripts,
+    premium_motion_scripts,
+    theme_css as premium_palette_css,
+)
 from tools.premium_theme import build_theme_css
 from tools.standalone_demo_html import (
     TASK_PREVIEW_MARKER,
@@ -115,19 +125,21 @@ def build_premium_task_manager_html(
     initial_stat_active = int(stat_active) if stat_active is not None else 0
     initial_stat_done = int(stat_done) if stat_done is not None else 0
 
-    return f"""<!DOCTYPE html>
+    html_doc = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{page_title}</title>
   <!-- {TASK_PREVIEW_MARKER} {PREMIUM_PREVIEW_MARKER} -->
+  {premium_fonts_link()}
   <style>
+{premium_palette_css(TEMPLATE_TASKFLOW)}
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
       margin: 0;
       min-height: 100vh;
-      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-family: var(--cf-font-body, "Space Grotesk", system-ui, sans-serif);
       font-size: 14px;
       line-height: 1.5;
       color: #e2e8f0;
@@ -238,12 +250,28 @@ def build_premium_task_manager_html(
       padding: 0;
     }}
     .saas-menu-btn:hover {{ background: rgba(99,102,241,0.2); border-color: rgba(129,140,248,0.35); }}
-    .saas-menu-icon {{
-      display: block;
-      font-size: 1.35rem;
-      line-height: 1;
-      font-weight: 600;
+    .saas-menu-btn span {{
+      display: block; width: 20px; height: 2px; background: #e2e8f0;
+      border-radius: 2px; transition: transform 0.3s, opacity 0.3s;
     }}
+    .saas-menu-btn span + span {{ margin-top: 5px; }}
+    .saas-shell.saas-nav-open .saas-menu-btn span:nth-child(1) {{
+      transform: translateY(7px) rotate(45deg);
+    }}
+    .saas-shell.saas-nav-open .saas-menu-btn span:nth-child(2) {{ opacity: 0; }}
+    .saas-shell.saas-nav-open .saas-menu-btn span:nth-child(3) {{
+      transform: translateY(-7px) rotate(-45deg);
+    }}
+    .kpi-card, .stat-card, .panel, .project-card, .activity-panel {{
+      border-radius: 18px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+      transition: transform 0.25s, box-shadow 0.25s;
+    }}
+    .kpi-card:hover, .stat-card:hover, .project-card:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.28);
+    }}
+    .cf-reveal {{ opacity: 0; transform: translateY(24px); }}
     .saas-sidebar-backdrop {{
       display: none;
       position: fixed;
@@ -291,7 +319,10 @@ def build_premium_task_manager_html(
     .view-section {{ display: none; }}
     .view-section.active {{ display: block; }}
     .page-header {{ margin-bottom: 1.25rem; }}
-    .page-title {{ margin: 0; font-size: 1.5rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.02em; }}
+    .page-title {{
+      margin: 0; font-size: 1.5rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.02em;
+      font-family: var(--cf-font-display, "Syne", sans-serif);
+    }}
     .page-subtitle {{ margin: 0.35rem 0 0; color: #94a3b8; font-size: 0.9rem; }}
     .kpi-grid {{
       display: grid;
@@ -565,12 +596,12 @@ def build_premium_task_manager_html(
             aria-expanded="false"
             aria-controls="saas-sidebar"
           >
-            <span class="saas-menu-icon" aria-hidden="true">☰</span>
+            <span></span><span></span><span></span>
           </button>
           <div class="saas-topbar-title" id="topbar-title">Tâches</div>
         </div>
         <div class="saas-topbar-right">
-          <div class="saas-notif" title="Notifications">🔔</div>
+          <button type="button" class="saas-notif" title="Notifications" data-cf-action="demo" data-cf-demo-msg="Centre de notifications — inclus dans votre version CapCore.">🔔</button>
           <div class="saas-user">
             <div class="saas-avatar">{initials}</div>
             <div>
@@ -588,19 +619,19 @@ def build_premium_task_manager_html(
             <p class="page-subtitle">Vue d'ensemble de votre activité — données de démonstration.</p>
           </div>
           <div class="kpi-grid">
-            <div class="kpi-card">
+            <div class="kpi-card cf-reveal">
               <div class="kpi-label">Chiffre d'affaires (Mois)</div>
-              <div class="kpi-value">48 250 €</div>
+              <div class="kpi-value cf-counter" data-target="48250" data-suffix=" €">0</div>
               <div class="kpi-trend up">+12,4 % vs mois dernier</div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card cf-reveal">
               <div class="kpi-label">Tâches du jour</div>
               <div class="kpi-value">7 / 12</div>
               <div class="kpi-trend neutral">5 en attente · 2 en retard</div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card cf-reveal">
               <div class="kpi-label">Taux de complétion</div>
-              <div class="kpi-value">86 %</div>
+              <div class="kpi-value cf-counter" data-target="86" data-suffix=" %">0</div>
               <div class="kpi-trend up">+3 pts cette semaine</div>
             </div>
           </div>
@@ -645,9 +676,9 @@ def build_premium_task_manager_html(
             <p class="page-subtitle">{page_subtitle}</p>
           </div>
           <div class="stats">
-            <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="stat-total">{initial_stat_total}</div></div>
-            <div class="stat-card"><div class="stat-label">En cours</div><div class="stat-value" id="stat-active">{initial_stat_active}</div></div>
-            <div class="stat-card"><div class="stat-label">Terminées</div><div class="stat-value" id="stat-done">{initial_stat_done}</div></div>
+            <div class="stat-card cf-reveal"><div class="stat-label">Total</div><div class="stat-value cf-counter" id="stat-total" data-target="{initial_stat_total}">{initial_stat_total}</div></div>
+            <div class="stat-card cf-reveal"><div class="stat-label">En cours</div><div class="stat-value cf-counter" id="stat-active" data-target="{initial_stat_active}">{initial_stat_active}</div></div>
+            <div class="stat-card cf-reveal"><div class="stat-label">Terminées</div><div class="stat-value cf-counter" id="stat-done" data-target="{initial_stat_done}">{initial_stat_done}</div></div>
           </div>
           <div class="panel">
             <div class="composer">
@@ -770,8 +801,10 @@ def build_premium_task_manager_html(
         </section>
 
       </main>
+{premium_footer_html(brand_name=brand_name, template=TEMPLATE_TASKFLOW)}
     </div>
   </div>
+{premium_contact_modal_html()}
   <script>
 (function () {{
   var shell = document.getElementById("saas-shell");
@@ -919,9 +952,18 @@ def build_premium_task_manager_html(
     var elTotal = document.getElementById("stat-total");
     var elActive = document.getElementById("stat-active");
     var elDone = document.getElementById("stat-done");
-    if (elTotal) elTotal.textContent = String(total);
-    if (elActive) elActive.textContent = String(active);
-    if (elDone) elDone.textContent = String(done);
+    if (elTotal) {{
+      elTotal.setAttribute("data-target", String(total));
+      elTotal.textContent = String(total);
+    }}
+    if (elActive) {{
+      elActive.setAttribute("data-target", String(active));
+      elActive.textContent = String(active);
+    }}
+    if (elDone) {{
+      elDone.setAttribute("data-target", String(done));
+      elDone.textContent = String(done);
+    }}
   }}
 
   function render() {{
@@ -989,5 +1031,9 @@ def build_premium_task_manager_html(
   render();
 }})();
   </script>
+{premium_interaction_scripts()}
+{premium_motion_scripts()}
 </body>
 </html>"""
+    assert_scripts_wrapped(html_doc)
+    return html_doc

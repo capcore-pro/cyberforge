@@ -66,7 +66,7 @@ def test_crm_html_has_no_template_placeholders() -> None:
     html = build_html_from_seed(seed)
     assert TEMPLATE_MARKERS[TEMPLATE_CRM] in html
     assert "{contact.name}" not in html
-    assert "saas-shell" not in html
+    assert '<div class="saas-shell"' not in html
     assert "Jean Dupont" in html
     assert "Marie Martin" in html
 
@@ -77,6 +77,23 @@ def test_default_tasks_are_professional_not_acme() -> None:
     joined = " ".join(t[0] for t in seed.tasks)
     assert "Acme Corp" not in joined
     assert "comité de direction" in joined.lower() or "reporting" in joined.lower()
+
+
+def test_all_templates_javascript_inside_script_tags() -> None:
+    """Aucun JS ne doit s'afficher comme texte (régression shell_nav sans <script>)."""
+    from tools.premium_base import assert_scripts_wrapped
+
+    prompts = {
+        TEMPLATE_TASKFLOW: ("App SaaS gestion de tâches", "SaaS"),
+        TEMPLATE_LANDING: ("Landing page vitrine marketing", "Site web"),
+        TEMPLATE_CRM: ("CRM contacts pipeline commercial", "SaaS"),
+        TEMPLATE_DASHBOARD: ("Dashboard analytics KPIs", "SaaS dashboard"),
+        TEMPLATE_FACTURATION: ("Facturation devis TVA", "Application web"),
+        TEMPLATE_RESERVATION: ("Réservation créneaux restaurant", "Application web"),
+    }
+    for template, (prompt, label) in prompts.items():
+        seed = heuristic_demo_seed(prompt, project_type_label=label)
+        assert_scripts_wrapped(build_html_from_seed(seed))
 
 
 def test_build_html_all_templates_valid() -> None:
