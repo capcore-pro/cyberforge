@@ -41,7 +41,7 @@ Le champ code = contenu de files[0]."""
 
 DEMO_SEED_SYSTEM_PROMPT = """Tu personnalises une démo SaaS CyberForge. NE GÉNÈRE AUCUN HTML, CSS, JS, React ni JSX.
 Choisis le template le plus adapté au prompt et fournis uniquement des données seed en JSON compact :
-{"template":"taskflow","title":"titre page FR","subtitle":"sous-titre FR","brand_name":"nom produit","brand_tag":"tagline courte","user_name":"Prénom Nom","user_role":"rôle","tasks":[{"text":"tâche FR","completed":false}]}
+{"template":"taskflow","title":"titre page FR","subtitle":"sous-titre FR","brand_name":"nom produit","brand_tag":"tagline courte","user_name":"Prénom Nom","user_role":"rôle métier précis","tasks":[{"text":"tâche FR","completed":false}]}
 Templates disponibles (champ template) :
 - "taskflow" : gestion de tâches / projets SaaS (tâches collaboratives)
 - "landing" : page vitrine (hero, features, CTA — tâches de mise en ligne)
@@ -51,7 +51,8 @@ Templates disponibles (champ template) :
 - "reservation" : créneaux restaurant (optionnel si réservation explicite)
 Règles :
 - Respecte le template indiqué dans le prompt (« Template premium : … ») s'il est présent.
-- 3 à 6 entrées tasks réalistes en français, adaptées au métier du template choisi.
+- 3 à 6 entrées tasks réalistes en français, adaptées au secteur du client (ex. agence marketing → campagnes, leads, ROI, clics ; immobilier → mandats, visites, biens, acheteurs).
+- brand_name, subtitle et user_role doivent refléter le métier demandé (pas de noms génériques type « Acme Corp »).
 - Pas de markdown, pas de texte hors JSON."""
 
 MAX_USER_PROMPT_CHARS = 2500
@@ -157,6 +158,7 @@ class CodeGenService:
         prompt: str,
         *,
         project_type_label: str = "Démo client",
+        template_hint: str | None = None,
     ) -> dict[str, Any]:
         """Personnalise titre / marque / tâches seed — jamais de HTML."""
         trimmed = prompt.strip()
@@ -168,8 +170,12 @@ class CodeGenService:
         if not specs:
             raise CodeGenServiceError(LLM_KEYS_UNAVAILABLE_MSG)
 
+        hint_line = ""
+        if template_hint:
+            hint_line = f"Template imposé par ArchitectAI : {template_hint.strip()}\n"
         user_msg = (
-            f"Type de projet : {project_type_label.strip()}\n\n"
+            f"Type de projet : {project_type_label.strip()}\n"
+            f"{hint_line}\n"
             f"Demande client :\n{_trim_prompt(trimmed)}"
         )
         timeout = self._http_timeout()

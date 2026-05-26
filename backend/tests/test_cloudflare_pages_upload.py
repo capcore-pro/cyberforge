@@ -22,7 +22,9 @@ from tools.standalone_demo_html import build_task_manager_standalone_html, wrap_
 def test_pages_asset_paths_flat_and_legacy() -> None:
     assert pages_asset_path_for_token("abc") == "uabc.html"
     assert pages_asset_path_legacy_for_token("abc") == "d/abc/index.html"
-    assert public_demo_url_for_token("abc").endswith("/uabc.html")
+    assert public_demo_url_for_token("abc") == (
+        "https://cyberforge-demos.pages.dev/d/abc"
+    )
 
 
 def test_pages_slug_avoids_manifest_path_starting_with_dash() -> None:

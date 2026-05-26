@@ -111,9 +111,10 @@ def pages_manifest_path_for_token(token: str) -> str:
 
 
 def public_demo_url_for_token(token: str) -> str:
-    """URL publique de la démo (fichier plat à la racine du projet Pages)."""
+    """URL publique partagée — proxy /d/{token} (redirige vers l'asset plat u{token}.html)."""
     base = f"https://{CYBERFORGE_DEMOS_PROJECT}.pages.dev"
-    return f"{base}/{pages_asset_path_for_token(token)}"
+    slug = pages_token_slug(token)
+    return f"{base}/d/{slug}"
 
 
 def _root_stub_digest() -> str:

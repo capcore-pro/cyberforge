@@ -34,17 +34,21 @@ from tools.landing_template import (
     build_html as build_landing_html,
 )
 from tools.premium_demo_data import (
-    CRM_CONTACTS,
-    CRM_PIPELINE,
-    DASHBOARD_CHART,
-    DASHBOARD_KPIS,
-    DASHBOARD_SECTORS,
     DEFAULT_PROFESSIONAL_TASKS,
-    INVOICES,
-    LANDING_FEATURES,
-    LANDING_TESTIMONIALS,
     RESERVATION_SLOTS,
     RESERVATION_TASKS,
+)
+from tools.premium_seed_context import (
+    contextual_crm_contacts,
+    contextual_crm_pipeline,
+    contextual_dashboard_chart,
+    contextual_dashboard_kpis,
+    contextual_dashboard_sectors,
+    contextual_invoices,
+    contextual_landing_features,
+    contextual_landing_testimonials,
+    contextual_tasks,
+    detect_demo_vertical,
 )
 from tools.premium_reservation_html import RESERVATION_MARKER, build_premium_reservation_html
 from tools.taskflow_template import (
@@ -135,6 +139,8 @@ class DemoSeedData:
     stat_total: int | None = None
     stat_active: int | None = None
     stat_done: int | None = None
+    context_prompt: str = ""
+    project_type_label: str = ""
 
 
 def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") -> str:
@@ -228,6 +234,8 @@ def detect_template_from_prompt(prompt: str, *, project_type_label: str = "") ->
         scores[TEMPLATE_LANDING] += 2
     if "saas_dashboard" in blob or "dashboard" in project_type_label.lower():
         scores[TEMPLATE_DASHBOARD] += 2
+    if re.search(r"\b(dashboard|tableau de bord)\b", blob):
+        scores[TEMPLATE_DASHBOARD] += 5
 
     specialized = max(
         scores[TEMPLATE_CRM],
@@ -277,11 +285,21 @@ def align_seed_template(
     return replace(
         seed,
         template=detected,
-        subtitle=_subtitle_for_template(detected, seed.brand_name),
+        subtitle=_subtitle_for_template(
+            detected,
+            seed.brand_name,
+            prompt=seed.context_prompt or prompt,
+            project_type_label=project_type_label,
+        ),
         brand_tag=(
             seed.brand_tag
             if detected == TEMPLATE_TASKFLOW
             else f"{TEMPLATE_LABELS[detected]} Pro"
+        ),
+        tasks=_tasks_for_template(
+            detected,
+            seed.context_prompt or prompt,
+            project_type_label=project_type_label or seed.project_type_label,
         ),
     )
 
@@ -306,6 +324,13 @@ def _brand_from_prompt(prompt: str, template: str) -> str:
     quoted = re.search(r"[«\"']([^«\"']{2,40})[»\"']", prompt)
     if quoted:
         return _clip(quoted.group(1), 32)
+    lower = prompt.lower()
+    if "agence marketing" in lower or (
+        "agence" in lower and "marketing" in lower
+    ):
+        return _clip("Pulse Agency", 32)
+    if "immobilier" in lower or "immobilière" in lower or "immobiliere" in lower:
+        return _clip("Habitat Plus", 32)
     defaults = {
         TEMPLATE_LANDING: "NovaLaunch",
         TEMPLATE_CRM: "RelateCRM",
@@ -333,7 +358,27 @@ def _brand_from_prompt(prompt: str, template: str) -> str:
     return defaults.get(template, _DEFAULT_BRAND)
 
 
-def _subtitle_for_template(template: str, brand: str) -> str:
+def _subtitle_for_template(
+    template: str,
+    brand: str,
+    *,
+    prompt: str = "",
+    project_type_label: str = "",
+) -> str:
+    vertical = detect_demo_vertical(
+        f"{project_type_label}\n{prompt}",
+        project_type_label=project_type_label,
+    )
+    if vertical == "marketing" and template == TEMPLATE_DASHBOARD:
+        return (
+            f"Campagnes, leads, ROI et clics — tableau de bord {brand} pour agences marketing."
+        )
+    if vertical == "marketing" and template == TEMPLATE_CRM:
+        return f"Pipeline leads et comptes clients — {brand} pour équipes acquisition."
+    if vertical == "real_estate" and template == TEMPLATE_CRM:
+        return f"Mandats, visites et acheteurs — CRM {brand} pour l'immobilier."
+    if vertical == "real_estate" and template == TEMPLATE_DASHBOARD:
+        return f"Mandats, visites et commissions — pilotage {brand} en temps réel."
     subs = {
         TEMPLATE_LANDING: f"Découvrez {brand} — la plateforme qui convertit vos visiteurs en clients.",
         TEMPLATE_CRM: f"Pilotez votre pipeline commercial avec {brand}.",
@@ -374,9 +419,32 @@ _LANDING_SEED_TASKS: tuple[tuple[str, bool], ...] = (
 )
 
 
-def _tasks_for_template(template: str, prompt: str) -> tuple[tuple[str, bool], ...]:
+def _seed_context_blob(seed: DemoSeedData) -> str:
+    return f"{seed.project_type_label}\n{seed.context_prompt or seed.title}"
+
+
+def _vertical_for_seed(seed: DemoSeedData) -> str:
+    return detect_demo_vertical(
+        seed.context_prompt or seed.title,
+        project_type_label=seed.project_type_label,
+    )
+
+
+def _tasks_for_template(
+    template: str,
+    prompt: str,
+    *,
+    project_type_label: str = "",
+) -> tuple[tuple[str, bool], ...]:
     lower = prompt.lower()
     template = normalize_template_id(template)
+    vertical = detect_demo_vertical(
+        prompt,
+        project_type_label=project_type_label,
+    )
+    contextual = contextual_tasks(template, vertical=vertical, prompt=prompt)
+    if contextual:
+        return contextual
     if template == TEMPLATE_RESERVATION:
         return RESERVATION_TASKS
     if template == TEMPLATE_CRM:
@@ -397,8 +465,16 @@ def _tasks_for_template(template: str, prompt: str) -> tuple[tuple[str, bool], .
     return _DEFAULT_TASKS
 
 
-def _tasks_from_prompt(prompt: str) -> tuple[tuple[str, bool], ...]:
-    return _tasks_for_template(detect_template_from_prompt(prompt), prompt)
+def _tasks_from_prompt(
+    prompt: str,
+    *,
+    project_type_label: str = "",
+) -> tuple[tuple[str, bool], ...]:
+    return _tasks_for_template(
+        detect_template_from_prompt(prompt, project_type_label=project_type_label),
+        prompt,
+        project_type_label=project_type_label,
+    )
 
 
 def heuristic_demo_seed(prompt: str, *, project_type_label: str) -> DemoSeedData:
@@ -409,16 +485,33 @@ def heuristic_demo_seed(prompt: str, *, project_type_label: str) -> DemoSeedData
     if len(title) < 4:
         title = TEMPLATE_LABELS.get(template, "Démo client")
     brand = _brand_from_prompt(clean, template)
+    vertical = detect_demo_vertical(clean, project_type_label=project_type_label)
+    role = _DEFAULT_ROLE
+    if vertical == "marketing":
+        role = "Directrice marketing"
+    elif vertical == "real_estate":
+        role = "Agent immobilier senior"
     return DemoSeedData(
         template=template,
         title=title,
-        subtitle=_subtitle_for_template(template, brand),
+        subtitle=_subtitle_for_template(
+            template,
+            brand,
+            prompt=clean,
+            project_type_label=project_type_label,
+        ),
         brand_name=brand,
         brand_tag=_DEFAULT_TAG if template == TEMPLATE_TASKFLOW else f"{TEMPLATE_LABELS[template]} Pro",
         user_name=_DEFAULT_USER,
-        user_role=_DEFAULT_ROLE,
-        tasks=_tasks_for_template(template, clean),
+        user_role=role,
+        tasks=_tasks_for_template(
+            template,
+            clean,
+            project_type_label=project_type_label,
+        ),
         llm_personalized=False,
+        context_prompt=clean,
+        project_type_label=project_type_label,
     )
 
 
@@ -490,7 +583,13 @@ def seed_from_dict(
             tasks.append((_clip(text, 140), completed))
 
     if len(tasks) < 3:
-        tasks = list(_tasks_for_template(template, f"{prompt} {title}"))
+        tasks = list(
+            _tasks_for_template(
+                template,
+                f"{prompt} {title}",
+                project_type_label=project_type_label,
+            )
+        )
 
     stat_total: int | None = None
     stat_active: int | None = None
@@ -513,7 +612,18 @@ def seed_from_dict(
     return DemoSeedData(
         template=template,
         title=title,
-        subtitle=_clip(str(data.get("subtitle") or _subtitle_for_template(template, title)), 140),
+        subtitle=_clip(
+            str(
+                data.get("subtitle")
+                or _subtitle_for_template(
+                    template,
+                    str(data.get("brand_name") or title),
+                    prompt=prompt,
+                    project_type_label=project_type_label,
+                )
+            ),
+            140,
+        ),
         brand_name=_clip(str(data.get("brand_name") or _DEFAULT_BRAND), 40),
         brand_tag=_clip(str(data.get("brand_tag") or _DEFAULT_TAG), 48),
         user_name=user_name,
@@ -527,15 +637,9 @@ def seed_from_dict(
         stat_total=stat_total,
         stat_active=stat_active,
         stat_done=stat_done,
+        context_prompt=prompt,
+        project_type_label=project_type_label,
     )
-
-
-def _crm_contacts_from_seed(seed: DemoSeedData) -> list[dict[str, str]]:
-    """Contacts CRM fictifs (Jean Dupont, Marie Martin, entreprises, statuts pipeline)."""
-    contacts = [dict(c) for c in CRM_CONTACTS]
-    if contacts:
-        contacts[0] = {**contacts[0], "company": seed.brand_name}
-    return contacts
 
 
 def _reservation_bookings_from_seed(seed: DemoSeedData) -> list[dict[str, str | int]]:
@@ -544,6 +648,7 @@ def _reservation_bookings_from_seed(seed: DemoSeedData) -> list[dict[str, str | 
 
 def build_html_from_seed(seed: DemoSeedData) -> str:
     """Assemble le HTML premium selon le template choisi."""
+    vertical = _vertical_for_seed(seed)
     common = dict(
         title=seed.title,
         subtitle=seed.subtitle,
@@ -556,20 +661,20 @@ def build_html_from_seed(seed: DemoSeedData) -> str:
     if tpl == TEMPLATE_CRM:
         return build_crm_html(
             **common,
-            contacts=_crm_contacts_from_seed(seed),
-            pipeline=[dict(p) for p in CRM_PIPELINE],
+            contacts=contextual_crm_contacts(vertical=vertical, brand_name=seed.brand_name),
+            pipeline=contextual_crm_pipeline(vertical=vertical),
         )
     if tpl == TEMPLATE_DASHBOARD:
         return build_dashboard_html(
             **common,
-            kpis=[dict(k) for k in DASHBOARD_KPIS],
-            chart_bars=[dict(b) for b in DASHBOARD_CHART],
-            sectors=[dict(s) for s in DASHBOARD_SECTORS],
+            kpis=contextual_dashboard_kpis(vertical=vertical),
+            chart_bars=contextual_dashboard_chart(vertical=vertical),
+            sectors=contextual_dashboard_sectors(vertical=vertical),
         )
     if tpl == TEMPLATE_FACTURATION:
         return build_invoice_html(
             **common,
-            invoices=[dict(i) for i in INVOICES],
+            invoices=contextual_invoices(vertical=vertical, brand_name=seed.brand_name),
         )
     if tpl == TEMPLATE_RESERVATION:
         return build_premium_reservation_html(
@@ -579,8 +684,8 @@ def build_html_from_seed(seed: DemoSeedData) -> str:
     if tpl == TEMPLATE_LANDING:
         return build_landing_html(
             **common,
-            features=LANDING_FEATURES,
-            testimonials=[dict(t) for t in LANDING_TESTIMONIALS],
+            features=contextual_landing_features(vertical=vertical),
+            testimonials=contextual_landing_testimonials(vertical=vertical),
         )
     return build_taskflow_html(
         **common,
@@ -633,13 +738,24 @@ class DemoTemplateService:
                 seed = replace(
                     seed,
                     template=hinted,
-                    subtitle=_subtitle_for_template(hinted, seed.brand_name),
+                    subtitle=_subtitle_for_template(
+                        hinted,
+                        seed.brand_name,
+                        prompt=prompt,
+                        project_type_label=project_type_label,
+                    ),
                     brand_tag=(
                         seed.brand_tag
                         if hinted == TEMPLATE_TASKFLOW
                         else f"{TEMPLATE_LABELS[hinted]} Pro"
                     ),
-                    tasks=_tasks_for_template(hinted, prompt),
+                    tasks=_tasks_for_template(
+                        hinted,
+                        prompt,
+                        project_type_label=project_type_label,
+                    ),
+                    context_prompt=prompt,
+                    project_type_label=project_type_label,
                 )
         codegen = CodeGenService(self._settings)
         if not codegen.is_configured():
@@ -653,8 +769,26 @@ class DemoTemplateService:
             data = await codegen.generate_demo_seed(
                 prompt,
                 project_type_label=project_type_label,
+                template_hint=template_hint,
             )
-            parsed = _parse_seed_payload(data, fallback_prompt=prompt)
+            parsed = _parse_seed_payload(
+                data,
+                fallback_prompt=prompt,
+                project_type_label=project_type_label,
+            )
+            parsed = replace(
+                parsed,
+                context_prompt=prompt,
+                project_type_label=project_type_label,
+                template=normalize_template_id(template_hint or parsed.template),
+                tasks=_tasks_for_template(
+                    normalize_template_id(template_hint or parsed.template),
+                    prompt,
+                    project_type_label=project_type_label,
+                )
+                if template_hint
+                else parsed.tasks,
+            )
             logger.info(
                 "[DemoTemplate] seed LLM | template=%s | brand=%s",
                 parsed.template,
@@ -698,10 +832,18 @@ def _parse_seed_payload(
     project_type_label: str = "",
 ) -> DemoSeedData:
     title = _clip(str(data.get("title") or "Démo client"), 72)
-    template = detect_template_from_prompt(
+    template = normalize_template_id(
+        str(data.get("template") or "")
+    ) or detect_template_from_prompt(
         f"{fallback_prompt}\n{title}",
         project_type_label=project_type_label,
     )
+    detected = detect_template_from_prompt(
+        f"{fallback_prompt}\n{title}",
+        project_type_label=project_type_label,
+    )
+    if template != detected:
+        template = detected
 
     tasks_raw = data.get("tasks") or []
     tasks: list[tuple[str, bool]] = []
@@ -724,13 +866,38 @@ def _parse_seed_payload(
 
     brand = _clip(str(data.get("brand_name") or _DEFAULT_BRAND), 40)
     if len(tasks) < 3:
-        tasks = list(_tasks_for_template(template, f"{fallback_prompt} {title}"))
+        tasks = list(
+            _tasks_for_template(
+                template,
+                f"{fallback_prompt} {title}",
+                project_type_label=project_type_label,
+            )
+        )
+
+    vertical = detect_demo_vertical(
+        f"{fallback_prompt}\n{title}",
+        project_type_label=project_type_label,
+    )
+    role = _clip(str(data.get("user_role") or _DEFAULT_ROLE), 48)
+    if role == _DEFAULT_ROLE:
+        if vertical == "marketing":
+            role = "Directrice marketing"
+        elif vertical == "real_estate":
+            role = "Agent immobilier senior"
 
     return DemoSeedData(
         template=normalize_template_id(template),
         title=title,
         subtitle=_clip(
-            str(data.get("subtitle") or _subtitle_for_template(template, brand)),
+            str(
+                data.get("subtitle")
+                or _subtitle_for_template(
+                    template,
+                    brand,
+                    prompt=fallback_prompt,
+                    project_type_label=project_type_label,
+                )
+            ),
             140,
         ),
         brand_name=brand,
@@ -739,9 +906,11 @@ def _parse_seed_payload(
             48,
         ),
         user_name=_clip(str(data.get("user_name") or _DEFAULT_USER), 48),
-        user_role=_clip(str(data.get("user_role") or _DEFAULT_ROLE), 48),
+        user_role=role,
         tasks=tuple(tasks),
         llm_personalized=True,
         primary_color=_clip(str(data.get("primary_color") or ""), 16),
         logo_data_url=_normalize_logo_data_url(data.get("logo_data_url")),
+        context_prompt=fallback_prompt,
+        project_type_label=project_type_label,
     )

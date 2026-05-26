@@ -127,6 +127,28 @@ def test_build_client_demo_generation_no_html_llm() -> None:
     assert not any(f.path.endswith(".tsx") for f in result.files)
 
 
+def test_marketing_agency_dashboard_context() -> None:
+    seed = heuristic_demo_seed(
+        "Dashboard pour une agence marketing : campagnes, leads, ROI et clics",
+        project_type_label="SaaS / tableau de bord",
+    )
+    assert seed.template == TEMPLATE_DASHBOARD
+    html = build_html_from_seed(seed)
+    blob = html.lower()
+    assert "lead" in blob or "campagne" in blob or "roi" in blob or "clic" in blob
+
+
+def test_real_estate_crm_context() -> None:
+    seed = heuristic_demo_seed(
+        "CRM immobilier pour mandats, visites et acheteurs",
+        project_type_label="Application web",
+    )
+    assert seed.template == TEMPLATE_CRM
+    html = build_html_from_seed(seed)
+    blob = html.lower()
+    assert "mandat" in blob or "visite" in blob or "appartement" in blob or "immobilier" in blob
+
+
 def test_seed_to_code_result_index_html_only() -> None:
     seed = heuristic_demo_seed("Dashboard analytics", project_type_label="SaaS")
     assert seed.template == TEMPLATE_DASHBOARD
