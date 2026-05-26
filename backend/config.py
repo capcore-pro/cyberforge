@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     backend_host: str = Field(default="127.0.0.1", alias="BACKEND_HOST")
     backend_port: int = Field(default=8002, alias="BACKEND_PORT")
+    backend_url_env: str | None = Field(default=None, alias="BACKEND_URL")
 
     database_url: str = Field(default="sqlite:///./database/cyberforge.db", alias="DATABASE_URL")
 
@@ -144,6 +145,16 @@ class Settings(BaseSettings):
         default=None, alias="CLOUDFLARE_API_TOKEN"
     )
 
+    capcore_notify_email: str = Field(
+        default="capcore.pro@gmail.com",
+        alias="CAPCORE_NOTIFY_EMAIL",
+    )
+    smtp_host: str = Field(default="smtp.gmail.com", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_user: SecretStr | None = Field(default=None, alias="SMTP_USER")
+    smtp_password: SecretStr | None = Field(default=None, alias="SMTP_PASSWORD")
+    smtp_from: str | None = Field(default=None, alias="SMTP_FROM")
+
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",
         alias="CORS_ORIGINS",
@@ -160,6 +171,14 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         """Liste des origines CORS autorisées."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def backend_public_url(self) -> str:
+        """URL publique du backend (appels depuis les démos Cloudflare)."""
+        explicit = self.backend_url_env
+        if explicit and str(explicit).strip():
+            return str(explicit).strip().rstrip("/")
+        return f"http://{self.backend_host}:{self.backend_port}"
 
     @property
     def frontend_public_url(self) -> str:

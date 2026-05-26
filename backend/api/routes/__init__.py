@@ -8,6 +8,7 @@ from api.routes import (
     coremind,
     demos,
     health,
+    notifications,
     pipeline_stream,
     projects,
     public_demos,
@@ -24,6 +25,7 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
     (clients.router, "/api"),
     (secrets.router, "/api"),
     (demos.router, "/api"),
+    (notifications.router, "/api"),
     (public_demos.router, "/api/public"),
 ]
 
@@ -34,6 +36,7 @@ __all__ = [
     "coremind",
     "demos",
     "health",
+    "notifications",
     "projects",
     "public_demos",
     "secrets",

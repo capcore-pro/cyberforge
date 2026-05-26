@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { APP_NAME } from "@shared/constants";
 import { BackendStatusBanner } from "@/components/BackendStatusBanner";
+import { ContactNotificationToast } from "@/components/ContactNotificationToast";
+import { useContactNotifications } from "@/context/ContactNotificationsContext";
 import { NAV_ITEMS, type AppPage } from "@/lib/navigation";
 
 interface AppShellProps {
@@ -19,6 +21,8 @@ export function AppShell({
   children,
   sidebarFooter,
 }: AppShellProps) {
+  const { unreadCount } = useContactNotifications();
+
   return (
     <div className="flex h-full min-h-0 w-full">
       <aside className="cyber-sidebar">
@@ -43,8 +47,16 @@ export function AppShell({
                 currentPage === item.id ? "cyber-nav-item-active" : ""
               } ${!item.enabled ? "cursor-not-allowed opacity-40" : ""}`}
             >
-              <span className="text-cyber-accent" aria-hidden>
+              <span className="relative text-cyber-accent" aria-hidden>
                 {item.icon}
+                {item.id === "clients" && unreadCount > 0 ? (
+                  <span
+                    className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white"
+                    aria-label={`${unreadCount} nouveau(x) contact(s)`}
+                  >
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                ) : null}
               </span>
               {item.label}
             </button>
@@ -63,6 +75,7 @@ export function AppShell({
       </aside>
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        <ContactNotificationToast />
         <BackendStatusBanner />
         <div
           className="pointer-events-none absolute inset-0 bg-cyber-grid bg-cyber-grid opacity-40"

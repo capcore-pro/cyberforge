@@ -144,9 +144,25 @@
   .cyber-action-btn-primary {
     @apply border-cyber-accent/50 text-cyber-neon hover:border-cyber-neon hover:bg-cyber-accent/10;
   }
+
+  .cyber-contact-toast {
+    @apply pointer-events-auto fixed right-6 top-6 z-50 max-w-sm rounded-lg border border-cyber-borderGlow bg-cyber-surface px-4 py-3 shadow-neonCyan;
+    animation: contact-toast-in 0.35s ease-out;
+  }
 }
 
 @layer utilities {
+  @keyframes contact-toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   @keyframes shimmer {
     0% {
       transform: translateX(-100%);

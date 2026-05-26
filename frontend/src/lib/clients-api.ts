@@ -1,7 +1,12 @@
 import { API_PREFIX } from "@shared/constants";
 import { apiRequest } from "@/lib/api-client";
 
-export type DemoStatusSlug = "envoyee" | "ouverte" | "validee" | "expiree";
+export type DemoStatusSlug =
+  | "envoyee"
+  | "ouverte"
+  | "validee"
+  | "expiree"
+  | "interessee";
 export type ClientKind = "client" | "perso";
 
 export interface ClientRecord {
@@ -55,6 +60,7 @@ export const DEMO_STATUS_LABELS: Record<DemoStatusSlug, string> = {
   ouverte: "Ouverte",
   validee: "Validée",
   expiree: "Expirée",
+  interessee: "Intéressé",
 };
 
 export async function listClients(kind?: ClientKind) {

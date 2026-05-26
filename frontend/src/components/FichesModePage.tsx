@@ -93,6 +93,7 @@ function formatDate(iso: string): string {
 const STATUS_STYLES: Record<DemoStatusSlug, string> = {
   envoyee: "border-slate-400/40 bg-slate-400/10 text-slate-300",
   ouverte: "border-cyan-400/40 bg-cyan-400/10 text-cyan-300",
+  interessee: "border-amber-400/40 bg-amber-400/10 text-amber-200",
   validee: "border-green-400/40 bg-green-400/10 text-green-300",
   expiree: "border-amber-400/40 bg-amber-400/10 text-amber-300",
 };

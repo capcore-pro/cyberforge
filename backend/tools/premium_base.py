@@ -662,6 +662,34 @@ def premium_interaction_scripts() -> str:
       "saas-menu-btn": 1, "cf-contact-form": 1
     }};
 
+    function readDemoRuntime() {{
+      var el = document.getElementById("cf-demo-runtime");
+      if (!el || !el.textContent) return {{}};
+      try {{ return JSON.parse(el.textContent); }} catch (e) {{ return {{}}; }}
+    }}
+    var RUNTIME = readDemoRuntime();
+    var DEMO_TOKEN = RUNTIME.token || "";
+    var PROJECT_TITLE = RUNTIME.projectTitle || document.title || "Démo";
+    var DEMO_URL = RUNTIME.demoUrl || (window.location.href || "").split("#")[0].split("?")[0];
+    var API_BASE = (RUNTIME.apiBase || "").replace(/\\/$/, "");
+
+    function submitDemoContact(name, email, message) {{
+      if (!DEMO_TOKEN || !API_BASE) return Promise.resolve({{ ok: false }});
+      var url = API_BASE + "/api/demos/" + encodeURIComponent(DEMO_TOKEN) + "/interested";
+      return fetch(url, {{
+        method: "POST",
+        mode: "cors",
+        credentials: "omit",
+        headers: {{ "Content-Type": "application/json" }},
+        body: JSON.stringify({{ name: name, email: email, message: message }})
+      }})
+        .then(function(r) {{
+          if (!r.ok) return {{ ok: false }};
+          return r.json().then(function(data) {{ return {{ ok: true, data: data }}; }});
+        }})
+        .catch(function() {{ return {{ ok: false }}; }});
+    }}
+
     function showToast(msg) {{
       var t = document.getElementById("cf-toast");
       if (!t) return;
@@ -687,18 +715,6 @@ def premium_interaction_scripts() -> str:
       modal.classList.remove("open");
       modal.setAttribute("aria-hidden", "true");
       document.body.classList.remove("cf-modal-open");
-    }}
-
-    function openGmailCompose(name, email, message) {{
-      var subject = encodeURIComponent("Contact CapCore — " + (name || "Demande démo"));
-      var body = encodeURIComponent(
-        "Nom : " + (name || "") + "\\n" +
-        "Email : " + (email || "") + "\\n\\n" +
-        (message || "")
-      );
-      var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" +
-        encodeURIComponent(CF_EMAIL) + "&su=" + subject + "&body=" + body;
-      window.open(url, "_blank", "noopener,noreferrer");
     }}
 
     function showView(viewId) {{
@@ -791,9 +807,21 @@ def premium_interaction_scripts() -> str:
           showToast("Merci de remplir tous les champs.");
           return;
         }}
-        openGmailCompose(name.trim(), email.trim(), message.trim());
-        closeContactModal();
-        showToast("Gmail s'ouvre avec votre message — il ne reste qu'à envoyer.");
+        var n = name.trim();
+        var em = email.trim();
+        var msg = message.trim();
+        var btn = contactForm.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+        submitDemoContact(n, em, msg).then(function(result) {{
+          if (btn) btn.disabled = false;
+          closeContactModal();
+          contactForm.reset();
+          if (result.ok) {{
+            showToast("Merci ! CapCore a bien reçu votre message — nous vous recontactons sous 48 h.");
+          }} else {{
+            showToast("Message non enregistré — réessayez ou écrivez à " + CF_EMAIL);
+          }}
+        }});
       }});
     }}
 

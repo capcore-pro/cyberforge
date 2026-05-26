@@ -38,6 +38,14 @@ DURATION_HOURS: dict[DemoDuration, int] = {
 }
 
 
+class InterestContact(BaseModel):
+    """Soumission formulaire CapCore sur une démo."""
+
+    name: str
+    email: str
+    message: str
+
+
 class DemoPayload(BaseModel):
     """Livrable figé servi au client (HTML rendu, lecture seule)."""
 
@@ -48,6 +56,11 @@ class DemoPayload(BaseModel):
     cloudflare_project: str | None = Field(default=None, max_length=64)
     summary: str | None = None
     project_type: str | None = None
+    access_password_enc: str | None = Field(
+        default=None,
+        max_length=512,
+        description="Mot de passe démo chiffré (notifications équipe).",
+    )
 
 
 class DemoRow(BaseModel):
@@ -61,7 +74,20 @@ class DemoRow(BaseModel):
     client_id: str | None = None
     status: DemoStatusSlug = "envoyee"
     opened_at: str | None = None
+    interested_at: str | None = None
+    interest_seen_at: str | None = None
+    interest_contact: dict[str, str] | None = None
     created_at: str
+
+
+class DemoContactNotification(BaseModel):
+    """Résumé pour badge / toast CyberForge."""
+
+    id: str
+    token: str
+    title: str
+    interested_at: str | None
+    interest_contact: dict[str, str] | None = None
 
 
 class DemoCreated(BaseModel):
@@ -363,6 +389,126 @@ class DemosStore:
         )
         return row
 
+    async def record_interested(
+        self,
+        token: str,
+        *,
+        contact: InterestContact | None = None,
+    ) -> DemoRow | None:
+        """Marque la démo comme « intéressée » (formulaire CapCore soumis)."""
+        row = await self.get_by_token(token)
+        if row is None or self.is_expired(row):
+            return None
+        if row.status == "expiree":
+            return None
+
+        from datetime import UTC, datetime
+
+        interested_at = datetime.now(UTC).isoformat()
+        patch: dict[str, Any] = {
+            "status": "interessee",
+            "interested_at": interested_at,
+            "interest_seen_at": None,
+        }
+        if contact is not None:
+            patch["interest_contact"] = {
+                "name": contact.name.strip(),
+                "email": contact.email.strip(),
+                "message": contact.message.strip(),
+            }
+
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.patch(
+                url,
+                headers=self._supabase._headers("return=representation"),
+                params={"token": f"eq.{token.strip()}"},
+                json=patch,
+            )
+            _raise_for_status(resp, "record_demo_interested", "PATCH", url, self._supabase)
+            rows = resp.json()
+            if isinstance(rows, list) and rows:
+                return _demo_from_row(rows[0])
+        return row.model_copy(
+            update={
+                "status": "interessee",
+                "interested_at": interested_at,
+                "interest_seen_at": None,
+                "interest_contact": patch.get("interest_contact"),
+            }
+        )
+
+    async def list_unread_contact_notifications(self) -> list[DemoContactNotification]:
+        if not self.is_configured():
+            return []
+
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={
+                    "status": "eq.interessee",
+                    "interest_seen_at": "is.null",
+                    "interested_at": "not.is.null",
+                    "select": "id,token,title,interested_at,interest_contact",
+                    "order": "interested_at.desc",
+                },
+            )
+            _raise_for_status(
+                resp, "list_unread_contact_notifications", "GET", url, self._supabase
+            )
+            rows = resp.json()
+        if not isinstance(rows, list):
+            return []
+        out: list[DemoContactNotification] = []
+        for raw in rows:
+            if not isinstance(raw, dict):
+                continue
+            contact = raw.get("interest_contact")
+            out.append(
+                DemoContactNotification(
+                    id=str(raw.get("id") or ""),
+                    token=str(raw.get("token") or ""),
+                    title=str(raw.get("title") or "Démo"),
+                    interested_at=str(raw["interested_at"])
+                    if raw.get("interested_at")
+                    else None,
+                    interest_contact=contact if isinstance(contact, dict) else None,
+                )
+            )
+        return out
+
+    async def count_unread_contact_notifications(self) -> int:
+        items = await self.list_unread_contact_notifications()
+        return len(items)
+
+    async def mark_contact_notifications_seen(self) -> int:
+        if not self.is_configured():
+            return 0
+
+        from datetime import UTC, datetime
+
+        seen_at = datetime.now(UTC).isoformat()
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.patch(
+                url,
+                headers=self._supabase._headers("return=representation"),
+                params={
+                    "status": "eq.interessee",
+                    "interest_seen_at": "is.null",
+                },
+                json={"interest_seen_at": seen_at},
+            )
+            _raise_for_status(
+                resp, "mark_contact_notifications_seen", "PATCH", url, self._supabase
+            )
+            rows = resp.json()
+        if isinstance(rows, list):
+            return len(rows)
+        return 0
+
     async def record_open(self, token: str) -> DemoRow | None:
         """Marque la démo comme ouverte (première ouverture depuis « envoyée »)."""
         row = await self.get_by_token(token)
@@ -450,6 +596,7 @@ def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoP
                 cloudflare_project=raw.get("cloudflare_project"),
                 summary=raw.get("summary"),
                 project_type=raw.get("project_type"),
+                access_password_enc=raw.get("access_password_enc"),
             )
 
     files = raw.get("files") if isinstance(raw.get("files"), list) else []
@@ -467,12 +614,13 @@ def _payload_from_storage(raw: Any, *, title: str = "Démo CyberForge") -> DemoP
         cloudflare_project=raw.get("cloudflare_project"),
         summary=raw.get("summary"),
         project_type=raw.get("project_type"),
+        access_password_enc=raw.get("access_password_enc"),
     )
 
 
 def _normalize_status(raw: Any) -> DemoStatusSlug:
     value = str(raw or "envoyee").strip().lower()
-    if value in ("envoyee", "ouverte", "validee", "expiree"):
+    if value in ("envoyee", "ouverte", "validee", "expiree", "interessee"):
         return cast(DemoStatusSlug, value)
     return "envoyee"
 
@@ -494,6 +642,13 @@ def _demo_from_row(row: dict[str, Any]) -> DemoRow:
         client_id=str(row["client_id"]) if row.get("client_id") else None,
         status=_normalize_status(row.get("status")),
         opened_at=str(row["opened_at"]) if row.get("opened_at") else None,
+        interested_at=str(row["interested_at"]) if row.get("interested_at") else None,
+        interest_seen_at=str(row["interest_seen_at"])
+        if row.get("interest_seen_at")
+        else None,
+        interest_contact=row.get("interest_contact")
+        if isinstance(row.get("interest_contact"), dict)
+        else None,
         created_at=str(row["created_at"]),
     )
 

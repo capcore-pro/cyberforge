@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
@@ -6,6 +6,7 @@ import { BackendHealthProvider } from "@/context/BackendHealthContext";
 import { AgentsStatusProvider } from "@/context/AgentsStatusContext";
 import { GeneratorSessionProvider } from "@/context/GeneratorSessionContext";
 import { PipelineActivityProvider } from "@/context/PipelineActivityContext";
+import { ContactNotificationsProvider, useContactNotifications } from "@/context/ContactNotificationsContext";
 import { getPublicDemoToken } from "@/lib/demo-route";
 import type { AppPage } from "./lib/navigation";
 import { ClientDemoPage } from "./pages/ClientDemoPage";
@@ -31,6 +32,32 @@ export default function App() {
     );
   }
 
+  return (
+    <ErrorBoundary>
+      <BackendHealthProvider>
+        <ContactNotificationsProvider>
+          <AppWithNotifications page={page} setPage={setPage} />
+        </ContactNotificationsProvider>
+      </BackendHealthProvider>
+    </ErrorBoundary>
+  );
+}
+
+function AppWithNotifications({
+  page,
+  setPage,
+}: {
+  page: AppPage;
+  setPage: (p: AppPage) => void;
+}) {
+  const { markAllSeen } = useContactNotifications();
+
+  useEffect(() => {
+    if (page === "clients") {
+      void markAllSeen();
+    }
+  }, [page, markAllSeen]);
+
   function renderPage() {
     switch (page) {
       case "generator":
@@ -54,20 +81,16 @@ export default function App() {
   }
 
   return (
-    <ErrorBoundary>
-      <BackendHealthProvider>
-        <AgentsStatusProvider>
-          <GeneratorSessionProvider>
-            <PipelineActivityProvider>
-              <Layout>
-                <AppShell currentPage={page} onNavigate={setPage}>
-                  {renderPage()}
-                </AppShell>
-              </Layout>
-            </PipelineActivityProvider>
-          </GeneratorSessionProvider>
-        </AgentsStatusProvider>
-      </BackendHealthProvider>
-    </ErrorBoundary>
+    <AgentsStatusProvider>
+      <GeneratorSessionProvider>
+        <PipelineActivityProvider>
+          <Layout>
+            <AppShell currentPage={page} onNavigate={setPage}>
+              {renderPage()}
+            </AppShell>
+          </Layout>
+        </PipelineActivityProvider>
+      </GeneratorSessionProvider>
+    </AgentsStatusProvider>
   );
 }

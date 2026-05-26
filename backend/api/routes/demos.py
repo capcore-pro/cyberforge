@@ -18,6 +18,8 @@ from db.demos_store import (
     SupabaseStoreError,
     get_demos_store,
 )
+from tools.capcore_notify import send_capcore_contact_email
+from tools.demo_password_vault import decrypt_demo_password, encrypt_demo_password
 from tools.demo_urls import unlock_demo_url
 from security.cloudflare_env import cloudflare_configured, get_cloudflare_credentials
 from tools.cloudflare_pages import (
@@ -30,6 +32,7 @@ from tools.cloudflare_pages import (
     public_demo_url_for_token,
     remove_demo_from_cyberforge_demos,
 )
+from config import get_settings
 from tools.demo_pipeline import (
     build_client_demo_document,
     client_demo_from_seed_dict,
@@ -191,10 +194,14 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
                 seed_prompt,
                 project_type_label=project_label,
             )
+        settings = get_settings()
         preview_html = wrap_demo_for_cloudflare(
             document,
             demo_password,
             title=title,
+            demo_token=demo_token,
+            demo_url=public_demo_url_for_token(demo_token),
+            api_base_url=settings.backend_public_url,
         )
         logger.info(
             "POST /demos — DemoPipeline | template=%s | brand=%s | gated_bytes=%s",
@@ -243,6 +250,7 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
         cloudflare_project=CYBERFORGE_DEMOS_PROJECT,
         summary=body.summary,
         project_type=body.project_type,
+        access_password_enc=encrypt_demo_password(demo_password),
     )
 
     try:
@@ -330,6 +338,86 @@ async def track_demo_open(token: str) -> DemoOpenResponse:
         recorded=updated.status == "ouverte",
         status=updated.status,
     )
+
+
+class DemoInterestedRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    email: str = Field(..., min_length=3, max_length=320)
+    message: str = Field(..., min_length=1, max_length=8000)
+
+
+class DemoInterestedResponse(BaseModel):
+    recorded: bool
+    status: DemoStatusSlug
+    email_sent: bool = False
+
+
+async def _handle_demo_interested(
+    token: str,
+    *,
+    contact: DemoInterestedRequest | None,
+) -> DemoInterestedResponse:
+    store = get_demos_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
+
+    clean = token.strip()
+    row = await store.get_by_token(clean)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+    if store.is_expired(row):
+        raise HTTPException(status_code=410, detail="Démo expirée.")
+
+    interest = None
+    if contact is not None:
+        from db.demos_store import InterestContact
+
+        interest = InterestContact(
+            name=contact.name,
+            email=contact.email,
+            message=contact.message,
+        )
+
+    updated = await store.record_interested(clean, contact=interest)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+
+    email_sent = False
+    if contact is not None:
+        demo_url = (
+            updated.payload.cloudflare_url or public_demo_url_for_token(clean)
+        ).rstrip("/")
+        demo_password = decrypt_demo_password(updated.payload.access_password_enc)
+        email_sent = await send_capcore_contact_email(
+            project_title=updated.title,
+            client_name=contact.name,
+            client_email=contact.email,
+            message=contact.message,
+            demo_url=demo_url,
+            demo_password=demo_password,
+            unlock_url=unlock_demo_url(clean),
+        )
+
+    return DemoInterestedResponse(
+        recorded=updated.status == "interessee",
+        status=updated.status,
+        email_sent=email_sent,
+    )
+
+
+@router.post("/demos/{token}/interested", response_model=DemoInterestedResponse)
+async def submit_demo_interested(
+    token: str,
+    body: DemoInterestedRequest,
+) -> DemoInterestedResponse:
+    """Formulaire CapCore soumis — statut, email Mat, notification CyberForge."""
+    return await _handle_demo_interested(token, contact=body)
+
+
+@router.get("/demos/{token}/interested", response_model=DemoInterestedResponse)
+async def track_demo_interested(token: str) -> DemoInterestedResponse:
+    """Compatibilité — enregistre le statut sans coordonnées client."""
+    return await _handle_demo_interested(token, contact=None)
 
 
 @router.patch("/demos/{demo_id}/status", response_model=UpdateDemoStatusResponse)
