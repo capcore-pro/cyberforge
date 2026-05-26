@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CreateDemoResponse, DemoDuration } from "@/lib/demos-api";
 import { copyTextToClipboard } from "@/lib/generation-export";
+import { buildClientDemoGmailComposeUrl } from "@/lib/gmail-compose-url";
 
 const DURATION_OPTIONS: { id: DemoDuration; label: string }[] = [
   { id: "24h", label: "24 heures" },
@@ -26,28 +27,6 @@ function formatExpiry(iso: string): string {
   } catch {
     return iso;
   }
-}
-
-function buildDemoGmailComposeUrl(created: CreateDemoResponse): string {
-  const subject = `Votre démo CyberForge — ${created.title}`;
-  const body = [
-    "Bonjour,",
-    "",
-    "Voici l'accès à votre démo interactive :",
-    "",
-    `Lien : ${created.url}`,
-    `Mot de passe : ${created.password}`,
-    "",
-    `Validité : jusqu'au ${formatExpiry(created.expires_at)}.`,
-    "",
-    "Cordialement,",
-  ].join("\n");
-  const params = new URLSearchParams({
-    view: "cm",
-    su: subject,
-    body,
-  });
-  return `https://mail.google.com/mail/?${params.toString()}`;
 }
 
 /**
@@ -212,7 +191,12 @@ export function CreateDemoModal({
 
             <div className="flex flex-col gap-2 sm:flex-row">
               <a
-                href={buildDemoGmailComposeUrl(created)}
+                href={buildClientDemoGmailComposeUrl({
+                  title: created.title,
+                  url: created.url,
+                  password: created.password,
+                  expiresAt: created.expires_at,
+                })}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="cyber-action-btn cyber-action-btn-primary flex-1 text-center no-underline"

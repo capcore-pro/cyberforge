@@ -36,7 +36,9 @@ ROOT_STUB_ASSET_PATH = "index.html"
 ROOT_STUB_MANIFEST_PATH = "/index.html"
 REDIRECTS_ASSET_PATH = "_redirects"
 REDIRECTS_MANIFEST_PATH = "/_redirects"
-# Proxy interne (200) : évite le fallback SPA sur /index.html pour les chemins /d/{token}/.
+# Compatibilité ascendante : les démos legacy (u{token}.html) continuent d'être
+# servies via ce proxy 200.  Les nouvelles démos utilisent d/{slug}/index.html
+# directement — Pages sert ce fichier à /d/{slug} et /d/{slug}/ sans redirect.
 _REDIRECTS_BODY = (
     b"/d/:token /u:token.html 200\n"
     b"/d/:token/ /u:token.html 200\n"
@@ -97,12 +99,19 @@ def pages_slug_for_token(token: str) -> str:
 
 
 def pages_asset_path_for_token(token: str) -> str:
-    """Chemin fichier principal (racine) — servi directement par Pages."""
+    """
+    Chemin fichier plat racine (u{token}.html) — gardé pour compatibilité
+    ascendante avec les démos existantes stockées dans Supabase.
+    Utilisez pages_asset_path_legacy_for_token pour les nouveaux déploiements.
+    """
     return f"{pages_slug_for_token(token)}.html"
 
 
 def pages_asset_path_legacy_for_token(token: str) -> str:
-    """Chemin /d/{token}/index.html — doit correspondre aux liens partagés."""
+    """
+    Chemin d/{slug}/index.html — chemin primaire pour les nouveaux déploiements.
+    Pages sert ce fichier directement à /d/{slug} et /d/{slug}/ sans redirect.
+    """
     return f"d/{pages_token_slug(token)}/index.html"
 
 
@@ -192,8 +201,8 @@ def _log_upload_html_snapshot(
 
 
 def demo_content_digest(token: str, html: str) -> tuple[str, str]:
-    """Retourne (chemin asset, hash) pour persistance Supabase."""
-    asset_path = pages_asset_path_for_token(token)
+    """Retourne (chemin asset d/{slug}/index.html, hash) pour persistance Supabase."""
+    asset_path = pages_asset_path_legacy_for_token(token)
     return asset_path, _file_digest(asset_path, html.encode("utf-8"))
 
 
@@ -966,10 +975,11 @@ async def deploy_demo_to_cyberforge_demos(
     other_manifest_entries: dict[str, str],
 ) -> CloudflareDeployResult:
     """
-    Publie la démo sous /d/{token}/ sur le projet fixe cyberforge-demos.
+    Publie la démo sous d/{slug}/index.html sur le projet fixe cyberforge-demos.
+    Pages sert ce fichier à /d/{slug} et /d/{slug}/ directement (sans redirect).
     other_manifest_entries : chemins actifs path relatif → hash (hors cette démo).
     """
-    asset_path = pages_asset_path_for_token(token)
+    asset_path = pages_asset_path_legacy_for_token(token)
     html_fresh = apply_deploy_cache_bust(html)
     body = html_fresh.encode("utf-8")
     digest = _file_digest(asset_path, body)
@@ -985,7 +995,7 @@ async def deploy_demo_to_cyberforge_demos(
     manifest = build_pages_manifest(entries, include_root_stub=False)
     _log_deploy_step(
         "0/5 deploy_demo",
-        "ZIP Direct Upload (cache-bust actif)",
+        "ZIP Direct Upload — d/{slug}/index.html (cache-bust actif)",
         asset_path=asset_path,
         digest=digest,
         manifest_paths=sorted(manifest.keys()),
@@ -1007,8 +1017,9 @@ async def deploy_demo_to_cyberforge_demos(
             "ZIP pré-upload sans cf-password-toggle — vérifiez wrap_with_password_gate."
         )
     logger.info(
-        "[Cloudflare Pages] deploy_demo ZIP validé | token=%s | zip_bytes=%s | toggle=True",
+        "[Cloudflare Pages] deploy_demo ZIP validé | token=%s | path=%s | zip_bytes=%s | toggle=True",
         token,
+        asset_path,
         len(pre_zip),
     )
 
@@ -1018,7 +1029,7 @@ async def deploy_demo_to_cyberforge_demos(
         manifest=manifest,
         upload_files=upload_files,
         asset_path=asset_path,
-        legacy_path="",
+        legacy_path=asset_path,
         digest=digest,
     )
 

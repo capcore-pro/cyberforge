@@ -44,6 +44,7 @@ async def run_coremind_flow_stream(body: CoreMindRequest) -> StreamingResponse:
                 result = await run_generation_pipeline(
                     body.prompt,
                     project_type_hint=body.project_type,
+                    generation_mode=body.generation_mode,
                     on_event=on_event,
                 )
                 persistence: PersistenceResult | None = None

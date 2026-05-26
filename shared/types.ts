@@ -52,10 +52,18 @@ export type RecommendedTool = "v0" | "deepseek";
 /** Niveau de complexité estimé */
 export type ComplexityLevel = "faible" | "moyenne" | "elevee";
 
+/**
+ * Mode de génération :
+ * - `client_demo` : pipeline démo HTML premium TaskFlow (défaut)
+ * - `real_app`    : génération d'une vraie application React/Next.js déployable
+ */
+export type GenerationMode = "client_demo" | "real_app";
+
 /** Requête POST /api/agents/coremind */
 export interface CoreMindRequest {
   prompt: string;
   project_type?: ProjectType | null;
+  generation_mode?: GenerationMode | null;
 }
 
 /** Métriques de génération (page Générateur) */

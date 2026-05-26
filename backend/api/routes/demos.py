@@ -26,7 +26,7 @@ from tools.cloudflare_pages import (
     LAST_CF_UPLOAD_HTML,
     demo_content_digest,
     deploy_demo_to_cyberforge_demos,
-    pages_asset_path_for_token,
+    pages_asset_path_legacy_for_token,
     public_demo_url_for_token,
     remove_demo_from_cyberforge_demos,
 )
@@ -219,7 +219,7 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
             html=preview_html,
             other_manifest_entries=other_entries,
         )
-        cf_path = deploy.asset_path or pages_asset_path_for_token(demo_token)
+        cf_path = deploy.asset_path or pages_asset_path_legacy_for_token(demo_token)
         cf_hash = deploy.content_hash
         if not cf_hash:
             _, cf_hash = demo_content_digest(demo_token, preview_html)

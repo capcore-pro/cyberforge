@@ -1,3 +1,5 @@
+import { buildClientDemoGmailComposeUrl } from "@/lib/gmail-compose-url";
+
 interface ExportProductionCardProps {
   productionUrl: string | null | undefined;
   exportProvider?: string | null;
@@ -23,18 +25,10 @@ export function ExportProductionCard({
   const openUrl = productionUrl.trim();
   const clientUrl = unlockUrl?.trim() || openUrl;
 
-  const mailSubject = encodeURIComponent("Votre démo CyberForge");
-  const mailLines = [
-    "Bonjour,",
-    "",
-    "Voici votre démo en ligne :",
-    clientUrl,
-  ];
-  if (demoPassword) {
-    mailLines.push("", `Mot de passe : ${demoPassword}`);
-  }
-  const mailBody = encodeURIComponent(mailLines.join("\n"));
-  const mailto = `mailto:?subject=${mailSubject}&body=${mailBody}`;
+  const gmailComposeUrl = buildClientDemoGmailComposeUrl({
+    url: clientUrl,
+    password: demoPassword,
+  });
 
   return (
     <section
@@ -67,7 +61,12 @@ export function ExportProductionCard({
         >
           Ouvrir
         </a>
-        <a href={mailto} className="cyber-action-btn">
+        <a
+          href={gmailComposeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="cyber-action-btn"
+        >
           Envoyer au client
         </a>
         {githubUrl ? (

@@ -20,7 +20,9 @@ from tools.standalone_demo_html import build_task_manager_standalone_html, wrap_
 
 
 def test_pages_asset_paths_flat_and_legacy() -> None:
+    # pages_asset_path_for_token kept for backward compat (legacy u-prefix flat path)
     assert pages_asset_path_for_token("abc") == "uabc.html"
+    # pages_asset_path_legacy_for_token is now the PRIMARY deploy path
     assert pages_asset_path_legacy_for_token("abc") == "d/abc/index.html"
     assert public_demo_url_for_token("abc") == (
         "https://cyberforge-demos.pages.dev/d/abc"
@@ -34,6 +36,19 @@ def test_pages_slug_avoids_manifest_path_starting_with_dash() -> None:
     assert pages_asset_path_legacy_for_token("-aap88BoxGWL481C0VQfr8") == (
         "d/-aap88BoxGWL481C0VQfr8/index.html"
     )
+
+
+def test_deploy_demo_uses_directory_path() -> None:
+    """Vérifie que le chemin primaire de déploiement est d/{slug}/index.html."""
+    token = "abc123"
+    primary = pages_asset_path_legacy_for_token(token)
+    assert primary == "d/abc123/index.html"
+    # Le chemin doit passer la validation du manifest
+    from tools.cloudflare_pages import _VALID_MANIFEST_PATH
+    assert _VALID_MANIFEST_PATH.match(primary)
+    # L'URL publique pointe vers /d/{slug} sans slash final
+    url = public_demo_url_for_token(token)
+    assert url == "https://cyberforge-demos.pages.dev/d/abc123"
 
 
 def test_build_pages_manifest_includes_redirects_no_stub_by_default() -> None:
@@ -56,7 +71,8 @@ def test_sanitize_manifest_entries_drops_obsolete_paths() -> None:
 
 
 def test_validate_manifest_covers_uploads() -> None:
-    path = pages_asset_path_for_token("abc")
+    # Use the primary deploy path (d/{slug}/index.html)
+    path = pages_asset_path_legacy_for_token("abc")
     body = b"<html></html>"
     digest = _file_digest(path, body)
     manifest = build_pages_manifest({path: digest})
@@ -64,7 +80,8 @@ def test_validate_manifest_covers_uploads() -> None:
 
 
 def test_apply_deploy_cache_bust_changes_digest() -> None:
-    path = pages_asset_path_for_token("abc")
+    # Use the primary deploy path (d/{slug}/index.html)
+    path = pages_asset_path_legacy_for_token("abc")
     html = "<!DOCTYPE html><html><body>ok</body></html>"
     d1 = _file_digest(path, html.encode())
     d2 = _file_digest(path, apply_deploy_cache_bust(html).encode())
@@ -75,13 +92,15 @@ def test_apply_deploy_cache_bust_changes_digest() -> None:
 def test_zip_contains_password_toggle_after_gate() -> None:
     inner = build_task_manager_standalone_html(title="Test", sources="")
     gated = wrap_with_password_gate(inner, "secret-demo", title="Test")
-    path = pages_asset_path_for_token("tok1")
+    # Primary deploy path is now d/{slug}/index.html
+    path = pages_asset_path_legacy_for_token("tok1")
     zip_bytes = build_deploy_zip({path: gated.encode("utf-8"), REDIRECTS_ASSET_PATH: b"/d/:token /u:token.html 200\n"})
     assert zip_contains_marker(zip_bytes, "cf-password-toggle")
 
 
 def test_build_deploy_zip_roundtrip() -> None:
-    path = pages_asset_path_for_token("demo1")
+    # Primary deploy path is now d/{slug}/index.html
+    path = pages_asset_path_legacy_for_token("demo1")
     files = {path: b"<html>ok</html>", REDIRECTS_ASSET_PATH: b"/d/:token /u:token.html 200\n"}
     zip_bytes = build_deploy_zip(files)
     assert zip_bytes[:2] == b"PK"

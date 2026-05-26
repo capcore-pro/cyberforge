@@ -8,6 +8,7 @@ import {
 } from "react";
 import type {
   CoreMindRunResponse,
+  GenerationMode,
   ProjectType,
   ValidationStatus,
   VisionPreviewSource,
@@ -25,6 +26,7 @@ export type GeneratorFlowPhase = "idle" | "running" | "done" | "error";
 export interface GeneratorSessionState {
   prompt: string;
   projectType: ProjectType;
+  generationMode: GenerationMode;
   phase: GeneratorFlowPhase;
   error: string | null;
   actionError: string | null;
@@ -54,6 +56,7 @@ export interface GeneratorSessionState {
 const initialSession = (): GeneratorSessionState => ({
   prompt: "",
   projectType: "site_web",
+  generationMode: "client_demo",
   phase: "idle",
   error: null,
   actionError: null,

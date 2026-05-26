@@ -43,6 +43,10 @@ class CoreMindRequest(BaseModel):
         default=None,
         description="Type de projet choisi dans le Générateur (optionnel)",
     )
+    generation_mode: str | None = Field(
+        default=None,
+        description="Mode de génération : 'client_demo' (défaut) ou 'real_app' (React/Next.js)",
+    )
 
 
 class CoreMindRunResponse(CoreMindRunResult):
@@ -123,6 +127,7 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
         result = await run_generation_pipeline(
             body.prompt,
             project_type_hint=body.project_type,
+            generation_mode=body.generation_mode,
         )
         if result.demo_pipeline is not None:
             logger.info(

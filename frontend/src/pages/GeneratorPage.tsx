@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ComplexityLevel, PipelineStepEvent } from "@shared/types";
+import type { ComplexityLevel, GenerationMode, PipelineStepEvent } from "@shared/types";
 import { useBackendHealth } from "@/context/BackendHealthContext";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import { usePipelineActivity } from "@/context/PipelineActivityContext";
@@ -102,6 +102,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const {
     prompt,
     projectType,
+    generationMode,
     phase,
     error,
     actionError,
@@ -354,7 +355,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
     try {
       const response = await streamCoremindRun(
-        { prompt: trimmed, project_type: projectType },
+        { prompt: trimmed, project_type: projectType, generation_mode: generationMode },
         { onStep },
       );
 
@@ -631,6 +632,43 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                 </span>
               </button>
             ))}
+            </div>
+          </div>
+
+          <div>
+            <span className="mb-2 block text-xs font-medium uppercase tracking-wider text-cyber-violet">
+              Mode de génération
+            </span>
+            <div className="flex gap-2">
+              {(
+                [
+                  {
+                    id: "client_demo" as GenerationMode,
+                    label: "Démo client",
+                    description: "HTML premium déployé sur Cloudflare",
+                  },
+                  {
+                    id: "real_app" as GenerationMode,
+                    label: "Vraie app",
+                    description: "React/Next.js déployable (Railway / Vercel)",
+                  },
+                ] as const
+              ).map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  disabled={isRunning}
+                  onClick={() => patch({ generationMode: mode.id })}
+                  className={`cyber-type-pill ${generationMode === mode.id ? "cyber-type-pill-active" : ""}`}
+                >
+                  <span className="block text-sm font-semibold text-cyber-text">
+                    {mode.label}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] text-cyber-muted">
+                    {mode.description}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
 

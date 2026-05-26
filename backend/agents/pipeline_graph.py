@@ -6,6 +6,7 @@ ExportAI déploie sur Cloudflare Pages, Railway ou GitHub selon le type de proje
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import replace
 from typing import Any, Awaitable, Callable, TypedDict
@@ -58,10 +59,18 @@ AGENT_LABELS: dict[str, str] = {
     "finalize": "Finalisation",
 }
 
+# Labels SSE spécifiques au mode "Vraie app"
+REAL_APP_STEP_MESSAGES: dict[str, str] = {
+    "coremind_start": "Génération app React/TypeScript…",
+    "export_start": "Déploiement application React (Railway / Vercel)…",
+}
+
 
 class PipelineState(TypedDict, total=False):
     prompt: str
     project_type_hint: ProjectType | None
+    # "client_demo" (défaut) → pipeline HTML premium ; "real_app" → React/Next.js
+    generation_mode: str | None
     architect_plan: ArchitectPlan | None
     analysis: CoreMindAnalysis | None
     builder_provider: str | None
@@ -218,6 +227,93 @@ def _route_after_builder(state: PipelineState) -> str:
     return "coremind"
 
 
+def _inject_package_json(
+    generation: Any,
+    project_label: str,
+) -> Any:
+    """
+    Ajoute package.json + src/main.tsx + index.html si absents de la génération
+    pour produire un projet React/Vite déployable sur Railway ou Vercel.
+    """
+    import json as _json
+    from tools.codegen_service import CodeGenerateResult, GeneratedFile
+
+    if not isinstance(generation, CodeGenerateResult):
+        return generation
+
+    existing_paths = {f.path for f in generation.files}
+    extra: list[GeneratedFile] = []
+
+    if "package.json" not in existing_paths:
+        slug = re.sub(r"[^a-z0-9-]", "-", project_label.lower().strip())[:40] or "vraie-app"
+        pkg = {
+            "name": slug,
+            "version": "0.1.0",
+            "private": True,
+            "type": "module",
+            "scripts": {
+                "dev": "vite",
+                "build": "tsc && vite build",
+                "preview": "vite preview",
+                "start": "vite",
+            },
+            "dependencies": {
+                "react": "^18.3.1",
+                "react-dom": "^18.3.1",
+            },
+            "devDependencies": {
+                "@types/react": "^18.3.1",
+                "@types/react-dom": "^18.3.1",
+                "@vitejs/plugin-react": "^4.3.1",
+                "typescript": "^5.5.3",
+                "vite": "^5.4.1",
+            },
+        }
+        extra.append(GeneratedFile(path="package.json", content=_json.dumps(pkg, indent=2, ensure_ascii=False)))
+
+    if "index.html" not in existing_paths and "src/main.tsx" not in existing_paths:
+        extra.append(GeneratedFile(
+            path="index.html",
+            content=(
+                '<!DOCTYPE html>\n<html lang="fr">\n  <head>\n'
+                '    <meta charset="UTF-8" />\n'
+                '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n'
+                f'    <title>{project_label}</title>\n'
+                '  </head>\n  <body>\n    <div id="root"></div>\n'
+                '    <script type="module" src="/src/main.tsx"></script>\n'
+                '  </body>\n</html>'
+            ),
+        ))
+        extra.append(GeneratedFile(
+            path="src/main.tsx",
+            content=(
+                'import React from "react";\n'
+                'import ReactDOM from "react-dom/client";\n'
+                'import App from "./App";\n\n'
+                'ReactDOM.createRoot(document.getElementById("root")!).render(\n'
+                '  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);\n'
+            ),
+        ))
+
+    if not extra:
+        return generation
+
+    new_stack = list(generation.stack)
+    for tag in ("react", "typescript", "vite"):
+        if tag not in new_stack:
+            new_stack.append(tag)
+
+    return CodeGenerateResult(
+        summary=generation.summary,
+        code=generation.code,
+        files=[*generation.files, *extra],
+        stack=new_stack,
+        model=generation.model,
+        provider=generation.provider,
+        demo_seed=generation.demo_seed,
+    )
+
+
 async def coremind_node(
     state: PipelineState,
     config: dict[str, Any] | None = None,
@@ -238,10 +334,51 @@ async def coremind_node(
         )
         return {}
 
-    await _step(cb, "coremind", "start", "Génération HTML et seed adaptée au template…")
     settings = _settings_from_config(config)
     prompt = state["prompt"].strip()
     type_label = plan.project_type_label
+    generation_mode = state.get("generation_mode") or "client_demo"
+
+    # --- Mode "Vraie app" : génère un projet React/TypeScript complet ---
+    if generation_mode == "real_app":
+        await _step(
+            cb,
+            "coremind",
+            "start",
+            f"Génération application React/TypeScript ({type_label})…",
+        )
+        codegen = CodeGenService(settings)
+        tier = CodeGenComplexity(analysis.complexity.value)
+        enriched_real = (
+            f"Type de projet : {type_label}.\n"
+            f"Contexte : application React/TypeScript déployable sur Railway ou Vercel.\n"
+            f"Texte UI en français.\n\n{prompt}"
+        )
+        generation = await codegen.generate_code(
+            enriched_real,
+            tier,
+            demo_html=False,
+        )
+        # Injecte package.json si absent
+        generation = _inject_package_json(generation, type_label)
+        code_chars = len(generation.code or "")
+        file_count = len(generation.files)
+        await _step(
+            cb,
+            "coremind",
+            "done",
+            f"App React générée — {file_count} fichier(s), {code_chars} chars · {generation.model}",
+            template="real_app",
+            html_bytes=code_chars,
+        )
+        return {
+            "generation": generation,
+            # Pas d'aperçu HTML : le code React n'est pas rendu directement.
+            "preview_html": None,
+        }
+
+    # --- Mode "Démo client" (par défaut) : pipeline HTML premium TaskFlow ---
+    await _step(cb, "coremind", "start", "Génération HTML et seed adaptée au template…")
     enriched = (
         f"Type de projet cible : {type_label}.\n"
         f"Template premium : {plan.template_label} ({plan.template}).\n\n{prompt}"
@@ -532,10 +669,20 @@ async def export_node(
         await _step(cb, "export", "done", "Export ignoré (génération incomplète).")
         return {}
 
-    await _step(cb, "export", "start", "Déploiement automatique (Cloudflare / Railway / GitHub)…")
+    generation_mode = state.get("generation_mode") or "client_demo"
+    if generation_mode == "real_app":
+        await _step(
+            cb, "export", "start",
+            "Déploiement application React (Railway / Vercel)…",
+        )
+    else:
+        await _step(cb, "export", "start", "Déploiement automatique (Cloudflare / Railway / GitHub)…")
+
     settings = _settings_from_config(config)
     agent = ExportAgent(settings)
-    preview_html = state.get("preview_html") or ""
+    # Pour real_app, on passe preview_html vide pour éviter que ExportAI tente
+    # un déploiement Cloudflare (is_usable_preview_html échouera sur du React).
+    preview_html = "" if generation_mode == "real_app" else (state.get("preview_html") or "")
 
     result = await agent.export(
         state["prompt"],
@@ -587,7 +734,8 @@ async def finalize_node(
     codegen = CodeGenService(settings)
     tier = CodeGenComplexity(analysis.complexity.value)
 
-    template = architect.template
+    generation_mode = state.get("generation_mode") or "client_demo"
+    template = "real_app" if generation_mode == "real_app" else architect.template
     html_bytes = len((preview_html or generation.code or "").encode("utf-8"))
     pipeline_info = DemoPipelineSummary(
         template=template,
@@ -734,18 +882,21 @@ async def run_generation_pipeline(
     prompt: str,
     *,
     project_type_hint: ProjectType | None = None,
+    generation_mode: str | None = None,
     settings: Settings | None = None,
     on_event: PipelineEventCallback | None = None,
 ) -> CoreMindRunResult:
     """
     Exécute le pipeline complet et retourne le résultat CoreMindRunResult.
     Émet des événements step_* via on_event si fourni (SSE frontend).
+    generation_mode : "client_demo" (défaut) ou "real_app" (React/Next.js).
     """
     resolved_settings = settings or get_settings()
     pipeline_started = time.perf_counter()
     initial: PipelineState = {
         "prompt": prompt.strip(),
         "project_type_hint": project_type_hint,
+        "generation_mode": generation_mode or "client_demo",
         "fix_loops": 0,
         "autofix_attempts": 0,
         "testpilot_refix_loops": 0,
