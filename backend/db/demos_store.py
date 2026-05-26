@@ -9,7 +9,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
-from db.clients_store import DemoStatusSlug
+from db.demo_types import DemoStatusSlug
 
 import bcrypt
 import httpx

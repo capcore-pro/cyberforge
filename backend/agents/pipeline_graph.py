@@ -1,6 +1,6 @@
 """
-Pipeline LangGraph — ArchitectAI → BuilderAI → CoreMindAI → BugHunterAI → AutoFixAI.
-BuilderAI tente v0 (UI) ou DeepSeek (code complexe) ; en échec, CoreMindAI reprend.
+Pipeline LangGraph complet — ArchitectAI → … → TestPilotAI → ExportAI → Finalisation.
+ExportAI déploie sur Cloudflare Pages, Railway ou GitHub selon le type de projet.
 """
 
 from __future__ import annotations
@@ -24,6 +24,9 @@ from agents.coremind_agent import (
     ProjectType,
 )
 from agents.demo_quality import preview_html_from_generation
+from agents.visionui_agent import VisionUIAgent
+from agents.testpilot_agent import TestPilotAgent, testpilot_to_bug_report
+from agents.export_agent import ExportAgent
 from config import Settings, get_settings
 from tools.codegen_service import CodeGenComplexity, CodeGenService
 from tools.demo_pipeline import build_client_demo_document
@@ -39,6 +42,7 @@ from tools.demo_template_service import TEMPLATE_MODEL, TEMPLATE_PROVIDER
 logger = logging.getLogger(__name__)
 
 MAX_AUTOFIX_LOOPS = 2
+MAX_TESTPILOT_AUTOFIX_LOOPS = 1
 
 PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -46,8 +50,11 @@ AGENT_LABELS: dict[str, str] = {
     "architect": "ArchitectAI",
     "builder": "BuilderAI",
     "coremind": "CoreMindAI",
+    "visionui": "VisionUI",
     "bughunter": "BugHunterAI",
     "autofix": "AutoFixAI",
+    "testpilot": "TestPilotAI",
+    "export": "ExportAI",
     "finalize": "Finalisation",
 }
 
@@ -61,9 +68,15 @@ class PipelineState(TypedDict, total=False):
     builder_fallback: bool
     generation: Any
     preview_html: str | None
+    vision_screenshot_url: str | None
+    vision_preview_source: str | None
     bug_report: BugHuntReport | None
     fix_loops: int
     autofix_attempts: int
+    testpilot_report: Any
+    testpilot_refix_loops: int
+    validation_status: str | None
+    export_result: Any
     result: CoreMindRunResult | None
     error: str | None
 
@@ -201,7 +214,7 @@ def _route_after_builder(state: PipelineState) -> str:
     if state.get("builder_fallback", True):
         return "coremind"
     if state.get("generation"):
-        return "bughunter"
+        return "visionui"
     return "coremind"
 
 
@@ -276,6 +289,47 @@ async def coremind_node(
     }
 
 
+async def visionui_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    plan = state.get("architect_plan")
+    preview_html = state.get("preview_html")
+    generation = state.get("generation")
+    if not plan:
+        return {"error": "État pipeline incomplet (VisionUI)."}
+
+    html = (preview_html or "").strip()
+    if not html and generation is not None:
+        html = (getattr(generation, "code", None) or "").strip()
+
+    if not html:
+        await _step(cb, "visionui", "done", "Aucun HTML à capturer — étape ignorée.")
+        return {}
+
+    await _step(cb, "visionui", "start", "Capture visuelle du HTML généré…")
+    settings = _settings_from_config(config)
+    agent = VisionUIAgent(settings)
+    result = await agent.capture(html, title=plan.project_type_label, settings=settings)
+    source_label = "Replicate" if result.preview_source == "replicate" else "HTML local"
+
+    await _step(
+        cb,
+        "visionui",
+        "done",
+        result.preview.message or f"Aperçu VisionUI ({source_label}).",
+        vision_screenshot_url=result.screenshot_url,
+        vision_preview_source=result.preview_source,
+        vision_local_html=result.preview.local_html if result.preview_source == "local" else None,
+    )
+    return {
+        "vision_screenshot_url": result.screenshot_url,
+        "vision_preview_source": result.preview_source,
+        "preview_html": result.preview.local_html or preview_html,
+    }
+
+
 async def bughunter_node(
     state: PipelineState,
     config: dict[str, Any] | None = None,
@@ -312,10 +366,10 @@ async def bughunter_node(
 def _route_after_bughunter(state: PipelineState) -> str:
     report = state.get("bug_report")
     if report and report.ok:
-        return "finalize"
+        return "testpilot"
     loops = state.get("fix_loops") or 0
     if loops >= MAX_AUTOFIX_LOOPS:
-        return "finalize"
+        return "testpilot"
     return "autofix"
 
 
@@ -376,6 +430,134 @@ async def autofix_node(
         "fix_loops": loop_num,
         "autofix_attempts": attempts,
     }
+
+
+async def testpilot_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    generation = state.get("generation")
+    plan = state.get("architect_plan")
+    preview_html = state.get("preview_html")
+    if not generation or not plan:
+        return {"error": "État pipeline incomplet (TestPilotAI)."}
+
+    await _step(cb, "testpilot", "start", "Validation rendu, liens et scripts JS…")
+    settings = _settings_from_config(config)
+    agent = TestPilotAgent(settings)
+    prompt = state["prompt"].strip()
+    enriched = (
+        f"Type : {plan.project_type_label}.\n"
+        f"Template : {plan.template_label}.\n\n{prompt}"
+    )
+    report = agent.validate_generation(
+        generation,
+        title=plan.project_type_label,
+        user_prompt=enriched,
+    )
+
+    fix_loops = state.get("fix_loops") or 0
+    refix_loops = state.get("testpilot_refix_loops") or 0
+
+    if report.ok:
+        if refix_loops > 0 or fix_loops > 0:
+            validation_status = "corrected"
+            badge_label = "Corrigé"
+        else:
+            validation_status = "validated"
+            badge_label = "Validé"
+        await _step(
+            cb,
+            "testpilot",
+            "done",
+            f"Validation réussie — {badge_label}.",
+            ok=True,
+            validation_status=validation_status,
+            validation_badge=badge_label,
+            checks_run=report.checks_run,
+        )
+        return {
+            "testpilot_report": report,
+            "validation_status": validation_status,
+        }
+
+    next_refix = refix_loops + 1
+    await _step(
+        cb,
+        "testpilot",
+        "done",
+        f"{len(report.issues)} échec(s) de validation — "
+        + (
+            "renvoi vers AutoFixAI."
+            if next_refix <= MAX_TESTPILOT_AUTOFIX_LOOPS
+            else "finalisation avec avertissements."
+        ),
+        ok=False,
+        validation_status="corrected",
+        validation_badge="Corrigé",
+        issue_count=len(report.issues),
+    )
+    return {
+        "testpilot_report": report,
+        "testpilot_refix_loops": next_refix,
+        "bug_report": testpilot_to_bug_report(report),
+        "validation_status": "corrected",
+    }
+
+
+def _route_after_testpilot(state: PipelineState) -> str:
+    report = state.get("testpilot_report")
+    if report and getattr(report, "ok", False):
+        return "export"
+    refix = state.get("testpilot_refix_loops") or 0
+    if refix > MAX_TESTPILOT_AUTOFIX_LOOPS:
+        return "export"
+    return "autofix"
+
+
+async def export_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    if state.get("error"):
+        await _step(cb, "export", "done", "Export ignoré (erreur pipeline).")
+        return {}
+
+    plan = state.get("architect_plan")
+    analysis = state.get("analysis")
+    generation = state.get("generation")
+    if not plan or not analysis or not generation:
+        await _step(cb, "export", "done", "Export ignoré (génération incomplète).")
+        return {}
+
+    await _step(cb, "export", "start", "Déploiement automatique (Cloudflare / Railway / GitHub)…")
+    settings = _settings_from_config(config)
+    agent = ExportAgent(settings)
+    preview_html = state.get("preview_html") or ""
+
+    result = await agent.export(
+        state["prompt"],
+        plan=plan,
+        analysis=analysis,
+        generation=generation,
+        preview_html=str(preview_html),
+        settings=settings,
+    )
+
+    await _step(
+        cb,
+        "export",
+        "done",
+        result.message or "Export terminé.",
+        ok=result.success,
+        production_url=result.production_url,
+        export_provider=result.provider,
+        github_url=result.github_url,
+        unlock_url=result.unlock_url,
+    )
+    return {"export_result": result}
 
 
 async def finalize_node(
@@ -446,6 +628,36 @@ async def finalize_node(
         else None,
     )
 
+    tp_report = state.get("testpilot_report")
+    validation_status = state.get("validation_status")
+    if not validation_status:
+        validation_status = "validated" if (tp_report and tp_report.ok) else "corrected"
+    testpilot_passed = bool(tp_report and tp_report.ok)
+    summary = None
+    if tp_report:
+        summary = (
+            "Validation TestPilotAI réussie."
+            if tp_report.ok
+            else f"Validation partielle ({len(tp_report.issues)} alerte(s))."
+        )
+
+    export_data = state.get("export_result")
+    export_manifest = None
+    production_url = None
+    export_provider = None
+    github_export_url = None
+    demo_token = None
+    demo_password = None
+    unlock_url = None
+    if export_data is not None:
+        export_manifest = getattr(export_data, "manifest", None)
+        production_url = getattr(export_data, "production_url", None)
+        export_provider = getattr(export_data, "provider", None)
+        github_export_url = getattr(export_data, "github_url", None)
+        demo_token = getattr(export_data, "demo_token", None)
+        demo_password = getattr(export_data, "demo_password", None)
+        unlock_url = getattr(export_data, "unlock_url", None)
+
     result = CoreMindRunResult(
         analysis=analysis,
         generation=generation,
@@ -453,6 +665,18 @@ async def finalize_node(
         planned_models=planned,
         demo_pipeline=pipeline_info,
         preview_html=preview_html,
+        vision_screenshot_url=state.get("vision_screenshot_url"),
+        vision_preview_source=state.get("vision_preview_source"),
+        testpilot_passed=testpilot_passed,
+        validation_status=validation_status,
+        testpilot_summary=summary,
+        export_manifest=export_manifest,
+        production_url=production_url,
+        export_provider=export_provider,
+        github_export_url=github_export_url,
+        demo_token=demo_token,
+        demo_password=demo_password,
+        unlock_url=unlock_url,
     )
     await _step(cb, "finalize", "done", "Génération terminée.")
     return {"result": result}
@@ -464,8 +688,11 @@ def build_pipeline_graph() -> Any:
     graph.add_node("architect", architect_node)
     graph.add_node("builder", builder_node)
     graph.add_node("coremind", coremind_node)
+    graph.add_node("visionui", visionui_node)
     graph.add_node("bughunter", bughunter_node)
     graph.add_node("autofix", autofix_node)
+    graph.add_node("testpilot", testpilot_node)
+    graph.add_node("export", export_node)
     graph.add_node("finalize", finalize_node)
 
     graph.set_entry_point("architect")
@@ -473,15 +700,22 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         "builder",
         _route_after_builder,
-        {"coremind": "coremind", "bughunter": "bughunter", "finalize": "finalize"},
+        {"coremind": "coremind", "visionui": "visionui", "finalize": "finalize"},
     )
-    graph.add_edge("coremind", "bughunter")
+    graph.add_edge("coremind", "visionui")
+    graph.add_edge("visionui", "bughunter")
     graph.add_conditional_edges(
         "bughunter",
         _route_after_bughunter,
-        {"finalize": "finalize", "autofix": "autofix"},
+        {"testpilot": "testpilot", "autofix": "autofix"},
     )
-    graph.add_edge("autofix", "bughunter")
+    graph.add_edge("autofix", "visionui")
+    graph.add_conditional_edges(
+        "testpilot",
+        _route_after_testpilot,
+        {"export": "export", "autofix": "autofix"},
+    )
+    graph.add_edge("export", "finalize")
     graph.add_edge("finalize", END)
     return graph.compile()
 
@@ -514,6 +748,7 @@ async def run_generation_pipeline(
         "project_type_hint": project_type_hint,
         "fix_loops": 0,
         "autofix_attempts": 0,
+        "testpilot_refix_loops": 0,
         "builder_fallback": True,
     }
     graph = get_compiled_pipeline()

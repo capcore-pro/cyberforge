@@ -255,6 +255,42 @@ class CoreMindRunResult(BaseModel):
         default=None,
         description="HTML premium unique (identique au fichier index.html livré)",
     )
+    vision_screenshot_url: str | None = Field(
+        default=None,
+        description="URL ou data URL de la capture VisionUI (Replicate)",
+    )
+    vision_preview_source: str | None = Field(
+        default=None,
+        description="replicate | local",
+    )
+    testpilot_passed: bool | None = Field(
+        default=None,
+        description="True si la validation TestPilotAI a réussi.",
+    )
+    validation_status: str | None = Field(
+        default=None,
+        description="validated (Validé) | corrected (Corrigé)",
+    )
+    testpilot_summary: str | None = Field(
+        default=None,
+        description="Résumé de la validation TestPilotAI.",
+    )
+    export_manifest: dict | None = Field(
+        default=None,
+        description="Manifeste de déploiement universel ExportAI.",
+    )
+    production_url: str | None = Field(
+        default=None,
+        description="URL de production (Cloudflare ou Railway).",
+    )
+    export_provider: str | None = Field(
+        default=None,
+        description="cloudflare | railway",
+    )
+    github_export_url: str | None = Field(default=None)
+    demo_token: str | None = Field(default=None)
+    demo_password: str | None = Field(default=None)
+    unlock_url: str | None = Field(default=None)
 
 
 class CoreMindAgent(BaseAgent):

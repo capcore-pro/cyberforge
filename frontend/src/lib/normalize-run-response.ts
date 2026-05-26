@@ -86,9 +86,63 @@ export function normalizeRunResponse(
     preview_html = code.trim();
   }
 
+  const vision_screenshot_url =
+    typeof raw.vision_screenshot_url === "string" && raw.vision_screenshot_url.trim()
+      ? raw.vision_screenshot_url.trim()
+      : null;
+  const vision_preview_source =
+    raw.vision_preview_source === "replicate" || raw.vision_preview_source === "local"
+      ? raw.vision_preview_source
+      : null;
+
+  const validation_status =
+    raw.validation_status === "validated" || raw.validation_status === "corrected"
+      ? raw.validation_status
+      : null;
+  const testpilot_passed =
+    typeof raw.testpilot_passed === "boolean" ? raw.testpilot_passed : null;
+  const testpilot_summary =
+    typeof raw.testpilot_summary === "string" ? raw.testpilot_summary : null;
+  const production_url =
+    typeof raw.production_url === "string" && raw.production_url.trim()
+      ? raw.production_url.trim()
+      : null;
+  const export_provider =
+    raw.export_provider === "cloudflare" || raw.export_provider === "railway"
+      ? raw.export_provider
+      : null;
+  const github_export_url =
+    typeof raw.github_export_url === "string" && raw.github_export_url.trim()
+      ? raw.github_export_url.trim()
+      : null;
+  const unlock_url =
+    typeof raw.unlock_url === "string" && raw.unlock_url.trim()
+      ? raw.unlock_url.trim()
+      : null;
+  const demo_token =
+    typeof raw.demo_token === "string" ? raw.demo_token : null;
+  const demo_password =
+    typeof raw.demo_password === "string" ? raw.demo_password : null;
+  const export_manifest =
+    raw.export_manifest && typeof raw.export_manifest === "object"
+      ? (raw.export_manifest as Record<string, unknown>)
+      : null;
+
   return {
     ...raw,
     preview_html,
+    vision_screenshot_url,
+    vision_preview_source,
+    validation_status,
+    testpilot_passed,
+    testpilot_summary,
+    production_url,
+    export_provider,
+    github_export_url,
+    unlock_url,
+    demo_token,
+    demo_password,
+    export_manifest,
     analysis,
     generation: {
       ...generation,

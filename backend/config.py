@@ -96,6 +96,28 @@ class Settings(BaseSettings):
         default=4096, alias="BUILDER_MAX_OUTPUT_TOKENS"
     )
 
+    replicate_api_key: SecretStr | None = Field(default=None, alias="REPLICATE_API_KEY")
+    replicate_html_model: str | None = Field(
+        default=None, alias="REPLICATE_HTML_MODEL"
+    )
+    vision_screenshot_width: int = Field(default=1280, alias="VISION_SCREENSHOT_WIDTH")
+    vision_screenshot_height: int = Field(default=720, alias="VISION_SCREENSHOT_HEIGHT")
+    vision_html_max_chars: int = Field(default=120_000, alias="VISION_HTML_MAX_CHARS")
+    vision_replicate_timeout_seconds: float = Field(
+        default=90.0, alias="VISION_REPLICATE_TIMEOUT_SECONDS"
+    )
+    vision_replicate_poll_seconds: float = Field(
+        default=1.5, alias="VISION_REPLICATE_POLL_SECONDS"
+    )
+
+    railway_api_key: SecretStr | None = Field(default=None, alias="RAILWAY_API_KEY")
+    github_token: SecretStr | None = Field(default=None, alias="GITHUB_TOKEN")
+    github_repo: str | None = Field(
+        default=None,
+        description="owner/repo optionnel pour push de branche",
+        alias="GITHUB_REPO",
+    )
+
     supabase_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("SUPABASE_URL", "supabase_url"),
@@ -154,6 +176,21 @@ class Settings(BaseSettings):
     def v0_configured(self) -> bool:
         """True si une clé v0 (Vercel) est définie."""
         return bool(plain_secret_str(self.v0_api_key))
+
+    @property
+    def replicate_configured(self) -> bool:
+        """True si Replicate est configuré pour VisionUI."""
+        return bool(plain_secret_str(self.replicate_api_key))
+
+    @property
+    def railway_configured(self) -> bool:
+        """True si Railway est configuré pour ExportAI."""
+        return bool(plain_secret_str(self.railway_api_key))
+
+    @property
+    def github_configured(self) -> bool:
+        """True si un token GitHub est configuré pour ExportAI."""
+        return bool(plain_secret_str(self.github_token))
 
     @property
     def cloudflare_configured(self) -> bool:

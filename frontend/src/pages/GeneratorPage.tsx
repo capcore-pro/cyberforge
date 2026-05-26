@@ -10,6 +10,9 @@ import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
 import { PipelineProgress, initialPipelineSteps } from "@/components/PipelineProgress";
+import { VisionUIPreview } from "@/components/VisionUIPreview";
+import { TestPilotValidationBadge } from "@/components/TestPilotValidationBadge";
+import { ExportProductionCard } from "@/components/ExportProductionCard";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   pipelineStreamErrorMessage,
@@ -112,6 +115,17 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     lastSavedId,
     cloudSaved,
     pipelineSteps,
+    visionScreenshotUrl,
+    visionPreviewSource,
+    visionMessage,
+    validationStatus,
+    validationSummary,
+    testpilotPassed,
+    productionUrl,
+    exportProvider,
+    unlockUrl,
+    demoPassword,
+    githubExportUrl,
     patch,
     applyPipelineStep,
   } = useGeneratorSession();
@@ -292,11 +306,50 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       customization: null,
       livePreviewHtml: null,
       pipelineSteps: initialPipelineSteps(),
+      visionScreenshotUrl: null,
+      visionPreviewSource: null,
+      visionMessage: null,
+      validationStatus: null,
+      validationSummary: null,
+      testpilotPassed: null,
+      productionUrl: null,
+      exportProvider: null,
+      unlockUrl: null,
+      demoPassword: null,
+      githubExportUrl: null,
     });
 
     const onStep = (event: PipelineStepEvent) => {
       applyPipelineStep(event);
       dispatchPipelineEvent(event);
+      if (event.type === "step_done" && event.agent === "testpilot") {
+        const status =
+          event.validation_status === "validated" ||
+          event.validation_status === "corrected"
+            ? event.validation_status
+            : null;
+        patch({
+          validationStatus: status,
+          validationSummary: event.message ?? null,
+          testpilotPassed: event.ok ?? null,
+        });
+      }
+      if (event.type === "step_done" && event.agent === "export") {
+        patch({
+          productionUrl: event.production_url ?? null,
+          exportProvider: event.export_provider ?? null,
+          unlockUrl: event.unlock_url ?? null,
+        });
+      }
+      if (event.type === "step_done" && event.agent === "visionui") {
+        const localHtml = event.vision_local_html?.trim();
+        patch({
+          visionScreenshotUrl: event.vision_screenshot_url ?? null,
+          visionPreviewSource: event.vision_preview_source ?? "local",
+          visionMessage: event.message ?? null,
+          ...(localHtml ? { livePreviewHtml: localHtml } : {}),
+        });
+      }
     };
 
     try {
@@ -343,6 +396,17 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
         ...(serverPreview?.includes("saas-shell")
           ? { previewHtml: serverPreview, livePreviewHtml: serverPreview }
           : {}),
+        visionScreenshotUrl: normalized.vision_screenshot_url ?? null,
+        visionPreviewSource: normalized.vision_preview_source ?? null,
+        visionMessage: null,
+        validationStatus: normalized.validation_status ?? null,
+        validationSummary: normalized.testpilot_summary ?? null,
+        testpilotPassed: normalized.testpilot_passed ?? null,
+        productionUrl: normalized.production_url ?? null,
+        exportProvider: normalized.export_provider ?? null,
+        unlockUrl: normalized.unlock_url ?? null,
+        demoPassword: normalized.demo_password ?? null,
+        githubExportUrl: normalized.github_export_url ?? null,
       });
     } catch (err) {
       patch({
@@ -530,8 +594,8 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
         ) : null}
         <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
           Un prompt, un type de projet : le pipeline LangGraph enchaîne ArchitectAI,
-          CoreMindAI, BugHunterAI et AutoFixAI (jusqu'à 2 corrections), avec
-          progression en temps réel.
+          les huit agents du pipeline (dont ExportAI pour le déploiement en production),
+          avec progression en temps réel.
           {isElectronPreviewAvailable()
             ? " L'aperçu visuel s'ouvre dans une fenêtre Electron (maquette HTML)."
             : " L'aperçu visuel s'affiche en maquette HTML dans une iframe."}
@@ -650,6 +714,22 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
       {result ? (
         <>
+          <ExportProductionCard
+            productionUrl={productionUrl ?? result.production_url}
+            exportProvider={exportProvider ?? result.export_provider}
+            unlockUrl={unlockUrl ?? result.unlock_url}
+            demoPassword={demoPassword ?? result.demo_password}
+            githubUrl={githubExportUrl ?? result.github_export_url}
+          />
+
+          {(validationStatus || result.validation_status) ? (
+            <TestPilotValidationBadge
+              status={validationStatus ?? result.validation_status}
+              summary={validationSummary ?? result.testpilot_summary}
+              passed={testpilotPassed ?? result.testpilot_passed}
+            />
+          ) : null}
+
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MetricTile
               label="Modèle utilisé"
@@ -785,6 +865,34 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
           </p>
           <PipelineProgress steps={pipelineSteps} />
         </section>
+      ) : null}
+
+      {isRunning && productionUrl ? (
+        <ExportProductionCard
+          productionUrl={productionUrl}
+          exportProvider={exportProvider}
+          unlockUrl={unlockUrl}
+          demoPassword={demoPassword}
+          githubUrl={githubExportUrl}
+        />
+      ) : null}
+
+      {isRunning && validationStatus ? (
+        <TestPilotValidationBadge
+          status={validationStatus}
+          summary={validationSummary}
+          passed={testpilotPassed}
+        />
+      ) : null}
+
+      {(isRunning || result) &&
+      (visionScreenshotUrl || livePreviewHtml || previewHtml) ? (
+        <VisionUIPreview
+          screenshotUrl={visionScreenshotUrl}
+          previewSource={visionPreviewSource}
+          html={livePreviewHtml ?? previewHtml ?? result?.preview_html ?? null}
+          message={visionMessage ?? undefined}
+        />
       ) : null}
 
       <GenerationHistoryPanel

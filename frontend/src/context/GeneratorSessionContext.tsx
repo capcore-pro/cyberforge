@@ -6,7 +6,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { CoreMindRunResponse, ProjectType } from "@shared/types";
+import type {
+  CoreMindRunResponse,
+  ProjectType,
+  ValidationStatus,
+  VisionPreviewSource,
+} from "@shared/types";
 import {
   applyPipelineStepEvent,
   initialPipelineSteps,
@@ -33,6 +38,17 @@ export interface GeneratorSessionState {
   lastSavedId: string | null;
   cloudSaved: boolean;
   pipelineSteps: PipelineStepState[];
+  visionScreenshotUrl: string | null;
+  visionPreviewSource: VisionPreviewSource | null;
+  visionMessage: string | null;
+  validationStatus: ValidationStatus | null;
+  validationSummary: string | null;
+  testpilotPassed: boolean | null;
+  productionUrl: string | null;
+  exportProvider: string | null;
+  unlockUrl: string | null;
+  demoPassword: string | null;
+  githubExportUrl: string | null;
 }
 
 const initialSession = (): GeneratorSessionState => ({
@@ -51,6 +67,17 @@ const initialSession = (): GeneratorSessionState => ({
   lastSavedId: null,
   cloudSaved: false,
   pipelineSteps: initialPipelineSteps(),
+  visionScreenshotUrl: null,
+  visionPreviewSource: null,
+  visionMessage: null,
+  validationStatus: null,
+  validationSummary: null,
+  testpilotPassed: null,
+  productionUrl: null,
+  exportProvider: null,
+  unlockUrl: null,
+  demoPassword: null,
+  githubExportUrl: null,
 });
 
 interface GeneratorSessionContextValue extends GeneratorSessionState {

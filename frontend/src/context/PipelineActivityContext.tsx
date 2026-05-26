@@ -14,8 +14,11 @@ const PIPELINE_AGENT_IDS: PipelineAgentId[] = [
   "architect",
   "builder",
   "coremind",
+  "visionui",
   "bughunter",
   "autofix",
+  "testpilot",
+  "export",
 ];
 
 type PipelineStatusMap = Record<string, AgentRuntimeStatus>;

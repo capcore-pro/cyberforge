@@ -13,6 +13,7 @@ const DEFAULT_STEPS: PipelineStepState[] = [
   { id: "architect", label: "ArchitectAI", status: "pending" },
   { id: "builder", label: "BuilderAI", status: "pending" },
   { id: "coremind", label: "CoreMindAI", status: "pending" },
+  { id: "visionui", label: "VisionUI", status: "pending" },
   { id: "bughunter", label: "BugHunterAI", status: "pending" },
 ];
 
@@ -41,10 +42,19 @@ export function applyPipelineStepEvent(
 
   let next = [...steps];
   const idx = next.findIndex((s) => s.id === agent);
-  if (idx < 0 && agent === "autofix") {
+  if (
+    idx < 0 &&
+    (agent === "autofix" || agent === "testpilot" || agent === "export")
+  ) {
+    const label =
+      agent === "autofix"
+        ? "AutoFixAI"
+        : agent === "testpilot"
+          ? "TestPilotAI"
+          : "ExportAI";
     next = [
       ...next,
-      { id: "autofix", label: "AutoFixAI", status: "pending" as const },
+      { id: agent, label, status: "pending" as const },
     ];
   }
 

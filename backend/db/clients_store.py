@@ -10,6 +10,7 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, Field
 
+from db.demo_types import MANUAL_DEMO_STATUSES, DemoStatusSlug
 from db.supabase_store import (
     SupabaseStore,
     SupabaseStoreError,
@@ -18,10 +19,7 @@ from db.supabase_store import (
     get_supabase_store,
 )
 
-DemoStatusSlug = Literal["envoyee", "ouverte", "validee", "expiree"]
 ClientKind = Literal["client", "perso"]
-
-MANUAL_DEMO_STATUSES: frozenset[DemoStatusSlug] = frozenset({"validee", "expiree"})
 
 
 class ClientRow(BaseModel):

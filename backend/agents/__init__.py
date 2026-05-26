@@ -5,7 +5,6 @@ from agents.auto_fix_agent import AutoFixAgent
 from agents.base_agent import BaseAgent
 from agents.bug_hunter_agent import BugHunterAgent, BugHuntReport, BugIssue
 from agents.coremind_agent import CoreMindAgent, DemoPipelineSummary
-from agents.pipeline_graph import run_generation_pipeline
 
 __all__ = [
     "ArchitectAgent",
@@ -17,5 +16,4 @@ __all__ = [
     "BugIssue",
     "CoreMindAgent",
     "DemoPipelineSummary",
-    "run_generation_pipeline",
 ]

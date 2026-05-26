@@ -157,9 +157,18 @@ export type PipelineAgentId =
   | "architect"
   | "builder"
   | "coremind"
+  | "visionui"
   | "bughunter"
   | "autofix"
+  | "testpilot"
+  | "export"
   | "finalize";
+
+export type ExportProvider = "cloudflare" | "railway";
+
+export type ValidationStatus = "validated" | "corrected";
+
+export type VisionPreviewSource = "replicate" | "local";
 
 export type PipelineStepPhase = "start" | "done" | "error";
 
@@ -172,6 +181,18 @@ export interface PipelineStepEvent {
   ok?: boolean;
   template?: string;
   loop?: number;
+  vision_screenshot_url?: string | null;
+  vision_preview_source?: VisionPreviewSource | null;
+  vision_local_html?: string | null;
+  validation_status?: ValidationStatus | null;
+  validation_badge?: string | null;
+  testpilot_passed?: boolean | null;
+  production_url?: string | null;
+  export_provider?: ExportProvider | string | null;
+  github_export_url?: string | null;
+  unlock_url?: string | null;
+  demo_token?: string | null;
+  demo_password?: string | null;
 }
 
 /** Réponse POST /api/agents/coremind/run — flow complet */
@@ -184,6 +205,19 @@ export interface CoreMindRunResponse {
   demo_pipeline?: DemoPipelineSummary | null;
   /** HTML aperçu serveur (aligné sur le livrable corrigé) */
   preview_html?: string | null;
+  /** Capture VisionUI (Replicate ou placeholder local) */
+  vision_screenshot_url?: string | null;
+  vision_preview_source?: VisionPreviewSource | null;
+  testpilot_passed?: boolean | null;
+  validation_status?: ValidationStatus | null;
+  testpilot_summary?: string | null;
+  export_manifest?: Record<string, unknown> | null;
+  production_url?: string | null;
+  export_provider?: ExportProvider | string | null;
+  github_export_url?: string | null;
+  demo_token?: string | null;
+  demo_password?: string | null;
+  unlock_url?: string | null;
 }
 
 /** Projet enregistré dans Supabase */

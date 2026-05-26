@@ -267,7 +267,7 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
               label="Agents pipeline"
               value={`${activeCount} / ${totalAgents}`}
               sub="LangGraph · ACTIF permanent"
-              highlight={activeCount >= 5}
+              highlight={activeCount >= 8}
             />
           </div>
         </div>
@@ -286,7 +286,7 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
               {activeCount} / {totalAgents} agents ACTIF via le pipeline LangGraph
               {pipelineRunning
                 ? " — génération en cours sur le Générateur (SSE)"
-                : " — ArchitectAI, BuilderAI, CoreMindAI, BugHunterAI, AutoFixAI opérationnels"}
+                : " — pipeline LangGraph complet (7 agents) opérationnel"}
             </p>
           </div>
         </div>

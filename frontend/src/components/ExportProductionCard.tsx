@@ -1,0 +1,86 @@
+interface ExportProductionCardProps {
+  productionUrl: string | null | undefined;
+  exportProvider?: string | null;
+  unlockUrl?: string | null;
+  demoPassword?: string | null;
+  githubUrl?: string | null;
+}
+
+/**
+ * URL de production ExportAI — ouvrir la démo ou préparer l'envoi client.
+ */
+export function ExportProductionCard({
+  productionUrl,
+  exportProvider,
+  unlockUrl,
+  demoPassword,
+  githubUrl,
+}: ExportProductionCardProps) {
+  if (!productionUrl?.trim()) {
+    return null;
+  }
+
+  const openUrl = productionUrl.trim();
+  const clientUrl = unlockUrl?.trim() || openUrl;
+
+  const mailSubject = encodeURIComponent("Votre démo CyberForge");
+  const mailLines = [
+    "Bonjour,",
+    "",
+    "Voici votre démo en ligne :",
+    clientUrl,
+  ];
+  if (demoPassword) {
+    mailLines.push("", `Mot de passe : ${demoPassword}`);
+  }
+  const mailBody = encodeURIComponent(mailLines.join("\n"));
+  const mailto = `mailto:?subject=${mailSubject}&body=${mailBody}`;
+
+  return (
+    <section
+      className="cyber-panel space-y-4 border-cyber-neon/30 p-5"
+      aria-label="Déploiement ExportAI"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-violet">
+          Production
+        </h3>
+        {exportProvider ? (
+          <span className="rounded border border-cyber-accent/30 bg-cyber-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-cyber-neon">
+            {exportProvider}
+          </span>
+        ) : null}
+      </div>
+      <p className="break-all font-mono text-sm text-cyber-neon">{openUrl}</p>
+      {demoPassword ? (
+        <p className="text-xs text-cyber-muted">
+          Mot de passe démo :{" "}
+          <span className="font-mono text-cyber-text">{demoPassword}</span>
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <a
+          href={openUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="cyber-action-btn cyber-action-btn-primary"
+        >
+          Ouvrir
+        </a>
+        <a href={mailto} className="cyber-action-btn">
+          Envoyer au client
+        </a>
+        {githubUrl ? (
+          <a
+            href={githubUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="cyber-action-btn"
+          >
+            Code source
+          </a>
+        ) : null}
+      </div>
+    </section>
+  );
+}

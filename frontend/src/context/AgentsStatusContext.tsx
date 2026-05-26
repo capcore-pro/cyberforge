@@ -31,8 +31,11 @@ const PIPELINE_AGENT_IDS = [
   "architect",
   "builder",
   "coremind",
+  "visionui",
   "bughunter",
   "autofix",
+  "testpilot",
+  "export",
 ] as const;
 
 const AGENT_CATALOG: { id: string; name: string; description: string }[] = [

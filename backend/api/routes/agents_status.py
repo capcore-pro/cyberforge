@@ -11,8 +11,11 @@ PIPELINE_AGENT_IDS: tuple[str, ...] = (
     "architect",
     "builder",
     "coremind",
+    "visionui",
     "bughunter",
     "autofix",
+    "testpilot",
+    "export",
 )
 
 TOTAL_AGENTS = 8
@@ -47,8 +50,7 @@ class AgentsStatusResponse(BaseModel):
 @router.get("/agents/status", response_model=AgentsStatusResponse)
 async def get_agents_status() -> AgentsStatusResponse:
     """
-    Les cinq agents du pipeline LangGraph sont toujours opérationnels (ACTIF).
-    Les trois autres restent en standby jusqu'à intégration future.
+    Les huit agents du pipeline LangGraph sont toujours opérationnels (ACTIF).
     """
     pipeline_set = set(PIPELINE_AGENT_IDS)
     agents: list[AgentStatusItem] = []
