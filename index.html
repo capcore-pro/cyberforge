@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Type de projet cible : Site web.</title>
+  <!-- cf-preview:v4-premium cf-premium-dashboard -->
+  <style>
+
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #e2e8f0;
+      background: #0b0f1a;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: #22d3ee; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .cf-shell { min-height: 100vh; width: 100%; max-width: 100vw; overflow-x: hidden; }
+    .cf-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+      padding: 0.55rem 1.1rem; border-radius: 10px; font-weight: 600; font-size: 0.875rem;
+      border: none; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .cf-btn-primary {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff; box-shadow: 0 4px 18px rgba(99,102,241,0.4);
+    }
+    .cf-btn-primary:hover { transform: translateY(-1px); }
+    .cf-btn-ghost {
+      background: rgba(255,255,255,0.06); color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .cf-card {
+      background: rgba(15,23,42,0.75);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 1.25rem;
+    }
+    .cf-logo {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: linear-gradient(135deg, #6366f1, #22d3ee);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.75rem; color: #fff;
+    }
+    @media (min-width: 900px) {
+      .cf-menu-btn { display: none !important; }
+      .cf-sidebar { transform: translateX(0) !important; display: flex !important; }
+      .cf-sidebar-backdrop { display: none !important; }
+      .cf-with-sidebar .cf-main { margin-left: min(260px, 28vw); }
+    }
+
+    .cf-with-sidebar .cf-sidebar {
+      display: none; position: fixed; left: 0; top: 0; bottom: 0; width: min(240px, 85vw);
+      background: #111827; border-right: 1px solid rgba(255,255,255,0.06);
+      padding: 1rem 0; transform: translateX(-100%); z-index: 50;
+    }
+    .cf-shell.cf-nav-open .cf-sidebar { display: block; transform: translateX(0); }
+    .cf-sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 40; }
+    .cf-shell.cf-nav-open .cf-sidebar-backdrop { display: block; }
+    .cf-menu-btn {
+      display: flex; width: 40px; height: 40px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05);
+      color: #fff; cursor: pointer;
+    }
+    .cf-topbar {
+      display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .cf-kpi-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem;
+      padding: 1rem;
+    }
+    @media (min-width: 700px) { .cf-kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+    .cf-kpi-value { font-size: 1.5rem; font-weight: 700; color: #f8fafc; }
+    .cf-kpi-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; }
+    .cf-kpi-trend { font-size: 0.75rem; color: #4ade80; margin-top: 0.25rem; }
+    .cf-chart-wrap { padding: 0 1rem 1rem; }
+    .cf-chart {
+      height: 200px; display: flex; align-items: flex-end; gap: 0.5rem;
+      padding: 1rem; background: rgba(15,23,42,0.6); border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .cf-bar {
+      flex: 1; background: linear-gradient(180deg, #6366f1, #4338ca);
+      border-radius: 6px 6px 0 0; min-width: 12px;
+    }
+    .cf-table-wrap { padding: 0 1rem 2rem; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { padding: 0.65rem 0.75rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    th { color: #64748b; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; }
+  </style>
+</head>
+<body class="cf-premium-dashboard">
+  <div class="cf-shell cf-with-sidebar" id="cf-shell">
+    <div class="cf-sidebar-backdrop"></div>
+    <aside class="cf-sidebar">
+      <div style="padding:0 1rem 1rem;display:flex;gap:0.75rem;align-items:center;">
+        <div class="cf-logo">AM</div>
+        <div><div style="font-weight:700;">Agence Pro</div><div style="font-size:0.7rem;color:#64748b;">Dashboard analytics Pro</div></div>
+      </div>
+    </aside>
+    <div class="cf-main">
+      <header class="cf-topbar">
+        <button type="button" class="cf-menu-btn" aria-label="Menu">☰</button>
+        <div style="flex:1;">
+          <div style="font-weight:600;">Type de projet cible : Site web.</div>
+          <div style="font-size:0.75rem;color:#64748b;">Visualisez vos KPIs en temps réel avec Agence Pro.</div>
+        </div>
+        <span style="font-size:0.8rem;">Alex Martin · Utilisateur</span>
+      </header>
+      <div class="cf-kpi-grid">
+        <div class="cf-card"><div class="cf-kpi-label">CA mensuel</div>
+          <div class="cf-kpi-value">128 450 €</div>
+          <div class="cf-kpi-trend" style="color:#4ade80;">+14,2 %</div></div>
+        <div class="cf-card"><div class="cf-kpi-label">Commandes</div>
+          <div class="cf-kpi-value">1 284</div>
+          <div class="cf-kpi-trend" style="color:#4ade80;">+9,8 %</div></div>
+        <div class="cf-card"><div class="cf-kpi-label">Panier moyen</div>
+          <div class="cf-kpi-value">96,40 €</div>
+          <div class="cf-kpi-trend" style="color:#4ade80;">+3,1 %</div></div>
+        <div class="cf-card"><div class="cf-kpi-label">Marge brute</div>
+          <div class="cf-kpi-value">38,6 %</div>
+          <div class="cf-kpi-trend" style="color:#94a3b8;">-0,4 pt</div></div>
+      </div>
+      <div class="cf-chart-wrap">
+        <h3 style="margin:0 0 0.75rem;padding:0 0.25rem;font-size:0.9rem;color:#f8fafc;">Chiffre d'affaires — 6 derniers mois</h3>
+        <div class="cf-chart" role="img" aria-label="Graphique ventes">
+          <div class="cf-bar" style="height:42%" title="Jan"></div>
+          <div class="cf-bar" style="height:55%" title="Fév"></div>
+          <div class="cf-bar" style="height:48%" title="Mar"></div>
+          <div class="cf-bar" style="height:72%" title="Avr"></div>
+          <div class="cf-bar" style="height:68%" title="Mai"></div>
+          <div class="cf-bar" style="height:88%" title="Juin"></div>
+        </div>
+      </div>
+      <div class="cf-table-wrap">
+        <h3 style="margin:0 0 0.75rem;font-size:0.9rem;color:#f8fafc;">Performance par secteur</h3>
+        <table>
+          <thead><tr><th>Secteur</th><th>CA</th><th>Croissance</th><th>Part</th></tr></thead>
+          <tbody>
+            <tr><td>Retail &amp; e-commerce</td>
+              <td>42 100 €</td>
+              <td style="color:#4ade80;">+18 %</td>
+              <td>33 %</td></tr>
+            <tr><td>Santé &amp; pharma</td>
+              <td>31 800 €</td>
+              <td style="color:#4ade80;">+11 %</td>
+              <td>25 %</td></tr>
+            <tr><td>BTP &amp; industrie</td>
+              <td>28 200 €</td>
+              <td style="color:#4ade80;">+6 %</td>
+              <td>22 %</td></tr>
+            <tr><td>Services B2B</td>
+              <td>26 350 €</td>
+              <td style="color:#4ade80;">+21 %</td>
+              <td>20 %</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function() {
+    var shell = document.getElementById("cf-shell");
+    if (!shell) return;
+    var btn = shell.querySelector(".cf-menu-btn");
+    var backdrop = shell.querySelector(".cf-sidebar-backdrop");
+    function close() { shell.classList.remove("cf-nav-open"); }
+    function toggle() { shell.classList.toggle("cf-nav-open"); }
+    if (btn) btn.addEventListener("click", toggle);
+    if (backdrop) backdrop.addEventListener("click", close);
+  })();
+</script>
+</body>
+</html>
