@@ -44,9 +44,8 @@ class ProjectType(str, Enum):
 
 
 class RecommendedTool(str, Enum):
-    BOLT = "bolt.new"
-    LOVABLE = "lovable"
     V0 = "v0"
+    DEEPSEEK = "deepseek"
 
 
 class ComplexityLevel(str, Enum):
@@ -152,27 +151,23 @@ _TYPE_KEYWORDS: dict[ProjectType, tuple[str, ...]] = {
 _TOOL_BY_TYPE: dict[ProjectType, RecommendedTool] = {
     ProjectType.SITE_WEB: RecommendedTool.V0,
     ProjectType.LANDING_PAGE: RecommendedTool.V0,
-    ProjectType.APPLICATION_WEB: RecommendedTool.LOVABLE,
-    ProjectType.APPLICATION_MOBILE: RecommendedTool.BOLT,
-    ProjectType.EXTENSION_NAVIGATEUR: RecommendedTool.BOLT,
-    ProjectType.API_BACKEND: RecommendedTool.BOLT,
-    ProjectType.APPLICATION_DESKTOP: RecommendedTool.BOLT,
-    ProjectType.SAAS_DASHBOARD: RecommendedTool.LOVABLE,
-    ProjectType.PROJET_GENERIQUE: RecommendedTool.LOVABLE,
+    ProjectType.APPLICATION_WEB: RecommendedTool.V0,
+    ProjectType.APPLICATION_MOBILE: RecommendedTool.DEEPSEEK,
+    ProjectType.EXTENSION_NAVIGATEUR: RecommendedTool.DEEPSEEK,
+    ProjectType.API_BACKEND: RecommendedTool.DEEPSEEK,
+    ProjectType.APPLICATION_DESKTOP: RecommendedTool.DEEPSEEK,
+    ProjectType.SAAS_DASHBOARD: RecommendedTool.V0,
+    ProjectType.PROJET_GENERIQUE: RecommendedTool.V0,
 }
 
 _TOOL_RATIONALE: dict[RecommendedTool, str] = {
     RecommendedTool.V0: (
-        "v0 excelle sur les interfaces React/Tailwind et les landings "
-        "visuellement soignées avec itération rapide sur le design."
+        "v0 by Vercel excelle sur les interfaces React/Next.js/Tailwind "
+        "et les landings visuellement soignées."
     ),
-    RecommendedTool.LOVABLE: (
-        "Lovable est adapté aux applications React complètes, aux flux "
-        "multi-écrans et aux produits SaaS avec logique métier."
-    ),
-    RecommendedTool.BOLT: (
-        "Bolt.new convient aux prototypes full-stack, backends, extensions "
-        "et projets nécessitant une stack intégrée rapidement."
+    RecommendedTool.DEEPSEEK: (
+        "DeepSeek est le moteur principal pour le code backend, les APIs "
+        "et la logique métier complexe (BuilderAI)."
     ),
 }
 
@@ -450,7 +445,7 @@ def _select_tool(text: str, project_type: ProjectType) -> RecommendedTool:
         ProjectType.SAAS_DASHBOARD,
         ProjectType.PROJET_GENERIQUE,
     ):
-        return RecommendedTool.BOLT
+        return RecommendedTool.DEEPSEEK
 
     return tool
 
@@ -492,13 +487,9 @@ def _build_next_steps(
         steps.append(
             "Itérer sur les maquettes UI (composants, palette néon/sombre) avant d'ajouter la logique."
         )
-    elif tool == RecommendedTool.LOVABLE:
+    elif tool == RecommendedTool.DEEPSEEK:
         steps.append(
-            "Définir les écrans principaux et les flux utilisateur dans Lovable, puis connecter les données."
-        )
-    else:
-        steps.append(
-            "Générer le socle code via CoreMindAI (Claude), puis valider le schéma de données."
+            "Générer le socle backend via BuilderAI (DeepSeek), puis valider le schéma de données."
         )
 
     if complexity == ComplexityLevel.ELEVEE:

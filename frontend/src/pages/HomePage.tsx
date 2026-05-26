@@ -153,8 +153,18 @@ interface HomePageProps {
  */
 export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
   const { status: backendStatus, health } = useBackendHealth();
-  const { getAgentStatus, activeCount, totalAgents } = useAgentsStatus();
-  const { pipelineRunning } = usePipelineActivity();
+  const { getAgentStatus: getCatalogAgentStatus, activeCount, totalAgents } =
+    useAgentsStatus();
+  const { pipelineRunning, getAgentStatus: getPipelineAgentStatus } =
+    usePipelineActivity();
+
+  const resolveAgentStatus = (agentId: string): AgentDisplayStatus => {
+    if (pipelineRunning) {
+      const runtime = getPipelineAgentStatus(agentId);
+      if (runtime === "active") return "active";
+    }
+    return getCatalogAgentStatus(agentId);
+  };
 
   const apiBaseUrl =
     import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
@@ -257,7 +267,7 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
               label="Agents pipeline"
               value={`${activeCount} / ${totalAgents}`}
               sub="LangGraph · ACTIF permanent"
-              highlight={activeCount >= 4}
+              highlight={activeCount >= 5}
             />
           </div>
         </div>
@@ -275,8 +285,8 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
             <p className="mt-1 text-xs text-cyber-muted">
               {activeCount} / {totalAgents} agents ACTIF via le pipeline LangGraph
               {pipelineRunning
-                ? " — génération en cours sur le Générateur"
-                : " — ArchitectAI, CoreMindAI, BugHunterAI, AutoFixAI toujours opérationnels"}
+                ? " — génération en cours sur le Générateur (SSE)"
+                : " — ArchitectAI, BuilderAI, CoreMindAI, BugHunterAI, AutoFixAI opérationnels"}
             </p>
           </div>
         </div>
@@ -285,7 +295,7 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
             <AgentCard
               key={agent.id}
               agent={agent}
-              runtimeStatus={getAgentStatus(agent.id)}
+              runtimeStatus={resolveAgentStatus(agent.id)}
             />
           ))}
         </div>

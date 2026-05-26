@@ -1,7 +1,25 @@
-"""Tests du routage LangGraph (BugHunter → AutoFix, max 2 boucles)."""
+"""Tests du routage LangGraph (BuilderAI, BugHunter → AutoFix)."""
 
 from agents.bug_hunter_agent import BugHuntReport, BugIssue
-from agents.pipeline_graph import MAX_AUTOFIX_LOOPS, _route_after_bughunter
+from agents.pipeline_graph import (
+    MAX_AUTOFIX_LOOPS,
+    _route_after_builder,
+    _route_after_bughunter,
+)
+
+
+def test_route_builder_fallback_to_coremind() -> None:
+    assert _route_after_builder({"builder_fallback": True}) == "coremind"
+
+
+def test_route_builder_success_skips_coremind() -> None:
+    assert (
+        _route_after_builder(
+            {"builder_fallback": False, "generation": object()},
+        )
+        == "bughunter"
+    )
+
 
 
 def test_route_ok_skips_autofix() -> None:

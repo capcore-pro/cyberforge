@@ -86,6 +86,16 @@ class Settings(BaseSettings):
         default=2, alias="COREMIND_MAX_PROVIDER_ATTEMPTS"
     )
 
+    v0_api_key: SecretStr | None = Field(default=None, alias="V0_API_KEY")
+    v0_api_base_url: str | None = Field(default=None, alias="V0_API_BASE_URL")
+    v0_model: str | None = Field(default=None, alias="V0_MODEL")
+    builder_http_timeout_seconds: float = Field(
+        default=45.0, alias="BUILDER_HTTP_TIMEOUT_SECONDS"
+    )
+    builder_max_output_tokens: int = Field(
+        default=4096, alias="BUILDER_MAX_OUTPUT_TOKENS"
+    )
+
     supabase_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("SUPABASE_URL", "supabase_url"),
@@ -139,6 +149,11 @@ class Settings(BaseSettings):
         if origins:
             return origins[0].rstrip("/")
         return "http://localhost:5173"
+
+    @property
+    def v0_configured(self) -> bool:
+        """True si une clé v0 (Vercel) est définie."""
+        return bool(plain_secret_str(self.v0_api_key))
 
     @property
     def cloudflare_configured(self) -> bool:

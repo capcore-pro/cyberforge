@@ -47,7 +47,7 @@ export type ProjectType =
   | "projet_generique";
 
 /** Outils de génération recommandés */
-export type RecommendedTool = "bolt.new" | "lovable" | "v0";
+export type RecommendedTool = "v0" | "deepseek";
 
 /** Niveau de complexité estimé */
 export type ComplexityLevel = "faible" | "moyenne" | "elevee";
@@ -155,6 +155,7 @@ export interface DemoPipelineSummary {
 /** Identifiants des agents du pipeline LangGraph */
 export type PipelineAgentId =
   | "architect"
+  | "builder"
   | "coremind"
   | "bughunter"
   | "autofix"

@@ -18,8 +18,8 @@ async def test_analyze_saas_dashboard() -> None:
     )
     assert result.project_type == ProjectType.SAAS_DASHBOARD
     assert result.recommended_tool in (
-        RecommendedTool.LOVABLE,
-        RecommendedTool.BOLT,
+        RecommendedTool.V0,
+        RecommendedTool.DEEPSEEK,
     )
     assert result.complexity in (
         ComplexityLevel.MOYENNE,

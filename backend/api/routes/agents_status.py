@@ -9,6 +9,7 @@ router = APIRouter(tags=["agents"])
 
 PIPELINE_AGENT_IDS: tuple[str, ...] = (
     "architect",
+    "builder",
     "coremind",
     "bughunter",
     "autofix",
@@ -46,8 +47,8 @@ class AgentsStatusResponse(BaseModel):
 @router.get("/agents/status", response_model=AgentsStatusResponse)
 async def get_agents_status() -> AgentsStatusResponse:
     """
-    Les quatre agents du pipeline LangGraph sont toujours opérationnels (ACTIF).
-    Les quatre autres restent en standby jusqu'à intégration future.
+    Les cinq agents du pipeline LangGraph sont toujours opérationnels (ACTIF).
+    Les trois autres restent en standby jusqu'à intégration future.
     """
     pipeline_set = set(PIPELINE_AGENT_IDS)
     agents: list[AgentStatusItem] = []

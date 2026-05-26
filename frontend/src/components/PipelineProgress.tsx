@@ -11,6 +11,7 @@ export interface PipelineStepState {
 
 const DEFAULT_STEPS: PipelineStepState[] = [
   { id: "architect", label: "ArchitectAI", status: "pending" },
+  { id: "builder", label: "BuilderAI", status: "pending" },
   { id: "coremind", label: "CoreMindAI", status: "pending" },
   { id: "bughunter", label: "BugHunterAI", status: "pending" },
 ];

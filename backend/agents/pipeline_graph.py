@@ -1,5 +1,6 @@
 """
-Pipeline LangGraph — ArchitectAI → CoreMindAI → BugHunterAI → AutoFixAI (max 2 boucles).
+Pipeline LangGraph — ArchitectAI → BuilderAI → CoreMindAI → BugHunterAI → AutoFixAI.
+BuilderAI tente v0 (UI) ou DeepSeek (code complexe) ; en échec, CoreMindAI reprend.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from typing import Any, Awaitable, Callable, TypedDict
 from langgraph.graph import END, StateGraph
 
 from agents.architect_agent import ArchitectAgent, ArchitectPlan
+from agents.builder_agent import BuilderAgent, BuilderProvider
 from agents.auto_fix_agent import AutoFixAgent
 from agents.bug_hunter_agent import BugHunterAgent, BugHuntReport
 from agents.coremind_agent import (
@@ -42,6 +44,7 @@ PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 AGENT_LABELS: dict[str, str] = {
     "architect": "ArchitectAI",
+    "builder": "BuilderAI",
     "coremind": "CoreMindAI",
     "bughunter": "BugHunterAI",
     "autofix": "AutoFixAI",
@@ -54,6 +57,8 @@ class PipelineState(TypedDict, total=False):
     project_type_hint: ProjectType | None
     architect_plan: ArchitectPlan | None
     analysis: CoreMindAnalysis | None
+    builder_provider: str | None
+    builder_fallback: bool
     generation: Any
     preview_html: str | None
     bug_report: BugHuntReport | None
@@ -135,6 +140,71 @@ async def architect_node(
     }
 
 
+async def builder_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    plan = state.get("architect_plan")
+    analysis = state.get("analysis")
+    if not plan or not analysis:
+        return {"error": "État pipeline incomplet (architect_plan manquant pour BuilderAI)."}
+
+    await _step(cb, "builder", "start", "Routage v0 ou DeepSeek (ordres CoreMindAI)…")
+    settings = _settings_from_config(config)
+    agent = BuilderAgent(settings)
+    result = await agent.build(
+        state["prompt"],
+        plan=plan,
+        analysis=analysis,
+        settings=settings,
+    )
+    provider_label = (
+        "v0"
+        if result.decision.provider == BuilderProvider.V0
+        else "DeepSeek"
+    )
+
+    if result.fallback_to_coremind:
+        await _step(
+            cb,
+            "builder",
+            "done",
+            f"{provider_label} indisponible — reprise par CoreMindAI.",
+            provider=result.decision.provider.value,
+            fallback=True,
+        )
+        return {
+            "builder_provider": result.decision.provider.value,
+            "builder_fallback": True,
+        }
+
+    await _step(
+        cb,
+        "builder",
+        "done",
+        f"Génération via {provider_label} réussie.",
+        provider=result.decision.provider.value,
+        fallback=False,
+    )
+    return {
+        "builder_provider": result.decision.provider.value,
+        "builder_fallback": False,
+        "generation": result.generation,
+        "preview_html": result.preview_html,
+    }
+
+
+def _route_after_builder(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
+    if state.get("builder_fallback", True):
+        return "coremind"
+    if state.get("generation"):
+        return "bughunter"
+    return "coremind"
+
+
 async def coremind_node(
     state: PipelineState,
     config: dict[str, Any] | None = None,
@@ -144,6 +214,16 @@ async def coremind_node(
     analysis = state.get("analysis")
     if not plan or not analysis:
         return {"error": "État pipeline incomplet (architect_plan manquant)."}
+
+    if not state.get("builder_fallback", True) and state.get("generation"):
+        await _step(
+            cb,
+            "coremind",
+            "done",
+            "Génération déjà fournie par BuilderAI — étape ignorée.",
+            skipped=True,
+        )
+        return {}
 
     await _step(cb, "coremind", "start", "Génération HTML et seed adaptée au template…")
     settings = _settings_from_config(config)
@@ -382,13 +462,19 @@ def build_pipeline_graph() -> Any:
     """Compile le graphe LangGraph."""
     graph = StateGraph(PipelineState)
     graph.add_node("architect", architect_node)
+    graph.add_node("builder", builder_node)
     graph.add_node("coremind", coremind_node)
     graph.add_node("bughunter", bughunter_node)
     graph.add_node("autofix", autofix_node)
     graph.add_node("finalize", finalize_node)
 
     graph.set_entry_point("architect")
-    graph.add_edge("architect", "coremind")
+    graph.add_edge("architect", "builder")
+    graph.add_conditional_edges(
+        "builder",
+        _route_after_builder,
+        {"coremind": "coremind", "bughunter": "bughunter", "finalize": "finalize"},
+    )
     graph.add_edge("coremind", "bughunter")
     graph.add_conditional_edges(
         "bughunter",
@@ -428,6 +514,7 @@ async def run_generation_pipeline(
         "project_type_hint": project_type_hint,
         "fix_loops": 0,
         "autofix_attempts": 0,
+        "builder_fallback": True,
     }
     graph = get_compiled_pipeline()
     final = await graph.ainvoke(

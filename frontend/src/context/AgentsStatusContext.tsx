@@ -29,6 +29,7 @@ const POLL_MS = 15_000;
 
 const PIPELINE_AGENT_IDS = [
   "architect",
+  "builder",
   "coremind",
   "bughunter",
   "autofix",

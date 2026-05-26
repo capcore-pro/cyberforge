@@ -12,6 +12,7 @@ export type AgentRuntimeStatus = "standby" | "active";
 
 const PIPELINE_AGENT_IDS: PipelineAgentId[] = [
   "architect",
+  "builder",
   "coremind",
   "bughunter",
   "autofix",

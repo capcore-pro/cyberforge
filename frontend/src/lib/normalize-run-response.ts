@@ -133,9 +133,7 @@ function normalizeAnalysis(
         ? src.project_type_label
         : projectType,
     recommended_tool:
-      src.recommended_tool === "bolt.new" ||
-      src.recommended_tool === "lovable" ||
-      src.recommended_tool === "v0"
+      src.recommended_tool === "v0" || src.recommended_tool === "deepseek"
         ? src.recommended_tool
         : "v0",
     tool_rationale:
