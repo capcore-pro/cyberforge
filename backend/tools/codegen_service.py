@@ -39,7 +39,8 @@ Règles strictes :
 {"summary":"1 phrase FR","code":"…HTML complet…","files":[{"path":"index.html","content":"<!DOCTYPE html>…"}],"stack":["html","css","javascript"]}
 Le champ code = contenu de files[0]."""
 
-DEMO_SEED_SYSTEM_PROMPT = """Tu personnalises une démo SaaS CyberForge. NE GÉNÈRE AUCUN HTML, CSS, JS, React ni JSX.
+DEMO_SEED_SYSTEM_PROMPT = """Tu personnalises les données d'une démo SaaS client. NE GÉNÈRE AUCUN HTML, CSS, JS, React ni JSX.
+NE mentionne jamais CyberForge, CapCore ni un nom d'éditeur — uniquement la marque / le métier du client.
 Choisis le template le plus adapté au prompt et fournis uniquement des données seed en JSON compact :
 {"template":"taskflow","title":"titre page FR","subtitle":"sous-titre FR","brand_name":"nom produit","brand_tag":"tagline courte","user_name":"Prénom Nom","user_role":"rôle métier précis","tasks":[{"text":"tâche FR","completed":false}]}
 Templates disponibles (champ template) :
@@ -50,9 +51,10 @@ Templates disponibles (champ template) :
 - "facturation" : factures (Payée/En attente/En retard — tâches comptables)
 - "reservation" : créneaux restaurant (optionnel si réservation explicite)
 Règles :
-- Respecte le template indiqué dans le prompt (« Template premium : … ») s'il est présent.
-- 3 à 6 entrées tasks réalistes en français, adaptées au secteur du client (ex. agence marketing → campagnes, leads, ROI, clics ; immobilier → mandats, visites, biens, acheteurs).
-- brand_name, subtitle et user_role doivent refléter le métier demandé (pas de noms génériques type « Acme Corp »).
+- Utilise le « Type de projet » et la « Demande client » pour le secteur (marketing : noms de campagnes, leads, ROI, CTR, clics ; restaurant : carte, plats, réservations, couverts, chef ; immobilier : mandats, visites, biens).
+- Respecte le template indiqué (« Template premium : … » ou « Template imposé ») s'il est présent.
+- 3 à 6 tasks ultra-spécifiques au métier (jamais de tâches génériques « reporting Q2 » sans contexte).
+- brand_name = nom réel de l'entreprise demandée ; subtitle et user_role alignés sur le métier.
 - Pas de markdown, pas de texte hors JSON."""
 
 MAX_USER_PROMPT_CHARS = 2500

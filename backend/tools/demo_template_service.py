@@ -47,9 +47,11 @@ from tools.premium_seed_context import (
     contextual_invoices,
     contextual_landing_features,
     contextual_landing_testimonials,
+    contextual_reservation_bookings,
     contextual_tasks,
     detect_demo_vertical,
 )
+from tools.prompt_seed_hints import build_prompt_seed_hints, is_generic_brand
 from tools.premium_reservation_html import RESERVATION_MARKER, build_premium_reservation_html
 from tools.taskflow_template import (
     MARKER as TASKFLOW_MARKER,
@@ -111,7 +113,7 @@ def normalize_template_id(template: str) -> str:
 TEMPLATE_PROVIDER = "cyberforge"
 TEMPLATE_MODEL = "cyberforge-premium"
 
-_DEFAULT_BRAND = "CyberForge"
+_DEFAULT_BRAND = "Studio Pro"
 _DEFAULT_TAG = "Démo premium"
 _DEFAULT_USER = "Alex Martin"
 _DEFAULT_ROLE = "Utilisateur"
@@ -442,7 +444,12 @@ def _tasks_for_template(
         prompt,
         project_type_label=project_type_label,
     )
-    contextual = contextual_tasks(template, vertical=vertical, prompt=prompt)
+    contextual = contextual_tasks(
+        template,
+        vertical=vertical,
+        prompt=prompt,
+        project_type_label=project_type_label,
+    )
     if contextual:
         return contextual
     if template == TEMPLATE_RESERVATION:
@@ -642,13 +649,108 @@ def seed_from_dict(
     )
 
 
-def _reservation_bookings_from_seed(seed: DemoSeedData) -> list[dict[str, str | int]]:
-    return [dict(b) for b in RESERVATION_SLOTS]
+def _reservation_bookings_from_seed(
+    seed: DemoSeedData,
+    *,
+    vertical: str,
+    hints: object,
+) -> list[dict[str, str | int]]:
+    prompt = seed.context_prompt or seed.title
+    return contextual_reservation_bookings(
+        vertical=vertical,
+        brand_name=seed.brand_name,
+        prompt=prompt,
+        project_type_label=seed.project_type_label,
+        hints=hints,  # type: ignore[arg-type]
+    )
+
+
+def enrich_demo_seed(seed: DemoSeedData) -> DemoSeedData:
+    """
+    Ré-applique prompt + type ArchitectAI pour forcer marque, tâches et métier cohérents.
+    """
+    prompt = (seed.context_prompt or seed.title).strip()
+    label = seed.project_type_label or ""
+    hints = build_prompt_seed_hints(prompt, project_type_label=label)
+    template = normalize_template_id(seed.template)
+    detected = detect_template_from_prompt(prompt, project_type_label=label)
+    if detected != template:
+        template = detected
+
+    brand = seed.brand_name.strip()
+    if is_generic_brand(brand) or brand == _DEFAULT_BRAND:
+        brand = hints.brand_name
+
+    tasks = contextual_tasks(
+        template,
+        vertical=hints.vertical,
+        prompt=prompt,
+        project_type_label=label,
+        hints=hints,
+    )
+    if not tasks:
+        tasks = _tasks_for_template(template, prompt, project_type_label=label)
+
+    title = seed.title
+    low_title = title.lower()
+    if low_title in ("démo client", "démo cyberforge", "demo client") or len(title) < 5:
+        first = _clip(prompt.split("\n")[0] if prompt else label, 72)
+        if len(first) >= 4:
+            title = first
+
+    role = seed.user_role
+    if role == _DEFAULT_ROLE:
+        if hints.vertical == "marketing":
+            role = "Directrice marketing"
+        elif hints.vertical == "real_estate":
+            role = "Agent immobilier senior"
+        elif hints.vertical == "restaurant":
+            role = "Chef / Gérant"
+
+    subtitle = _subtitle_for_template(
+        template,
+        brand,
+        prompt=prompt,
+        project_type_label=label,
+    )
+    if (
+        seed.llm_personalized
+        and seed.subtitle
+        and "cyberforge" not in seed.subtitle.lower()
+        and hints.vertical == "generic"
+    ):
+        subtitle = seed.subtitle
+
+    return replace(
+        seed,
+        template=template,
+        title=title,
+        subtitle=subtitle,
+        brand_name=_clip(brand, 40),
+        brand_tag=(
+            seed.brand_tag
+            if template == TEMPLATE_TASKFLOW
+            else f"{TEMPLATE_LABELS.get(template, template)} Pro"
+        ),
+        user_role=_clip(role, 48),
+        tasks=tuple(tasks),
+        context_prompt=prompt,
+        project_type_label=label,
+    )
 
 
 def build_html_from_seed(seed: DemoSeedData) -> str:
     """Assemble le HTML premium selon le template choisi."""
-    vertical = _vertical_for_seed(seed)
+    seed = enrich_demo_seed(seed)
+    prompt = seed.context_prompt or seed.title
+    hints = build_prompt_seed_hints(prompt, project_type_label=seed.project_type_label)
+    vertical = hints.vertical
+    ctx = dict(
+        vertical=vertical,
+        prompt=prompt,
+        project_type_label=seed.project_type_label,
+        hints=hints,
+    )
     common = dict(
         title=seed.title,
         subtitle=seed.subtitle,
@@ -661,30 +763,33 @@ def build_html_from_seed(seed: DemoSeedData) -> str:
     if tpl == TEMPLATE_CRM:
         return build_crm_html(
             **common,
-            contacts=contextual_crm_contacts(vertical=vertical, brand_name=seed.brand_name),
-            pipeline=contextual_crm_pipeline(vertical=vertical),
+            contacts=contextual_crm_contacts(
+                brand_name=seed.brand_name,
+                **ctx,
+            ),
+            pipeline=contextual_crm_pipeline(**ctx),
         )
     if tpl == TEMPLATE_DASHBOARD:
         return build_dashboard_html(
             **common,
-            kpis=contextual_dashboard_kpis(vertical=vertical),
+            kpis=contextual_dashboard_kpis(**ctx),
             chart_bars=contextual_dashboard_chart(vertical=vertical),
-            sectors=contextual_dashboard_sectors(vertical=vertical),
+            sectors=contextual_dashboard_sectors(**ctx),
         )
     if tpl == TEMPLATE_FACTURATION:
         return build_invoice_html(
             **common,
-            invoices=contextual_invoices(vertical=vertical, brand_name=seed.brand_name),
+            invoices=contextual_invoices(brand_name=seed.brand_name, **ctx),
         )
     if tpl == TEMPLATE_RESERVATION:
         return build_premium_reservation_html(
             **common,
-            bookings=_reservation_bookings_from_seed(seed),
+            bookings=_reservation_bookings_from_seed(seed, vertical=vertical, hints=hints),
         )
     if tpl == TEMPLATE_LANDING:
         return build_landing_html(
             **common,
-            features=contextual_landing_features(vertical=vertical),
+            features=contextual_landing_features(**ctx),
             testimonials=contextual_landing_testimonials(vertical=vertical),
         )
     return build_taskflow_html(
@@ -764,7 +869,7 @@ class DemoTemplateService:
                 seed.template,
                 seed.title,
             )
-            return seed
+            return enrich_demo_seed(seed)
         try:
             data = await codegen.generate_demo_seed(
                 prompt,
@@ -794,10 +899,10 @@ class DemoTemplateService:
                 parsed.template,
                 parsed.brand_name,
             )
-            return parsed
+            return enrich_demo_seed(parsed)
         except CodeGenServiceError as exc:
             logger.warning("[DemoTemplate] seed LLM échoué — heuristique : %s", exc)
-            return seed
+            return enrich_demo_seed(seed)
 
     async def build_client_demo_generation(
         self,

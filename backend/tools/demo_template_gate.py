@@ -11,7 +11,7 @@ def build_gated_html(
     build_plain: Callable[..., str],
     password: str,
     *,
-    title: str = "Démo CyberForge",
+    title: str = "Démo client",
     **kwargs: object,
 ) -> str:
     """Enveloppe le HTML template avec wrap_with_password_gate."""

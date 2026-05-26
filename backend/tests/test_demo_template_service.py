@@ -57,7 +57,8 @@ def test_heuristic_seed_restaurant_tasks() -> None:
     )
     assert seed.template == TEMPLATE_RESERVATION
     assert "restaurant" in seed.brand_name.lower() or "Restaurant" in seed.brand_name
-    assert "Jean Dupont" in build_html_from_seed(seed)
+    html = build_html_from_seed(seed).lower()
+    assert "couvert" in html or "réservation" in html or "carte" in html or "chef" in html
 
 
 def test_crm_html_has_no_template_placeholders() -> None:
