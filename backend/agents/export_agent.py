@@ -106,7 +106,13 @@ class ExportAgent(BaseAgent):
         project_name = slugify_project_name(
             plan.project_type_label or analysis.project_type_label or "projet"
         )
-        provider = select_export_provider(plan.project_type, prompt)
+        # Phase 4 vitrines Next.js : on publie le scaffold via GitHub (puis Vercel).
+        # (Le CLI Vercel n'est pas requis : l'utilisateur connecte Vercel au repo/branche.)
+        provider = (
+            "github"
+            if generation.stack and "vitrine_next" in generation.stack
+            else select_export_provider(plan.project_type, prompt)
+        )
         files = self._collect_files(generation, preview_html)
         file_paths = list(files.keys())
 
@@ -140,7 +146,10 @@ class ExportAgent(BaseAgent):
             message = f"Démo publiée sur Cloudflare — {production_url}"
 
         try:
-            if provider == "railway" and plain_secret_str(resolved.railway_api_key):
+            if provider == "github":
+                # publication via GitHub ci-dessous (push_source_to_github)
+                message = "Sources prêtes pour Vercel (publication GitHub)…"
+            elif provider == "railway" and plain_secret_str(resolved.railway_api_key):
                 production_url, railway_id = await deploy_to_railway(
                     project_name=project_name,
                     settings=resolved,
@@ -194,6 +203,11 @@ class ExportAgent(BaseAgent):
                     env["GITHUB_URL"] = github_url
             except Exception as exc:
                 logger.warning("Export GitHub ignoré : %s", exc)
+
+        # Pour vitrine_next : la \"production\" est le repo/branch GitHub à connecter à Vercel.
+        if provider == "github" and github_url and not production_url:
+            production_url = github_url
+            message = "Sources publiées sur GitHub — connectez la branche à Vercel."
 
         domain_host = None
         if production_url:

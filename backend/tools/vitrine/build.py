@@ -15,6 +15,34 @@ from tools.vitrine.unsplash_resolver import resolve_vitrine_images
 
 logger = logging.getLogger(__name__)
 
+_TEXT_EXTENSIONS = {
+    ".ts",
+    ".tsx",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".json",
+    ".md",
+    ".css",
+    ".txt",
+    ".html",
+    ".yml",
+    ".yaml",
+    ".toml",
+    ".gitignore",
+}
+
+_BINARY_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".ico",
+    ".woff",
+    ".woff2",
+}
+
 
 @dataclass(frozen=True)
 class VitrineBuildResult:
@@ -66,13 +94,16 @@ async def build_vitrine_site(
     except Exception as exc:
         raise ScaffoldRenderError(str(exc)) from exc
 
-    site_json = scaffold.site_json_path.read_text(encoding="utf-8")
-    site_rel = "content/site.json"
-    files = [GeneratedFile(path=site_rel, content=site_json)]
+    files: list[GeneratedFile] = []
+    for rel in scaffold.files:
+        if not _is_text_asset(rel):
+            continue
+        content_text = (scaffold.output_dir / rel).read_text(encoding="utf-8")
+        files.append(GeneratedFile(path=rel, content=content_text))
 
     generation = CodeGenerateResult(
         summary=f"Site vitrine Next.js — {content.meta.businessName}",
-        code=site_json,
+        code="",
         files=files,
         stack=["nextjs", "react", "typescript", "tailwind", "vitrine_next"],
         model="vitrine-content",
@@ -93,3 +124,16 @@ async def build_vitrine_site(
         file_count=len(scaffold.files),
         images_resolved=image_stats.resolved,
     )
+
+
+def _is_text_asset(relative_path: str) -> bool:
+    lower = relative_path.lower()
+    if "node_modules" in lower or "/.next/" in lower or lower.startswith(".next/"):
+        return False
+    suffix = Path(lower).suffix
+    if suffix in _BINARY_EXTENSIONS:
+        return False
+    if suffix:
+        return suffix in _TEXT_EXTENSIONS
+    # fichiers sans extension (ex: .gitignore à la racine du template)
+    return True

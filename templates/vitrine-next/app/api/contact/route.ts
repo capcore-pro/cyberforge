@@ -29,12 +29,31 @@ export async function POST(request: Request) {
     );
   }
 
-  // Phase 4.2d : proxy vers backend CyberForge + Brevo
-  console.info("[contact] message reçu (stub)", {
-    name: parsed.data.name,
-    email: parsed.data.email,
-    messageLength: parsed.data.message.length,
+  const backendBase =
+    process.env.VITRINE_BACKEND_URL ??
+    process.env.DEMO_API_BASE_URL ??
+    "https://cyberforge-backend-production.up.railway.app";
+
+  const siteUrl =
+    request.headers.get("origin") ??
+    request.headers.get("referer") ??
+    null;
+
+  const res = await fetch(`${backendBase.replace(/\/$/, "")}/api/vitrine/contact`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...parsed.data, site: siteUrl }),
+    // avoid caching POST in edge environments
+    cache: "no-store",
   });
 
-  return NextResponse.json({ ok: true, recorded: true });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return NextResponse.json(
+      { detail: typeof payload.detail === "string" ? payload.detail : "Envoi impossible." },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({ ok: true, ...payload });
 }
