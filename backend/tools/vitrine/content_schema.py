@@ -10,6 +10,11 @@ from pydantic import BaseModel, Field, field_validator
 class UnsplashImage(BaseModel):
     url: str = Field(min_length=10)
     alt: str = Field(min_length=3)
+    imageQuery: str | None = Field(
+        default=None,
+        max_length=120,
+        description="Terme de recherche Unsplash (résolu en Phase 4.2c).",
+    )
     photographer: str | None = None
     photographerUrl: str | None = None
 

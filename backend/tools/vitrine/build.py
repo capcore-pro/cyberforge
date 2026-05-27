@@ -11,6 +11,7 @@ from tools.codegen_service import CodeGenerateResult, GeneratedFile
 from tools.vitrine.content_agent import VitrineContentAgent, VitrineContentError
 from tools.vitrine.content_schema import ClientBranding, VitrineSiteContent
 from tools.vitrine.scaffold_renderer import ScaffoldRenderError, render_vitrine_scaffold
+from tools.vitrine.unsplash_resolver import resolve_vitrine_images
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class VitrineBuildResult:
     output_dir: Path
     generation: CodeGenerateResult
     file_count: int
+    images_resolved: int = 0
 
 
 async def build_vitrine_site(
@@ -47,6 +49,15 @@ async def build_vitrine_site(
         raise
     except Exception as exc:
         raise VitrineContentError(str(exc)) from exc
+
+    content, image_stats = await resolve_vitrine_images(content, settings=resolved)
+    if image_stats.resolved:
+        logger.info(
+            "build_vitrine_site images | resolved=%s skipped=%s failed=%s",
+            image_stats.resolved,
+            image_stats.skipped,
+            image_stats.failed,
+        )
 
     try:
         scaffold = render_vitrine_scaffold(content, output_dir=output_dir)
@@ -80,4 +91,5 @@ async def build_vitrine_site(
         output_dir=scaffold.output_dir,
         generation=generation,
         file_count=len(scaffold.files),
+        images_resolved=image_stats.resolved,
     )

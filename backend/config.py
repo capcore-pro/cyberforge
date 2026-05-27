@@ -162,6 +162,16 @@ class Settings(BaseSettings):
     )
     brevo_sender_name: str = Field(default="CapCore", alias="BREVO_SENDER_NAME")
 
+    unsplash_access_key: SecretStr | None = Field(
+        default=None,
+        alias="UNSPLASH_ACCESS_KEY",
+        description="Clé API Unsplash (recherche photos vitrine Next.js).",
+    )
+    unsplash_http_timeout_seconds: float = Field(
+        default=12.0,
+        alias="UNSPLASH_HTTP_TIMEOUT_SECONDS",
+    )
+
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",
         alias="CORS_ORIGINS",
@@ -217,6 +227,11 @@ class Settings(BaseSettings):
     def github_configured(self) -> bool:
         """True si un token GitHub est configuré pour ExportAI."""
         return bool(plain_secret_str(self.github_token))
+
+    @property
+    def unsplash_configured(self) -> bool:
+        """True si l'API Unsplash est disponible pour les vitrines Next.js."""
+        return bool(plain_secret_str(self.unsplash_access_key))
 
     @property
     def cloudflare_configured(self) -> bool:

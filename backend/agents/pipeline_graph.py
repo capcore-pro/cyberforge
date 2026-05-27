@@ -369,6 +369,11 @@ async def coremind_node(
             (
                 f"Scaffold vitrine — {vitrine.content.meta.businessName} · "
                 f"{vitrine.file_count} fichier(s)"
+                + (
+                    f" · {vitrine.images_resolved} image(s) Unsplash"
+                    if vitrine.images_resolved
+                    else ""
+                )
             ),
             template="vitrine_next",
             html_bytes=len(vitrine.generation.code or ""),
