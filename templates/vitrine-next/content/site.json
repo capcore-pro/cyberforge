@@ -1,0 +1,173 @@
+{
+  "meta": {
+    "businessName": "Plomberie Dubois",
+    "tagline": "Plombier chauffagiste à Rouen — dépannage 7j/7",
+    "locale": "fr",
+    "primaryColor": "#0284c7",
+    "logoUrl": null
+  },
+  "navigation": [
+    { "label": "Accueil", "href": "/" },
+    { "label": "Services", "href": "/services" },
+    { "label": "Contact", "href": "/contact" }
+  ],
+  "home": {
+    "hero": {
+      "title": "Votre plombier de confiance à Rouen",
+      "subtitle": "Intervention rapide pour fuites, chauffe-eau, salles de bain et rénovation. Devis gratuit sous 24 h, artisans qualifiés RGE.",
+      "ctaPrimary": { "label": "Demander un devis", "href": "/contact" },
+      "ctaSecondary": { "label": "Voir nos services", "href": "/services" },
+      "image": {
+        "url": "https://images.unsplash.com/photo-1585704032915-84aefa38bccb?auto=format&fit=crop&w=1920&q=80",
+        "alt": "Plombier professionnel en intervention",
+        "photographer": "Annie Spratt",
+        "photographerUrl": "https://unsplash.com/@anniespratt"
+      }
+    },
+    "servicesPreview": [
+      {
+        "title": "Dépannage urgent",
+        "description": "Fuite d'eau, canalisation bouchée, chauffe-eau en panne — intervention sous 2 h en agglo rouennaise.",
+        "href": "/services#depannage",
+        "image": {
+          "url": "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&w=800&q=80",
+          "alt": "Outils de plomberie",
+          "photographer": "Daniele Levis Pelusi",
+          "photographerUrl": "https://unsplash.com/@madsoflen"
+        }
+      },
+      {
+        "title": "Salle de bain",
+        "description": "Création et rénovation clé en main : douche italienne, carrelage, robinetterie design.",
+        "href": "/services#salle-de-bain",
+        "image": {
+          "url": "https://images.unsplash.com/photo-1552321872-4d65aee8ce37?auto=format&fit=crop&w=800&q=80",
+          "alt": "Salle de bain moderne",
+          "photographer": "Collov Home Design",
+          "photographerUrl": "https://unsplash.com/@collov"
+        }
+      },
+      {
+        "title": "Chauffage & eau chaude",
+        "description": "Installation et entretien de chaudières, pompes à chaleur et ballons thermodynamiques.",
+        "href": "/services#chauffage",
+        "image": {
+          "url": "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80",
+          "alt": "Installation chauffage",
+          "photographer": "Screenshot",
+          "photographerUrl": "https://unsplash.com"
+        }
+      }
+    ],
+    "testimonials": [
+      {
+        "quote": "Intervention un dimanche soir pour une fuite sous l'évier — arrivée en 45 minutes, problème réglé proprement. Je recommande sans hésiter.",
+        "author": "Sophie Martin",
+        "role": "Mont-Saint-Aignan",
+        "rating": 5
+      },
+      {
+        "quote": "Rénovation complète de notre salle de bain à Saint-Sever. Devis clair, délais tenus, finitions impeccables.",
+        "author": "Marc & Julie Leroy",
+        "role": "Rouen rive droite",
+        "rating": 5
+      },
+      {
+        "quote": "Remplacement de chaudière gaz par une PAC : accompagnement pour les aides MaPrimeRénov', très pro.",
+        "author": "Philippe Garnier",
+        "role": "Sotteville-lès-Rouen",
+        "rating": 5
+      }
+    ],
+    "ctaBand": {
+      "title": "Une urgence plomberie à Rouen ?",
+      "text": "Appelez-nous ou envoyez un message — nous vous rappelons dans l'heure aux heures ouvrables.",
+      "buttonLabel": "Nous contacter",
+      "buttonHref": "/contact"
+    }
+  },
+  "servicesPage": {
+    "intro": {
+      "title": "Nos prestations plomberie & chauffage",
+      "description": "Plomberie Dubois accompagne particuliers et professionnels sur Rouen et l'agglomération (rayon 30 km). Tous nos techniciens sont assurés et formés aux normes en vigueur."
+    },
+    "sections": [
+      {
+        "id": "depannage",
+        "title": "Dépannage & urgences",
+        "description": "Disponibles 7j/7 pour les situations critiques : infiltration, rupture de canalisation, WC bouchés, absence d'eau chaude.",
+        "bullets": [
+          "Devis sur place avant intervention",
+          "Matériel professionnel embarqué",
+          "Rapport photo pour votre assurance"
+        ],
+        "image": {
+          "url": "https://images.unsplash.com/photo-1607472586893-edb8b1b4c763?auto=format&fit=crop&w=1200&q=80",
+          "alt": "Réparation de tuyauterie",
+          "photographer": "Laurynas Me",
+          "photographerUrl": "https://unsplash.com/@laurynasme"
+        }
+      },
+      {
+        "id": "salle-de-bain",
+        "title": "Salle de bain & rénovation",
+        "description": "Du plan 3D à la pose finale : nous coordonnons plomberie, carrelage et électricité pour un projet sans stress.",
+        "bullets": [
+          "Douche à l'italienne et baignoires",
+          "Robinetterie Grohe, Hansgrohe, etc.",
+          "Garantie décennale sur les travaux"
+        ],
+        "image": {
+          "url": "https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=1200&q=80",
+          "alt": "Rénovation salle de bain",
+          "photographer": "Collov Home Design",
+          "photographerUrl": "https://unsplash.com/@collov"
+        }
+      },
+      {
+        "id": "chauffage",
+        "title": "Chauffage & eau chaude sanitaire",
+        "description": "Conseil énergétique, installation et contrats d'entretien pour prolonger la durée de vie de vos équipements.",
+        "bullets": [
+          "Chaudières gaz et condensation",
+          "Pompes à chaleur air-eau",
+          "Entretien annuel obligatoire"
+        ],
+        "image": {
+          "url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=1200&q=80",
+          "alt": "Radiateur et chauffage",
+          "photographer": "Danist Soh",
+          "photographerUrl": "https://unsplash.com/@danist"
+        }
+      }
+    ]
+  },
+  "contactPage": {
+    "headline": "Contactez Plomberie Dubois",
+    "subtext": "Décrivez votre besoin (urgence, devis rénovation, entretien chauffage). Nous vous répondons rapidement par téléphone ou e-mail.",
+    "fields": {
+      "name": "Nom complet",
+      "email": "E-mail",
+      "message": "Votre message",
+      "submit": "Envoyer ma demande"
+    },
+    "successMessage": "Merci ! Votre message a bien été envoyé. Nous vous recontactons très vite.",
+    "sidebar": {
+      "phone": "02 35 00 00 00",
+      "email": "contact@plomberie-dubois-rouen.fr",
+      "hours": "Lun–Ven 8h–19h · Sam 9h–17h · Urgences 7j/7",
+      "address": "12 quai Cavelier de la Salle, 76000 Rouen"
+    }
+  },
+  "footer": {
+    "description": "Artisan plombier chauffagiste à Rouen depuis 15 ans. Qualité, transparence et réactivité.",
+    "phone": "02 35 00 00 00",
+    "email": "contact@plomberie-dubois-rouen.fr",
+    "address": "12 quai Cavelier de la Salle, 76000 Rouen",
+    "socialLinks": [
+      { "label": "Google", "href": "https://google.com" },
+      { "label": "Facebook", "href": "https://facebook.com" }
+    ],
+    "legalNote": "© Plomberie Dubois — SIRET 000 000 000 00000 — Mentions légales"
+  }
+}
