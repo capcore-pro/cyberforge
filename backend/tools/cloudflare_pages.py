@@ -979,6 +979,17 @@ async def deploy_demo_to_cyberforge_demos(
     Pages sert ce fichier à /d/{slug} et /d/{slug}/ directement (sans redirect).
     other_manifest_entries : chemins actifs path relatif → hash (hors cette démo).
     """
+    from config import get_settings
+    from tools.demo_runtime import ensure_demo_runtime_config, extract_demo_title_from_html
+
+    settings = get_settings()
+    html = ensure_demo_runtime_config(
+        html,
+        token=token,
+        project_title=extract_demo_title_from_html(html),
+        demo_url=public_demo_url_for_token(token),
+        api_base_url=settings.demo_api_base_url,
+    )
     asset_path = pages_asset_path_legacy_for_token(token)
     html_fresh = apply_deploy_cache_bust(html)
     body = html_fresh.encode("utf-8")

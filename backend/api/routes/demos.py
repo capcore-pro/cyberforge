@@ -84,6 +84,13 @@ class DeleteDemoResponse(BaseModel):
     cloudflare_redeployed: bool
 
 
+class RedeployDemoPagesResponse(BaseModel):
+    id: str
+    token: str
+    url: str
+    content_hash: str | None = None
+
+
 def _http_error_from_supabase(exc: SupabaseStoreError, route: str) -> HTTPException:
     detail = exc.to_http_detail()
     detail["route"] = route
@@ -201,7 +208,7 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
             title=title,
             demo_token=demo_token,
             demo_url=public_demo_url_for_token(demo_token),
-            api_base_url=settings.backend_public_url,
+            api_base_url=settings.demo_api_base_url,
         )
         logger.info(
             "POST /demos — DemoPipeline | template=%s | brand=%s | gated_bytes=%s",
@@ -364,8 +371,10 @@ async def _handle_demo_interested(
     clean = token.strip()
     row = await store.get_by_token(clean)
     if row is None:
+        logger.warning("demo interested — token inconnu: %s", clean)
         raise HTTPException(status_code=404, detail="Démo introuvable.")
     if store.is_expired(row):
+        logger.info("demo interested — démo expirée: %s", clean)
         raise HTTPException(status_code=410, detail="Démo expirée.")
 
     interest = None
@@ -377,9 +386,26 @@ async def _handle_demo_interested(
             email=contact.email,
             message=contact.message,
         )
+        logger.info(
+            "demo interested — soumission | token=%s | demo_id=%s | client=%s <%s>",
+            clean,
+            row.id,
+            contact.name.strip(),
+            contact.email.strip(),
+        )
 
-    updated = await store.record_interested(clean, contact=interest)
+    try:
+        updated = await store.record_interested(clean, contact=interest)
+    except SupabaseStoreError as exc:
+        logger.exception(
+            "demo interested — échec Supabase PATCH | token=%s | detail=%s",
+            clean,
+            exc,
+        )
+        raise _http_error_from_supabase(exc, "PATCH /demos/interested") from exc
+
     if updated is None:
+        logger.error("demo interested — record_interested sans ligne | token=%s", clean)
         raise HTTPException(status_code=404, detail="Démo introuvable.")
 
     email_sent = False
@@ -396,6 +422,13 @@ async def _handle_demo_interested(
             demo_url=demo_url,
             demo_password=demo_password,
             unlock_url=unlock_demo_url(clean),
+        )
+        logger.info(
+            "demo interested — terminé | token=%s | status=%s | recorded=%s | email_sent=%s",
+            clean,
+            updated.status,
+            updated.status == "interessee",
+            email_sent,
         )
 
     return DemoInterestedResponse(
@@ -447,6 +480,64 @@ async def update_demo_status(
     if updated is None:
         raise HTTPException(status_code=404, detail="Démo introuvable.")
     return UpdateDemoStatusResponse(id=updated.id, status=updated.status)
+
+
+@router.post("/demos/{demo_id}/redeploy-pages", response_model=RedeployDemoPagesResponse)
+async def redeploy_demo_pages(demo_id: str) -> RedeployDemoPagesResponse:
+    """Réinjecte token/API dans le HTML et republie sur Cloudflare Pages."""
+    store = get_demos_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
+    if not cloudflare_configured():
+        raise HTTPException(
+            status_code=503,
+            detail={"message": "Cloudflare non configuré."},
+        )
+    credentials = get_cloudflare_credentials()
+    if credentials is None:
+        raise HTTPException(status_code=503, detail="Cloudflare non configuré.")
+
+    try:
+        row = await store.get_by_id(demo_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(exc, "POST /demos/{id}/redeploy-pages") from exc
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+
+    preview_html = (row.payload.preview_html or "").strip()
+    if not preview_html:
+        raise HTTPException(status_code=422, detail="HTML de démo absent — recréez la démo.")
+
+    try:
+        other_entries = await store.list_cloudflare_manifest_entries(
+            exclude_token=row.token,
+        )
+        deploy = await deploy_demo_to_cyberforge_demos(
+            account_id=credentials.account_id,
+            api_token=credentials.api_token,
+            token=row.token,
+            html=preview_html,
+            other_manifest_entries=other_entries,
+        )
+    except CloudflarePagesError as exc:
+        logger.exception("redeploy-pages — échec Cloudflare | demo_id=%s", demo_id)
+        raise HTTPException(status_code=502, detail={"message": str(exc)}) from exc
+
+    public_url = public_demo_url_for_token(row.token).rstrip("/")
+    logger.info(
+        "redeploy-pages — OK | demo_id=%s | token=%s | hash=%s | snapshot=%s",
+        demo_id,
+        row.token,
+        deploy.content_hash,
+        LAST_CF_UPLOAD_HTML,
+    )
+    return RedeployDemoPagesResponse(
+        id=row.id,
+        token=row.token,
+        url=public_url,
+        content_hash=deploy.content_hash,
+    )
 
 
 @router.delete("/demos/{demo_id}", response_model=DeleteDemoResponse)

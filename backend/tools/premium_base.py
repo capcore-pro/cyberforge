@@ -667,14 +667,26 @@ def premium_interaction_scripts() -> str:
       if (!el || !el.textContent) return {{}};
       try {{ return JSON.parse(el.textContent); }} catch (e) {{ return {{}}; }}
     }}
+    function demoTokenFromUrl() {{
+      var path = window.location.pathname || "";
+      var m = path.match(/\\/d\\/([^\\/]+)/);
+      return m && m[1] ? decodeURIComponent(m[1]) : "";
+    }}
+
     var RUNTIME = readDemoRuntime();
-    var DEMO_TOKEN = RUNTIME.token || "";
+    var DEMO_TOKEN = RUNTIME.token || demoTokenFromUrl() || "";
     var PROJECT_TITLE = RUNTIME.projectTitle || document.title || "Démo";
     var DEMO_URL = RUNTIME.demoUrl || (window.location.href || "").split("#")[0].split("?")[0];
     var API_BASE = (RUNTIME.apiBase || "").replace(/\\/$/, "");
 
     function submitDemoContact(name, email, message) {{
-      if (!DEMO_TOKEN || !API_BASE) return Promise.resolve({{ ok: false }});
+      if (!DEMO_TOKEN || !API_BASE) {{
+        console.error(
+          "[CapCore] Contact impossible — token ou API manquant",
+          {{ token: DEMO_TOKEN, apiBase: API_BASE }}
+        );
+        return Promise.resolve({{ ok: false, reason: "config" }});
+      }}
       var url = API_BASE + "/api/demos/" + encodeURIComponent(DEMO_TOKEN) + "/interested";
       return fetch(url, {{
         method: "POST",
@@ -684,10 +696,18 @@ def premium_interaction_scripts() -> str:
         body: JSON.stringify({{ name: name, email: email, message: message }})
       }})
         .then(function(r) {{
-          if (!r.ok) return {{ ok: false }};
+          if (!r.ok) {{
+            return r.text().then(function(body) {{
+              console.error("[CapCore] POST interested HTTP", r.status, body);
+              return {{ ok: false, status: r.status, body: body }};
+            }});
+          }}
           return r.json().then(function(data) {{ return {{ ok: true, data: data }}; }});
         }})
-        .catch(function() {{ return {{ ok: false }}; }});
+        .catch(function(err) {{
+          console.error("[CapCore] POST interested réseau", err);
+          return {{ ok: false, reason: "network", error: String(err) }};
+        }});
     }}
 
     function showToast(msg) {{

@@ -144,12 +144,14 @@ def wrap_demo_for_cloudflare(
     gated = wrap_with_password_gate(document.html, password.strip(), title=title)
     if "cf-password-toggle" not in gated:
         raise ValueError("Gate mot de passe invalide (cf-password-toggle manquant).")
-    if demo_token and api_base_url:
+    if demo_token.strip():
+        from tools.demo_runtime import resolve_demo_api_base_url
+
         gated = inject_demo_runtime_config(
             gated,
             token=demo_token,
             project_title=title,
             demo_url=demo_url or "",
-            api_base_url=api_base_url,
+            api_base_url=resolve_demo_api_base_url(api_base_url),
         )
     return gated

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from api.main import create_app
 from db.demos_store import DemoPayload, DemoRow
-from tools.demo_runtime import inject_demo_runtime_config
+from tools.demo_runtime import ensure_demo_runtime_config, inject_demo_runtime_config
 
 
 def _sample_row(*, status: str = "ouverte") -> DemoRow:
@@ -32,6 +32,72 @@ def test_demo_password_vault_roundtrip() -> None:
     assert decrypt_demo_password(enc) == "Secret42!"
 
 
+def test_send_capcore_contact_email_via_brevo() -> None:
+    from tools.capcore_notify import _send_brevo_email, send_capcore_contact_email
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 201
+    mock_resp.text = ""
+
+    with (
+        patch("tools.capcore_notify.plain_secret_str", return_value="xkeysib-test"),
+        patch("tools.capcore_notify.httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_client = mock_client_cls.return_value.__aenter__.return_value
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        asyncio.run(
+            _send_brevo_email(
+                to_email="capcore.pro@gmail.com",
+                subject="🔔 Test",
+                body="Corps",
+            )
+        )
+        call = mock_client.post.await_args
+        assert call.args[0] == "https://api.brevo.com/v3/smtp/email"
+        assert call.kwargs["headers"]["api-key"] == "xkeysib-test"
+        payload = call.kwargs["json"]
+        assert payload["subject"] == "🔔 Test"
+        assert payload["to"] == [{"email": "capcore.pro@gmail.com"}]
+        assert payload["textContent"] == "Corps"
+        assert "sender" in payload
+
+    with (
+        patch("tools.capcore_notify._brevo_configured", return_value=True),
+        patch(
+            "tools.capcore_notify._send_brevo_email",
+            new_callable=AsyncMock,
+        ) as mock_send,
+    ):
+        ok = asyncio.run(
+            send_capcore_contact_email(
+                project_title="CRM",
+                client_name="Jean",
+                client_email="jean@test.com",
+                message="Hello",
+                demo_url="https://x/d/t",
+            )
+        )
+
+    assert ok is True
+    mock_send.assert_awaited_once()
+
+
+def test_send_capcore_contact_email_without_brevo_key() -> None:
+    from tools.capcore_notify import send_capcore_contact_email
+
+    with patch("tools.capcore_notify._brevo_configured", return_value=False):
+        ok = asyncio.run(
+            send_capcore_contact_email(
+                project_title="CRM",
+                client_name="Jean",
+                client_email="jean@test.com",
+                message="Hello",
+                demo_url="https://x/d/t",
+            )
+        )
+    assert ok is False
+
+
 def test_capcore_contact_email_subject_and_body() -> None:
     subject, body = _build_contact_email(
         project_title="CRM Acme",
@@ -48,6 +114,23 @@ def test_capcore_contact_email_subject_and_body() -> None:
     assert "cyberforge-demos.pages.dev" in body
 
 
+def test_ensure_demo_runtime_config_upserts_empty_api_base() -> None:
+    html = (
+        '<html><body><script id="cf-demo-runtime" type="application/json">'
+        '{"token":"tok","projectTitle":"T","demoUrl":"https://x/d/tok","apiBase":""}'
+        "</script></body></html>"
+    )
+    again = ensure_demo_runtime_config(
+        html,
+        token="tok",
+        project_title="T",
+        demo_url="https://x/d/tok",
+        api_base_url="https://cyberforge-backend-production.up.railway.app",
+    )
+    assert again.count('id="cf-demo-runtime"') == 1
+    assert '"apiBase": "https://cyberforge-backend-production.up.railway.app"' in again
+
+
 def test_inject_demo_runtime_config_adds_json_script() -> None:
     html = inject_demo_runtime_config(
         "<!DOCTYPE html><html><body><p>Hi</p></body></html>",
@@ -60,7 +143,28 @@ def test_inject_demo_runtime_config_adds_json_script() -> None:
     assert "Mon CRM" in html
     assert "abc123" in html
     assert "https://api.example.com" in html
-    assert html.index("cf-demo-runtime") < html.lower().index("</body>")
+    body_idx = html.lower().index("<body")
+    runtime_idx = html.index("cf-demo-runtime")
+    content_idx = html.index("<p>Hi</p>")
+    assert body_idx < runtime_idx < content_idx
+
+
+def test_runtime_script_before_premium_scripts() -> None:
+    from tools.premium_base import premium_interaction_scripts
+
+    body = (
+        "<!DOCTYPE html><html><body>"
+        + premium_interaction_scripts()
+        + "</body></html>"
+    )
+    html = inject_demo_runtime_config(
+        body,
+        token="tok",
+        project_title="T",
+        demo_url="https://x/d/tok",
+        api_base_url="https://api.example.com",
+    )
+    assert html.index("cf-demo-runtime") < html.index("readDemoRuntime")
 
 
 def test_premium_html_submits_contact_via_post() -> None:

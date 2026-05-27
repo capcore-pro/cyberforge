@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     backend_host: str = Field(default="127.0.0.1", alias="BACKEND_HOST")
     backend_port: int = Field(default=8002, alias="BACKEND_PORT")
     backend_url_env: str | None = Field(default=None, alias="BACKEND_URL")
+    demo_api_base_url: str = Field(
+        default="https://cyberforge-backend-production.up.railway.app",
+        alias="DEMO_API_BASE_URL",
+        description="URL API injectée dans les démos Cloudflare (formulaire CapCore).",
+    )
 
     database_url: str = Field(default="sqlite:///./database/cyberforge.db", alias="DATABASE_URL")
 
@@ -149,11 +154,13 @@ class Settings(BaseSettings):
         default="capcore.pro@gmail.com",
         alias="CAPCORE_NOTIFY_EMAIL",
     )
-    smtp_host: str = Field(default="smtp.gmail.com", alias="SMTP_HOST")
-    smtp_port: int = Field(default=587, alias="SMTP_PORT")
-    smtp_user: SecretStr | None = Field(default=None, alias="SMTP_USER")
-    smtp_password: SecretStr | None = Field(default=None, alias="SMTP_PASSWORD")
-    smtp_from: str | None = Field(default=None, alias="SMTP_FROM")
+    brevo_api_key: SecretStr | None = Field(default=None, alias="BREVO_API_KEY")
+    brevo_sender_email: str | None = Field(
+        default=None,
+        alias="BREVO_SENDER_EMAIL",
+        description="Expéditeur vérifié dans Brevo (défaut : CAPCORE_NOTIFY_EMAIL).",
+    )
+    brevo_sender_name: str = Field(default="CyberForge", alias="BREVO_SENDER_NAME")
 
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",
