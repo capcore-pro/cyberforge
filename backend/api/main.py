@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import API_ROUTERS
 from api.routes import meta
 from config import refresh_settings
+from db.managed_projects_store import reset_managed_projects_store
 from db.supabase_store import reset_supabase_store
 
 APP_VERSION = "0.1.0"
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     """Crée et configure l'instance FastAPI."""
     settings = refresh_settings()
     reset_supabase_store()
+    reset_managed_projects_store()
 
     application = FastAPI(
         title=settings.app_name,

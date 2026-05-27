@@ -244,6 +244,40 @@ export interface ProjectRecord {
   preview_html: string | null;
 }
 
+/** Projet géré par CyberForge (V1) — vitrines Next.js */
+export interface ManagedProjectRecord {
+  id: string;
+  type: string;
+  slug: string;
+  title: string | null;
+  prompt_original: string;
+  prompt_last: string;
+  status: string;
+  provider: string;
+  github_repo: string;
+  github_branch: string;
+  vercel_project_id: string | null;
+  vercel_deployment_id_last: string | null;
+  url_preview: string | null;
+  url_production: string | null;
+  error_last: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/** Run d'exécution (create/update/delete) pour un projet géré */
+export interface ManagedProjectRunRecord {
+  id: string;
+  project_id: string;
+  action: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+  artifacts: Record<string, unknown>;
+}
+
 /** Génération enregistrée dans Supabase */
 export interface GenerationRecord {
   id: string;

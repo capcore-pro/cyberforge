@@ -133,6 +133,21 @@ class Settings(BaseSettings):
         alias="VERCEL_TOKEN",
         description="Token API Vercel pour déploiement / configuration automatisée.",
     )
+    vercel_team_id: str | None = Field(
+        default=None,
+        alias="VERCEL_TEAM_ID",
+        description="Team ID Vercel (optionnel) pour scoper les appels API.",
+    )
+    vercel_vitrines_project_id: str | None = Field(
+        default=None,
+        alias="VERCEL_VITRINES_PROJECT_ID",
+        description="Project ID Vercel du projet 'vitrines' (optionnel si résoluble par nom).",
+    )
+    vercel_vitrines_project_name: str = Field(
+        default="vitrines",
+        alias="VERCEL_VITRINES_PROJECT_NAME",
+        description="Nom du projet Vercel vitrines (par défaut 'vitrines').",
+    )
 
     supabase_url: str | None = Field(
         default=None,

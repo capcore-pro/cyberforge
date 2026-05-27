@@ -240,6 +240,39 @@ async def push_source_to_github(
     return await _create_gist(project_slug, files, token)
 
 
+async def delete_github_branch(
+    *,
+    repo: str,
+    branch: str,
+    settings: Settings | None = None,
+) -> bool:
+    """
+    Supprime une branche (ref) dans un repo GitHub.
+    Retourne True si supprimée, False si elle n'existait pas.
+    """
+    resolved = settings or get_settings()
+    token = plain_secret_str(resolved.github_token)
+    if not token:
+        raise GitHubExportError("GITHUB_TOKEN non configuré.")
+    if "/" not in repo:
+        raise GitHubExportError(f"Dépôt GitHub invalide : {repo!r}")
+
+    owner, name = repo.split("/", 1)
+    ref_path = f"heads/{branch}"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.delete(
+            f"{GITHUB_API}/repos/{owner}/{name}/git/refs/{ref_path}",
+            headers=_headers(token),
+        )
+        if resp.status_code in (204, 200):
+            return True
+        if resp.status_code == 404:
+            return False
+        raise GitHubExportError(
+            f"Suppression branche {branch} HTTP {resp.status_code}: {resp.text[:200]}"
+        )
+
+
 async def _create_gist(slug: str, files: dict[str, str], token: str) -> str:
     if not files:
         raise GitHubExportError("Aucun fichier à publier.")

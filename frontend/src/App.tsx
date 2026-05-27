@@ -15,6 +15,7 @@ import { HomePage } from "./pages/HomePage";
 import { ClientsPage } from "./pages/ClientsPage";
 import { PersoPage } from "./pages/PersoPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { VitrinesPage } from "./pages/VitrinesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 /**
@@ -64,6 +65,8 @@ function AppWithNotifications({
         return <GeneratorPage onOpenProjects={() => setPage("projects")} />;
       case "projects":
         return <ProjectsPage />;
+      case "vitrines":
+        return <VitrinesPage />;
       case "clients":
         return <ClientsPage onOpenGenerator={() => setPage("generator")} />;
       case "perso":
