@@ -70,9 +70,9 @@ def test_push_vitrine_site_to_github_mocked(monkeypatch: pytest.MonkeyPatch) -> 
             branch_slug="plomberie-dubois",
             files={"package.json": "{}", "content/site.json": "{}"},
             settings=Settings(github_token="gh_test"),
-            repo="capcore-pro/vitrines",
+            repo="mathiasgibiard-dotcom/vitrines",
         )
     )
 
-    assert url == "https://github.com/capcore-pro/vitrines/tree/plomberie-dubois"
-    assert any("ensure:capcore-pro/vitrines" in c for c in calls)
+    assert url == "https://github.com/mathiasgibiard-dotcom/vitrines/tree/plomberie-dubois"
+    assert any("ensure:mathiasgibiard-dotcom/vitrines" in c for c in calls)

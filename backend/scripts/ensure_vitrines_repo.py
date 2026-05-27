@@ -1,4 +1,4 @@
-"""Crée le dépôt GitHub capcore-pro/vitrines s'il n'existe pas."""
+"""Crée le dépôt GitHub mathiasgibiard-dotcom/vitrines s'il n'existe pas."""
 
 from __future__ import annotations
 

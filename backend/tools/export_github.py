@@ -16,7 +16,7 @@ from config import Settings, get_settings, plain_secret_str
 logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
-DEFAULT_VITRINES_REPO = "capcore-pro/vitrines"
+DEFAULT_VITRINES_REPO = "mathiasgibiard-dotcom/vitrines"
 
 
 class GitHubExportError(Exception):

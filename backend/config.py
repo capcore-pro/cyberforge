@@ -124,9 +124,14 @@ class Settings(BaseSettings):
         alias="GITHUB_REPO",
     )
     vitrines_github_repo: str = Field(
-        default="capcore-pro/vitrines",
+        default="mathiasgibiard-dotcom/vitrines",
         alias="VITRINES_GITHUB_REPO",
         description="Dépôt GitHub — une branche par site vitrine Next.js (Vercel).",
+    )
+    vercel_token: SecretStr | None = Field(
+        default=None,
+        alias="VERCEL_TOKEN",
+        description="Token API Vercel pour déploiement / configuration automatisée.",
     )
 
     supabase_url: str | None = Field(
