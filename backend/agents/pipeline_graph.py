@@ -476,6 +476,16 @@ async def visionui_node(
     if not plan:
         return {"error": "État pipeline incomplet (VisionUI)."}
 
+    generation_mode = state.get("generation_mode") or "client_demo"
+    if generation_mode in ("real_app", "vitrine_next"):
+        await _step(
+            cb,
+            "visionui",
+            "done",
+            "Aperçu HTML non applicable — étape ignorée.",
+        )
+        return {}
+
     html = (preview_html or "").strip()
     if not html and generation is not None:
         html = (getattr(generation, "code", None) or "").strip()
