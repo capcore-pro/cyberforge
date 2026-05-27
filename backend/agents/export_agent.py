@@ -21,7 +21,12 @@ from tools.deploy_manifest import (
     slugify_project_name,
 )
 from tools.export_cloudflare import CloudflareExportError, deploy_html_demo
-from tools.export_github import push_source_to_github
+from tools.export_github import (
+    DEFAULT_VITRINES_REPO,
+    push_source_to_github,
+    push_vitrine_site_to_github,
+    vitrine_branch_name,
+)
 from tools.export_railway import RailwayExportError, deploy_to_railway
 from tools.generation_sources import is_usable_preview_html
 
@@ -191,23 +196,46 @@ class ExportAgent(BaseAgent):
                 except RailwayExportError as rw_exc:
                     message = f"{message} ; Railway : {rw_exc}"
 
+        is_vitrine = bool(generation.stack and "vitrine_next" in generation.stack)
+
         if plain_secret_str(resolved.github_token) and files:
             try:
-                github_url = await push_source_to_github(
-                    project_slug=project_name,
-                    files=files,
-                    settings=resolved,
-                )
+                if is_vitrine:
+                    vitrines_repo = (
+                        resolved.vitrines_github_repo or DEFAULT_VITRINES_REPO
+                    ).strip()
+                    branch = vitrine_branch_name(project_name)
+                    github_url = await push_vitrine_site_to_github(
+                        branch_slug=project_name,
+                        files=files,
+                        settings=resolved,
+                        repo=vitrines_repo,
+                    )
+                    env["VITRINES_REPO"] = vitrines_repo
+                    env["VITRINE_BRANCH"] = branch
+                else:
+                    github_url = await push_source_to_github(
+                        project_slug=project_name,
+                        files=files,
+                        settings=resolved,
+                    )
                 if github_url:
                     secondary.append("github")
                     env["GITHUB_URL"] = github_url
             except Exception as exc:
                 logger.warning("Export GitHub ignoré : %s", exc)
 
-        # Pour vitrine_next : la \"production\" est le repo/branch GitHub à connecter à Vercel.
         if provider == "github" and github_url and not production_url:
             production_url = github_url
-            message = "Sources publiées sur GitHub — connectez la branche à Vercel."
+            if is_vitrine:
+                branch = env.get("VITRINE_BRANCH", vitrine_branch_name(project_name))
+                repo = env.get("VITRINES_REPO", DEFAULT_VITRINES_REPO)
+                message = (
+                    f"Vitrine publiée sur {repo} (branche `{branch}`) — "
+                    "Vercel peut déployer chaque branche automatiquement."
+                )
+            else:
+                message = "Sources publiées sur GitHub — connectez la branche à Vercel."
 
         domain_host = None
         if production_url:

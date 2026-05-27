@@ -123,6 +123,11 @@ class Settings(BaseSettings):
         description="owner/repo optionnel pour push de branche",
         alias="GITHUB_REPO",
     )
+    vitrines_github_repo: str = Field(
+        default="capcore-pro/vitrines",
+        alias="VITRINES_GITHUB_REPO",
+        description="Dépôt GitHub — une branche par site vitrine Next.js (Vercel).",
+    )
 
     supabase_url: str | None = Field(
         default=None,
