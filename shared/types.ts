@@ -54,10 +54,11 @@ export type ComplexityLevel = "faible" | "moyenne" | "elevee";
 
 /**
  * Mode de génération :
- * - `client_demo` : pipeline démo HTML premium TaskFlow (défaut)
- * - `real_app`    : génération d'une vraie application React/Next.js déployable
+ * - `client_demo`   : pipeline démo HTML premium TaskFlow (défaut)
+ * - `real_app`      : génération d'une vraie application React/Next.js déployable
+ * - `vitrine_next`  : scaffold Next.js fixe + contenu JSON (Phase 4 vitrine)
  */
-export type GenerationMode = "client_demo" | "real_app";
+export type GenerationMode = "client_demo" | "real_app" | "vitrine_next";
 
 /** Requête POST /api/agents/coremind */
 export interface CoreMindRequest {

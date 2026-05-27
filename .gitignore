@@ -147,6 +147,9 @@ dist/
 dist-electron/
 release/
 
+# Builds vitrine Next.js locaux (Phase 4.2b)
+backend/.vitrine-builds/
+
 # Python
 __pycache__/
 *.py[cod]

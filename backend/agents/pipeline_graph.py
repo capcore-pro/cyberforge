@@ -39,6 +39,8 @@ from tools.demo_template_service import (
 )
 from tools.pricing import estimate_cost_usd
 from tools.demo_template_service import TEMPLATE_MODEL, TEMPLATE_PROVIDER
+from tools.vitrine.build import VitrineContentError, build_vitrine_site
+from tools.vitrine.scaffold_renderer import ScaffoldRenderError
 
 logger = logging.getLogger(__name__)
 
@@ -338,6 +340,43 @@ async def coremind_node(
     prompt = state["prompt"].strip()
     type_label = plan.project_type_label
     generation_mode = state.get("generation_mode") or "client_demo"
+
+    # --- Mode vitrine Next.js : scaffold fixe + contenu JSON (Phase 4.2b) ---
+    if generation_mode == "vitrine_next":
+        await _step(
+            cb,
+            "coremind",
+            "start",
+            f"Génération site vitrine Next.js ({type_label})…",
+        )
+        enriched_vitrine = (
+            f"Type de projet : {type_label}.\n"
+            f"Contexte : site vitrine multi-pages (accueil, services, contact).\n"
+            f"Texte UI en français.\n\n{prompt}"
+        )
+        try:
+            vitrine = await build_vitrine_site(
+                enriched_vitrine,
+                project_type_label=type_label,
+                settings=settings,
+            )
+        except (VitrineContentError, ScaffoldRenderError) as exc:
+            return {"error": f"Génération vitrine : {exc}"}
+        await _step(
+            cb,
+            "coremind",
+            "done",
+            (
+                f"Scaffold vitrine — {vitrine.content.meta.businessName} · "
+                f"{vitrine.file_count} fichier(s)"
+            ),
+            template="vitrine_next",
+            html_bytes=len(vitrine.generation.code or ""),
+        )
+        return {
+            "generation": vitrine.generation,
+            "preview_html": None,
+        }
 
     # --- Mode "Vraie app" : génère un projet React/TypeScript complet ---
     if generation_mode == "real_app":
@@ -670,19 +709,24 @@ async def export_node(
         return {}
 
     generation_mode = state.get("generation_mode") or "client_demo"
-    if generation_mode == "real_app":
-        await _step(
-            cb, "export", "start",
-            "Déploiement application React (Railway / Vercel)…",
+    if generation_mode in ("real_app", "vitrine_next"):
+        label = (
+            "Déploiement site vitrine Next.js (Vercel)…"
+            if generation_mode == "vitrine_next"
+            else "Déploiement application React (Railway / Vercel)…"
         )
+        await _step(cb, "export", "start", label)
     else:
         await _step(cb, "export", "start", "Déploiement automatique (Cloudflare / Railway / GitHub)…")
 
     settings = _settings_from_config(config)
     agent = ExportAgent(settings)
-    # Pour real_app, on passe preview_html vide pour éviter que ExportAI tente
-    # un déploiement Cloudflare (is_usable_preview_html échouera sur du React).
-    preview_html = "" if generation_mode == "real_app" else (state.get("preview_html") or "")
+    # Pas d'aperçu HTML pour React / vitrine Next (évite export Cloudflare démo).
+    preview_html = (
+        ""
+        if generation_mode in ("real_app", "vitrine_next")
+        else (state.get("preview_html") or "")
+    )
 
     result = await agent.export(
         state["prompt"],
@@ -735,7 +779,12 @@ async def finalize_node(
     tier = CodeGenComplexity(analysis.complexity.value)
 
     generation_mode = state.get("generation_mode") or "client_demo"
-    template = "real_app" if generation_mode == "real_app" else architect.template
+    if generation_mode == "vitrine_next":
+        template = "vitrine_next"
+    elif generation_mode == "real_app":
+        template = "real_app"
+    else:
+        template = architect.template
     html_bytes = len((preview_html or generation.code or "").encode("utf-8"))
     pipeline_info = DemoPipelineSummary(
         template=template,
@@ -889,7 +938,7 @@ async def run_generation_pipeline(
     """
     Exécute le pipeline complet et retourne le résultat CoreMindRunResult.
     Émet des événements step_* via on_event si fourni (SSE frontend).
-    generation_mode : "client_demo" (défaut) ou "real_app" (React/Next.js).
+    generation_mode : "client_demo" (défaut), "real_app" ou "vitrine_next".
     """
     resolved_settings = settings or get_settings()
     pipeline_started = time.perf_counter()

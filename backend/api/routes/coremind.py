@@ -45,7 +45,10 @@ class CoreMindRequest(BaseModel):
     )
     generation_mode: str | None = Field(
         default=None,
-        description="Mode de génération : 'client_demo' (défaut) ou 'real_app' (React/Next.js)",
+        description=(
+            "Mode : 'client_demo' (défaut), 'real_app' (React), "
+            "'vitrine_next' (scaffold Next.js + site.json)"
+        ),
     )
 
 
