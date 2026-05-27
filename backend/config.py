@@ -155,12 +155,12 @@ class Settings(BaseSettings):
         alias="CAPCORE_NOTIFY_EMAIL",
     )
     brevo_api_key: SecretStr | None = Field(default=None, alias="BREVO_API_KEY")
-    brevo_sender_email: str | None = Field(
-        default=None,
+    brevo_sender_email: str = Field(
+        default="noreply@capcore.pro",
         alias="BREVO_SENDER_EMAIL",
-        description="Expéditeur vérifié dans Brevo (défaut : CAPCORE_NOTIFY_EMAIL).",
+        description="Expéditeur vérifié dans Brevo.",
     )
-    brevo_sender_name: str = Field(default="CyberForge", alias="BREVO_SENDER_NAME")
+    brevo_sender_name: str = Field(default="CapCore", alias="BREVO_SENDER_NAME")
 
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",

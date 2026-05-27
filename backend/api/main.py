@@ -41,9 +41,19 @@ def _log_registered_routes(application: FastAPI) -> None:
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
+    from config import get_settings, plain_secret_str
     from security.cloudflare_env import load_cloudflare_from_env
 
     load_cloudflare_from_env()
+    settings = get_settings()
+    brevo_key = bool(plain_secret_str(settings.brevo_api_key))
+    logger.info(
+        "Brevo notifications | configured=%s | sender=%s <%s> | dest=%s",
+        brevo_key,
+        settings.brevo_sender_name,
+        settings.brevo_sender_email,
+        settings.capcore_notify_email,
+    )
     _log_registered_routes(application)
     yield
 
