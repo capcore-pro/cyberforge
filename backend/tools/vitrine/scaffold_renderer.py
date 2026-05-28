@@ -12,6 +12,9 @@ from tools.vitrine.content_schema import VitrineSiteContent
 
 logger = logging.getLogger(__name__)
 
+_TEMPLATE_DIR_CACHE: Path | None = None
+
+
 def _find_template_dir() -> Path:
     """
     Résout le chemin du template de manière robuste, même si le backend est
@@ -33,8 +36,6 @@ def _find_template_dir() -> Path:
         + ")"
     )
 
-
-VITRINE_TEMPLATE_DIR = _find_template_dir()
 SITE_JSON_REL = Path("content") / "site.json"
 
 _COPY_IGNORE_NAMES = {
@@ -58,7 +59,10 @@ class ScaffoldResult:
 
 
 def vitrine_template_dir() -> Path:
-    return VITRINE_TEMPLATE_DIR
+    global _TEMPLATE_DIR_CACHE
+    if _TEMPLATE_DIR_CACHE is None:
+        _TEMPLATE_DIR_CACHE = _find_template_dir()
+    return _TEMPLATE_DIR_CACHE
 
 
 def _ignore_copy(_dir: str, names: list[str]) -> set[str]:
