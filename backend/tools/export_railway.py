@@ -157,9 +157,7 @@ async def _environment_commit_staged(
     await _gql(
         """
         mutation($environmentId: String!, $message: String, $skipDeploys: Boolean) {
-          environmentPatchCommitStaged(environmentId: $environmentId, commitMessage: $message, skipDeploys: $skipDeploys) {
-            id
-          }
+          environmentPatchCommitStaged(environmentId: $environmentId, commitMessage: $message, skipDeploys: $skipDeploys)
         }
         """.strip(),
         {"environmentId": environment_id, "message": message, "skipDeploys": skip_deploys},
