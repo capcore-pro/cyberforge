@@ -47,6 +47,8 @@ class ManagedProjectRow(BaseModel):
     url_backend: str | None = None
     railway_project_id: str | None = None
     railway_service_id: str | None = None
+    artifact_filename: str | None = None
+    artifact_kind: str | None = None
     error_last: str | None = None
     created_at: str
     updated_at: str
