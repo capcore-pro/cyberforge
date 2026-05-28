@@ -265,6 +265,9 @@ async def deploy_github_backend_service(
     if "/" not in github_repo:
         raise RailwayExportError(f"GitHub repo invalide: {github_repo!r}")
 
+    if shared_project_id and shared_project_id.strip():
+        logger.info("Railway Option C | shared_project_id=%s | service_branch=%s", shared_project_id.strip(), branch)
+
     safe_name = re.sub(r"[^\w\s-]", "", project_name)[:60].strip() or "CyberForge App"
     # 1) Project (Option C: reuse a single shared project)
     if shared_project_id and shared_project_id.strip():
