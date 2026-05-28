@@ -174,13 +174,16 @@ async def download_extension_zip(project_id: str) -> Response:
     if not row:
         raise HTTPException(status_code=404, detail="Projet introuvable.")
 
-    # Rebuild from canonical generator (deterministic from prompt/slug).
-    files = _extension_files(row.prompt_last, row.github_branch)
-    zip_bytes = build_extension_zip(files)
-    filename = (row.artifact_filename or f"{row.github_branch}.zip").replace("/", "-")
-    return Response(
-        content=zip_bytes,
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    try:
+        files = _extension_files(row.prompt_last, row.github_branch)
+        zip_bytes = build_extension_zip(files)
+        filename = (row.artifact_filename or f"{row.github_branch}.zip").replace("/", "-")
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:
+        logger.exception("download_extension_zip failed")
+        raise HTTPException(status_code=500, detail=str(exc)[:300]) from exc
 
