@@ -49,6 +49,12 @@ class ManagedProjectRow(BaseModel):
     railway_service_id: str | None = None
     artifact_filename: str | None = None
     artifact_kind: str | None = None
+    reservation_timezone: str | None = None
+    reservation_currency: str | None = None
+    stripe_mode: str | None = None
+    stripe_account_id: str | None = None
+    ecommerce_currency: str | None = None
+    ecommerce_shipping_flat_cents: int | None = None
     error_last: str | None = None
     created_at: str
     updated_at: str

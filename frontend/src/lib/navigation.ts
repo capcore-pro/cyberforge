@@ -6,6 +6,8 @@ export type AppPage =
   | "vitrines"
   | "application_web"
   | "extensions"
+  | "site_reservation"
+  | "ecommerce"
   | "clients"
   | "perso"
   | "agents"
@@ -27,6 +29,8 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "vitrines", label: "Vitrines", icon: "▦", enabled: true },
   { id: "application_web", label: "Apps web", icon: "▣", enabled: true },
   { id: "extensions", label: "Extensions", icon: "⬢", enabled: true },
+  { id: "site_reservation", label: "Réservation", icon: "◷", enabled: true },
+  { id: "ecommerce", label: "Ecommerce", icon: "▧", enabled: true },
   { id: "clients", label: "Clients", icon: "◎", enabled: true },
   { id: "perso", label: "Perso", icon: "◉", enabled: true },
   { id: "agents", label: "Agents", icon: "◇", enabled: false },

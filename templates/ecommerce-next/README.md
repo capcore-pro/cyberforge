@@ -1,0 +1,1 @@
+# Ecommerce (template)\n\nTemplate Next.js minimal consommant l’API publique CyberForge:\n\n- `NEXT_PUBLIC_ECOMMERCE_API_BASE_URL`\n- `NEXT_PUBLIC_ECOMMERCE_SLUG`\n\nPages:\n- `/` catalogue\n- `/cart` panier + checkout\n- `/success` confirmation\n

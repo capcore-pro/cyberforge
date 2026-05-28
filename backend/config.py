@@ -202,6 +202,17 @@ class Settings(BaseSettings):
     )
     brevo_sender_name: str = Field(default="CapCore", alias="BREVO_SENDER_NAME")
 
+    stripe_secret_key: SecretStr | None = Field(
+        default=None,
+        alias="STRIPE_SECRET_KEY",
+        description="Clé secrète Stripe (Checkout + webhooks).",
+    )
+    stripe_ecommerce_webhook_secret: SecretStr | None = Field(
+        default=None,
+        alias="STRIPE_ECOMMERCE_WEBHOOK_SECRET",
+        description="Secret de signature webhook Stripe pour ecommerce (optionnel en dev).",
+    )
+
     unsplash_access_key: SecretStr | None = Field(
         default=None,
         alias="UNSPLASH_ACCESS_KEY",

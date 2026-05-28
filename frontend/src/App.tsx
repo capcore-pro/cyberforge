@@ -18,6 +18,8 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { VitrinesPage } from "./pages/VitrinesPage";
 import { ApplicationWebPage } from "./pages/ApplicationWebPage";
 import { ExtensionsPage } from "./pages/ExtensionsPage";
+import { SiteReservationPage } from "./pages/SiteReservationPage";
+import { EcommercePage } from "./pages/EcommercePage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 /**
@@ -73,6 +75,10 @@ function AppWithNotifications({
         return <ApplicationWebPage />;
       case "extensions":
         return <ExtensionsPage />;
+      case "site_reservation":
+        return <SiteReservationPage />;
+      case "ecommerce":
+        return <EcommercePage />;
       case "clients":
         return <ClientsPage onOpenGenerator={() => setPage("generator")} />;
       case "perso":
