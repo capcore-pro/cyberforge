@@ -98,10 +98,7 @@ async def _resolve_workspace_id(*, token: str, preferred: str | None = None) -> 
         """
         query {
           me {
-            workspaces {
-              nodes { id name }
-              edges { node { id name } }
-            }
+            workspaces { id name }
           }
         }
         """.strip(),
@@ -109,20 +106,10 @@ async def _resolve_workspace_id(*, token: str, preferred: str | None = None) -> 
         token=token,
     )
     me = (data.get("me") or {}) if isinstance(data, dict) else {}
-    wss_blob = me.get("workspaces") or {}
+    wss_blob = me.get("workspaces") or []
     wss: list[dict] = []
     if isinstance(wss_blob, list):
         wss = [w for w in wss_blob if isinstance(w, dict)]
-    elif isinstance(wss_blob, dict):
-        nodes = wss_blob.get("nodes")
-        if isinstance(nodes, list) and nodes:
-            wss = [w for w in nodes if isinstance(w, dict)]
-        else:
-            edges = wss_blob.get("edges")
-            if isinstance(edges, list):
-                for edge in edges:
-                    if isinstance(edge, dict) and isinstance(edge.get("node"), dict):
-                        wss.append(edge["node"])
     if not wss:
         raise RailwayExportError("Impossible de résoudre le workspace Railway (me.workspaces vide).")
     return str(wss[0]["id"])
