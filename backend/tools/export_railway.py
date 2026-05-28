@@ -165,18 +165,22 @@ async def _environment_commit_staged(
     )
 
 
-async def _service_domain_create(*, environment_id: str, service_id: str, token: str) -> None:
-    await _gql(
+async def _service_domain_create(*, environment_id: str, service_id: str, token: str) -> str | None:
+    data = await _gql(
         """
         mutation ($environmentId: String!, $serviceId: String!) {
           serviceDomainCreate(input: {environmentId: $environmentId, serviceId: $serviceId}) {
-            createdAt
+            domain
+            id
           }
         }
         """.strip(),
         {"environmentId": environment_id, "serviceId": service_id},
         token=token,
     )
+    row = (data.get("serviceDomainCreate") or {}) if isinstance(data, dict) else {}
+    dom = (row.get("domain") or "").strip()
+    return dom or None
 
 
 async def _get_service_domains(
@@ -185,24 +189,8 @@ async def _get_service_domains(
     service_id: str,
     token: str,
 ) -> list[str]:
-    data = await _gql(
-        """
-        query($environmentId: String!, $serviceId: String!) {
-          serviceDomains(environmentId: $environmentId, serviceId: $serviceId) {
-            domain
-          }
-        }
-        """.strip(),
-        {"environmentId": environment_id, "serviceId": service_id},
-        token=token,
-    )
-    rows = (data.get("serviceDomains") or []) if isinstance(data, dict) else []
-    domains: list[str] = []
-    for row in rows:
-        d = (row.get("domain") or "").strip()
-        if d:
-            domains.append(d)
-    return domains
+    # NOTE: kept for backward-compat but not used in new flow.
+    return []
 
 
 async def deploy_to_railway(
@@ -318,14 +306,16 @@ async def deploy_github_backend_service(
     )
 
     # 5) Ensure domain
-    await _service_domain_create(environment_id=environment_id, service_id=service_id, token=token)
-    domains = await _get_service_domains(environment_id=environment_id, service_id=service_id, token=token)
-    if not domains:
-        # still return dashboard URL as fallback
+    domain = await _service_domain_create(
+        environment_id=environment_id,
+        service_id=service_id,
+        token=token,
+    )
+    if not domain:
         backend_url = f"https://railway.app/project/{project_id}"
         return backend_url, project_id, service_id
 
-    backend_url = "https://" + domains[0]
+    backend_url = "https://" + domain
     return backend_url, project_id, service_id
 
 
