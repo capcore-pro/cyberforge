@@ -128,6 +128,11 @@ class Settings(BaseSettings):
         alias="VITRINES_GITHUB_REPO",
         description="Dépôt GitHub — une branche par site vitrine Next.js (Vercel).",
     )
+    applications_web_github_repo: str = Field(
+        default="mathiasgibiard-dotcom/applications-web",
+        alias="APPLICATIONS_WEB_GITHUB_REPO",
+        description="Dépôt GitHub — une branche par application web (Railway + Vercel).",
+    )
     vercel_token: SecretStr | None = Field(
         default=None,
         alias="VERCEL_TOKEN",

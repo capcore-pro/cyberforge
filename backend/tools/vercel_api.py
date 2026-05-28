@@ -178,6 +178,96 @@ async def ensure_project_for_vitrine_branch(
         raise VercelError(f"Vercel create project HTTP {create.status_code}: {create.text[:500]}")
 
 
+async def ensure_project_for_github_branch(
+    *,
+    project_name: str,
+    github_repo: str,
+    production_branch: str,
+    env: dict[str, str],
+    root_directory: str | None = None,
+    settings: Settings | None = None,
+) -> str:
+    """
+    Generic helper: create (if needed) a Vercel project linked to a GitHub repo/branch,
+    with env vars and optional rootDirectory (monorepo).
+    """
+    token = _token(settings)
+    team_id = _team_id(settings)
+    params = {"teamId": team_id} if team_id else None
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        get_resp = await client.get(
+            f"{VERCEL_API}/v9/projects/{project_name}",
+            headers=_headers(token),
+            params=params,
+        )
+        if get_resp.status_code == 200:
+            pid = get_resp.json().get("id")
+            if not pid:
+                raise VercelError("Projet Vercel sans id.")
+            try:
+                current = (get_resp.json().get("link") or {}).get("productionBranch")
+            except Exception:
+                current = None
+            if current != production_branch:
+                await _set_production_branch(project_name, production_branch, token, team_id)
+            return str(pid)
+        if get_resp.status_code not in (404,):
+            raise VercelError(
+                f"Vercel get project {project_name} HTTP {get_resp.status_code}: {get_resp.text[:300]}"
+            )
+
+        env_vars: list[dict[str, Any]] = []
+        for k, v in env.items():
+            if not k or v is None:
+                continue
+            env_vars.append(
+                {
+                    "key": k,
+                    "value": str(v),
+                    "target": ["production", "preview", "development"],
+                    "type": "plain",
+                }
+            )
+
+        git_repo: dict[str, Any] = {
+            "type": "github",
+            "repo": github_repo,
+            "productionBranch": production_branch,
+        }
+        if root_directory:
+            git_repo["rootDirectory"] = root_directory
+
+        body: dict[str, Any] = {
+            "name": project_name,
+            "framework": "nextjs",
+            "gitRepository": git_repo,
+            "environmentVariables": env_vars,
+        }
+
+        create = await client.post(
+            f"{VERCEL_API}/v11/projects",
+            headers=_headers(token),
+            params=params,
+            json=body,
+        )
+        if create.status_code in (200, 201):
+            pid = create.json().get("id")
+            if not pid:
+                raise VercelError("Création projet Vercel sans id.")
+            await _set_production_branch(project_name, production_branch, token, team_id)
+            return str(pid)
+        if create.status_code in (409,):
+            again = await client.get(
+                f"{VERCEL_API}/v9/projects/{project_name}",
+                headers=_headers(token),
+                params=params,
+            )
+            if again.status_code == 200 and again.json().get("id"):
+                return str(again.json()["id"])
+        raise VercelError(f"Vercel create project HTTP {create.status_code}: {create.text[:500]}")
+
+
 async def _set_production_branch(
     project_name: str,
     branch: str,

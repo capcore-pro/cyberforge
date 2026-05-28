@@ -257,9 +257,13 @@ export interface ManagedProjectRecord {
   github_repo: string;
   github_branch: string;
   vercel_project_id: string | null;
+  vercel_frontend_project_id: string | null;
   vercel_deployment_id_last: string | null;
   url_preview: string | null;
   url_production: string | null;
+  url_backend: string | null;
+  railway_project_id: string | null;
+  railway_service_id: string | null;
   error_last: string | null;
   created_at: string;
   updated_at: string;

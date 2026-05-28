@@ -40,9 +40,13 @@ class ManagedProjectRow(BaseModel):
     github_repo: str
     github_branch: str
     vercel_project_id: str | None = None
+    vercel_frontend_project_id: str | None = None
     vercel_deployment_id_last: str | None = None
     url_preview: str | None = None
     url_production: str | None = None
+    url_backend: str | None = None
+    railway_project_id: str | None = None
+    railway_service_id: str | None = None
     error_last: str | None = None
     created_at: str
     updated_at: str
