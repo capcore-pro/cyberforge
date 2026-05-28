@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/dist
+**/dist-electron
+**/.vscode
+**/.idea
+**/__pycache__
+**/*.pyc
+backend/.vitrine-builds
+vitrines-temp
+backend/_fetch_*.html
+backend/_last_*.*
