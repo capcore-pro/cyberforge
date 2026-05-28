@@ -5,6 +5,7 @@ export type AppPage =
   | "projects"
   | "vitrines"
   | "application_web"
+  | "extensions"
   | "clients"
   | "perso"
   | "agents"
@@ -25,6 +26,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "projects", label: "Projets", icon: "▤", enabled: true },
   { id: "vitrines", label: "Vitrines", icon: "▦", enabled: true },
   { id: "application_web", label: "Apps web", icon: "▣", enabled: true },
+  { id: "extensions", label: "Extensions", icon: "⬢", enabled: true },
   { id: "clients", label: "Clients", icon: "◎", enabled: true },
   { id: "perso", label: "Perso", icon: "◉", enabled: true },
   { id: "agents", label: "Agents", icon: "◇", enabled: false },
