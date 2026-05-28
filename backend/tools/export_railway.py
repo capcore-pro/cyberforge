@@ -73,6 +73,27 @@ async def _get_default_environment_id(*, project_id: str, token: str) -> str:
     return str(envs[0]["id"])
 
 
+async def _resolve_workspace_id(*, token: str, preferred: str | None = None) -> str:
+    if preferred and preferred.strip():
+        return preferred.strip()
+    data = await _gql(
+        """
+        query {
+          me {
+            workspaces { id name }
+          }
+        }
+        """.strip(),
+        {},
+        token=token,
+    )
+    me = (data.get("me") or {}) if isinstance(data, dict) else {}
+    wss = me.get("workspaces") or []
+    if not wss:
+        raise RailwayExportError("Impossible de résoudre le workspace Railway (me.workspaces vide).")
+    return str(wss[0]["id"])
+
+
 async def _service_create(*, project_id: str, name: str, token: str) -> str:
     data = await _gql(
         """
@@ -182,34 +203,17 @@ async def deploy_to_railway(
         raise RailwayExportError("RAILWAY_API_KEY non configurée.")
 
     safe_name = re.sub(r"[^\w\s-]", "", project_name)[:60].strip() or "CyberForge App"
+    workspace_id = await _resolve_workspace_id(token=token, preferred=getattr(resolved, "railway_workspace_id", None))
     query = """
-    mutation projectCreate($name: String!) {
-      projectCreate(input: { name: $name }) {
+    mutation projectCreate($name: String!, $workspaceId: String!) {
+      projectCreate(input: { name: $name, workspaceId: $workspaceId }) {
         id
         name
       }
     }
     """
-    async with httpx.AsyncClient(timeout=45.0) as client:
-        resp = await client.post(
-            RAILWAY_GRAPHQL,
-            json={"query": query, "variables": {"name": safe_name}},
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-        )
-
-    if resp.status_code >= 400:
-        raise RailwayExportError(f"Railway HTTP {resp.status_code}: {resp.text[:300]}")
-
-    payload = resp.json()
-    errors = payload.get("errors")
-    if errors:
-        msg = errors[0].get("message", str(errors)) if isinstance(errors, list) else str(errors)
-        raise RailwayExportError(msg)
-
-    data = (payload.get("data") or {}).get("projectCreate") or {}
+    payload = await _gql(query.strip(), {"name": safe_name, "workspaceId": workspace_id}, token=token, timeout=45.0)
+    data = payload.get("projectCreate") or {}
     project_id = data.get("id")
     if not project_id:
         raise RailwayExportError("Railway n'a pas renvoyé d'identifiant projet.")
@@ -240,15 +244,16 @@ async def deploy_github_backend_service(
         raise RailwayExportError(f"GitHub repo invalide: {github_repo!r}")
 
     safe_name = re.sub(r"[^\w\s-]", "", project_name)[:60].strip() or "CyberForge App"
+    workspace_id = await _resolve_workspace_id(token=token, preferred=getattr(resolved, "railway_workspace_id", None))
 
     # 1) Create project
     data = await _gql(
         """
-        mutation projectCreate($name: String!) {
-          projectCreate(input: { name: $name }) { id name }
+        mutation projectCreate($name: String!, $workspaceId: String!) {
+          projectCreate(input: { name: $name, workspaceId: $workspaceId }) { id name }
         }
         """.strip(),
-        {"name": safe_name},
+        {"name": safe_name, "workspaceId": workspace_id},
         token=token,
         timeout=45.0,
     )

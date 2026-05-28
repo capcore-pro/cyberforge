@@ -117,6 +117,11 @@ class Settings(BaseSettings):
     )
 
     railway_api_key: SecretStr | None = Field(default=None, alias="RAILWAY_API_KEY")
+    railway_workspace_id: str | None = Field(
+        default=None,
+        alias="RAILWAY_WORKSPACE_ID",
+        description="Workspace ID Railway (optionnel, requis si token n'embarque pas le workspace par défaut).",
+    )
     github_token: SecretStr | None = Field(default=None, alias="GITHUB_TOKEN")
     github_repo: str | None = Field(
         default=None,
