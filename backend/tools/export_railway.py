@@ -57,7 +57,6 @@ async def _get_default_environment_id(*, project_id: str, token: str) -> str:
         query($id: String!) {
           project(id: $id) {
             environments {
-              nodes { id name }
               edges { node { id name } }
             }
           }
@@ -72,15 +71,11 @@ async def _get_default_environment_id(*, project_id: str, token: str) -> str:
     if isinstance(envs_blob, list):
         envs = [e for e in envs_blob if isinstance(e, dict)]
     elif isinstance(envs_blob, dict):
-        nodes = envs_blob.get("nodes")
-        if isinstance(nodes, list) and nodes:
-            envs = [e for e in nodes if isinstance(e, dict)]
-        else:
-            edges = envs_blob.get("edges")
-            if isinstance(edges, list):
-                for edge in edges:
-                    if isinstance(edge, dict) and isinstance(edge.get("node"), dict):
-                        envs.append(edge["node"])
+        edges = envs_blob.get("edges")
+        if isinstance(edges, list):
+            for edge in edges:
+                if isinstance(edge, dict) and isinstance(edge.get("node"), dict):
+                    envs.append(edge["node"])
 
     if not envs:
         raise RailwayExportError("Projet Railway sans environment.")
