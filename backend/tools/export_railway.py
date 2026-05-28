@@ -137,7 +137,9 @@ async def _environment_stage_changes(
     await _gql(
         """
         mutation($environmentId: String!, $payload: EnvironmentConfig!, $merge: Boolean) {
-          environmentStageChanges(environmentId: $environmentId, input: $payload, merge: $merge)
+          environmentStageChanges(environmentId: $environmentId, input: $payload, merge: $merge) {
+            id
+          }
         }
         """.strip(),
         {"environmentId": environment_id, "payload": payload, "merge": merge},
