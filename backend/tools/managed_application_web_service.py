@@ -18,7 +18,12 @@ from typing import Any
 from config import Settings, get_settings
 from db.managed_projects_store import ManagedProjectsStore
 from tools.export_github import delete_github_branch, push_vitrine_site_to_github
-from tools.export_railway import RailwayExportError, deploy_github_backend_service
+from tools.export_railway import (
+    RailwayExportError,
+    delete_railway_project,
+    delete_railway_service,
+    deploy_github_backend_service,
+)
 from tools.vercel_api import (
     VercelError,
     delete_project,
@@ -325,10 +330,25 @@ async def hard_delete_application_web(
     except Exception as exc:
         artifacts["vercel_error"] = str(exc)
 
-    # Railway cleanup (best-effort): currently only project id stored; deletion API may be added later.
-    if project.railway_project_id:
-        artifacts["railway_project_id"] = project.railway_project_id
-        artifacts["railway_cleanup"] = "manual_or_future"
+    # Railway cleanup
+    try:
+        token = (getattr(resolved, "railway_api_key", None) or None)
+        # resolved.railway_api_key is SecretStr; reuse deploy_railway's token extraction
+        from config import plain_secret_str
+
+        api_token = plain_secret_str(token)
+        if api_token and project.railway_service_id:
+            artifacts["railway_service_deleted"] = await delete_railway_service(
+                service_id=project.railway_service_id,
+                token=api_token,
+            )
+        if api_token and project.railway_project_id:
+            artifacts["railway_project_deleted"] = await delete_railway_project(
+                project_id=project.railway_project_id,
+                token=api_token,
+            )
+    except Exception as exc:
+        artifacts["railway_error"] = str(exc)
 
     # GitHub branch cleanup
     try:

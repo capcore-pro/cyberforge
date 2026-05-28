@@ -323,3 +323,25 @@ async def deploy_github_backend_service(
 
     backend_url = "https://" + domains[0]
     return backend_url, project_id, service_id
+
+
+async def delete_railway_service(*, service_id: str, token: str) -> bool:
+    data = await _gql(
+        """
+        mutation($id: String!) { serviceDelete(id: $id) }
+        """.strip(),
+        {"id": service_id},
+        token=token,
+    )
+    return bool(data.get("serviceDelete")) if isinstance(data, dict) else False
+
+
+async def delete_railway_project(*, project_id: str, token: str) -> bool:
+    data = await _gql(
+        """
+        mutation($id: String!) { projectDelete(id: $id) }
+        """.strip(),
+        {"id": project_id},
+        token=token,
+    )
+    return bool(data.get("projectDelete")) if isinstance(data, dict) else False
