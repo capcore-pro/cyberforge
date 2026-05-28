@@ -325,7 +325,10 @@ class ManagedProjectsStore:
         payload: dict[str, Any] = {"project_id": project_id}
         if enabled is not None:
             payload["enabled"] = bool(enabled)
-        payload["client_email"] = client_email
+        # Important: only patch client_email when explicitly provided, otherwise
+        # password updates would wipe the stored email.
+        if client_email is not None:
+            payload["client_email"] = client_email
         if password_encrypted is not None:
             payload["password_encrypted"] = password_encrypted
         if password_updated_at is not None:
