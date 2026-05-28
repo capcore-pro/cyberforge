@@ -205,6 +205,17 @@ async def ensure_project_for_github_branch(
             pid = get_resp.json().get("id")
             if not pid:
                 raise VercelError("Projet Vercel sans id.")
+            # Best-effort: ensure rootDirectory is correct for monorepos.
+            if root_directory:
+                try:
+                    await client.patch(
+                        f"{VERCEL_API}/v9/projects/{project_name}",
+                        headers=_headers(token),
+                        params=params,
+                        json={"rootDirectory": root_directory},
+                    )
+                except Exception:
+                    pass
             try:
                 current = (get_resp.json().get("link") or {}).get("productionBranch")
             except Exception:
@@ -242,6 +253,8 @@ async def ensure_project_for_github_branch(
             "name": project_name,
             "framework": "nextjs",
             "gitRepository": git_repo,
+            # Vercel expects rootDirectory at the top level for monorepos (in addition to link config).
+            **({"rootDirectory": root_directory} if root_directory else {}),
             "environmentVariables": env_vars,
         }
 
