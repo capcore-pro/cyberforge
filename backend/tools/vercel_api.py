@@ -139,7 +139,19 @@ async def ensure_project_for_vitrine_branch(
                     "value": vitrine_backend_url,
                     "target": ["production", "preview", "development"],
                     "type": "plain",
-                }
+                },
+                {
+                    "key": "NEXT_PUBLIC_VITRINE_BACKEND_URL",
+                    "value": vitrine_backend_url,
+                    "target": ["production", "preview", "development"],
+                    "type": "plain",
+                },
+                {
+                    "key": "NEXT_PUBLIC_VITRINE_SLUG",
+                    "value": production_branch,
+                    "target": ["production", "preview", "development"],
+                    "type": "plain",
+                },
             ],
         }
         create = await client.post(

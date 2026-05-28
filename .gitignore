@@ -150,6 +150,14 @@ release/
 # Builds vitrine Next.js locaux (Phase 4.2b)
 backend/.vitrine-builds/
 
+# Fichiers temporaires (debug / scripts)
+backend/.envtaskkill
+backend/_fetch_*.html
+backend/_last_*.*
+backend/_smtp_test_err.txt
+backend/scripts/_tmp_*.py
+vitrines-temp/
+
 # Python
 __pycache__/
 *.py[cod]

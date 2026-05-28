@@ -12,8 +12,29 @@ from tools.vitrine.content_schema import VitrineSiteContent
 
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-VITRINE_TEMPLATE_DIR = REPO_ROOT / "templates" / "vitrine-next"
+def _find_template_dir() -> Path:
+    """
+    Résout le chemin du template de manière robuste, même si le backend est
+    déployé depuis un sous-dossier (ex: working dir = backend/ sur Railway).
+    """
+    candidates: list[Path] = []
+    bases = [Path(__file__).resolve(), Path.cwd().resolve()]
+    for base in bases:
+        for parent in [base, *base.parents[:10]]:
+            candidates.append(parent / "templates" / "vitrine-next")
+    for path in candidates:
+        if path.is_dir():
+            return path
+    # keep last candidate for error readability
+    raise ScaffoldRenderError(
+        "Template introuvable : templates/vitrine-next (candidates tried: "
+        + ", ".join(str(p) for p in candidates[:6])
+        + ("…" if len(candidates) > 6 else "")
+        + ")"
+    )
+
+
+VITRINE_TEMPLATE_DIR = _find_template_dir()
 SITE_JSON_REL = Path("content") / "site.json"
 
 _COPY_IGNORE_NAMES = {
@@ -37,10 +58,6 @@ class ScaffoldResult:
 
 
 def vitrine_template_dir() -> Path:
-    if not VITRINE_TEMPLATE_DIR.is_dir():
-        raise ScaffoldRenderError(
-            f"Template introuvable : {VITRINE_TEMPLATE_DIR}",
-        )
     return VITRINE_TEMPLATE_DIR
 
 
@@ -65,7 +82,9 @@ def render_vitrine_scaffold(
     Duplique templates/vitrine-next vers output_dir et écrit le JSON de contenu.
     """
     template = vitrine_template_dir()
-    target = output_dir or (REPO_ROOT / "backend" / ".vitrine-builds" / _slug_dir(content))
+    # default output under backend/.vitrine-builds
+    backend_root = Path(__file__).resolve().parents[2]
+    target = output_dir or (backend_root / ".vitrine-builds" / _slug_dir(content))
     target = target.resolve()
 
     if target.exists():

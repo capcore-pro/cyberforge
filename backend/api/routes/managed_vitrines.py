@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+import httpx
 
 from config import get_settings
 from db.managed_projects_store import (
@@ -22,6 +23,15 @@ from db.managed_projects_store import (
     get_managed_projects_store,
 )
 from tools.managed_vitrine_service import ManagedVitrineError, provision_vitrine, update_vitrine
+from tools.replicate_screenshot import ReplicateScreenshotClient
+from tools.vitrine_auth_service import (
+    VitrineAuthError,
+    decrypt_password,
+    ensure_auth_row,
+    generate_vitrine_password,
+    set_auth_settings,
+    set_password,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +165,20 @@ class DeleteVitrineRequest(BaseModel):
     hard_delete: bool = False
 
 
+class VitrineAuthResponse(BaseModel):
+    enabled: bool
+    client_email: str | None = None
+    password: str | None = None
+    password_updated_at: str | None = None
+
+
+class UpdateVitrineAuthRequest(BaseModel):
+    enabled: bool | None = None
+    client_email: str | None = None
+    password: str | None = Field(default=None, max_length=200)
+    generate_password: bool = False
+
+
 @router.post("/managed-projects/vitrines/{project_id}/delete")
 async def delete_vitrine_project(project_id: str, body: DeleteVitrineRequest) -> dict[str, bool]:
     store = get_managed_projects_store()
@@ -181,4 +205,88 @@ async def delete_vitrine_project(project_id: str, body: DeleteVitrineRequest) ->
         patch={"status": "deleted", "deleted_at": datetime.now(tz=UTC).isoformat()},
     )
     return {"deleted": True}
+
+
+@router.get("/managed-projects/vitrines/{project_id}/preview")
+async def get_vitrine_preview(project_id: str) -> dict[str, str | None]:
+    """
+    Retourne un screenshot (Replicate si configuré) de la vitrine, pour aperçu intégré.
+    """
+    store = get_managed_projects_store()
+    if not store.is_configured():
+        raise _not_configured()
+    row = await store.get_project(project_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    url = (row.url_production or row.url_preview or "").strip()
+    if not url:
+        return {"screenshot_url": None}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url, headers={"User-Agent": "CyberForge/preview"})
+            html = resp.text if resp.status_code < 400 else ""
+    except Exception:
+        html = ""
+
+    client = ReplicateScreenshotClient(settings=get_settings())
+    result = await client.screenshot_html(
+        html,
+        title=row.title or row.slug,
+        width=1280,
+        height=720,
+    )
+    return {"screenshot_url": result.screenshot_url}
+
+
+@router.get("/managed-projects/vitrines/{project_id}/auth", response_model=VitrineAuthResponse)
+async def get_vitrine_auth(project_id: str) -> VitrineAuthResponse:
+    store = get_managed_projects_store()
+    if not store.is_configured():
+        raise _not_configured()
+    row = await store.get_project(project_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    auth = await ensure_auth_row(store, project_id)
+    return VitrineAuthResponse(
+        enabled=bool(auth.enabled),
+        client_email=auth.client_email,
+        password=decrypt_password(auth),
+        password_updated_at=auth.password_updated_at,
+    )
+
+
+@router.post("/managed-projects/vitrines/{project_id}/auth", response_model=VitrineAuthResponse)
+async def update_vitrine_auth(project_id: str, body: UpdateVitrineAuthRequest) -> VitrineAuthResponse:
+    store = get_managed_projects_store()
+    if not store.is_configured():
+        raise _not_configured()
+    row = await store.get_project(project_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    try:
+        auth = await ensure_auth_row(store, project_id)
+        if body.enabled is not None or body.client_email is not None:
+            auth = await set_auth_settings(
+                store=store,
+                project_id=project_id,
+                enabled=body.enabled,
+                client_email=body.client_email,
+            )
+        if body.generate_password:
+            new_pwd = generate_vitrine_password()
+            auth = await set_password(store=store, project_id=project_id, password=new_pwd)
+        elif body.password is not None and body.password.strip():
+            auth = await set_password(store=store, project_id=project_id, password=body.password)
+        return VitrineAuthResponse(
+            enabled=bool(auth.enabled),
+            client_email=auth.client_email,
+            password=decrypt_password(auth),
+            password_updated_at=auth.password_updated_at,
+        )
+    except VitrineAuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 

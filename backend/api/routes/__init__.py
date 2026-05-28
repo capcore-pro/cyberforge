@@ -15,6 +15,7 @@ from api.routes import (
     public_demos,
     secrets,
     vitrine,
+    vitrine_auth,
 )
 
 # (router, prefix OpenAPI)
@@ -30,6 +31,7 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
     (demos.router, "/api"),
     (notifications.router, "/api"),
     (vitrine.router, "/api"),
+    (vitrine_auth.router, "/api"),
     (public_demos.router, "/api/public"),
 ]
 
@@ -46,4 +48,5 @@ __all__ = [
     "public_demos",
     "secrets",
     "vitrine",
+    "vitrine_auth",
 ]

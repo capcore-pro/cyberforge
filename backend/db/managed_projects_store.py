@@ -60,6 +60,16 @@ class ManagedProjectRunRow(BaseModel):
     artifacts: dict[str, Any] = Field(default_factory=dict)
 
 
+class ManagedProjectAuthRow(BaseModel):
+    project_id: str
+    enabled: bool = False
+    client_email: str | None = None
+    password_encrypted: str | None = None
+    password_updated_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 class ManagedProjectsStore:
     """
     Wrapper SupabaseStore spécialisé sur managed_projects / managed_project_runs.
@@ -263,6 +273,73 @@ class ManagedProjectsStore:
             if not isinstance(data, list):
                 return []
             return [ManagedProjectRunRow(**row) for row in data if isinstance(row, dict)]
+
+    async def get_project_id_by_slug(self, *, slug: str, type: str = "vitrine_next") -> str | None:
+        if not self.is_configured():
+            return None
+        cleaned = (slug or "").strip()
+        if not cleaned:
+            return None
+        url = f"{self._rest_url()}/managed_projects"
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={"slug": f"eq.{cleaned}", "type": f"eq.{type}", "select": "id", "limit": "1"},
+            )
+            _raise_for_status(resp, "get_managed_project_id_by_slug", "GET", url, self._base)
+            rows = resp.json()
+            if not rows:
+                return None
+            row = rows[0]
+            return str(row.get("id") or "").strip() or None
+
+    async def get_project_auth(self, project_id: str) -> ManagedProjectAuthRow | None:
+        if not self.is_configured():
+            return None
+        url = f"{self._rest_url()}/managed_project_auth"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={"project_id": f"eq.{project_id}", "select": "*"},
+            )
+            _raise_for_status(resp, "get_managed_project_auth", "GET", url, self._base)
+            rows = resp.json()
+            if not rows:
+                return None
+            return ManagedProjectAuthRow(**rows[0])
+
+    async def upsert_project_auth(
+        self,
+        project_id: str,
+        *,
+        enabled: bool | None = None,
+        client_email: str | None = None,
+        password_encrypted: str | None = None,
+        password_updated_at: str | None = None,
+    ) -> ManagedProjectAuthRow:
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+        url = f"{self._rest_url()}/managed_project_auth"
+        payload: dict[str, Any] = {"project_id": project_id}
+        if enabled is not None:
+            payload["enabled"] = bool(enabled)
+        payload["client_email"] = client_email
+        if password_encrypted is not None:
+            payload["password_encrypted"] = password_encrypted
+        if password_updated_at is not None:
+            payload["password_updated_at"] = password_updated_at
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                headers=self._headers("resolution=merge-duplicates,return=representation"),
+                json=payload,
+            )
+            _raise_for_status(resp, "upsert_managed_project_auth", "POST", url, self._base)
+            data = resp.json()
+            row = data[0] if isinstance(data, list) and data else data
+            return ManagedProjectAuthRow(**row)
 
 
 _managed_store: ManagedProjectsStore | None = None
