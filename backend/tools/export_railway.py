@@ -277,10 +277,16 @@ async def deploy_github_backend_service(
         project_id = str(project_id)
 
     # 2) Resolve environment
-    environment_id = await _get_default_environment_id(project_id=project_id, token=token)
+    try:
+        environment_id = await _get_default_environment_id(project_id=project_id, token=token)
+    except RailwayExportError as exc:
+        raise RailwayExportError(f"env_resolve: {exc}") from exc
 
     # 3) Create empty service
-    service_id = await _service_create(project_id=project_id, name=f"api-{branch[:24]}", token=token)
+    try:
+        service_id = await _service_create(project_id=project_id, name=f"api-{branch[:24]}", token=token)
+    except RailwayExportError as exc:
+        raise RailwayExportError(f"service_create: {exc}") from exc
 
     # 4) Stage config: link to repo/branch, set root dir and start command
     payload: dict = {
@@ -297,20 +303,26 @@ async def deploy_github_backend_service(
     if start_command:
         payload["services"][service_id]["deploy"] = {"startCommand": start_command}
 
-    await _environment_stage_changes(environment_id=environment_id, payload=payload, token=token, merge=True)
-    await _environment_commit_staged(
-        environment_id=environment_id,
-        message=f"CyberForge: link backend to {github_repo}@{branch}",
-        token=token,
-        skip_deploys=False,
-    )
+    try:
+        await _environment_stage_changes(environment_id=environment_id, payload=payload, token=token, merge=True)
+        await _environment_commit_staged(
+            environment_id=environment_id,
+            message=f"CyberForge: link backend to {github_repo}@{branch}",
+            token=token,
+            skip_deploys=False,
+        )
+    except RailwayExportError as exc:
+        raise RailwayExportError(f"env_stage_commit: {exc}") from exc
 
     # 5) Ensure domain
-    domain = await _service_domain_create(
-        environment_id=environment_id,
-        service_id=service_id,
-        token=token,
-    )
+    try:
+        domain = await _service_domain_create(
+            environment_id=environment_id,
+            service_id=service_id,
+            token=token,
+        )
+    except RailwayExportError as exc:
+        raise RailwayExportError(f"domain_create: {exc}") from exc
     if not domain:
         backend_url = f"https://railway.app/project/{project_id}"
         return backend_url, project_id, service_id
