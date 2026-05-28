@@ -122,6 +122,11 @@ class Settings(BaseSettings):
         alias="RAILWAY_WORKSPACE_ID",
         description="Workspace ID Railway (optionnel, requis si token n'embarque pas le workspace par défaut).",
     )
+    railway_shared_project_id: str | None = Field(
+        default=None,
+        alias="RAILWAY_SHARED_PROJECT_ID",
+        description="Project ID Railway partagé (Option C) pour réutiliser un seul projet et créer/supprimer des services dedans.",
+    )
     github_token: SecretStr | None = Field(default=None, alias="GITHUB_TOKEN")
     github_repo: str | None = Field(
         default=None,

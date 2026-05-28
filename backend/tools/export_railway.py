@@ -250,6 +250,7 @@ async def deploy_github_backend_service(
     branch: str,
     root_directory: str = "backend",
     start_command: str | None = None,
+    shared_project_id: str | None = None,
     settings: Settings | None = None,
 ) -> tuple[str, str, str]:
     """
@@ -265,30 +266,35 @@ async def deploy_github_backend_service(
         raise RailwayExportError(f"GitHub repo invalide: {github_repo!r}")
 
     safe_name = re.sub(r"[^\w\s-]", "", project_name)[:60].strip() or "CyberForge App"
-    workspace_id = await _resolve_workspace_id(token=token, preferred=getattr(resolved, "railway_workspace_id", None))
-
-    # 1) Create project
-    data = await _gql(
-        """
-        mutation projectCreate($name: String!, $workspaceId: String!) {
-          projectCreate(input: { name: $name, workspaceId: $workspaceId }) { id name }
-        }
-        """.strip(),
-        {"name": safe_name, "workspaceId": workspace_id},
-        token=token,
-        timeout=45.0,
-    )
-    proj = (data.get("projectCreate") or {}) if isinstance(data, dict) else {}
-    project_id = proj.get("id")
-    if not project_id:
-        raise RailwayExportError("Railway n'a pas renvoyé d'identifiant projet.")
-    project_id = str(project_id)
+    # 1) Project (Option C: reuse a single shared project)
+    if shared_project_id and shared_project_id.strip():
+        project_id = shared_project_id.strip()
+    else:
+        workspace_id = await _resolve_workspace_id(
+            token=token,
+            preferred=getattr(resolved, "railway_workspace_id", None),
+        )
+        data = await _gql(
+            """
+            mutation projectCreate($name: String!, $workspaceId: String!) {
+              projectCreate(input: { name: $name, workspaceId: $workspaceId }) { id name }
+            }
+            """.strip(),
+            {"name": safe_name, "workspaceId": workspace_id},
+            token=token,
+            timeout=45.0,
+        )
+        proj = (data.get("projectCreate") or {}) if isinstance(data, dict) else {}
+        project_id = proj.get("id")
+        if not project_id:
+            raise RailwayExportError("Railway n'a pas renvoyé d'identifiant projet.")
+        project_id = str(project_id)
 
     # 2) Resolve environment
     environment_id = await _get_default_environment_id(project_id=project_id, token=token)
 
     # 3) Create empty service
-    service_id = await _service_create(project_id=project_id, name="backend", token=token)
+    service_id = await _service_create(project_id=project_id, name=f"api-{branch[:24]}", token=token)
 
     # 4) Stage config: link to repo/branch, set root dir and start command
     payload: dict = {

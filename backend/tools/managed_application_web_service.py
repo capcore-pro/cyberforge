@@ -20,7 +20,6 @@ from db.managed_projects_store import ManagedProjectsStore
 from tools.export_github import delete_github_branch, push_vitrine_site_to_github
 from tools.export_railway import (
     RailwayExportError,
-    delete_railway_project,
     delete_railway_service,
     deploy_github_backend_service,
 )
@@ -207,12 +206,14 @@ async def provision_application_web(
 
     # 2) Deploy backend to Railway
     try:
+        shared_project_id = (getattr(resolved, "railway_shared_project_id", None) or "").strip() or None
         backend_url, railway_project_id, railway_service_id = await deploy_github_backend_service(
             project_name=slug,
             github_repo=github_repo,
             branch=slug,
             root_directory="backend",
             start_command=None,
+            shared_project_id=shared_project_id,
             settings=resolved,
         )
     except RailwayExportError as exc:
@@ -342,11 +343,7 @@ async def hard_delete_application_web(
                 service_id=project.railway_service_id,
                 token=api_token,
             )
-        if api_token and project.railway_project_id:
-            artifacts["railway_project_deleted"] = await delete_railway_project(
-                project_id=project.railway_project_id,
-                token=api_token,
-            )
+        # Option C: keep shared project, do not delete it.
     except Exception as exc:
         artifacts["railway_error"] = str(exc)
 
