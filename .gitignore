@@ -156,6 +156,8 @@ backend/_fetch_*.html
 backend/_last_*.*
 backend/_smtp_test_err.txt
 backend/scripts/_tmp_*.py
+backend/scripts/railway_*.py
+backend/scripts/redeploy_demo_token.py
 vitrines-temp/
 
 # Python
