@@ -23,7 +23,7 @@ _PALETTES: dict[str, dict[str, str]] = {
         "surface": "rgba(15, 28, 52, 0.88)",
         "glow": "rgba(37, 99, 235, 0.28)",
         "font_display": '"Syne", sans-serif',
-        "font_body": '"Plus Jakarta Sans", sans-serif',
+        "font_body": '"Space Grotesk", sans-serif',
     },
     TEMPLATE_LANDING: {
         "primary": "#7c3aed",
@@ -32,7 +32,7 @@ _PALETTES: dict[str, dict[str, str]] = {
         "surface": "rgba(30, 20, 55, 0.85)",
         "glow": "rgba(124, 58, 237, 0.35)",
         "font_display": '"Syne", sans-serif',
-        "font_body": '"Plus Jakarta Sans", sans-serif',
+        "font_body": '"Space Grotesk", sans-serif',
     },
     TEMPLATE_DASHBOARD: {
         "primary": "#22d3ee",
@@ -50,7 +50,7 @@ _PALETTES: dict[str, dict[str, str]] = {
         "surface": "rgba(12, 32, 26, 0.9)",
         "glow": "rgba(5, 150, 105, 0.28)",
         "font_display": '"Syne", sans-serif',
-        "font_body": '"Plus Jakarta Sans", sans-serif',
+        "font_body": '"Space Grotesk", sans-serif',
     },
     TEMPLATE_TASKFLOW: {
         "primary": "#6366f1",
@@ -68,7 +68,7 @@ _PALETTES: dict[str, dict[str, str]] = {
         "surface": "rgba(32, 22, 12, 0.9)",
         "glow": "rgba(217, 119, 6, 0.28)",
         "font_display": '"Syne", sans-serif',
-        "font_body": '"Plus Jakarta Sans", sans-serif',
+        "font_body": '"Space Grotesk", sans-serif',
     },
 }
 
@@ -83,6 +83,9 @@ _UNSPLASH: dict[str, str] = {
     "restaurant": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80&auto=format&fit=crop",
     "marketing": "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200&q=80&auto=format&fit=crop",
     "realestate": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=1200&q=80&auto=format&fit=crop",
+    "artisan": "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=1200&q=80&auto=format&fit=crop",
+    "beauty": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=1200&q=80&auto=format&fit=crop",
+    "fitness": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1200&q=80&auto=format&fit=crop",
 }
 
 PREMIUM_BASE_CSS = """
@@ -107,6 +110,11 @@ PREMIUM_BASE_CSS = """
     img { max-width: 100%; height: auto; display: block; }
     .cf-shell { min-height: 100vh; width: 100%; max-width: 100vw; overflow-x: hidden; }
     .cf-reveal { opacity: 0; transform: translateY(28px); }
+    .cf-reveal.cf-in {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 700ms ease, transform 700ms cubic-bezier(.2,.9,.2,1);
+    }
     .cf-btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
       padding: 0.65rem 1.35rem; border-radius: 12px; font-weight: 600; font-size: 0.9rem;
@@ -119,9 +127,11 @@ PREMIUM_BASE_CSS = """
       color: #fff;
       box-shadow: 0 8px 28px var(--cf-glow);
     }
-    .cf-btn-primary:hover {
-      transform: translateY(-2px) scale(1.02);
-      box-shadow: 0 12px 36px var(--cf-glow);
+    @media (hover:hover) and (pointer:fine) {
+      .cf-btn-primary:hover {
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 12px 36px var(--cf-glow);
+      }
     }
     .cf-btn-primary:active { transform: translateY(0) scale(0.98); }
     .cf-btn-ghost {
@@ -141,9 +151,22 @@ PREMIUM_BASE_CSS = """
       box-shadow: 0 4px 24px rgba(0,0,0,0.22), 0 1px 0 rgba(255,255,255,0.04) inset;
       transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
     }
-    .cf-card:hover {
-      border-color: color-mix(in srgb, var(--cf-primary) 28%, transparent);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.28), 0 0 0 1px color-mix(in srgb, var(--cf-primary) 12%, transparent);
+    @media (hover:hover) and (pointer:fine) {
+      .cf-card:hover {
+        border-color: color-mix(in srgb, var(--cf-primary) 28%, transparent);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.28), 0 0 0 1px color-mix(in srgb, var(--cf-primary) 12%, transparent);
+      }
+    }
+
+    :focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--cf-secondary) 70%, transparent);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+      .cf-reveal { opacity: 1 !important; transform: none !important; }
     }
     .cf-logo {
       width: 44px; height: 44px; border-radius: 14px;
@@ -472,8 +495,7 @@ def premium_fonts_link() -> str:
     return (
         '<link rel="preconnect" href="https://fonts.googleapis.com" />'
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />'
-        '<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700'
-        "&family=Space+Grotesk:wght@400;500;600;700"
+        '<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700'
         '&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />'
     )
 
@@ -486,6 +508,12 @@ def unsplash_hero_url(template: str, *, vertical: str = "") -> str:
         return _UNSPLASH["marketing"]
     if "real_estate" in v or "immobilier" in v:
         return _UNSPLASH["realestate"]
+    if "artisan" in v or "plomb" in v or "électric" in v or "electric" in v:
+        return _UNSPLASH["artisan"]
+    if "coiff" in v or "beaut" in v or "salon" in v:
+        return _UNSPLASH["beauty"]
+    if "fitness" in v or "sport" in v or "gym" in v:
+        return _UNSPLASH["fitness"]
     return _UNSPLASH.get(template, _UNSPLASH["landing"])
 
 
@@ -874,12 +902,27 @@ def premium_interaction_scripts() -> str:
 
 
 def premium_motion_scripts() -> str:
-    """GSAP scroll reveal + compteurs animés."""
+    """Reveal + compteurs animés (subtil, respecte prefers-reduced-motion)."""
     return """
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" crossorigin="anonymous"></script>
   <script>
   (function() {
+    var reduce = false;
+    try { reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch(e) {}
+
+    function revealNow(el) { el.classList.add("cf-in"); }
+
+    function initReveal() {
+      var nodes = Array.prototype.slice.call(document.querySelectorAll(".cf-reveal"));
+      if (reduce) { nodes.forEach(revealNow); return; }
+      if (!("IntersectionObserver" in window)) { nodes.forEach(revealNow); return; }
+      var io = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) { revealNow(entry.target); io.unobserve(entry.target); }
+        });
+      }, { root: null, threshold: 0.12, rootMargin: "0px 0px -10% 0px" });
+      nodes.forEach(function(n) { io.observe(n); });
+    }
+
     function parseCounter(el) {
       var raw = (el.getAttribute("data-target") || el.textContent || "0").trim();
       var suffix = (el.getAttribute("data-suffix") || "").trim();
@@ -887,40 +930,48 @@ def premium_motion_scripts() -> str:
       var num = parseFloat(raw.replace(/[^0-9.,]/g, "").replace(",", ".")) || 0;
       return { num: num, suffix: suffix, prefix: prefix, decimals: (raw.split(/[.,]/)[1] || "").length };
     }
-    function animateCounters() {
-      document.querySelectorAll(".cf-counter[data-target], .cf-counter[data-count]").forEach(function(el) {
-        var p = parseCounter(el);
-        if (!p.num) return;
-        var obj = { v: 0 };
-        gsap.to(obj, {
-          v: p.num, duration: 1.6, ease: "power2.out",
-          scrollTrigger: { trigger: el, start: "top 88%", once: true },
-          onUpdate: function() {
-            var n = p.decimals ? obj.v.toFixed(p.decimals) : Math.round(obj.v).toLocaleString("fr-FR");
-            el.textContent = p.prefix + n + p.suffix;
-          }
+
+    function animateNumber(el) {
+      var p = parseCounter(el);
+      if (!p.num) return;
+      if (reduce) {
+        var fixed = p.decimals ? p.num.toFixed(p.decimals) : String(Math.round(p.num));
+        el.textContent = p.prefix + fixed + p.suffix;
+        return;
+      }
+      var dur = 900;
+      var t0 = performance.now();
+      function tick(now) {
+        var t = Math.min(1, (now - t0) / dur);
+        var v = (1 - Math.pow(1 - t, 3)) * p.num;
+        var n = p.decimals ? v.toFixed(p.decimals) : Math.round(v).toLocaleString("fr-FR");
+        el.textContent = p.prefix + n + p.suffix;
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function initCounters() {
+      var nodes = Array.prototype.slice.call(document.querySelectorAll(".cf-counter[data-target], .cf-counter[data-count]"));
+      if (!nodes.length) return;
+      if (reduce || !("IntersectionObserver" in window)) {
+        nodes.forEach(animateNumber);
+        return;
+      }
+      var io = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting) return;
+          var el = entry.target;
+          io.unobserve(el);
+          animateNumber(el);
         });
-      });
+      }, { threshold: 0.35 });
+      nodes.forEach(function(n) { io.observe(n); });
     }
-    function initMotion() {
-      if (typeof gsap === "undefined") return;
-      if (typeof ScrollTrigger !== "undefined") gsap.registerPlugin(ScrollTrigger);
-      gsap.utils.toArray(".cf-reveal").forEach(function(el, i) {
-        gsap.fromTo(el,
-          { opacity: 0, y: 36 },
-          {
-            opacity: 1, y: 0, duration: 0.85, delay: i * 0.06, ease: "power3.out",
-            scrollTrigger: { trigger: el, start: "top 90%", once: true }
-          }
-        );
-      });
-      animateCounters();
-    }
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initMotion);
-    } else {
-      initMotion();
-    }
+
+    function initMotion() { initReveal(); initCounters(); }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initMotion);
+    else initMotion();
   })();
   </script>"""
 

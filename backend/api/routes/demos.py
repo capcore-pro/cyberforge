@@ -39,6 +39,8 @@ from tools.demo_pipeline import (
     wrap_demo_for_cloudflare,
 )
 from tools.demo_template_service import heuristic_demo_seed, seed_as_dict
+from tools.premium_seed_context import detect_demo_vertical
+from tools.tavily_extract import TavilyError, tavily_extract_one
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +138,129 @@ async def _seed_with_client_branding(
     elif client.name and not merged.get("brand_name"):
         merged["brand_name"] = client.name
     return merged
+
+
+class UrlClonePreviewRequest(BaseModel):
+    url: str = Field(..., min_length=8, max_length=2048)
+    improved_prompt: str | None = Field(
+        default=None,
+        max_length=4000,
+        description="Optionnel: consignes pour améliorer le clone (UX, copy, sections).",
+    )
+
+
+class UrlClonePreviewResponse(BaseModel):
+    url: str
+    vertical: str
+    title: str
+    html: str
+    extracted_chars: int
+    notes: list[str] = Field(default_factory=list)
+
+
+def _domain_brand(url: str) -> str:
+    import re
+    from urllib.parse import urlparse
+
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:
+        host = ""
+    host = re.sub(r"^www\.", "", host)
+    if not host:
+        return "Nova Studio"
+    base = host.split(".")[0] if "." in host else host
+    base = re.sub(r"[^a-z0-9-]+", " ", base).strip().replace("-", " ")
+    return (base.title()[:40] or "Nova Studio").strip()
+
+
+def _first_heading(markdown: str) -> str:
+    for line in (markdown or "").splitlines():
+        s = line.strip()
+        if s.startswith("#"):
+            return s.lstrip("#").strip()
+    return ""
+
+
+@router.post("/demos/url-clone/preview", response_model=UrlClonePreviewResponse)
+async def url_clone_preview(body: UrlClonePreviewRequest) -> UrlClonePreviewResponse:
+    """
+    Démo interne: analyse URL concurrente via Tavily (extract) puis génération d'un HTML premium.
+    Ne déploie rien (pas de Cloudflare/Supabase) — sert uniquement à prévisualiser.
+    """
+    url = body.url.strip()
+    improved = (body.improved_prompt or "").strip()
+    notes: list[str] = []
+
+    try:
+        extracted = await tavily_extract_one(
+            url,
+            query="Proposition de valeur, sections, offres, tarifs, contact, témoignages, ton de marque",
+            extract_depth="basic",
+            include_images=True,
+        )
+    except TavilyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Tavily indisponible ou non configuré.",
+                "error": str(exc),
+                "hint": "Ajoutez TAVILY_API_KEY dans backend/.env",
+            },
+        ) from exc
+
+    raw = extracted.raw_content.strip()
+    if not raw:
+        raise HTTPException(status_code=422, detail="Extraction vide — impossible de cloner.")
+
+    heading = _first_heading(raw)
+    brand = _domain_brand(url)
+    title = heading[:80].strip() or f"Site {brand}"
+    vertical = detect_demo_vertical(raw + "\n" + improved, project_type_label="landing")
+
+    # Seed “landing” enrichie: on injecte le contenu concurrent dans subtitle/prompt pour contextualiser.
+    prompt = (
+        f"Clone amélioré d'un concurrent depuis URL.\n"
+        f"URL: {url}\n"
+        f"Marque: {brand}\n"
+        f"Vertical: {vertical}\n\n"
+        f"Contenu extrait (markdown):\n{raw[:14_000]}\n\n"
+    )
+    if improved:
+        prompt += f"Contraintes amélioration:\n{improved}\n"
+
+    from tools.demo_template_service import DemoSeedData, align_seed_template
+    from tools.demo_template_service import build_html_from_seed
+
+    seed = DemoSeedData(
+        template="landing",
+        title=title,
+        subtitle="Une expérience premium, plus claire, plus rapide, plus rassurante.",
+        brand_name=brand,
+        brand_tag="Version améliorée",
+        user_name="Alex Martin",
+        user_role="Fondateur",
+        tasks=(),
+        llm_personalized=False,
+    )
+    # Aligne la seed (vertical via hints) en réutilisant la pipeline existante.
+    seed = align_seed_template(seed, prompt, project_type_label="landing")
+    html = build_html_from_seed(seed)
+    if "<!DOCTYPE" not in html or len(html) < 1000:
+        raise HTTPException(status_code=422, detail="HTML généré invalide.")
+
+    notes.append("Preview interne uniquement (aucun déploiement).")
+    if extracted.images:
+        notes.append(f"{len(extracted.images)} image(s) trouvée(s) (non injectées automatiquement en V1).")
+
+    return UrlClonePreviewResponse(
+        url=url,
+        vertical=vertical,
+        title=seed.title,
+        html=html,
+        extracted_chars=len(raw),
+        notes=notes,
+    )
 
 
 @router.post("/demos", response_model=CreateDemoResponse)

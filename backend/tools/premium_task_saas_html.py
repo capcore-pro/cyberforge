@@ -200,7 +200,9 @@ def build_premium_task_manager_html(
       user-select: none;
       transition: background 0.15s, color 0.15s;
     }}
-    .saas-nav-item:hover {{ background: rgba(255,255,255,0.04); color: #cbd5e1; }}
+    @media (hover:hover) and (pointer:fine) {{
+      .saas-nav-item:hover {{ background: rgba(255,255,255,0.04); color: #cbd5e1; }}
+    }}
     .saas-nav-item.active {{
       background: rgba(99,102,241,0.18);
       color: #e0e7ff;
@@ -249,7 +251,9 @@ def build_premium_task_manager_html(
       flex-shrink: 0;
       padding: 0;
     }}
-    .saas-menu-btn:hover {{ background: rgba(99,102,241,0.2); border-color: rgba(129,140,248,0.35); }}
+    @media (hover:hover) and (pointer:fine) {{
+      .saas-menu-btn:hover {{ background: rgba(99,102,241,0.2); border-color: rgba(129,140,248,0.35); }}
+    }}
     .saas-menu-btn span {{
       display: block; width: 20px; height: 2px; background: #e2e8f0;
       border-radius: 2px; transition: transform 0.3s, opacity 0.3s;
@@ -267,11 +271,18 @@ def build_premium_task_manager_html(
       box-shadow: 0 4px 24px rgba(0,0,0,0.2);
       transition: transform 0.25s, box-shadow 0.25s;
     }}
-    .kpi-card:hover, .stat-card:hover, .project-card:hover {{
-      transform: translateY(-2px);
-      box-shadow: 0 12px 36px rgba(0,0,0,0.28);
+    @media (hover:hover) and (pointer:fine) {{
+      .kpi-card:hover, .stat-card:hover, .project-card:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 12px 36px rgba(0,0,0,0.28);
+      }}
     }}
     .cf-reveal {{ opacity: 0; transform: translateY(24px); }}
+    .cf-reveal.cf-in {{
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 700ms ease, transform 700ms cubic-bezier(.2,.9,.2,1);
+    }}
     .saas-sidebar-backdrop {{
       display: none;
       position: fixed;

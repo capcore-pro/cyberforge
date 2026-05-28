@@ -223,6 +223,16 @@ class Settings(BaseSettings):
         alias="UNSPLASH_HTTP_TIMEOUT_SECONDS",
     )
 
+    tavily_api_key: SecretStr | None = Field(
+        default=None,
+        alias="TAVILY_API_KEY",
+        description="Clé API Tavily (Extract) pour analyse URL concurrente.",
+    )
+    tavily_http_timeout_seconds: float = Field(
+        default=25.0,
+        alias="TAVILY_HTTP_TIMEOUT_SECONDS",
+    )
+
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",
         alias="CORS_ORIGINS",

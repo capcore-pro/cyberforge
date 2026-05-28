@@ -105,6 +105,45 @@ _VERTICAL_HEALTH = (
     "hopital",
     "hôpital",
 )
+_VERTICAL_ARTISAN = (
+    "artisan",
+    "plombier",
+    "plomberie",
+    "électricien",
+    "electricien",
+    "électricité",
+    "electricite",
+    "chauffagiste",
+    "serrurier",
+    "peintre",
+    "rénovation",
+    "renovation",
+    "dépannage",
+    "depannage",
+)
+_VERTICAL_BEAUTY = (
+    "coiffure",
+    "coiffeur",
+    "salon",
+    "barbier",
+    "esthétique",
+    "esthetique",
+    "ongles",
+    "manucure",
+    "spa",
+    "institut",
+)
+_VERTICAL_FITNESS = (
+    "fitness",
+    "gym",
+    "salle de sport",
+    "coach",
+    "coaching",
+    "crossfit",
+    "yoga",
+    "pilates",
+    "musculation",
+)
 _VERTICAL_FINANCE = (
     "finance",
     "fintech",
@@ -119,7 +158,7 @@ _VERTICAL_FINANCE = (
 
 
 def detect_demo_vertical(prompt: str, *, project_type_label: str = "") -> str:
-    """Retourne marketing | real_estate | restaurant | health | finance | generic."""
+    """Retourne marketing | real_estate | restaurant | health | finance | artisan | beauty | fitness | generic."""
     blob = f"{project_type_label}\n{prompt}".lower()
 
     scores: dict[str, int] = {
@@ -128,6 +167,9 @@ def detect_demo_vertical(prompt: str, *, project_type_label: str = "") -> str:
         "restaurant": sum(1 for k in _VERTICAL_RESTAURANT if k in blob),
         "health": sum(1 for k in _VERTICAL_HEALTH if k in blob),
         "finance": sum(1 for k in _VERTICAL_FINANCE if k in blob),
+        "artisan": sum(1 for k in _VERTICAL_ARTISAN if k in blob),
+        "beauty": sum(1 for k in _VERTICAL_BEAUTY if k in blob),
+        "fitness": sum(1 for k in _VERTICAL_FITNESS if k in blob),
     }
     if re.search(r"\bagence\s+marketing\b", blob):
         scores["marketing"] += 4
@@ -137,6 +179,12 @@ def detect_demo_vertical(prompt: str, *, project_type_label: str = "") -> str:
         scores["marketing"] += 2
     if re.search(r"\b(restaurant|café|cafe|bistrot|gastronom)\b", blob):
         scores["restaurant"] += 3
+    if re.search(r"\b(plombier|électricien|electricien|chauffagiste|serrurier|dépannage|depannage)\b", blob):
+        scores["artisan"] += 3
+    if re.search(r"\b(coiffure|barbier|esthétique|esthetique|institut)\b", blob):
+        scores["beauty"] += 3
+    if re.search(r"\b(fitness|gym|crossfit|yoga|pilates)\b", blob):
+        scores["fitness"] += 3
     label_lower = project_type_label.lower()
     if "site web" in label_lower and scores["restaurant"] > 0:
         scores["restaurant"] += 1
@@ -308,6 +356,123 @@ def contextual_crm_contacts(
                 "deal_value": "—",
             },
         ]
+    elif vertical == "artisan":
+        rows = [
+            {
+                "id": "1",
+                "company": brand,
+                "person": "Sophie Martin",
+                "status": "Client",
+                "email": "sophie.martin@gmail.com",
+                "role_line": "Sophie Martin — Dépannage fuite cuisine (priorité)",
+                "deal_value": "290 €",
+            },
+            {
+                "id": "2",
+                "company": "Rénovation salle de bain",
+                "person": "Marc & Julie Leroy",
+                "status": "Prospect",
+                "email": "leroy.famille@gmail.com",
+                "role_line": "Devis rénovation complète (douche italienne)",
+                "deal_value": "6 800 €",
+            },
+            {
+                "id": "3",
+                "company": "Contrat entretien",
+                "person": "Philippe Garnier",
+                "status": "Client",
+                "email": "p.garnier@proton.me",
+                "role_line": "Entretien annuel chaudière + pièces",
+                "deal_value": "180 €",
+            },
+            {
+                "id": "4",
+                "company": "Urgence week-end",
+                "person": "Inès Benali",
+                "status": "Prospect",
+                "email": "ines.benali@gmail.com",
+                "role_line": "Canalisation bouchée — intervention 24h",
+                "deal_value": "—",
+            },
+        ]
+    elif vertical == "beauty":
+        rows = [
+            {
+                "id": "1",
+                "company": brand,
+                "person": "Camille Rousseau",
+                "status": "Client",
+                "email": "camille.rousseau@gmail.com",
+                "role_line": "Balayage + coupe — fidélité (5e visite)",
+                "deal_value": "145 €",
+            },
+            {
+                "id": "2",
+                "company": "Forfait mariée",
+                "person": "Nadia El Amrani",
+                "status": "Prospect",
+                "email": "nadia.elamrani@gmail.com",
+                "role_line": "Essai + chignon — date 14/06",
+                "deal_value": "320 €",
+            },
+            {
+                "id": "3",
+                "company": "Barbe & entretien",
+                "person": "Thomas Rey",
+                "status": "Client",
+                "email": "thomas.rey@gmail.com",
+                "role_line": "Barbier — créneau mensuel",
+                "deal_value": "35 €",
+            },
+            {
+                "id": "4",
+                "company": "Cartes cadeaux",
+                "person": "Sophie Bernard",
+                "status": "Prospect",
+                "email": "sophie.bernard@gmail.com",
+                "role_line": "Achat carte cadeau — 2 prestations",
+                "deal_value": "—",
+            },
+        ]
+    elif vertical == "fitness":
+        rows = [
+            {
+                "id": "1",
+                "company": brand,
+                "person": "Julien Perrin",
+                "status": "Prospect",
+                "email": "julien.perrin@gmail.com",
+                "role_line": "Essai 7 jours + onboarding coach",
+                "deal_value": "—",
+            },
+            {
+                "id": "2",
+                "company": "Pack coaching",
+                "person": "Inès Benali",
+                "status": "Client",
+                "email": "ines.benali@gmail.com",
+                "role_line": "Pack 10 séances — objectif renfo",
+                "deal_value": "490 €",
+            },
+            {
+                "id": "3",
+                "company": "Abonnement annuel",
+                "person": "Sophie Lemaire",
+                "status": "Client",
+                "email": "sophie.lemaire@gmail.com",
+                "role_line": "Renouvellement — prélèvement SEPA",
+                "deal_value": "420 €",
+            },
+            {
+                "id": "4",
+                "company": "Entreprise",
+                "person": "Marc Delaunay",
+                "status": "Prospect",
+                "email": "marc.delaunay@startup.fr",
+                "role_line": "Offre corporate 12 salariés",
+                "deal_value": "1 200 €",
+            },
+        ]
     else:
         from tools.premium_demo_data import CRM_CONTACTS
 
@@ -361,6 +526,27 @@ def contextual_crm_pipeline(
             {"stage": "Client", "deal": "Mandat T4 Villeurbanne — signé", "color": "#4ade80"},
             {"stage": "Perdu", "deal": "Maison Villefranche — mandat expiré", "color": "#f87171"},
         ]
+    if vertical == "artisan":
+        return [
+            {"stage": "À planifier", "deal": "Devis rénovation SDB — Leroy", "color": "#6366f1"},
+            {"stage": "En cours", "deal": "Dépannage fuite — Martin", "color": "#4ade80"},
+            {"stage": "Terminé", "deal": "Entretien chaudière — Garnier", "color": "#4ade80"},
+            {"stage": "Perdu", "deal": "Installation PAC — budget reporté", "color": "#f87171"},
+        ]
+    if vertical == "beauty":
+        return [
+            {"stage": "Confirmé", "deal": "Balayage + coupe — Rousseau", "color": "#4ade80"},
+            {"stage": "En attente", "deal": "Forfait mariée — essai", "color": "#6366f1"},
+            {"stage": "Confirmé", "deal": "Barbe — Rey (mensuel)", "color": "#4ade80"},
+            {"stage": "Annulé", "deal": "No-show — créneau 18h", "color": "#f87171"},
+        ]
+    if vertical == "fitness":
+        return [
+            {"stage": "Essai", "deal": "Essai 7 jours — Perrin", "color": "#6366f1"},
+            {"stage": "Client", "deal": "Pack coaching 10 séances — Benali", "color": "#4ade80"},
+            {"stage": "Client", "deal": "Renouvellement annuel — Lemaire", "color": "#4ade80"},
+            {"stage": "Perdu", "deal": "Corporate — budget gelé", "color": "#f87171"},
+        ]
     from tools.premium_demo_data import CRM_PIPELINE
 
     return [dict(p) for p in CRM_PIPELINE]
@@ -400,6 +586,27 @@ def contextual_dashboard_kpis(
             {"label": f"Ticket moyen ({cuisine})", "value": "48,90 €", "trend": "+2,1 %", "up": True},
             {"label": "Taux no-show", "value": "4,2 %", "trend": "-0,8 pt", "up": True},
         ]
+    if vertical == "artisan":
+        return [
+            {"label": "Interventions (7 j)", "value": "46", "trend": "+6", "up": True},
+            {"label": "Devis envoyés", "value": "19", "trend": "+12 %", "up": True},
+            {"label": "Taux conversion devis", "value": "38 %", "trend": "+4 pt", "up": True},
+            {"label": "CA main-d'œuvre", "value": "14 850 €", "trend": "+7,2 %", "up": True},
+        ]
+    if vertical == "beauty":
+        return [
+            {"label": "RDV (semaine)", "value": "128", "trend": "+9 %", "up": True},
+            {"label": "Taux remplissage", "value": "92 %", "trend": "+3 pt", "up": True},
+            {"label": "Panier moyen", "value": "58,40 €", "trend": "+1,8 %", "up": True},
+            {"label": "No-show", "value": "3,1 %", "trend": "-0,4 pt", "up": True},
+        ]
+    if vertical == "fitness":
+        return [
+            {"label": "Adhérents actifs", "value": "742", "trend": "+21", "up": True},
+            {"label": "Taux rétention", "value": "87 %", "trend": "+2 pt", "up": True},
+            {"label": "Cours collectifs", "value": "64", "trend": "+8", "up": True},
+            {"label": "Upsell coaching", "value": "16,2 %", "trend": "+1,1 pt", "up": True},
+        ]
     from tools.premium_demo_data import DASHBOARD_KPIS
 
     return [dict(k) for k in DASHBOARD_KPIS]
@@ -422,6 +629,33 @@ def contextual_dashboard_chart(*, vertical: str) -> list[dict[str, str | int]]:
             {"month": "Mar", "height": 58},
             {"month": "Avr", "height": 65},
             {"month": "Mai", "height": 71},
+            {"month": "Juin", "height": 88},
+        ]
+    if vertical == "artisan":
+        return [
+            {"month": "Jan", "height": 44},
+            {"month": "Fév", "height": 49},
+            {"month": "Mar", "height": 61},
+            {"month": "Avr", "height": 58},
+            {"month": "Mai", "height": 72},
+            {"month": "Juin", "height": 83},
+        ]
+    if vertical == "beauty":
+        return [
+            {"month": "Jan", "height": 52},
+            {"month": "Fév", "height": 56},
+            {"month": "Mar", "height": 63},
+            {"month": "Avr", "height": 70},
+            {"month": "Mai", "height": 78},
+            {"month": "Juin", "height": 90},
+        ]
+    if vertical == "fitness":
+        return [
+            {"month": "Jan", "height": 48},
+            {"month": "Fév", "height": 54},
+            {"month": "Mar", "height": 57},
+            {"month": "Avr", "height": 69},
+            {"month": "Mai", "height": 76},
             {"month": "Juin", "height": 88},
         ]
     from tools.premium_demo_data import DASHBOARD_CHART
@@ -478,6 +712,27 @@ def contextual_dashboard_sectors(
             {"sector": "Location", "revenue": "28 600 €", "growth": "+9 %", "share": "23 %"},
             {"sector": "Investissement", "revenue": "24 200 €", "growth": "+21 %", "share": "20 %"},
             {"sector": "Neuf & promoteurs", "revenue": "18 900 €", "growth": "+6 %", "share": "15 %"},
+        ]
+    if vertical == "artisan":
+        return [
+            {"sector": "Dépannage urgent", "revenue": "6 300 €", "growth": "+12 %", "share": "34 %"},
+            {"sector": "Rénovation SDB", "revenue": "4 850 €", "growth": "+18 %", "share": "26 %"},
+            {"sector": "Chauffage & ECS", "revenue": "5 120 €", "growth": "+7 %", "share": "28 %"},
+            {"sector": "Contrats entretien", "revenue": "2 150 €", "growth": "+4 %", "share": "12 %"},
+        ]
+    if vertical == "beauty":
+        return [
+            {"sector": "Coupe & brushing", "revenue": "7 400 €", "growth": "+8 %", "share": "38 %"},
+            {"sector": "Coloration", "revenue": "5 900 €", "growth": "+11 %", "share": "30 %"},
+            {"sector": "Barbier", "revenue": "3 100 €", "growth": "+6 %", "share": "16 %"},
+            {"sector": "Soins & beauté", "revenue": "3 000 €", "growth": "+14 %", "share": "16 %"},
+        ]
+    if vertical == "fitness":
+        return [
+            {"sector": "Abonnements", "revenue": "24 600 €", "growth": "+9 %", "share": "62 %"},
+            {"sector": "Coaching", "revenue": "8 200 €", "growth": "+16 %", "share": "21 %"},
+            {"sector": "Cours collectifs", "revenue": "4 300 €", "growth": "+7 %", "share": "11 %"},
+            {"sector": "Boutique", "revenue": "2 200 €", "growth": "+5 %", "share": "6 %"},
         ]
     from tools.premium_demo_data import DASHBOARD_SECTORS
 
@@ -540,6 +795,71 @@ def contextual_invoices(
                 "badge_class": "cf-badge cf-badge-pending",
             },
         ]
+    if vertical == "artisan":
+        return [
+            {
+                "id": "2026-4101",
+                "number": "FAC-2026-4101",
+                "client": "Dépannage fuite — Sophie Martin",
+                "ht": 241.67,
+                "status": "Payée",
+                "badge_class": "cf-badge",
+            },
+            {
+                "id": "2026-4102",
+                "number": "FAC-2026-4102",
+                "client": "Rénovation salle de bain — devis",
+                "ht": 5666.67,
+                "status": "En attente",
+                "badge_class": "cf-badge cf-badge-pending",
+            },
+            {
+                "id": "2026-4103",
+                "number": "FAC-2026-4103",
+                "client": "Entretien chaudière — Philippe Garnier",
+                "ht": 150.00,
+                "status": "En retard",
+                "badge_class": "cf-badge cf-badge-overdue",
+            },
+        ]
+    if vertical == "beauty":
+        return [
+            {
+                "id": "2026-5101",
+                "number": "FAC-2026-5101",
+                "client": "Balayage + coupe — Camille Rousseau",
+                "ht": 120.83,
+                "status": "Payée",
+                "badge_class": "cf-badge",
+            },
+            {
+                "id": "2026-5102",
+                "number": "FAC-2026-5102",
+                "client": "Forfait mariée — acompte",
+                "ht": 120.00,
+                "status": "En attente",
+                "badge_class": "cf-badge cf-badge-pending",
+            },
+        ]
+    if vertical == "fitness":
+        return [
+            {
+                "id": "2026-6101",
+                "number": "FAC-2026-6101",
+                "client": "Abonnement annuel — Sophie Lemaire",
+                "ht": 350.00,
+                "status": "Payée",
+                "badge_class": "cf-badge",
+            },
+            {
+                "id": "2026-6102",
+                "number": "FAC-2026-6102",
+                "client": "Pack coaching 10 séances — Inès Benali",
+                "ht": 408.33,
+                "status": "En attente",
+                "badge_class": "cf-badge cf-badge-pending",
+            },
+        ]
     from tools.premium_demo_data import INVOICES
 
     return [dict(i) for i in INVOICES]
@@ -576,6 +896,30 @@ def contextual_landing_features(
             "Planning visites et relances acheteurs",
             "Estimations et documents conformes",
         )
+    if vertical == "health":
+        return (
+            "Prise de rendez-vous et rappels automatiques",
+            "Dossiers patients et consentements RGPD",
+            "Planning équipe et optimisation des créneaux",
+        )
+    if vertical == "artisan":
+        return (
+            "Demandes d’intervention et planning en temps réel",
+            "Devis/Factures en 1 clic + signatures",
+            "Suivi chantiers, photos et rapports client",
+        )
+    if vertical == "beauty":
+        return (
+            "Réservations en ligne + rappels SMS/email",
+            "Catalogue prestations, forfaits et fidélité",
+            "Gestion équipe, cabines et stocks produits",
+        )
+    if vertical == "fitness":
+        return (
+            "Planning cours collectifs + listes d’attente",
+            "Abonnements, paiements et relances",
+            "Suivi progression + coaching personnalisé",
+        )
     from tools.premium_demo_data import LANDING_FEATURES
 
     return LANDING_FEATURES
@@ -606,6 +950,71 @@ def contextual_landing_testimonials(*, vertical: str) -> list[dict[str, str]]:
                 "quote": "Mes acheteurs reçoivent les créneaux de visite sans relance manuelle.",
                 "author": "Philippe Garnier",
                 "role": "Agent senior, Villeurbanne",
+            },
+        ]
+    if vertical == "restaurant":
+        return [
+            {
+                "quote": "La prise de réservation a réduit les no-shows et on optimise enfin le plan de salle.",
+                "author": "Élodie Marchand",
+                "role": "Gérante, brasserie",
+            },
+            {
+                "quote": "On a un vrai suivi des couverts + ticket moyen — la marge s’est améliorée dès le 1er mois.",
+                "author": "Antoine Leroy",
+                "role": "Chef, bistrot",
+            },
+        ]
+    if vertical == "health":
+        return [
+            {
+                "quote": "Les rappels automatiques ont divisé par deux les RDV manqués.",
+                "author": "Dr. Sophie Bernard",
+                "role": "Médecin généraliste",
+            },
+            {
+                "quote": "Le planning équipe est enfin lisible et on gagne du temps à l’accueil.",
+                "author": "Marc Delaunay",
+                "role": "Directeur de clinique",
+            },
+        ]
+    if vertical == "artisan":
+        return [
+            {
+                "quote": "Devis et factures partent en 2 minutes, et le client signe sur mobile.",
+                "author": "Philippe Garnier",
+                "role": "Artisan chauffagiste",
+            },
+            {
+                "quote": "On a un suivi chantier clair (photos, étapes) : zéro malentendu.",
+                "author": "Julie Leroy",
+                "role": "Particulier — rénovation",
+            },
+        ]
+    if vertical == "beauty":
+        return [
+            {
+                "quote": "Le remplissage du planning a augmenté et les clientes reçoivent les rappels automatiquement.",
+                "author": "Camille Rousseau",
+                "role": "Manager salon",
+            },
+            {
+                "quote": "L’encaissement est plus fluide et la fidélité se gère sans effort.",
+                "author": "Nadia El Amrani",
+                "role": "Coiffeuse",
+            },
+        ]
+    if vertical == "fitness":
+        return [
+            {
+                "quote": "Les inscriptions aux cours sont simples, et les listes d’attente remplissent les créneaux.",
+                "author": "Julien Perrin",
+                "role": "Coach sportif",
+            },
+            {
+                "quote": "Les relances d’abonnement ont stabilisé la rétention.",
+                "author": "Sophie Lemaire",
+                "role": "Manager club",
             },
         ]
     from tools.premium_demo_data import LANDING_TESTIMONIALS
@@ -694,6 +1103,55 @@ def contextual_tasks(
             ("Commander les produits frais au marché", True),
             ("Brief équipe salle sur les accords mets-vins", False),
         )
+    if vertical == "artisan":
+        if template == "crm":
+            return (
+                ("Qualifier les demandes d’intervention (24h)", False),
+                ("Envoyer le devis rénovation SDB (PDF)", False),
+                ("Planifier les interventions semaine prochaine", True),
+                ("Relancer acompte sur devis en attente", False),
+            )
+        if template in ("dashboard", "saas_dashboard"):
+            return (
+                ("Suivre le taux conversion devis → interventions", False),
+                ("Analyser les urgences week-end (temps moyen)", False),
+                ("Exporter le rapport CA main-d'œuvre", True),
+                ("Optimiser la tournée (trajets + temps)", False),
+            )
+        return (
+            ("Mettre à jour le planning interventions", False),
+            ("Préparer les pièces chantier", False),
+            ("Envoyer photos avant/après au client", True),
+            ("Finaliser la facture d’intervention", False),
+        )
+    if vertical == "beauty":
+        if template == "reservation":
+            return (
+                ("Confirmer les RDV de demain (rappels)", False),
+                ("Bloquer 1h pour coloration longue", False),
+                ("Mettre à jour le catalogue prestations", True),
+                ("Relancer les no-show récents", False),
+            )
+        return (
+            ("Préparer les créneaux week-end", False),
+            ("Mettre à jour la fiche cliente fidélité", False),
+            ("Commander produits coloration", True),
+            ("Publier le planning équipe", False),
+        )
+    if vertical == "fitness":
+        if template == "reservation":
+            return (
+                ("Ouvrir les inscriptions cours du samedi", False),
+                ("Gérer la liste d’attente HIIT", False),
+                ("Planifier les coachings 1:1", True),
+                ("Relancer les essais 7 jours", False),
+            )
+        return (
+            ("Mettre à jour le planning cours collectifs", False),
+            ("Analyser la rétention (mensuel)", False),
+            ("Lancer une campagne upsell coaching", True),
+            ("Préparer onboarding nouveaux adhérents", False),
+        )
     return ()
 
 
@@ -705,14 +1163,27 @@ def contextual_reservation_bookings(
     project_type_label: str = "",
     hints: PromptSeedHints | None = None,
 ) -> list[dict[str, str | int]]:
-    """Créneaux restaurant contextualisés (sinon données premium par défaut)."""
-    if vertical != "restaurant":
+    """Créneaux contextualisés (restaurant/beauty/fitness), sinon données premium par défaut."""
+    if vertical not in ("restaurant", "beauty", "fitness"):
         from tools.premium_demo_data import RESERVATION_SLOTS
-
         return [dict(b) for b in RESERVATION_SLOTS]
 
     h = _hints_or_build(hints, prompt, project_type_label)
     venue = brand_name or h.brand_name
+    if vertical == "beauty":
+        return [
+            {"id": "1", "date": "26 mai 2026", "slot": "10:00", "name": "Camille Rousseau", "covers": 1, "status": "Confirmée", "note": "Balayage + coupe (2h)"},
+            {"id": "2", "date": "26 mai 2026", "slot": "14:30", "name": "Nadia El Amrani", "covers": 1, "status": "En attente", "note": "Essai mariée (1h)"},
+            {"id": "3", "date": "27 mai 2026", "slot": "18:00", "name": "Thomas Rey", "covers": 1, "status": "Confirmée", "note": f"Barbier — {venue}"},
+            {"id": "4", "date": "27 mai 2026", "slot": "19:30", "name": "Sophie Bernard", "covers": 1, "status": "Annulée", "note": "No-show — reprogrammation"},
+        ]
+    if vertical == "fitness":
+        return [
+            {"id": "1", "date": "26 mai 2026", "slot": "07:30", "name": "Cours HIIT", "covers": 18, "status": "Confirmée", "note": "Liste d'attente 4"},
+            {"id": "2", "date": "26 mai 2026", "slot": "12:15", "name": "Pilates", "covers": 12, "status": "Confirmée", "note": "Niveau intermédiaire"},
+            {"id": "3", "date": "27 mai 2026", "slot": "18:30", "name": "Cross-training", "covers": 16, "status": "En attente", "note": "2 places restantes"},
+            {"id": "4", "date": "27 mai 2026", "slot": "20:00", "name": "Coaching 1:1", "covers": 1, "status": "Confirmée", "note": f"Objectif renfo — {venue}"},
+        ]
     return [
         {
             "id": "1",

@@ -10,6 +10,12 @@ import {
 } from "@/lib/vitrines-api";
 import { API_PREFIX } from "@shared/constants";
 import { apiRequest } from "@/lib/api-client";
+import {
+  searchVitrineImages,
+  setVitrineImage,
+  type UnsplashSearchItem,
+  type VitrineImageSlot,
+} from "@/lib/vitrines-images-api";
 
 function formatDate(iso: string): string {
   try {
@@ -53,6 +59,19 @@ export function VitrinesPage() {
   );
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const [imagesTarget, setImagesTarget] = useState<ManagedProjectRecord | null>(
+    null,
+  );
+  const [imagesSlot, setImagesSlot] = useState<{
+    slot: VitrineImageSlot;
+    index?: number;
+  } | null>(null);
+  const [imagesQuery, setImagesQuery] = useState("");
+  const [imagesOrientation, setImagesOrientation] = useState<string>("landscape");
+  const [imagesBusy, setImagesBusy] = useState(false);
+  const [imagesResults, setImagesResults] = useState<UnsplashSearchItem[]>([]);
+  const [imagesError, setImagesError] = useState<string | null>(null);
 
   const [authById, setAuthById] = useState<
     Record<
@@ -300,6 +319,72 @@ export function VitrinesPage() {
     }
   }
 
+  async function openImages(p: ManagedProjectRecord) {
+    setImagesTarget(p);
+    setImagesSlot({ slot: "hero" });
+    setImagesResults([]);
+    setImagesError(null);
+    setImagesQuery("");
+  }
+
+  function closeImages() {
+    setImagesTarget(null);
+    setImagesSlot(null);
+    setImagesResults([]);
+    setImagesError(null);
+  }
+
+  async function runImageSearch() {
+    if (!imagesTarget) return;
+    const q = imagesQuery.trim();
+    if (q.length < 2) {
+      setImagesError("Recherche trop courte.");
+      return;
+    }
+    setImagesBusy(true);
+    setImagesError(null);
+    try {
+      const resp = await searchVitrineImages(
+        imagesTarget.id,
+        q,
+        imagesOrientation || undefined,
+        1,
+      );
+      if (!resp.ok) {
+        setImagesError(apiErrorMessage(resp, "Recherche Unsplash impossible."));
+        return;
+      }
+      setImagesResults(Array.isArray(resp.data) ? resp.data : []);
+    } finally {
+      setImagesBusy(false);
+    }
+  }
+
+  async function applyImage(item: UnsplashSearchItem) {
+    if (!imagesTarget || !imagesSlot) return;
+    setImagesBusy(true);
+    setImagesError(null);
+    try {
+      const resp = await setVitrineImage(imagesTarget.id, {
+        slot: imagesSlot.slot,
+        index: imagesSlot.index,
+        url: item.url,
+        alt: item.alt,
+        photographer: item.photographer ?? null,
+        photographerUrl: item.photographerUrl ?? null,
+        imageQuery: item.imageQuery ?? imagesQuery.trim() || null,
+      });
+      if (!resp.ok) {
+        setImagesError(apiErrorMessage(resp, "Remplacement image impossible."));
+        return;
+      }
+      // refresh list so status updates to building
+      await load();
+    } finally {
+      setImagesBusy(false);
+    }
+  }
+
   function closePreview() {
     setPreviewTarget(null);
     setPreviewImage(null);
@@ -414,6 +499,12 @@ export function VitrinesPage() {
                   </button>
                   <button
                     className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/15"
+                    onClick={() => void openImages(p)}
+                  >
+                    Images
+                  </button>
+                  <button
+                    className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/15"
                     onClick={() => void onUpdate(p.id)}
                   >
                     Modifier
@@ -511,6 +602,120 @@ export function VitrinesPage() {
                       : "Capture indisponible (Replicate non configuré ou erreur)."}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {imagesTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex h-[min(90vh,720px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-white/10 bg-[#0a0a0f]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-neon">
+                  Images vitrine
+                </div>
+                <div className="text-[10px] text-cyber-muted">
+                  {imagesTarget.title || imagesTarget.slug}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeImages}
+                className="rounded border border-white/10 px-3 py-1 text-xs text-cyber-muted hover:border-white/20 hover:text-white"
+              >
+                Fermer
+              </button>
+            </div>
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 md:grid-cols-2">
+              <div className="space-y-3 overflow-auto rounded border border-white/10 bg-black/20 p-3">
+                <div className="text-sm font-semibold">Slot</div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className={`rounded px-3 py-1 text-xs ${imagesSlot?.slot === "hero" ? "bg-white/20" : "bg-white/10 hover:bg-white/15"}`}
+                    onClick={() => setImagesSlot({ slot: "hero" })}
+                  >
+                    Hero
+                  </button>
+                  <button
+                    className={`rounded px-3 py-1 text-xs ${imagesSlot?.slot === "servicesPreview" && imagesSlot?.index === 0 ? "bg-white/20" : "bg-white/10 hover:bg-white/15"}`}
+                    onClick={() => setImagesSlot({ slot: "servicesPreview", index: 0 })}
+                  >
+                    Services #1
+                  </button>
+                  <button
+                    className={`rounded px-3 py-1 text-xs ${imagesSlot?.slot === "servicesPreview" && imagesSlot?.index === 1 ? "bg-white/20" : "bg-white/10 hover:bg-white/15"}`}
+                    onClick={() => setImagesSlot({ slot: "servicesPreview", index: 1 })}
+                  >
+                    Services #2
+                  </button>
+                  <button
+                    className={`rounded px-3 py-1 text-xs ${imagesSlot?.slot === "servicesPreview" && imagesSlot?.index === 2 ? "bg-white/20" : "bg-white/10 hover:bg-white/15"}`}
+                    onClick={() => setImagesSlot({ slot: "servicesPreview", index: 2 })}
+                  >
+                    Services #3
+                  </button>
+                </div>
+                <div className="text-xs opacity-80">
+                  Sections services : disponibles via index (V1 UI minimal).
+                </div>
+                <div className="text-sm font-semibold">Recherche Unsplash</div>
+                <div className="flex gap-2">
+                  <input
+                    className="w-full rounded bg-black/30 p-2 text-sm outline-none"
+                    placeholder="Ex: plombier, boulangerie, salle de bain…"
+                    value={imagesQuery}
+                    onChange={(e) => setImagesQuery(e.target.value)}
+                  />
+                  <select
+                    className="rounded bg-black/30 p-2 text-sm outline-none"
+                    value={imagesOrientation}
+                    onChange={(e) => setImagesOrientation(e.target.value)}
+                  >
+                    <option value="landscape">landscape</option>
+                    <option value="squarish">squarish</option>
+                    <option value="portrait">portrait</option>
+                  </select>
+                </div>
+                <button
+                  className="w-full rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-50"
+                  disabled={imagesBusy}
+                  onClick={() => void runImageSearch()}
+                >
+                  {imagesBusy ? "Recherche…" : "Rechercher"}
+                </button>
+                {imagesError ? <div className="text-sm text-red-300">{imagesError}</div> : null}
+              </div>
+              <div className="min-h-0 overflow-auto rounded border border-white/10 bg-black/20 p-3">
+                <div className="mb-2 text-sm font-semibold">Résultats</div>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                  {imagesResults.map((it) => (
+                    <button
+                      key={it.id}
+                      className="overflow-hidden rounded border border-white/10 bg-black/10 text-left hover:border-white/20"
+                      onClick={() => void applyImage(it)}
+                      disabled={imagesBusy}
+                      title={it.alt}
+                    >
+                      <img
+                        src={it.thumbUrl || it.url}
+                        alt={it.alt}
+                        className="h-24 w-full object-cover"
+                      />
+                      <div className="p-2 text-[10px] opacity-80">
+                        {it.photographer || "Unsplash"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {!imagesResults.length ? (
+                  <div className="mt-2 text-xs opacity-70">Aucun résultat.</div>
+                ) : null}
               </div>
             </div>
           </div>

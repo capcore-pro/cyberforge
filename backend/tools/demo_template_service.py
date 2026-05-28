@@ -706,6 +706,14 @@ def enrich_demo_seed(seed: DemoSeedData) -> DemoSeedData:
             role = "Agent immobilier senior"
         elif hints.vertical == "restaurant":
             role = "Chef / Gérant"
+        elif hints.vertical == "health":
+            role = "Responsable cabinet"
+        elif hints.vertical == "artisan":
+            role = "Artisan / Gérant"
+        elif hints.vertical == "beauty":
+            role = "Manager salon"
+        elif hints.vertical == "fitness":
+            role = "Manager club"
 
     subtitle = _subtitle_for_template(
         template,

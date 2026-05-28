@@ -23,6 +23,7 @@ import {
   type CreateDemoResponse,
   type DemoDuration,
 } from "@/lib/demos-api";
+import { previewUrlClone } from "@/lib/url-clone-api";
 import {
   copyTextToClipboard,
   downloadProjectZip,
@@ -136,6 +137,10 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const [demoBusy, setDemoBusy] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [demoCreated, setDemoCreated] = useState<CreateDemoResponse | null>(null);
+  const [urlCloneUrl, setUrlCloneUrl] = useState("");
+  const [urlClonePrompt, setUrlClonePrompt] = useState("");
+  const [urlCloneBusy, setUrlCloneBusy] = useState(false);
+  const [urlCloneError, setUrlCloneError] = useState<string | null>(null);
   const [linkedClientId, setLinkedClientId] = useState<string | null>(() =>
     getSelectedClientId(),
   );
@@ -192,6 +197,23 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     const code = run?.generation.code?.trim();
     if (code?.includes("saas-shell")) return code;
     return fromServer || null;
+  }
+
+  async function handleUrlClonePreview() {
+    const url = urlCloneUrl.trim();
+    if (!url || url.length < 8) return;
+    setUrlCloneBusy(true);
+    setUrlCloneError(null);
+    const response = await previewUrlClone({
+      url,
+      improved_prompt: urlClonePrompt.trim() || null,
+    });
+    setUrlCloneBusy(false);
+    if (!response.ok || !response.data) {
+      setUrlCloneError(apiErrorMessage(response, "Analyse URL impossible."));
+      return;
+    }
+    patch({ previewHtml: response.data.html });
   }
 
   const effectiveDemoSeed = useCallback(() => {
@@ -688,6 +710,47 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
               disabled={isRunning}
             />
           </label>
+
+          <section className="rounded-lg border border-cyber-border bg-cyber-bg/40 p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyber-violet">
+              URL Clone (beta) · Démo HTML interne
+            </p>
+            <p className="mt-2 text-xs text-cyber-muted">
+              Colle une URL concurrente → extraction (Tavily) → génération d&apos;une landing premium améliorée (preview).
+            </p>
+            <div className="mt-3 grid gap-2">
+              <input
+                value={urlCloneUrl}
+                onChange={(e) => setUrlCloneUrl(e.target.value)}
+                placeholder="https://exemple.com"
+                className="cyber-prompt-field h-10 py-2"
+                disabled={isRunning || urlCloneBusy}
+              />
+              <textarea
+                value={urlClonePrompt}
+                onChange={(e) => setUrlClonePrompt(e.target.value)}
+                rows={3}
+                placeholder="Optionnel: améliore le copy, ajoute preuve sociale, CTA clair, sections pricing…"
+                className="cyber-prompt-field"
+                disabled={isRunning || urlCloneBusy}
+              />
+              {urlCloneError ? (
+                <p className="rounded border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300">
+                  {urlCloneError}
+                </p>
+              ) : null}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="cyber-action-btn cyber-action-btn-primary"
+                  disabled={isRunning || urlCloneBusy || urlCloneUrl.trim().length < 8}
+                  onClick={() => void handleUrlClonePreview()}
+                >
+                  {urlCloneBusy ? "Analyse…" : "Prévisualiser le clone"}
+                </button>
+              </div>
+            </div>
+          </section>
 
           <div className="flex flex-wrap items-center gap-3">
             <button

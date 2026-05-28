@@ -240,6 +240,92 @@ async def push_source_to_github(
     return await _create_gist(project_slug, files, token)
 
 
+async def get_github_file(
+    *,
+    repo: str,
+    branch: str,
+    path: str,
+    settings: Settings | None = None,
+) -> tuple[str, str]:
+    """
+    Lit un fichier via GitHub Contents API.
+
+    Retourne (sha, content_utf8).
+    """
+    resolved = settings or get_settings()
+    token = plain_secret_str(resolved.github_token)
+    if not token:
+        raise GitHubExportError("GITHUB_TOKEN non configuré.")
+    if "/" not in repo:
+        raise GitHubExportError(f"Dépôt GitHub invalide : {repo!r}")
+    owner, name = repo.split("/", 1)
+    cleaned_path = (path or "").lstrip("/")
+    if not cleaned_path:
+        raise GitHubExportError("Chemin fichier GitHub manquant.")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.get(
+            f"{GITHUB_API}/repos/{owner}/{name}/contents/{cleaned_path}",
+            headers=_headers(token),
+            params={"ref": vitrine_branch_name(branch)},
+        )
+        if r.status_code >= 400:
+            raise GitHubExportError(f"Lecture fichier {cleaned_path} HTTP {r.status_code}: {r.text[:200]}")
+        js = r.json()
+        sha = js.get("sha")
+        content_b64 = js.get("content") or ""
+        encoding = js.get("encoding") or "base64"
+        if not sha or encoding != "base64":
+            raise GitHubExportError("Réponse GitHub inattendue (sha/encoding).")
+        raw = base64.b64decode(content_b64.encode("utf-8"))
+        return str(sha), raw.decode("utf-8")
+
+
+async def put_github_file(
+    *,
+    repo: str,
+    branch: str,
+    path: str,
+    content_utf8: str,
+    sha: str,
+    message: str,
+    settings: Settings | None = None,
+) -> str:
+    """
+    Met à jour un fichier via GitHub Contents API. Retourne le nouveau sha.
+    """
+    resolved = settings or get_settings()
+    token = plain_secret_str(resolved.github_token)
+    if not token:
+        raise GitHubExportError("GITHUB_TOKEN non configuré.")
+    if "/" not in repo:
+        raise GitHubExportError(f"Dépôt GitHub invalide : {repo!r}")
+    owner, name = repo.split("/", 1)
+    cleaned_path = (path or "").lstrip("/")
+    if not cleaned_path:
+        raise GitHubExportError("Chemin fichier GitHub manquant.")
+    if not sha:
+        raise GitHubExportError("SHA manquant (mise à jour contents).")
+
+    payload = {
+        "message": message[:120] or "Update file",
+        "content": base64.b64encode((content_utf8 or "").encode("utf-8")).decode("utf-8"),
+        "sha": sha,
+        "branch": vitrine_branch_name(branch),
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.put(
+            f"{GITHUB_API}/repos/{owner}/{name}/contents/{cleaned_path}",
+            headers=_headers(token),
+            json=payload,
+        )
+        if r.status_code >= 400:
+            raise GitHubExportError(f"Update fichier {cleaned_path} HTTP {r.status_code}: {r.text[:200]}")
+        js = r.json()
+        new_sha = ((js.get("content") or {}).get("sha")) or ""
+        return str(new_sha).strip() or sha
+
+
 async def delete_github_branch(
     *,
     repo: str,

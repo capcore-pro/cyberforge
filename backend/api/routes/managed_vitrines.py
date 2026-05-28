@@ -7,12 +7,13 @@ Objectif : tout piloter depuis CyberForge (pas d'actions manuelles GitHub/Vercel
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 import httpx
 
@@ -24,6 +25,8 @@ from db.managed_projects_store import (
 )
 from tools.managed_vitrine_service import ManagedVitrineError, provision_vitrine, update_vitrine
 from tools.replicate_screenshot import ReplicateScreenshotClient
+from tools.export_github import get_github_file, put_github_file
+from tools.vercel_api import trigger_git_deploy, wait_for_deployment_ready
 from tools.vitrine_auth_service import (
     VitrineAuthError,
     decrypt_password,
@@ -32,6 +35,7 @@ from tools.vitrine_auth_service import (
     set_auth_settings,
     set_password,
 )
+from tools.vitrine.content_schema import VitrineSiteContent, UnsplashImage
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +181,194 @@ class UpdateVitrineAuthRequest(BaseModel):
     client_email: str | None = None
     password: str | None = Field(default=None, max_length=200)
     generate_password: bool = False
+
+
+class UnsplashSearchItem(BaseModel):
+    id: str
+    url: str
+    thumbUrl: str | None = None
+    alt: str
+    photographer: str | None = None
+    photographerUrl: str | None = None
+    imageQuery: str | None = None
+
+
+@router.get("/managed-projects/vitrines/{project_id}/images/search", response_model=list[UnsplashSearchItem])
+async def search_unsplash_images(
+    project_id: str,
+    q: str = Query(..., min_length=2, max_length=120),
+    orientation: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1, le=50),
+) -> list[UnsplashSearchItem]:
+    """
+    Recherche Unsplash (via API officielle) pour sélectionner une image depuis CyberForge.
+    """
+    store = get_managed_projects_store()
+    if not store.is_configured():
+        raise _not_configured()
+    row = await store.get_project(project_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    settings = get_settings()
+    access_key = (settings.unsplash_access_key.get_secret_value().strip() if settings.unsplash_access_key else "")
+    if not access_key:
+        raise HTTPException(status_code=503, detail="UNSPLASH_ACCESS_KEY manquante.")
+
+    params: dict[str, Any] = {"query": q.strip()[:120], "per_page": 12, "page": page}
+    if orientation:
+        params["orientation"] = orientation
+    async with httpx.AsyncClient(timeout=settings.unsplash_http_timeout_seconds) as client:
+        r = await client.get(
+            "https://api.unsplash.com/search/photos",
+            params=params,
+            headers={"Authorization": f"Client-ID {access_key}", "Accept-Version": "v1"},
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"Unsplash HTTP {r.status_code}")
+        payload = r.json()
+        results = payload.get("results") or []
+        items: list[UnsplashSearchItem] = []
+        for photo in results:
+            pid = str(photo.get("id") or "")
+            urls = photo.get("urls") or {}
+            regular = urls.get("regular") or urls.get("small") or ""
+            thumb = urls.get("thumb") or None
+            user = photo.get("user") or {}
+            photographer = (user.get("name") or "").strip() or None
+            links = user.get("links") or {}
+            photographer_url = (links.get("html") or "").strip() or None
+            alt = (
+                photo.get("alt_description")
+                or photo.get("description")
+                or q
+            )
+            if pid and regular:
+                items.append(
+                    UnsplashSearchItem(
+                        id=pid,
+                        url=str(regular),
+                        thumbUrl=str(thumb) if thumb else None,
+                        alt=str(alt).strip()[:200] or q,
+                        photographer=photographer,
+                        photographerUrl=photographer_url,
+                        imageQuery=q.strip()[:120],
+                    )
+                )
+        return items
+
+
+class SetVitrineImageRequest(BaseModel):
+    slot: str = Field(..., description="hero | servicesPreview | servicesSection")
+    index: int | None = Field(default=None, ge=0, le=20)
+    url: str = Field(..., min_length=10, max_length=2000)
+    alt: str = Field(..., min_length=3, max_length=200)
+    photographer: str | None = Field(default=None, max_length=120)
+    photographerUrl: str | None = Field(default=None, max_length=2000)
+    imageQuery: str | None = Field(default=None, max_length=120)
+
+
+@router.post("/managed-projects/vitrines/{project_id}/images/set")
+async def set_vitrine_image(project_id: str, body: SetVitrineImageRequest) -> dict[str, Any]:
+    store = get_managed_projects_store()
+    if not store.is_configured():
+        raise _not_configured()
+    project = await store.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    settings = get_settings()
+    run = await store.create_run(project_id, action="update")
+    await store.update_project(project_id, patch={"status": "building", "error_last": None})
+
+    async def _run() -> None:
+        try:
+            sha, raw = await get_github_file(
+                repo=project.github_repo,
+                branch=project.github_branch,
+                path="content/site.json",
+                settings=settings,
+            )
+            content = VitrineSiteContent.model_validate(json.loads(raw))
+            image = UnsplashImage(
+                url=body.url,
+                alt=body.alt,
+                photographer=body.photographer,
+                photographerUrl=body.photographerUrl,
+                imageQuery=body.imageQuery,
+            )
+            # Patch slot
+            if body.slot == "hero":
+                content.home.hero.image = image
+            elif body.slot == "servicesPreview":
+                if body.index is None:
+                    raise ValueError("index requis pour servicesPreview")
+                content.home.servicesPreview[body.index].image = image
+            elif body.slot == "servicesSection":
+                if body.index is None:
+                    raise ValueError("index requis pour servicesSection")
+                content.servicesPage.sections[body.index].image = image
+            else:
+                raise ValueError("slot invalide")
+
+            new_text = json.dumps(content.model_dump(by_alias=True), ensure_ascii=False, indent=2) + "\n"
+            await put_github_file(
+                repo=project.github_repo,
+                branch=project.github_branch,
+                path="content/site.json",
+                content_utf8=new_text,
+                sha=sha,
+                message=f"CyberForge: update vitrine image ({body.slot})",
+                settings=settings,
+            )
+
+            # Trigger Vercel deploy
+            org, repo_name = project.github_repo.split("/", 1)
+            last_exc: Exception | None = None
+            triggered = None
+            for attempt in range(3):
+                try:
+                    triggered = await trigger_git_deploy(
+                        project_name=project.github_branch,
+                        github_org=org,
+                        github_repo=repo_name,
+                        git_ref=project.github_branch,
+                        settings=settings,
+                    )
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    # GitHub/Vercel can be eventually consistent right after a commit.
+                    await asyncio.sleep(2.0 + attempt * 2.0)
+            if triggered is None:
+                raise last_exc or RuntimeError("Vercel trigger deploy failed")
+            dep = await wait_for_deployment_ready(triggered.id, settings=settings, timeout_seconds=300.0)
+            url_preview = f"https://{dep.url}" if dep.url else None
+            url_production = f"https://{project.github_branch}.vercel.app"
+            status = "deployed" if dep.ready_state == "READY" else "failed"
+            await store.update_project(
+                project_id,
+                patch={
+                    "status": status,
+                    "vercel_deployment_id_last": dep.id,
+                    "url_preview": url_preview,
+                    "url_production": url_production if status == "deployed" else url_preview,
+                    "error_last": None if status == "deployed" else "Vercel deployment failed",
+                },
+            )
+            await store.finish_run(
+                run.id,
+                status="succeeded" if status == "deployed" else "failed",
+                error=None if status == "deployed" else "Vercel deployment failed",
+                artifacts={"vercel_deployment_id": dep.id, "slot": body.slot, "index": body.index},
+            )
+        except Exception as exc:
+            logger.exception("set_vitrine_image failed")
+            await store.update_project(project_id, patch={"status": "failed", "error_last": str(exc)})
+            await store.finish_run(run.id, status="failed", error=str(exc))
+
+    asyncio.create_task(_run())
+    return {"scheduled": True, "run_id": run.id}
 
 
 @router.post("/managed-projects/vitrines/{project_id}/delete")
