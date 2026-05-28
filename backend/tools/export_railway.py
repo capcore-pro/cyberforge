@@ -56,14 +56,32 @@ async def _get_default_environment_id(*, project_id: str, token: str) -> str:
         """
         query($id: String!) {
           project(id: $id) {
-            environments { id name }
+            environments {
+              nodes { id name }
+              edges { node { id name } }
+            }
           }
         }
         """.strip(),
         {"id": project_id},
         token=token,
     )
-    envs = ((data.get("project") or {}).get("environments") or []) if isinstance(data, dict) else []
+    project = (data.get("project") or {}) if isinstance(data, dict) else {}
+    envs_blob = project.get("environments") or {}
+    envs: list[dict] = []
+    if isinstance(envs_blob, list):
+        envs = [e for e in envs_blob if isinstance(e, dict)]
+    elif isinstance(envs_blob, dict):
+        nodes = envs_blob.get("nodes")
+        if isinstance(nodes, list) and nodes:
+            envs = [e for e in nodes if isinstance(e, dict)]
+        else:
+            edges = envs_blob.get("edges")
+            if isinstance(edges, list):
+                for edge in edges:
+                    if isinstance(edge, dict) and isinstance(edge.get("node"), dict):
+                        envs.append(edge["node"])
+
     if not envs:
         raise RailwayExportError("Projet Railway sans environment.")
     # prefer "production" if present
@@ -80,7 +98,10 @@ async def _resolve_workspace_id(*, token: str, preferred: str | None = None) -> 
         """
         query {
           me {
-            workspaces { id name }
+            workspaces {
+              nodes { id name }
+              edges { node { id name } }
+            }
           }
         }
         """.strip(),
@@ -88,7 +109,20 @@ async def _resolve_workspace_id(*, token: str, preferred: str | None = None) -> 
         token=token,
     )
     me = (data.get("me") or {}) if isinstance(data, dict) else {}
-    wss = me.get("workspaces") or []
+    wss_blob = me.get("workspaces") or {}
+    wss: list[dict] = []
+    if isinstance(wss_blob, list):
+        wss = [w for w in wss_blob if isinstance(w, dict)]
+    elif isinstance(wss_blob, dict):
+        nodes = wss_blob.get("nodes")
+        if isinstance(nodes, list) and nodes:
+            wss = [w for w in nodes if isinstance(w, dict)]
+        else:
+            edges = wss_blob.get("edges")
+            if isinstance(edges, list):
+                for edge in edges:
+                    if isinstance(edge, dict) and isinstance(edge.get("node"), dict):
+                        wss.append(edge["node"])
     if not wss:
         raise RailwayExportError("Impossible de résoudre le workspace Railway (me.workspaces vide).")
     return str(wss[0]["id"])
