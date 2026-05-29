@@ -190,6 +190,61 @@ class Settings(BaseSettings):
         default=None, alias="CLOUDFLARE_API_TOKEN"
     )
 
+    # Médiathèque — Cloudflare R2 (API S3-compatible)
+    cloudflare_r2_account_id: SecretStr | None = Field(
+        default=None, alias="CLOUDFLARE_R2_ACCOUNT_ID"
+    )
+    cloudflare_r2_access_key_id: SecretStr | None = Field(
+        default=None, alias="CLOUDFLARE_R2_ACCESS_KEY_ID"
+    )
+    cloudflare_r2_secret_access_key: SecretStr | None = Field(
+        default=None, alias="CLOUDFLARE_R2_SECRET_ACCESS_KEY"
+    )
+    cloudflare_r2_bucket: str | None = Field(
+        default=None, alias="CLOUDFLARE_R2_BUCKET"
+    )
+    cloudflare_r2_public_base_url: str | None = Field(
+        default=None,
+        alias="CLOUDFLARE_R2_PUBLIC_BASE_URL",
+        description="URL publique du bucket R2 (domaine custom ou r2.dev).",
+    )
+    media_root: str | None = Field(
+        default=None,
+        alias="MEDIA_ROOT",
+        description="Racine stockage local médiathèque (défaut : <repo>/media/).",
+    )
+    legal_documents_root: str | None = Field(
+        default=None,
+        alias="LEGAL_DOCUMENTS_ROOT",
+        description="Racine PDFs devis/factures/CGV (défaut : <repo>/documents/).",
+    )
+
+    mat_legal_name: str = Field(
+        default="Mathias Gibiard",
+        alias="MAT_LEGAL_NAME",
+    )
+    mat_legal_activity: str = Field(
+        default="CapCore — CyberForge / Cap Copy",
+        alias="MAT_LEGAL_ACTIVITY",
+    )
+    mat_legal_status: str = Field(
+        default="Micro-entrepreneur",
+        alias="MAT_LEGAL_STATUS",
+    )
+    mat_legal_email: str = Field(
+        default="capcore.pro@gmail.com",
+        alias="MAT_LEGAL_EMAIL",
+    )
+    mat_siret: str | None = Field(
+        default=None,
+        alias="MAT_SIRET",
+        description="SIRET micro-entrepreneur (affiché sur devis/factures).",
+    )
+    mat_legal_brand: str = Field(
+        default="CapCore",
+        alias="MAT_LEGAL_BRAND",
+    )
+
     capcore_notify_email: str = Field(
         default="capcore.pro@gmail.com",
         alias="CAPCORE_NOTIFY_EMAIL",
@@ -300,6 +355,24 @@ class Settings(BaseSettings):
         return bool(
             plain_secret_str(self.cloudflare_account_id)
             and plain_secret_str(self.cloudflare_api_token)
+        )
+
+    @property
+    def legal_documents_dir(self) -> Path:
+        """Répertoire de sortie des PDFs juridiques."""
+        explicit = self.legal_documents_root
+        if explicit and str(explicit).strip():
+            return Path(str(explicit).strip())
+        return _ROOT / "documents"
+
+    @property
+    def cloudflare_r2_configured(self) -> bool:
+        """True si les credentials R2 médiathèque sont définis."""
+        return bool(
+            plain_secret_str(self.cloudflare_r2_account_id)
+            and plain_secret_str(self.cloudflare_r2_access_key_id)
+            and plain_secret_str(self.cloudflare_r2_secret_access_key)
+            and (self.cloudflare_r2_bucket or "").strip()
         )
 
     @property

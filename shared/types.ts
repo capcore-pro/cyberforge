@@ -65,6 +65,33 @@ export interface CoreMindRequest {
   prompt: string;
   project_type?: ProjectType | null;
   generation_mode?: GenerationMode | null;
+  /** Suivi coûts API (cost_tracker) — UUID client ou id projet Supabase */
+  project_id?: string | null;
+}
+
+/** Tarification ArchitectAI (SSE ou GET /projects/{id}/costs) */
+export interface ArchitectPlanCosts {
+  complexity_score: number;
+  complexity_label: string;
+  market_price_min: number;
+  market_price_max: number;
+  suggested_price_min: number;
+  suggested_price_max: number;
+}
+
+/** GET /api/projects/{project_id}/costs */
+export interface ProjectCostsResponse {
+  project_id: string;
+  total_eur: number;
+  by_service: Record<string, number>;
+  architect_plan: ArchitectPlanCosts | null;
+  margin_multiplier: number | null;
+  updated_at: string;
+}
+
+/** DELETE /api/projects/{project_id}/costs */
+export interface ResetProjectCostsResponse {
+  status: string;
 }
 
 /** Métriques de génération (page Générateur) */
@@ -202,6 +229,13 @@ export interface PipelineStepEvent {
   unlock_url?: string | null;
   demo_token?: string | null;
   demo_password?: string | null;
+  complexity_score?: number;
+  complexity_label?: string;
+  market_price_min?: number;
+  market_price_max?: number;
+  suggested_price_min?: number;
+  suggested_price_max?: number;
+  pricing_category?: string;
 }
 
 /** Réponse POST /api/agents/coremind/run — flow complet */

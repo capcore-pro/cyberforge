@@ -10,6 +10,10 @@ import { GenerationHistoryPanel } from "@/components/GenerationHistoryPanel";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
 import { PipelineProgress, initialPipelineSteps } from "@/components/PipelineProgress";
+import {
+  PricingWidget,
+  type PricingLiveData,
+} from "@/components/PricingWidget";
 import { VisionUIPreview } from "@/components/VisionUIPreview";
 import { TestPilotValidationBadge } from "@/components/TestPilotValidationBadge";
 import { ExportProductionCard } from "@/components/ExportProductionCard";
@@ -50,6 +54,8 @@ import {
   clearSelectedClientId,
   getSelectedClientId,
 } from "@/lib/selected-client";
+import { fetchProjectCosts } from "@/lib/costs-api";
+import { architectPlanFromPipelineEvent } from "@/lib/pricing-sse";
 
 const COMPLEXITY_STYLES: Record<ComplexityLevel, string> = {
   faible: "text-green-400 border-green-400/40 bg-green-400/10",
@@ -148,6 +154,8 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const [linkedClientPerso, setLinkedClientPerso] = useState(false);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [customizeSaveBusy, setCustomizeSaveBusy] = useState(false);
+  const [runProjectId, setRunProjectId] = useState<string | null>(null);
+  const [pricingLive, setPricingLive] = useState<PricingLiveData | null>(null);
   const { dispatchPipelineEvent } = usePipelineActivity();
 
   const refreshHistory = useCallback(() => {
@@ -157,6 +165,35 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   useEffect(() => {
     refreshHistory();
   }, [refreshHistory]);
+
+  useEffect(() => {
+    if (phase !== "running" || !runProjectId) {
+      return;
+    }
+    let cancelled = false;
+
+    const poll = async () => {
+      const response = await fetchProjectCosts(runProjectId);
+      if (cancelled || !response.ok || !response.data) {
+        return;
+      }
+      const d = response.data;
+      setPricingLive((prev) => ({
+        architectPlan: d.architect_plan ?? prev?.architectPlan ?? null,
+        totalEur: d.total_eur,
+        byService: d.by_service,
+        marginMultiplier: d.margin_multiplier,
+        updatedAt: d.updated_at,
+      }));
+    };
+
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [phase, runProjectId]);
 
   useEffect(() => {
     if (backendStatus === "offline" && phase === "running") {
@@ -319,6 +356,10 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       return;
     }
 
+    const sessionProjectId = crypto.randomUUID();
+    setRunProjectId(sessionProjectId);
+    setPricingLive(null);
+
     patch({
       phase: "running",
       error: null,
@@ -345,6 +386,18 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     const onStep = (event: PipelineStepEvent) => {
       applyPipelineStep(event);
       dispatchPipelineEvent(event);
+      if (event.type === "step_done" && event.agent === "architect") {
+        const plan = architectPlanFromPipelineEvent(event);
+        if (plan) {
+          setPricingLive((prev) => ({
+            architectPlan: plan,
+            totalEur: prev?.totalEur ?? 0,
+            byService: prev?.byService ?? {},
+            marginMultiplier: prev?.marginMultiplier ?? null,
+            updatedAt: prev?.updatedAt ?? null,
+          }));
+        }
+      }
       if (event.type === "step_done" && event.agent === "testpilot") {
         const status =
           event.validation_status === "validated" ||
@@ -377,7 +430,12 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
     try {
       const response = await streamCoremindRun(
-        { prompt: trimmed, project_type: projectType, generation_mode: generationMode },
+        {
+          prompt: trimmed,
+          project_type: projectType,
+          generation_mode: generationMode,
+          project_id: sessionProjectId,
+        },
         { onStep },
       );
 
@@ -407,9 +465,26 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
         projectTitleFromPrompt(trimmed),
       );
       const serverPreview = normalized.preview_html?.trim();
+      const persistedId = normalized.persistence?.project_id;
+      if (persistedId) {
+        setRunProjectId(persistedId);
+      }
+      void fetchProjectCosts(persistedId ?? sessionProjectId).then((costsResp) => {
+        if (costsResp.ok && costsResp.data) {
+          const d = costsResp.data;
+          setPricingLive((prev) => ({
+            architectPlan: d.architect_plan ?? prev?.architectPlan ?? null,
+            totalEur: d.total_eur,
+            byService: d.by_service,
+            marginMultiplier: d.margin_multiplier,
+            updatedAt: d.updated_at,
+          }));
+        }
+      });
+
       patch({
         lastSavedId: entry.id,
-        cloudSaved: Boolean(normalized.persistence?.project_id),
+        cloudSaved: Boolean(persistedId),
         result: normalized,
         baselineCustomization: cloneCustomization(custom),
         customization: custom,
@@ -965,7 +1040,22 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
             Pipeline LangGraph
           </p>
           <PipelineProgress steps={pipelineSteps} />
+          {runProjectId ? (
+            <PricingWidget
+              mode="live"
+              projectId={runProjectId}
+              liveData={pricingLive}
+            />
+          ) : null}
         </section>
+      ) : null}
+
+      {!isRunning && pricingLive?.architectPlan && runProjectId ? (
+        <PricingWidget
+          mode="live"
+          projectId={runProjectId}
+          liveData={pricingLive}
+        />
       ) : null}
 
       {isRunning && productionUrl ? (

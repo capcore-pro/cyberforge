@@ -21,6 +21,9 @@ import { ExtensionsPage } from "./pages/ExtensionsPage";
 import { SiteReservationPage } from "./pages/SiteReservationPage";
 import { EcommercePage } from "./pages/EcommercePage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { CockpitPage } from "./pages/CockpitPage";
+import { MediaLibraryPage } from "./pages/MediaLibraryPage";
+import { LegalPage } from "./pages/LegalPage";
 
 /**
  * Composant racine — navigation entre les pages principales.
@@ -85,6 +88,12 @@ function AppWithNotifications({
         return <PersoPage onOpenGenerator={() => setPage("generator")} />;
       case "settings":
         return <SettingsPage />;
+      case "cockpit":
+        return <CockpitPage />;
+      case "media_library":
+        return <MediaLibraryPage />;
+      case "legal":
+        return <LegalPage />;
       default:
         return (
           <HomePage

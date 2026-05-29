@@ -60,6 +60,7 @@ async def build_client_demo_document(
     project_type_label: str = "Démo client",
     settings: Settings | None = None,
     seed: DemoSeedData | None = None,
+    project_id: str | None = None,
 ) -> ClientDemoDocument:
     """
     Produit le HTML final premium à partir du prompt (seed LLM ou heuristique).
@@ -69,6 +70,7 @@ async def build_client_demo_document(
     resolved = seed or await svc.resolve_seed(
         prompt,
         project_type_label=project_type_label,
+        project_id=project_id,
     )
     resolved = align_seed_template(
         resolved,

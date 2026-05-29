@@ -14,6 +14,7 @@ import httpx
 from pydantic import BaseModel
 
 from config import Settings, get_settings, plain_secret_str
+from cost_tracker import maybe_track_cost, usage_from_openai_payload
 from security.llm_secrets import get_effective_llm_key
 from tools.codegen_service import (
     CodeGenerateResult,
@@ -124,7 +125,12 @@ class V0Client:
     def model(self) -> str:
         return self._settings.v0_model or DEFAULT_V0_MODEL
 
-    async def generate_ui(self, prompt: str) -> BuildOutcome:
+    async def generate_ui(
+        self,
+        prompt: str,
+        *,
+        project_id: str | None = None,
+    ) -> BuildOutcome:
         if not self.is_configured():
             return BuildOutcome(
                 provider="v0",
@@ -169,6 +175,8 @@ class V0Client:
         except (ValueError, json.JSONDecodeError, KeyError) as exc:
             return BuildOutcome(provider="v0", success=False, error=str(exc))
 
+        maybe_track_cost(project_id, "v0", {"requests": 1})
+
         generation = CodeGenerateResult(
             summary="Interface React générée via v0 (Vercel)",
             code=code,
@@ -198,7 +206,12 @@ class DeepSeekBuilderClient:
     def is_configured(self) -> bool:
         return bool(self._api_key())
 
-    async def generate_code(self, prompt: str) -> BuildOutcome:
+    async def generate_code(
+        self,
+        prompt: str,
+        *,
+        project_id: str | None = None,
+    ) -> BuildOutcome:
         api_key = self._api_key()
         if not api_key:
             return BuildOutcome(
@@ -252,6 +265,12 @@ class DeepSeekBuilderClient:
             code, files = _code_from_llm_text(text, default_path="src/main.ts")
         except (ValueError, json.JSONDecodeError, KeyError) as exc:
             return BuildOutcome(provider="deepseek", success=False, error=str(exc))
+
+        maybe_track_cost(
+            project_id,
+            "deepseek_v3",
+            usage_from_openai_payload(payload),
+        )
 
         generation = CodeGenerateResult(
             summary="Code métier généré via DeepSeek (BuilderAI)",

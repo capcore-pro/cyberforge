@@ -50,6 +50,11 @@ class CoreMindRequest(BaseModel):
             "'vitrine_next' (scaffold Next.js + site.json)"
         ),
     )
+    project_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Identifiant projet pour le suivi des coûts API",
+    )
 
 
 class CoreMindRunResponse(CoreMindRunResult):
@@ -79,6 +84,11 @@ class CoreMindGenerateRequest(BaseModel):
         max_length=12000,
         description="Description du code ou projet à générer",
     )
+    project_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Identifiant projet pour le suivi des coûts API",
+    )
 
 
 @router.post("/agents/coremind", response_model=CoreMindAnalysis)
@@ -101,7 +111,7 @@ async def generate_code_with_coremind(
         raise HTTPException(status_code=503, detail=LLM_KEYS_UNAVAILABLE_MSG)
     agent = CoreMindAgent()
     try:
-        return await agent.generate_code(body.prompt)
+        return await agent.generate_code(body.prompt, project_id=body.project_id)
     except CodeGenServiceError as exc:
         raise _codegen_http_error(exc) from exc
 
@@ -131,6 +141,7 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
             body.prompt,
             project_type_hint=body.project_type,
             generation_mode=body.generation_mode,
+            project_id=body.project_id,
         )
         if result.demo_pipeline is not None:
             logger.info(

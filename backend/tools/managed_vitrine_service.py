@@ -31,6 +31,7 @@ from tools.vercel_api import (
     wait_for_deployment_ready,
     wait_for_branch_deployment_ready,
 )
+from cost_tracker import maybe_track_cost
 from tools.vitrine.build import build_vitrine_site
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,11 @@ async def provision_vitrine(
         raise ManagedVitrineError("GITHUB_TOKEN manquant.")
 
     try:
-        build = await build_vitrine_site(prompt, settings=resolved)
+        build = await build_vitrine_site(
+            prompt,
+            settings=resolved,
+            project_id=project_id,
+        )
         files = {f.path: f.content for f in build.generation.files}
         github_url = await push_vitrine_site_to_github(
             branch_slug=project.github_branch,
@@ -73,6 +78,8 @@ async def provision_vitrine(
             settings=resolved,
             repo=github_repo,
         )
+        if github_url:
+            maybe_track_cost(project_id, "github", {"requests": 1})
 
         # Clean client URL: one Vercel project per vitrine => https://<slug>.vercel.app
         vitrine_backend_url = (getattr(resolved, "demo_api_base_url", None) or "").strip() or "https://cyberforge-backend-production.up.railway.app"
@@ -96,6 +103,8 @@ async def provision_vitrine(
         url_preview = f"https://{dep.url}" if dep.url else None
         url_production = f"https://{project.github_branch}.vercel.app"
         status = "deployed" if dep.ready_state == "READY" else "failed"
+        if status == "deployed":
+            maybe_track_cost(project_id, "vercel", {"requests": 1})
 
         await st.update_project(
             project_id,
@@ -148,7 +157,11 @@ async def update_vitrine(
     await st.update_project(project_id, patch={"status": "building", "prompt_last": prompt, "error_last": None})
 
     try:
-        build = await build_vitrine_site(prompt, settings=resolved)
+        build = await build_vitrine_site(
+            prompt,
+            settings=resolved,
+            project_id=project_id,
+        )
         files = {f.path: f.content for f in build.generation.files}
         github_url = await push_vitrine_site_to_github(
             branch_slug=project.github_branch,
@@ -156,6 +169,8 @@ async def update_vitrine(
             settings=resolved,
             repo=project.github_repo,
         )
+        if github_url:
+            maybe_track_cost(project_id, "github", {"requests": 1})
 
         vitrine_backend_url = (getattr(resolved, "demo_api_base_url", None) or "").strip() or "https://cyberforge-backend-production.up.railway.app"
         vercel_project_id = project.vercel_project_id or await ensure_project_for_vitrine_branch(
@@ -177,6 +192,8 @@ async def update_vitrine(
         url_preview = f"https://{dep.url}" if dep.url else None
         url_production = f"https://{project.github_branch}.vercel.app"
         status = "deployed" if dep.ready_state == "READY" else "failed"
+        if status == "deployed":
+            maybe_track_cost(project_id, "vercel", {"requests": 1})
         await st.update_project(
             project_id,
             patch={

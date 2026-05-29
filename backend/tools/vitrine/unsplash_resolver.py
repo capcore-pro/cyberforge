@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 import httpx
 
 from config import Settings, get_settings, plain_secret_str
+from cost_tracker import maybe_track_cost
 from tools.vitrine.content_schema import UnsplashImage, VitrineSiteContent
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class UnsplashImageResolver:
         content: VitrineSiteContent,
         *,
         locale: str = "fr",
+        project_id: str | None = None,
     ) -> tuple[VitrineSiteContent, UnsplashResolveStats]:
         if not self.configured:
             logger.info("UnsplashResolver — UNSPLASH_ACCESS_KEY absente, images inchangées")
@@ -101,6 +103,7 @@ class UnsplashImageResolver:
                         pick_index=slot.pick_index,
                         alt_fallback=str(image_dict.get("alt") or search_query),
                         locale=locale,
+                        project_id=project_id,
                     )
                 except Exception as exc:
                     logger.warning(
@@ -135,6 +138,7 @@ class UnsplashImageResolver:
         pick_index: int,
         alt_fallback: str,
         locale: str,
+        project_id: str | None = None,
     ) -> UnsplashImage | None:
         params: dict[str, str | int] = {
             "query": query[:120],
@@ -156,6 +160,7 @@ class UnsplashImageResolver:
             },
         )
         response.raise_for_status()
+        maybe_track_cost(project_id, "unsplash", {"requests": 1})
         payload = response.json()
         results = payload.get("results") or []
         if not results:
@@ -175,13 +180,42 @@ class UnsplashImageResolver:
             photo.get("alt_description") or photo.get("description") or alt_fallback or query
         )
         alt_text = str(alt).strip()[:200]
+        photo_url = _sized_unsplash_url(raw_url, width=DEFAULT_WIDTH)
+        photo_id = str(photo.get("id") or "").strip()
+
+        await self._persist_unsplash_image(
+            photo_url=photo_url,
+            photo_id=photo_id,
+            project_id=project_id,
+            query_keyword=query[:120],
+        )
 
         return UnsplashImage(
-            url=_sized_unsplash_url(raw_url, width=DEFAULT_WIDTH),
+            url=photo_url,
             alt=alt_text or query[:200],
             photographer=photographer,
             photographerUrl=photographer_url,
             imageQuery=query[:120],
+        )
+
+    async def _persist_unsplash_image(
+        self,
+        *,
+        photo_url: str,
+        photo_id: str,
+        project_id: str | None,
+        query_keyword: str,
+    ) -> None:
+        from tools.media_library import try_save_generated_asset
+
+        safe_id = photo_id or "unknown"
+        keyword = (query_keyword or "search").strip()[:60] or "search"
+        await try_save_generated_asset(
+            url=photo_url,
+            filename=f"unsplash_{safe_id}.jpg",
+            project_id=project_id,
+            source="generated",
+            tags=["unsplash", keyword],
         )
 
 
@@ -255,7 +289,8 @@ async def resolve_vitrine_images(
     *,
     settings: Settings | None = None,
     locale: str | None = None,
+    project_id: str | None = None,
 ) -> tuple[VitrineSiteContent, UnsplashResolveStats]:
     resolver = UnsplashImageResolver(settings)
     loc = locale or content.meta.locale or "fr"
-    return await resolver.resolve_content(content, locale=loc)
+    return await resolver.resolve_content(content, locale=loc, project_id=project_id)

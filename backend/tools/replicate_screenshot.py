@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import httpx
 
 from config import Settings, get_settings, plain_secret_str
+from cost_tracker import maybe_track_cost
 from tools.vision_local_preview import VisionPreviewResult, local_html_preview
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,8 @@ class ReplicateScreenshotClient:
         title: str = "CyberForge",
         width: int | None = None,
         height: int | None = None,
+        project_id: str | None = None,
+        project_type: str | None = None,
     ) -> VisionPreviewResult:
         if not self.is_configured():
             return local_html_preview(html, title=title)
@@ -90,7 +94,7 @@ class ReplicateScreenshotClient:
         }
 
         try:
-            url = await self._run_model_prediction(input_payload)
+            url = await self._run_model_prediction(input_payload, project_id=project_id)
         except (ReplicateScreenshotError, httpx.HTTPError) as exc:
             logger.warning("Replicate VisionUI — %s, fallback HTML local", exc)
             result = local_html_preview(html, title=title)
@@ -102,6 +106,12 @@ class ReplicateScreenshotClient:
             result.message = "Replicate sans URL image — rendu HTML local."
             return result
 
+        await self._persist_replicate_image(
+            url,
+            project_id=project_id,
+            project_type=project_type,
+        )
+
         return VisionPreviewResult(
             source="replicate",
             screenshot_url=url,
@@ -109,7 +119,31 @@ class ReplicateScreenshotClient:
             message="Capture Replicate générée.",
         )
 
-    async def _run_model_prediction(self, input_payload: dict[str, Any]) -> str:
+    async def _persist_replicate_image(
+        self,
+        image_url: str,
+        *,
+        project_id: str | None,
+        project_type: str | None,
+    ) -> None:
+        from tools.media_library import try_save_generated_asset
+
+        safe_pid = re.sub(r"[^\w.\-]", "_", (project_id or "unknown"))[:64]
+        ptype = (project_type or "unknown").strip() or "unknown"
+        await try_save_generated_asset(
+            url=image_url,
+            filename=f"replicate_{safe_pid}.png",
+            project_id=project_id,
+            source="generated",
+            tags=["replicate", ptype],
+        )
+
+    async def _run_model_prediction(
+        self,
+        input_payload: dict[str, Any],
+        *,
+        project_id: str | None = None,
+    ) -> str:
         owner, name = self._split_model_slug(self.model_slug)
         create_url = f"{REPLICATE_API_BASE}/models/{owner}/{name}/predictions"
         timeout = httpx.Timeout(self._settings.vision_replicate_timeout_seconds)
@@ -141,6 +175,7 @@ class ReplicateScreenshotClient:
             if status == "succeeded":
                 url = _extract_output_url(payload.get("output"))
                 if url:
+                    maybe_track_cost(project_id, "replicate", {"images": 1})
                     return url
                 raise ReplicateScreenshotError("Prédiction réussie sans URL de sortie.")
 
@@ -153,9 +188,19 @@ class ReplicateScreenshotClient:
             if not prediction_id:
                 raise ReplicateScreenshotError("Réponse Replicate sans id de prédiction.")
 
-            return await self._poll_prediction(client, str(prediction_id))
+            return await self._poll_prediction(
+                client,
+                str(prediction_id),
+                project_id=project_id,
+            )
 
-    async def _poll_prediction(self, client: httpx.AsyncClient, prediction_id: str) -> str:
+    async def _poll_prediction(
+        self,
+        client: httpx.AsyncClient,
+        prediction_id: str,
+        *,
+        project_id: str | None = None,
+    ) -> str:
         poll_url = f"{REPLICATE_API_BASE}/predictions/{prediction_id}"
         headers = _auth_header(self.api_key)
         deadline = self._settings.vision_replicate_timeout_seconds
@@ -172,6 +217,7 @@ class ReplicateScreenshotClient:
             if status == "succeeded":
                 url = _extract_output_url(payload.get("output"))
                 if url:
+                    maybe_track_cost(project_id, "replicate", {"images": 1})
                     return url
                 raise ReplicateScreenshotError("Sortie Replicate vide.")
 

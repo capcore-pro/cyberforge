@@ -45,6 +45,7 @@ async def run_coremind_flow_stream(body: CoreMindRequest) -> StreamingResponse:
                     body.prompt,
                     project_type_hint=body.project_type,
                     generation_mode=body.generation_mode,
+                    project_id=body.project_id,
                     on_event=on_event,
                 )
                 persistence: PersistenceResult | None = None

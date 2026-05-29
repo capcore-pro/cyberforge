@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from uuid import uuid4
 from typing import Any
@@ -40,6 +41,32 @@ from tools.vitrine.content_schema import VitrineSiteContent, UnsplashImage
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["vitrines"])
+
+
+def _unsplash_photo_id_from_url(url: str) -> str:
+    match = re.search(r"photo-([A-Za-z0-9_-]+)", url)
+    if match:
+        return match.group(1)[:48]
+    return uuid4().hex[:12]
+
+
+async def _persist_unsplash_selection(
+    *,
+    photo_url: str,
+    project_id: str,
+    image_query: str | None,
+) -> None:
+    from tools.media_library import try_save_generated_asset
+
+    photo_id = _unsplash_photo_id_from_url(photo_url)
+    keyword = (image_query or "vitrine").strip()[:60] or "vitrine"
+    await try_save_generated_asset(
+        url=photo_url,
+        filename=f"unsplash_{photo_id}.jpg",
+        project_id=project_id,
+        source="generated",
+        tags=["unsplash", keyword],
+    )
 
 
 class CreateVitrineRequest(BaseModel):
@@ -297,6 +324,12 @@ async def set_vitrine_image(project_id: str, body: SetVitrineImageRequest) -> di
                 photographerUrl=body.photographerUrl,
                 imageQuery=body.imageQuery,
             )
+            if "unsplash.com" in body.url.lower():
+                await _persist_unsplash_selection(
+                    photo_url=body.url,
+                    project_id=project_id,
+                    image_query=body.imageQuery or body.alt,
+                )
             # Patch slot
             if body.slot == "hero":
                 content.home.hero.image = image
@@ -428,6 +461,8 @@ async def get_vitrine_preview(project_id: str) -> dict[str, str | None]:
         title=row.title or row.slug,
         width=1280,
         height=720,
+        project_id=project_id,
+        project_type="vitrine",
     )
     return {"screenshot_url": result.screenshot_url}
 

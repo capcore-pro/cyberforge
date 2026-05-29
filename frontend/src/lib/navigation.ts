@@ -1,6 +1,9 @@
 /** Pages accessibles dans l'application desktop. */
 export type AppPage =
   | "dashboard"
+  | "cockpit"
+  | "media_library"
+  | "legal"
   | "generator"
   | "projects"
   | "vitrines"
@@ -24,6 +27,9 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Tableau de bord", icon: "◈", enabled: true },
+  { id: "cockpit", label: "Cockpit", icon: "◐", enabled: true },
+  { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
+  { id: "legal", label: "Légal", icon: "⚖", enabled: true },
   { id: "generator", label: "Générateur", icon: "⚡", enabled: true },
   { id: "projects", label: "Projets", icon: "▤", enabled: true },
   { id: "vitrines", label: "Vitrines", icon: "▦", enabled: true },

@@ -14,6 +14,7 @@ def _mock_search_response() -> dict:
     return {
         "results": [
             {
+                "id": "photo-1",
                 "urls": {
                     "regular": "https://images.unsplash.com/photo-1?ixid=abc",
                 },
@@ -54,7 +55,13 @@ def test_resolver_replaces_images_with_api_key() -> None:
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    with patch("tools.vitrine.unsplash_resolver.httpx.AsyncClient", return_value=mock_client):
+    with (
+        patch("tools.vitrine.unsplash_resolver.httpx.AsyncClient", return_value=mock_client),
+        patch(
+            "tools.media_library.try_save_generated_asset",
+            new_callable=AsyncMock,
+        ),
+    ):
         resolved, stats = asyncio.run(
             resolve_vitrine_images(content, settings=settings),
         )
@@ -66,8 +73,8 @@ def test_resolver_replaces_images_with_api_key() -> None:
     assert hero.photographer == "Jane Doe"
     assert hero.photographerUrl == "https://unsplash.com/@jane"
     mock_client.get.assert_called()
-    call_kwargs = mock_client.get.call_args.kwargs
-    assert call_kwargs["headers"]["Authorization"] == "Client-ID test-unsplash-key"
+    first_call = mock_client.get.call_args_list[0]
+    assert first_call.kwargs["headers"]["Authorization"] == "Client-ID test-unsplash-key"
 
 
 def test_sized_unsplash_url_adds_params() -> None:

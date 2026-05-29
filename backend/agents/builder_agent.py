@@ -153,6 +153,7 @@ class BuilderAgent(BaseAgent):
         plan: ArchitectPlan,
         analysis: CoreMindAnalysis,
         settings: Settings | None = None,
+        project_id: str | None = None,
     ) -> BuilderRunResult:
         """Tente v0 ou DeepSeek ; signale le fallback CoreMind si échec."""
         resolved = settings or self._settings
@@ -165,9 +166,12 @@ class BuilderAgent(BaseAgent):
         )
 
         if decision.provider == BuilderProvider.V0:
-            outcome = await V0Client(resolved).generate_ui(enriched)
+            outcome = await V0Client(resolved).generate_ui(enriched, project_id=project_id)
         else:
-            outcome = await DeepSeekBuilderClient(resolved).generate_code(enriched)
+            outcome = await DeepSeekBuilderClient(resolved).generate_code(
+                enriched,
+                project_id=project_id,
+            )
 
         if not outcome.success or outcome.generation is None:
             reason = outcome.error or "générateur indisponible"

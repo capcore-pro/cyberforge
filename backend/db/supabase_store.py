@@ -398,6 +398,7 @@ class SupabaseStore:
                 project_type_label=PROJECT_TYPE_LABELS.get(
                     project_type, project_type.value
                 ),
+                project_id=project_id,
             )
             preview_html = document.html
 

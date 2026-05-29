@@ -60,6 +60,7 @@ async def build_vitrine_site(
     branding: ClientBranding | None = None,
     output_dir: Path | None = None,
     settings: Settings | None = None,
+    project_id: str | None = None,
 ) -> VitrineBuildResult:
     """
     Génère le JSON de contenu puis matérialise le projet Next.js dans output_dir.
@@ -72,13 +73,18 @@ async def build_vitrine_site(
             prompt,
             project_type_label=project_type_label,
             branding=branding,
+            project_id=project_id,
         )
     except VitrineContentError:
         raise
     except Exception as exc:
         raise VitrineContentError(str(exc)) from exc
 
-    content, image_stats = await resolve_vitrine_images(content, settings=resolved)
+    content, image_stats = await resolve_vitrine_images(
+        content,
+        settings=resolved,
+        project_id=project_id,
+    )
     if image_stats.resolved:
         logger.info(
             "build_vitrine_site images | resolved=%s skipped=%s failed=%s",

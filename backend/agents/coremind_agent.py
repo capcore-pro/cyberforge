@@ -244,6 +244,10 @@ class CoreMindRunResult(BaseModel):
     """Flow complet : analyse + sélection de modèles + génération."""
 
     analysis: CoreMindAnalysis
+    architect_plan: Any | None = Field(
+        default=None,
+        description="Plan ArchitectAI (type, template, complexité, tarification)",
+    )
     generation: CodeGenerateResult
     metrics: GenerationMetrics
     planned_models: list[str] = Field(
@@ -337,7 +341,12 @@ class CoreMindAgent(BaseAgent):
             summary=summary,
         )
 
-    async def generate_code(self, prompt: str) -> CodeGenerateResult:
+    async def generate_code(
+        self,
+        prompt: str,
+        *,
+        project_id: str | None = None,
+    ) -> CodeGenerateResult:
         """
         Génère du code via le routage CoreMindAI (coût croissant selon complexité).
         DeepSeek → Gemini Flash → Claude Haiku → Claude Sonnet si élevée.
@@ -345,7 +354,11 @@ class CoreMindAgent(BaseAgent):
         normalized = _normalize(prompt)
         _, score = _estimate_complexity(normalized)
         tier = CodeGenComplexity(complexity_from_score(score).value)
-        return await CodeGenService(self._settings).generate_code(prompt, tier)
+        return await CodeGenService(self._settings).generate_code(
+            prompt,
+            tier,
+            project_id=project_id,
+        )
 
     async def run_flow(
         self,

@@ -9,6 +9,7 @@ import type {
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { CustomizePanel } from "@/components/CustomizePanel";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
+import { PricingWidget } from "@/components/PricingWidget";
 import { ProjectPreviewThumbnail } from "@/components/ProjectPreviewThumbnail";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { apiRequest } from "@/lib/api-client";
@@ -606,7 +607,8 @@ export function ProjectsPage() {
                 </article>
 
                 {isOpen ? (
-                  <div className="border-t border-cyber-border bg-cyber-bg/40 p-4">
+                  <div className="border-t border-cyber-border bg-cyber-bg/40 p-4 space-y-4">
+                    <PricingWidget mode="static" projectId={project.id} />
                     {detailLoading ? (
                       <p className="text-xs text-cyber-muted">Chargement…</p>
                     ) : detail && detail.project.id === project.id ? (

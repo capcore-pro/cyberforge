@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from config import Settings, get_settings
+from cost_tracker import maybe_track_cost
 from db.managed_projects_store import ManagedProjectsStore
 from tools.export_github import delete_github_branch, push_vitrine_site_to_github
 from tools.export_railway import (
@@ -203,6 +204,7 @@ async def provision_application_web(
     # 1) Generate and push sources to GitHub branch
     files = _scaffold_files(prompt, slug)
     await push_vitrine_site_to_github(branch_slug=slug, files=files, settings=resolved, repo=github_repo)
+    maybe_track_cost(project_id, "github", {"requests": 1})
 
     # 2) Deploy backend to Railway
     try:
@@ -220,6 +222,8 @@ async def provision_application_web(
         await st.update_project(project_id, patch={"status": "failed", "error_last": f"Railway: {exc}"})
         await st.finish_run(run_id, status="failed", error=str(exc))
         return
+
+    maybe_track_cost(project_id, "railway", {"requests": 1})
 
     # 3) Deploy frontend to Vercel (Next.js)
     try:
@@ -247,6 +251,8 @@ async def provision_application_web(
         url_preview = f"https://{dep.url}" if dep.url else None
         url_production = f"https://{slug}.vercel.app"
         status = "deployed" if dep.ready_state == "READY" else "failed"
+        if status == "deployed":
+            maybe_track_cost(project_id, "vercel", {"requests": 1})
 
         await st.update_project(
             project_id,

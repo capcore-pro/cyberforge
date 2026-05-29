@@ -17,6 +17,13 @@ def _plan(project_type: ProjectType, template: str = "taskflow") -> ArchitectPla
         template=template,
         template_label=template,
         rationale="test",
+        complexity_score=5,
+        complexity_label="Moyenne",
+        market_price_min=1500,
+        market_price_max=3000,
+        suggested_price_min=600,
+        suggested_price_max=1200,
+        pricing_category="application_web",
     )
 
 

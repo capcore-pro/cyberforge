@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from api.routes import (
     agents_status,
     clients,
+    costs,
     coremind,
     demos,
     health,
@@ -32,6 +33,7 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
     (coremind.router, "/api"),
     (pipeline_stream.router, "/api"),
     (projects.router, "/api"),
+    (costs.router, "/api"),
     (admin_ecommerce.router, "/api"),
     (managed_application_web.router, "/api"),
     (managed_vitrines.router, "/api"),
@@ -53,6 +55,7 @@ __all__ = [
     "API_ROUTERS",
     "agents_status",
     "clients",
+    "costs",
     "coremind",
     "demos",
     "health",

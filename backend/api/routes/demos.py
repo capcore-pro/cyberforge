@@ -64,6 +64,11 @@ class CreateDemoRequest(BaseModel):
     project_type: str | None = Field(default=None, max_length=64)
     code: str | None = Field(default=None, max_length=500_000)
     generation_id: str | None = None
+    project_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Identifiant projet pour le suivi des coûts API",
+    )
     prompt: str | None = Field(default=None, max_length=8000)
     demo_seed: dict | None = None
     client_id: str | None = None
@@ -142,6 +147,11 @@ async def _seed_with_client_branding(
 
 class UrlClonePreviewRequest(BaseModel):
     url: str = Field(..., min_length=8, max_length=2048)
+    project_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Identifiant projet pour le suivi des coûts API",
+    )
     improved_prompt: str | None = Field(
         default=None,
         max_length=4000,
@@ -198,6 +208,7 @@ async def url_clone_preview(body: UrlClonePreviewRequest) -> UrlClonePreviewResp
             query="Proposition de valeur, sections, offres, tarifs, contact, témoignages, ton de marque",
             extract_depth="basic",
             include_images=True,
+            project_id=body.project_id,
         )
     except TavilyError as exc:
         raise HTTPException(
@@ -325,6 +336,7 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
             document = await build_client_demo_document(
                 seed_prompt,
                 project_type_label=project_label,
+                project_id=body.project_id or body.generation_id,
             )
         settings = get_settings()
         preview_html = wrap_demo_for_cloudflare(
@@ -547,6 +559,7 @@ async def _handle_demo_interested(
             demo_url=demo_url,
             demo_password=demo_password,
             unlock_url=unlock_demo_url(clean),
+            project_id=updated.id,
         )
         logger.info(
             "demo interested — terminé | token=%s | status=%s | recorded=%s | email_sent=%s",

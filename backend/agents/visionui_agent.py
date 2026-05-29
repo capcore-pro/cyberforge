@@ -50,12 +50,19 @@ class VisionUIAgent(BaseAgent):
         *,
         title: str = "Aperçu CyberForge",
         settings: Settings | None = None,
+        project_id: str | None = None,
+        project_type: str | None = None,
     ) -> VisionUIRunResult:
         resolved = settings or self._settings
         client = ReplicateScreenshotClient(resolved)
 
         if client.is_configured():
-            preview = await client.screenshot_html(html, title=title)
+            preview = await client.screenshot_html(
+                html,
+                title=title,
+                project_id=project_id,
+                project_type=project_type,
+            )
         else:
             logger.info("REPLICATE_API_KEY absente — rendu HTML local VisionUI")
             preview = local_html_preview(html, title=title)

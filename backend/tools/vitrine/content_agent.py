@@ -68,6 +68,7 @@ class VitrineContentAgent:
         *,
         project_type_label: str = "Site vitrine",
         branding: ClientBranding | None = None,
+        project_id: str | None = None,
     ) -> VitrineSiteContent:
         cleaned = prompt.strip()
         if len(cleaned) < 3:
@@ -79,7 +80,12 @@ class VitrineContentAgent:
             f"Brief client :\n{cleaned[:8000]}"
         )
 
-        raw = await self._generate_full_json(user_msg)
+        previous_track = self._codegen._track_project_id
+        self._codegen._track_project_id = project_id
+        try:
+            raw = await self._generate_full_json(user_msg)
+        finally:
+            self._codegen._track_project_id = previous_track
         if not raw:
             logger.warning("VitrineContentAI — repli sur exemple site.json")
             content = load_example_content()
@@ -184,10 +190,12 @@ async def generate_vitrine_content(
     project_type_label: str = "Site vitrine",
     branding: ClientBranding | None = None,
     settings: Settings | None = None,
+    project_id: str | None = None,
 ) -> VitrineSiteContent:
     agent = VitrineContentAgent(settings)
     return await agent.generate(
         prompt,
         project_type_label=project_type_label,
         branding=branding,
+        project_id=project_id,
     )

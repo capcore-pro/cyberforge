@@ -29,6 +29,8 @@ from agents.visionui_agent import VisionUIAgent
 from agents.testpilot_agent import TestPilotAgent, testpilot_to_bug_report
 from agents.export_agent import ExportAgent
 from config import Settings, get_settings
+from cockpit_sync import flush_project_costs
+from cost_tracker import set_architect_plan
 from tools.codegen_service import CodeGenComplexity, CodeGenService
 from tools.demo_pipeline import build_client_demo_document
 from tools.demo_template_service import (
@@ -70,6 +72,7 @@ REAL_APP_STEP_MESSAGES: dict[str, str] = {
 
 class PipelineState(TypedDict, total=False):
     prompt: str
+    project_id: str | None
     project_type_hint: ProjectType | None
     # "client_demo" (défaut) → pipeline HTML premium ; "real_app" → React/Next.js
     generation_mode: str | None
@@ -148,16 +151,31 @@ async def architect_node(
     plan, coremind_analysis = await agent.plan_with_analysis(
         state["prompt"],
         project_type_hint=state.get("project_type_hint"),
+        generation_mode=state.get("generation_mode"),
     )
     await _step(
         cb,
         "architect",
         "done",
-        f"{plan.project_type_label} · template {plan.template_label}",
+        (
+            f"{plan.project_type_label} · template {plan.template_label} · "
+            f"{plan.complexity_label} ({plan.complexity_score}/10) · "
+            f"marché {plan.market_price_min}–{plan.market_price_max} €"
+        ),
         template=plan.template,
         project_type=plan.project_type.value,
         used_llm=plan.used_llm,
+        complexity_score=plan.complexity_score,
+        complexity_label=plan.complexity_label,
+        market_price_min=plan.market_price_min,
+        market_price_max=plan.market_price_max,
+        suggested_price_min=plan.suggested_price_min,
+        suggested_price_max=plan.suggested_price_max,
+        pricing_category=plan.pricing_category,
     )
+    project_id = state.get("project_id")
+    if project_id:
+        set_architect_plan(str(project_id), plan)
     return {
         "architect_plan": plan,
         "analysis": coremind_analysis,
@@ -182,6 +200,7 @@ async def builder_node(
         plan=plan,
         analysis=analysis,
         settings=settings,
+        project_id=state.get("project_id"),
     )
     provider_label = (
         "v0"
@@ -359,6 +378,7 @@ async def coremind_node(
                 enriched_vitrine,
                 project_type_label=type_label,
                 settings=settings,
+                project_id=state.get("project_id"),
             )
         except (VitrineContentError, ScaffoldRenderError) as exc:
             return {"error": f"Génération vitrine : {exc}"}
@@ -402,6 +422,7 @@ async def coremind_node(
             enriched_real,
             tier,
             demo_html=False,
+            project_id=state.get("project_id"),
         )
         # Injecte package.json si absent
         generation = _inject_package_json(generation, type_label)
@@ -433,6 +454,7 @@ async def coremind_node(
         enriched,
         project_type_label=type_label,
         template_hint=plan.template,
+        project_id=state.get("project_id"),
     )
     seed = replace(
         seed,
@@ -450,6 +472,7 @@ async def coremind_node(
         project_type_label=type_label,
         settings=settings,
         seed=seed,
+        project_id=state.get("project_id"),
     )
     preview_html = preview_html_from_generation(
         document.generation,
@@ -502,7 +525,13 @@ async def visionui_node(
     await _step(cb, "visionui", "start", "Capture visuelle du HTML généré…")
     settings = _settings_from_config(config)
     agent = VisionUIAgent(settings)
-    result = await agent.capture(html, title=plan.project_type_label, settings=settings)
+    result = await agent.capture(
+        html,
+        title=plan.project_type_label,
+        settings=settings,
+        project_id=state.get("project_id"),
+        project_type=plan.project_type_label,
+    )
     source_label = "Replicate" if result.preview_source == "replicate" else "HTML local"
 
     await _step(
@@ -597,6 +626,7 @@ async def autofix_node(
         tier=tier,
         title=plan.project_type_label,
         initial_report=report,
+        project_id=state.get("project_id"),
     )
     preview_html = preview_html_from_generation(
         generation,
@@ -750,6 +780,7 @@ async def export_node(
         generation=generation,
         preview_html=str(preview_html),
         settings=settings,
+        project_id=state.get("project_id"),
     )
 
     await _step(
@@ -872,6 +903,7 @@ async def finalize_node(
 
     result = CoreMindRunResult(
         analysis=analysis,
+        architect_plan=architect,
         generation=generation,
         metrics=metrics,
         planned_models=planned,
@@ -947,6 +979,7 @@ async def run_generation_pipeline(
     *,
     project_type_hint: ProjectType | None = None,
     generation_mode: str | None = None,
+    project_id: str | None = None,
     settings: Settings | None = None,
     on_event: PipelineEventCallback | None = None,
 ) -> CoreMindRunResult:
@@ -959,6 +992,7 @@ async def run_generation_pipeline(
     pipeline_started = time.perf_counter()
     initial: PipelineState = {
         "prompt": prompt.strip(),
+        "project_id": project_id,
         "project_type_hint": project_type_hint,
         "generation_mode": generation_mode or "client_demo",
         "fix_loops": 0,
@@ -967,21 +1001,29 @@ async def run_generation_pipeline(
         "builder_fallback": True,
     }
     graph = get_compiled_pipeline()
-    final = await graph.ainvoke(
-        initial,
-        config={
-            "configurable": {
-                "settings": resolved_settings,
-                "on_event": on_event,
-                "pipeline_started": pipeline_started,
-            }
-        },
-    )
+    pid = (project_id or "").strip() or None
+    try:
+        final = await graph.ainvoke(
+            initial,
+            config={
+                "configurable": {
+                    "settings": resolved_settings,
+                    "on_event": on_event,
+                    "pipeline_started": pipeline_started,
+                }
+            },
+        )
 
-    if final.get("error"):
-        raise ValueError(final["error"])
+        if final.get("error"):
+            raise ValueError(final["error"])
 
-    result = final.get("result")
-    if not result:
-        raise ValueError("Le pipeline n'a pas produit de résultat.")
-    return result
+        result = final.get("result")
+        if not result:
+            raise ValueError("Le pipeline n'a pas produit de résultat.")
+        return result
+    finally:
+        if pid:
+            try:
+                flush_project_costs(pid)
+            except Exception:
+                logger.exception("flush_project_costs(%s) échoué", pid)

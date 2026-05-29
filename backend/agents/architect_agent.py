@@ -20,6 +20,7 @@ from agents.coremind_agent import (
     ProjectType,
 )
 from config import Settings, plain_secret_str
+from agents.architect_pricing import build_complexity_pricing
 from tools.demo_template_service import (
     TEMPLATE_LABELS,
     VALID_TEMPLATES,
@@ -40,6 +41,22 @@ class ArchitectPlan(BaseModel):
     template_label: str
     rationale: str
     used_llm: bool = False
+    complexity_score: int = Field(
+        ge=1,
+        le=10,
+        description="Score de complexité prompt (1–10)",
+    )
+    complexity_label: str = Field(
+        description='Libellé : "Simple", "Moyenne" ou "Complexe"',
+    )
+    market_price_min: int = Field(ge=0, description="Fourchette marché basse (€)")
+    market_price_max: int = Field(ge=0, description="Fourchette marché haute (€)")
+    suggested_price_min: int = Field(ge=0, description="Prix de vente suggéré bas (~40 % marché)")
+    suggested_price_max: int = Field(ge=0, description="Prix de vente suggéré haut (~40 % marché)")
+    pricing_category: str = Field(
+        default="application_web",
+        description="Catégorie tarifaire (vitrine_next, ecommerce, …)",
+    )
 
 
 class ArchitectAgent(BaseAgent):
@@ -63,11 +80,13 @@ class ArchitectAgent(BaseAgent):
         prompt: str,
         *,
         project_type_hint: ProjectType | None = None,
+        generation_mode: str | None = None,
     ) -> ArchitectPlan:
         """Analyse le prompt et retourne type + template."""
         plan, _ = await self.plan_with_analysis(
             prompt,
             project_type_hint=project_type_hint,
+            generation_mode=generation_mode,
         )
         return plan
 
@@ -76,6 +95,7 @@ class ArchitectAgent(BaseAgent):
         prompt: str,
         *,
         project_type_hint: ProjectType | None = None,
+        generation_mode: str | None = None,
     ) -> tuple[ArchitectPlan, CoreMindAnalysis]:
         """Analyse le prompt et retourne le plan + l'analyse CoreMind."""
         normalized = prompt.strip()
@@ -85,8 +105,18 @@ class ArchitectAgent(BaseAgent):
         coremind = CoreMindAgent(self._settings)
         analysis = await coremind.analyze(normalized, project_type_hint)
         type_label = PROJECT_TYPE_LABELS[analysis.project_type]
+        pricing = build_complexity_pricing(
+            normalized,
+            analysis.project_type,
+            generation_mode=generation_mode,
+        )
 
-        llm_plan = await self._llm_refine(normalized, analysis, type_label)
+        llm_plan = await self._llm_refine(
+            normalized,
+            analysis,
+            type_label,
+            pricing=pricing,
+        )
         if llm_plan is not None:
             return llm_plan, analysis
 
@@ -96,8 +126,10 @@ class ArchitectAgent(BaseAgent):
         )
         template_label = TEMPLATE_LABELS.get(template, template)
         rationale = (
-            f"Type « {type_label} » (score complexité {analysis.complexity_score}/10). "
-            f"Template premium « {template_label} » choisi par analyse heuristique du prompt."
+            f"Type « {type_label} » (complexité {pricing['complexity_label']} "
+            f"{pricing['complexity_score']}/10). "
+            f"Template premium « {template_label} » choisi par analyse heuristique du prompt. "
+            f"Marché estimé {pricing['market_price_min']}–{pricing['market_price_max']} €."
         )
         plan = ArchitectPlan(
             project_type=analysis.project_type,
@@ -106,8 +138,21 @@ class ArchitectAgent(BaseAgent):
             template_label=template_label,
             rationale=rationale,
             used_llm=False,
+            **pricing,
         )
         return plan, analysis
+
+    @staticmethod
+    def _pricing_fields(pricing: dict[str, int | str]) -> dict[str, int | str]:
+        return {
+            "complexity_score": int(pricing["complexity_score"]),
+            "complexity_label": str(pricing["complexity_label"]),
+            "market_price_min": int(pricing["market_price_min"]),
+            "market_price_max": int(pricing["market_price_max"]),
+            "suggested_price_min": int(pricing["suggested_price_min"]),
+            "suggested_price_max": int(pricing["suggested_price_max"]),
+            "pricing_category": str(pricing["pricing_category"]),
+        }
 
     def _anthropic_key(self) -> str:
         raw = self._settings.anthropic_api_key
@@ -118,6 +163,8 @@ class ArchitectAgent(BaseAgent):
         prompt: str,
         analysis: CoreMindAnalysis,
         type_label: str,
+        *,
+        pricing: dict[str, int | str],
     ) -> ArchitectPlan | None:
         api_key = self._anthropic_key()
         if not api_key:
@@ -181,6 +228,7 @@ class ArchitectAgent(BaseAgent):
                 template_label=TEMPLATE_LABELS.get(template, template),
                 rationale=rationale[:500],
                 used_llm=True,
+                **self._pricing_fields(pricing),
             )
         except Exception:
             logger.warning("[ArchitectAI] appel LLM échoué — heuristique", exc_info=True)

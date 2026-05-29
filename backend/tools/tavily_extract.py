@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import httpx
 
 from config import Settings, get_settings, plain_secret_str
+from cost_tracker import maybe_track_cost
 
 
 class TavilyError(RuntimeError):
@@ -26,6 +27,7 @@ async def tavily_extract_one(
     extract_depth: str = "basic",
     include_images: bool = True,
     settings: Settings | None = None,
+    project_id: str | None = None,
 ) -> TavilyExtractResult:
     """
     Tavily Extract API (POST https://api.tavily.com/extract).
@@ -81,5 +83,6 @@ async def tavily_extract_one(
     raw = str(first.get("raw_content") or "").strip()
     imgs = first.get("images") or []
     images: list[str] = [str(x) for x in imgs if isinstance(x, (str, int, float)) and str(x)]
+    maybe_track_cost(project_id, "tavily", {"requests": 1})
     return TavilyExtractResult(url=clean, raw_content=raw, images=images)
 

@@ -16,6 +16,10 @@ async def test_architect_detects_crm_template() -> None:
     assert plan.template == TEMPLATE_CRM
     assert plan.project_type in (ProjectType.SAAS_DASHBOARD, ProjectType.APPLICATION_WEB)
     assert analysis.complexity_score >= 1
+    assert 1 <= plan.complexity_score <= 10
+    assert plan.complexity_label in ("Simple", "Moyenne", "Complexe")
+    assert plan.market_price_max >= plan.market_price_min > 0
+    assert plan.suggested_price_max >= plan.suggested_price_min > 0
 
 
 @pytest.mark.asyncio

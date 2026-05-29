@@ -21,6 +21,11 @@ class VitrineContactRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=200)
     message: str = Field(..., min_length=10, max_length=8000)
     site: str | None = Field(default=None, max_length=300)
+    project_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Identifiant projet pour le suivi des coûts API",
+    )
 
 
 class VitrineContactResponse(BaseModel):
@@ -44,6 +49,7 @@ async def vitrine_contact(body: VitrineContactRequest) -> VitrineContactResponse
         demo_url=body.site or "",
         demo_password=None,
         unlock_url=None,
+        project_id=body.project_id,
     )
     return VitrineContactResponse(recorded=True, email_sent=email_sent)
 

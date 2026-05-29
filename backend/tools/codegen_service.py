@@ -16,6 +16,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from config import Settings, get_settings
+from cost_tracker import maybe_track_cost, usage_from_anthropic_payload, usage_from_openai_payload
 from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG, get_effective_llm_key
 
 CODEGEN_SYSTEM_PROMPT = """Tu es CoreMindAI (CyberForge). Génère vite un prototype React + TypeScript + Tailwind.
@@ -103,6 +104,7 @@ class CodeGenService:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
         self._active_system_prompt = CODEGEN_SYSTEM_PROMPT
+        self._track_project_id: str | None = None
 
     def is_configured(self) -> bool:
         return len(self._available_specs(CodeGenComplexity.ELEVEE)) > 0
@@ -120,6 +122,7 @@ class CodeGenService:
         complexity: CodeGenComplexity = CodeGenComplexity.MOYENNE,
         *,
         demo_html: bool = False,
+        project_id: str | None = None,
     ) -> CodeGenerateResult:
         trimmed = prompt.strip()
         if len(trimmed) < 3:
@@ -136,20 +139,25 @@ class CodeGenService:
         prompt_for_llm = _trim_prompt(trimmed)
         timeout = self._http_timeout()
         errors: list[str] = []
+        previous_track = self._track_project_id
+        self._track_project_id = project_id
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            for spec in specs:
-                try:
-                    text = await spec.call(prompt_for_llm, spec.model, client)
-                    parsed = _parse_json_response(text)
-                    return _to_code_result(parsed, spec.provider_id, spec.model)
-                except httpx.TimeoutException:
-                    limit = self._settings.coremind_llm_timeout_seconds
-                    errors.append(
-                        f"{spec.provider_id}/{spec.model}: timeout ({limit:.0f}s)"
-                    )
-                except Exception as exc:
-                    errors.append(f"{spec.provider_id}/{spec.model}: {exc}")
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                for spec in specs:
+                    try:
+                        text = await spec.call(prompt_for_llm, spec.model, client)
+                        parsed = _parse_json_response(text)
+                        return _to_code_result(parsed, spec.provider_id, spec.model)
+                    except httpx.TimeoutException:
+                        limit = self._settings.coremind_llm_timeout_seconds
+                        errors.append(
+                            f"{spec.provider_id}/{spec.model}: timeout ({limit:.0f}s)"
+                        )
+                    except Exception as exc:
+                        errors.append(f"{spec.provider_id}/{spec.model}: {exc}")
+        finally:
+            self._track_project_id = previous_track
 
         raise CodeGenServiceError(
             "Tous les modèles ont échoué : " + " | ".join(errors[:4])
@@ -161,6 +169,7 @@ class CodeGenService:
         *,
         project_type_label: str = "Démo client",
         template_hint: str | None = None,
+        project_id: str | None = None,
     ) -> dict[str, Any]:
         """Personnalise titre / marque / tâches seed — jamais de HTML."""
         trimmed = prompt.strip()
@@ -182,19 +191,24 @@ class CodeGenService:
         )
         timeout = self._http_timeout()
         errors: list[str] = []
+        previous_track = self._track_project_id
+        self._track_project_id = project_id
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            for spec in specs:
-                try:
-                    text = await spec.call(user_msg, spec.model, client)
-                    return _parse_json_response(text)
-                except httpx.TimeoutException:
-                    limit = self._settings.coremind_llm_timeout_seconds
-                    errors.append(
-                        f"{spec.provider_id}/{spec.model}: timeout ({limit:.0f}s)"
-                    )
-                except Exception as exc:
-                    errors.append(f"{spec.provider_id}/{spec.model}: {exc}")
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                for spec in specs:
+                    try:
+                        text = await spec.call(user_msg, spec.model, client)
+                        return _parse_json_response(text)
+                    except httpx.TimeoutException:
+                        limit = self._settings.coremind_llm_timeout_seconds
+                        errors.append(
+                            f"{spec.provider_id}/{spec.model}: timeout ({limit:.0f}s)"
+                        )
+                    except Exception as exc:
+                        errors.append(f"{spec.provider_id}/{spec.model}: {exc}")
+        finally:
+            self._track_project_id = previous_track
 
         raise CodeGenServiceError(
             "Personnalisation seed échouée : " + " | ".join(errors[:4])
@@ -287,7 +301,14 @@ class CodeGenService:
             },
             content=body,
         )
-        return _extract_openai_text(response, "DeepSeek")
+        text = _extract_openai_text(response, "DeepSeek")
+        if self._track_project_id:
+            maybe_track_cost(
+                self._track_project_id,
+                "deepseek_v3",
+                usage_from_openai_payload(response.json()),
+            )
+        return text
 
     async def _call_gemini(
         self, prompt: str, model: str, client: httpx.AsyncClient
@@ -359,6 +380,12 @@ class CodeGenService:
         )
         if not text.strip():
             raise CodeGenServiceError("Réponse Anthropic vide.")
+        if self._track_project_id and model == self._settings.coremind_sonnet_model:
+            maybe_track_cost(
+                self._track_project_id,
+                "claude_sonnet",
+                usage_from_anthropic_payload(payload),
+            )
         return text
 
 

@@ -28,6 +28,7 @@ from tools.export_github import (
     vitrine_branch_name,
 )
 from tools.export_railway import RailwayExportError, deploy_to_railway
+from cost_tracker import maybe_track_cost
 from tools.generation_sources import is_usable_preview_html
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,7 @@ class ExportAgent(BaseAgent):
         generation: CodeGenerateResult,
         preview_html: str = "",
         settings: Settings | None = None,
+        project_id: str | None = None,
     ) -> ExportResult:
         resolved = settings or self._settings
         project_name = slugify_project_name(
@@ -255,6 +257,11 @@ class ExportAgent(BaseAgent):
         success = bool(production_url)
         if not message:
             message = "Export terminé." if success else "Export sans URL de production."
+
+        if project_id and github_url:
+            maybe_track_cost(project_id, "github", {"requests": 1})
+        if project_id and provider == "railway" and production_url:
+            maybe_track_cost(project_id, "railway", {"requests": 1})
 
         return ExportResult(
             success=success,

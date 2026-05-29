@@ -109,6 +109,7 @@ class AutoFixAgent(BaseAgent):
         tier: CodeGenComplexity,
         title: str,
         initial_report: BugHuntReport,
+        project_id: str | None = None,
     ) -> tuple[CodeGenerateResult, int, BugHuntReport]:
         """
         Repli TaskFlow immédiat si code source visible, sinon régénérations LLM.
@@ -142,6 +143,7 @@ class AutoFixAgent(BaseAgent):
                     fix_prompt,
                     tier,
                     demo_html=True,
+                    project_id=project_id,
                 )
             except Exception:
                 logger.exception("[AutoFixAI] échec appel LLM tentative %s", attempt)

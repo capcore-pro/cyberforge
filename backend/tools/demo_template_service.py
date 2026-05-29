@@ -843,6 +843,7 @@ class DemoTemplateService:
         *,
         project_type_label: str,
         template_hint: str | None = None,
+        project_id: str | None = None,
     ) -> DemoSeedData:
         seed = heuristic_demo_seed(prompt, project_type_label=project_type_label)
         if template_hint:
@@ -883,6 +884,7 @@ class DemoTemplateService:
                 prompt,
                 project_type_label=project_type_label,
                 template_hint=template_hint,
+                project_id=project_id,
             )
             parsed = _parse_seed_payload(
                 data,
