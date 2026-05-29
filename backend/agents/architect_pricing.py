@@ -111,10 +111,7 @@ _ECOMMERCE_HINTS = (
     "woocommerce",
 )
 
-_RESERVATION_HINTS = (
-    "réservation",
-    "reservation",
-    "booking",
+_RESERVATION_STRONG_HINTS = (
     "restaurant",
     "table",
     "créneau",
@@ -123,9 +120,48 @@ _RESERVATION_HINTS = (
     "chambre",
 )
 
+_RESERVATION_PRIMARY_WORDS = ("réservation", "reservation", "booking")
+
+_SERVICE_CATALOG_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bnous\s+proposons\b", re.I),
+    re.compile(r"\bon\s+proposons\b", re.I),
+    re.compile(
+        r"\bproposons\s+(?:des\s+)?(?:services?|prestations?|offres?|activités?)\b",
+        re.I,
+    ),
+    re.compile(r"\boffrons\b", re.I),
+    re.compile(r"\bnos\s+(?:services?|prestations?|offres?)\b", re.I),
+    re.compile(r"\b(?:services?|prestations?|offres?)\s*:\s*", re.I),
+    re.compile(
+        r"\bproposons\s+[^.\n]{0,160}(?:réservation|reservation|booking)\b",
+        re.I,
+    ),
+    re.compile(
+        r"(?:réservation|reservation|booking)\s*[,;]\s*\w",
+        re.I,
+    ),
+)
+
 
 def _normalize(text: str) -> str:
     return text.strip().lower()
+
+
+def _is_service_catalog_context(text: str) -> bool:
+    """
+    « réservation » / « booking » listés comme prestation (ex. « nous proposons A, B, réservation »),
+    pas comme objet principal du projet.
+    """
+    return any(pattern.search(text) for pattern in _SERVICE_CATALOG_PATTERNS)
+
+
+def _prompt_triggers_site_reservation(text: str) -> bool:
+    """True si le prompt décrit un projet de réservation (pas une simple mention en liste de services)."""
+    if any(h in text for h in _RESERVATION_STRONG_HINTS):
+        return True
+    if _is_service_catalog_context(text):
+        return False
+    return any(word in text for word in _RESERVATION_PRIMARY_WORDS)
 
 
 def _count_matches(patterns: tuple[re.Pattern[str], ...], text: str) -> int:
@@ -212,7 +248,7 @@ def resolve_pricing_category(
         return "vitrine_next"
     if any(h in text for h in _ECOMMERCE_HINTS):
         return "ecommerce"
-    if any(h in text for h in _RESERVATION_HINTS):
+    if _prompt_triggers_site_reservation(text):
         return "site_reservation"
 
     if project_type == ProjectType.EXTENSION_NAVIGATEUR:
@@ -251,9 +287,10 @@ def build_complexity_pricing(
     project_type: ProjectType,
     *,
     generation_mode: str | None = None,
+    pricing_category: PricingCategory | None = None,
 ) -> dict[str, int | str]:
     score = analyze_prompt_complexity(prompt)
-    category = resolve_pricing_category(
+    category: PricingCategory = pricing_category or resolve_pricing_category(
         project_type,
         prompt,
         generation_mode=generation_mode,

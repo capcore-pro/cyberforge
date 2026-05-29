@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_REPLICATE_MODEL = "intelligent-utilities/html-to-image"
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
+REPLICATE_TIMEOUT_SECONDS = 120.0
 
 
 class ReplicateScreenshotError(Exception):
@@ -63,6 +64,10 @@ class ReplicateScreenshotClient:
     @property
     def model_slug(self) -> str:
         return self._settings.replicate_html_model or DEFAULT_REPLICATE_MODEL
+
+    def _replicate_timeout_seconds(self) -> float:
+        configured = float(self._settings.vision_replicate_timeout_seconds)
+        return max(REPLICATE_TIMEOUT_SECONDS, configured)
 
     async def screenshot_html(
         self,
@@ -146,11 +151,12 @@ class ReplicateScreenshotClient:
     ) -> str:
         owner, name = self._split_model_slug(self.model_slug)
         create_url = f"{REPLICATE_API_BASE}/models/{owner}/{name}/predictions"
-        timeout = httpx.Timeout(self._settings.vision_replicate_timeout_seconds)
+        timeout_seconds = self._replicate_timeout_seconds()
+        timeout = httpx.Timeout(timeout_seconds)
         headers = {
             **_auth_header(self.api_key),
             "Content-Type": "application/json",
-            "Prefer": f"wait={int(min(60, self._settings.vision_replicate_timeout_seconds))}",
+            "Prefer": f"wait={int(min(60, timeout_seconds))}",
         }
 
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -203,7 +209,7 @@ class ReplicateScreenshotClient:
     ) -> str:
         poll_url = f"{REPLICATE_API_BASE}/predictions/{prediction_id}"
         headers = _auth_header(self.api_key)
-        deadline = self._settings.vision_replicate_timeout_seconds
+        deadline = self._replicate_timeout_seconds()
         interval = max(0.5, self._settings.vision_replicate_poll_seconds)
         elapsed = 0.0
 

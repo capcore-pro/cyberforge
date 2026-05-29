@@ -5,6 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from security.secret_encoding import secret_for_http_header
+
 from . import _helpers
 
 
@@ -13,7 +15,7 @@ class BaseConnector(ABC):
 
     def __init__(self, service_id: str, api_key: str) -> None:
         self.service_id = service_id.strip()
-        self.api_key = (api_key or "").strip()
+        self.api_key = secret_for_http_header(api_key)
 
     @abstractmethod
     def get_balance(self) -> float:

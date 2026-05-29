@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{APP_TITLE}}</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>{{APP_TITLE}}</h1>
+      <p style="margin: 0.35rem 0 0; color: #94a3b8; font-size: 0.85rem">
+        {{CLIENT_NAME}} — Commande {{ORDER_ID}}
+      </p>
+    </header>
+    <div class="layout">
+      <section>
+        <h2 style="font-size: 1rem; color: #94a3b8">Catalogue</h2>
+        <div class="catalog" id="catalog"></div>
+      </section>
+      <aside class="cart">
+        <h2>Panier</h2>
+        <ul id="cartList"></ul>
+        <p class="total">Total : <span id="cartTotal">0,00 €</span></p>
+        <button type="button" class="btn-primary" id="printTicket">Imprimer le ticket</button>
+        <button type="button" class="btn-secondary" id="clearCart">Vider le panier</button>
+      </aside>
+    </div>
+
+    <div id="ticket" style="display: none"></div>
+
+    <script>
+      const PRODUCTS = [
+        { id: "cafe", name: "Café", price: 2.5 },
+        { id: "the", name: "Thé", price: 2.2 },
+        { id: "croissant", name: "Croissant", price: 1.4 },
+        { id: "sandwich", name: "Sandwich", price: 6.5 },
+        { id: "eau", name: "Eau 50cl", price: 1.8 },
+        { id: "menu", name: "Menu du jour", price: 12.9 },
+      ];
+
+      const cart = [];
+
+      function formatMoney(n) {
+        return new Intl.NumberFormat("fr-FR", {
+          style: "currency",
+          currency: "EUR",
+        }).format(n);
+      }
+
+      function renderCatalog() {
+        const root = document.getElementById("catalog");
+        root.innerHTML = "";
+        PRODUCTS.forEach((p) => {
+          const div = document.createElement("div");
+          div.className = "product";
+          div.innerHTML = `<strong>${p.name}</strong><span>${formatMoney(p.price)}</span>`;
+          div.addEventListener("click", () => addToCart(p.id));
+          root.appendChild(div);
+        });
+      }
+
+      function addToCart(productId) {
+        const product = PRODUCTS.find((p) => p.id === productId);
+        if (!product) return;
+        const line = cart.find((c) => c.id === productId);
+        if (line) line.qty += 1;
+        else cart.push({ ...product, qty: 1 });
+        renderCart();
+      }
+
+      function renderCart() {
+        const list = document.getElementById("cartList");
+        list.innerHTML = "";
+        let total = 0;
+        cart.forEach((line, index) => {
+          const li = document.createElement("li");
+          const sub = line.qty * line.price;
+          total += sub;
+          li.innerHTML = `<span>${line.name} × ${line.qty}</span><span>${formatMoney(sub)} <button type="button" data-i="${index}" class="btn-secondary" style="padding:0.2rem 0.4rem;margin:0">−</button></span>`;
+          li.querySelector("button").addEventListener("click", () => {
+            if (line.qty > 1) line.qty -= 1;
+            else cart.splice(index, 1);
+            renderCart();
+          });
+          list.appendChild(li);
+        });
+        document.getElementById("cartTotal").textContent = formatMoney(total);
+      }
+
+      document.getElementById("clearCart").addEventListener("click", () => {
+        cart.length = 0;
+        renderCart();
+      });
+
+      document.getElementById("printTicket").addEventListener("click", () => {
+        const ticket = document.getElementById("ticket");
+        const now = new Date().toLocaleString("fr-FR");
+        let total = 0;
+        const lines = cart
+          .map((l) => {
+            const sub = l.qty * l.price;
+            total += sub;
+            return `<div>${l.name} × ${l.qty} — ${formatMoney(sub)}</div>`;
+          })
+          .join("");
+        ticket.style.display = "block";
+        ticket.innerHTML = `
+          <h3 style="margin:0 0 8px">{{APP_TITLE}}</h3>
+          <div style="font-size:12px;margin-bottom:8px">${now}</div>
+          <div style="font-size:12px;margin-bottom:8px">Client : {{CLIENT_NAME}}</div>
+          <hr />
+          ${lines || "<div>Aucun article</div>"}
+          <hr />
+          <strong>Total : ${formatMoney(total)}</strong>
+          <div style="font-size:11px;margin-top:8px">Merci ! — {{ORDER_ID}}</div>
+        `;
+        window.print();
+        ticket.style.display = "none";
+      });
+
+      renderCatalog();
+      renderCart();
+    </script>
+  </body>
+</html>

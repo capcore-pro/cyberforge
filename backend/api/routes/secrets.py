@@ -27,6 +27,12 @@ class SaveSecretsRequest(BaseModel):
     anthropic_api_key: str | None = None
     deepseek_api_key: str | None = None
     google_generative_ai_api_key: str | None = None
+    v0_api_key: str | None = None
+    replicate_api_key: str | None = None
+    tavily_api_key: str | None = None
+    railway_api_key: str | None = None
+    vercel_token: str | None = None
+    github_token: str | None = None
 
 
 class ChangeMasterPasswordRequest(BaseModel):
@@ -104,6 +110,12 @@ async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
                 "ANTHROPIC_API_KEY": body.anthropic_api_key,
                 "DEEPSEEK_API_KEY": body.deepseek_api_key,
                 "GOOGLE_GENERATIVE_AI_API_KEY": body.google_generative_ai_api_key,
+                "V0_API_KEY": body.v0_api_key,
+                "REPLICATE_API_KEY": body.replicate_api_key,
+                "TAVILY_API_KEY": body.tavily_api_key,
+                "RAILWAY_API_KEY": body.railway_api_key,
+                "VERCEL_TOKEN": body.vercel_token,
+                "GITHUB_TOKEN": body.github_token,
             },
         )
     except VaultInvalidPasswordError as exc:

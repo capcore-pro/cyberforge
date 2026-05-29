@@ -1,0 +1,129 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+header {
+  padding: 1rem 1.5rem;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+
+header h1 {
+  margin: 0;
+  color: #fbbf24;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 1rem;
+  padding: 1rem;
+  min-height: calc(100vh - 80px);
+}
+
+.catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.product {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.product:hover {
+  border-color: #fbbf24;
+}
+
+.product strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.cart {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.cart h2 {
+  margin-top: 0;
+}
+
+.cart ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.cart li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #334155;
+  font-size: 0.9rem;
+}
+
+.total {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #fbbf24;
+  margin: 0.75rem 0;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: #f59e0b;
+  color: #0f172a;
+}
+
+.btn-secondary {
+  background: #334155;
+  color: #e2e8f0;
+  margin-top: 0.5rem;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #ticket,
+  #ticket * {
+    visibility: visible;
+  }
+  #ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    background: #fff;
+    color: #000;
+    padding: 8px;
+  }
+}

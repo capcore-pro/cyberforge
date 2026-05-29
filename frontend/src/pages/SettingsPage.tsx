@@ -8,16 +8,141 @@ import {
   lockSecrets,
   saveSecrets,
   unlockSecrets,
+  type InfraFlags,
   type ProviderFlags,
   type SecretsStatusResponse,
+  type VaultConfiguredFlags,
+  type VaultKeysPayload,
 } from "@/lib/secrets-api";
 
-const PROVIDER_LABELS: { key: keyof ProviderFlags; label: string; field: string }[] = [
-  { key: "deepseek", label: "DeepSeek", field: "deepseek_api_key" },
-  { key: "gemini", label: "Google Gemini", field: "google_generative_ai_api_key" },
-  { key: "anthropic", label: "Anthropic", field: "anthropic_api_key" },
-  { key: "openai", label: "OpenAI", field: "openai_api_key" },
+const PROVIDER_LABELS: { key: keyof ProviderFlags; label: string }[] = [
+  { key: "deepseek", label: "DeepSeek" },
+  { key: "gemini", label: "Google Gemini" },
+  { key: "anthropic", label: "Anthropic" },
+  { key: "openai", label: "OpenAI" },
 ];
+
+const INFRA_LABELS: { key: keyof InfraFlags; label: string }[] = [
+  { key: "v0", label: "v0" },
+  { key: "replicate", label: "Replicate" },
+  { key: "tavily", label: "Tavily" },
+  { key: "railway", label: "Railway" },
+  { key: "vercel", label: "Vercel" },
+  { key: "github", label: "GitHub" },
+];
+
+type ApiKeyFieldDef = {
+  configuredKey: keyof VaultConfiguredFlags;
+  label: string;
+  payloadKey: keyof VaultKeysPayload;
+  emptyPlaceholder: string;
+};
+
+const LLM_API_FIELDS: ApiKeyFieldDef[] = [
+  {
+    configuredKey: "deepseek",
+    label: "Clé API DeepSeek",
+    payloadKey: "deepseek_api_key",
+    emptyPlaceholder: "sk-…",
+  },
+  {
+    configuredKey: "gemini",
+    label: "Clé API Google Gemini",
+    payloadKey: "google_generative_ai_api_key",
+    emptyPlaceholder: "AIza…",
+  },
+  {
+    configuredKey: "anthropic",
+    label: "Clé API Anthropic",
+    payloadKey: "anthropic_api_key",
+    emptyPlaceholder: "sk-ant-…",
+  },
+  {
+    configuredKey: "openai",
+    label: "Clé API OpenAI (optionnel)",
+    payloadKey: "openai_api_key",
+    emptyPlaceholder: "sk-…",
+  },
+];
+
+const INFRA_API_FIELDS: ApiKeyFieldDef[] = [
+  {
+    configuredKey: "v0",
+    label: "V0_API_KEY",
+    payloadKey: "v0_api_key",
+    emptyPlaceholder: "v0_…",
+  },
+  {
+    configuredKey: "replicate",
+    label: "REPLICATE_API_KEY",
+    payloadKey: "replicate_api_key",
+    emptyPlaceholder: "r8_…",
+  },
+  {
+    configuredKey: "tavily",
+    label: "TAVILY_API_KEY",
+    payloadKey: "tavily_api_key",
+    emptyPlaceholder: "tvly-…",
+  },
+  {
+    configuredKey: "railway",
+    label: "RAILWAY_API_KEY",
+    payloadKey: "railway_api_key",
+    emptyPlaceholder: "…",
+  },
+  {
+    configuredKey: "vercel",
+    label: "VERCEL_TOKEN",
+    payloadKey: "vercel_token",
+    emptyPlaceholder: "…",
+  },
+  {
+    configuredKey: "github",
+    label: "GITHUB_TOKEN",
+    payloadKey: "github_token",
+    emptyPlaceholder: "ghp_…",
+  },
+];
+
+const VAULT_PLACEHOLDER = "•••• (déjà en coffre)";
+
+function ApiKeyInput({
+  label,
+  value,
+  onChange,
+  configured,
+  emptyPlaceholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  configured: boolean;
+  emptyPlaceholder: string;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
+        {label}
+      </span>
+      <input
+        type="password"
+        autoComplete="off"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="cyber-prompt-field min-h-0 font-mono text-xs"
+        placeholder={configured ? VAULT_PLACEHOLDER : emptyPlaceholder}
+      />
+    </label>
+  );
+}
+
+function clearApiKeyInputs(
+  setters: Record<keyof VaultKeysPayload, (value: string) => void>,
+) {
+  for (const setter of Object.values(setters)) {
+    setter("");
+  }
+}
 
 function PasswordFieldWithToggle({
   label,
@@ -91,6 +216,38 @@ export function SettingsPage() {
   const [geminiKey, setGeminiKey] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [v0Key, setV0Key] = useState("");
+  const [replicateKey, setReplicateKey] = useState("");
+  const [tavilyKey, setTavilyKey] = useState("");
+  const [railwayKey, setRailwayKey] = useState("");
+  const [vercelToken, setVercelToken] = useState("");
+  const [githubToken, setGithubToken] = useState("");
+
+  const keyValues: Record<keyof VaultKeysPayload, string> = {
+    deepseek_api_key: deepseekKey,
+    google_generative_ai_api_key: geminiKey,
+    anthropic_api_key: anthropicKey,
+    openai_api_key: openaiKey,
+    v0_api_key: v0Key,
+    replicate_api_key: replicateKey,
+    tavily_api_key: tavilyKey,
+    railway_api_key: railwayKey,
+    vercel_token: vercelToken,
+    github_token: githubToken,
+  };
+
+  const keySetters: Record<keyof VaultKeysPayload, (value: string) => void> = {
+    deepseek_api_key: setDeepseekKey,
+    google_generative_ai_api_key: setGeminiKey,
+    anthropic_api_key: setAnthropicKey,
+    openai_api_key: setOpenaiKey,
+    v0_api_key: setV0Key,
+    replicate_api_key: setReplicateKey,
+    tavily_api_key: setTavilyKey,
+    railway_api_key: setRailwayKey,
+    vercel_token: setVercelToken,
+    github_token: setGithubToken,
+  };
 
   const refreshStatus = useCallback(async () => {
     setLoading(true);
@@ -157,10 +314,7 @@ export function SettingsPage() {
       return;
     }
     setSuccess("Coffre verrouillé.");
-    setDeepseekKey("");
-    setGeminiKey("");
-    setAnthropicKey("");
-    setOpenaiKey("");
+    clearApiKeyInputs(keySetters);
     await refreshStatus();
   }
 
@@ -169,16 +323,16 @@ export function SettingsPage() {
       setError("Le mot de passe maître est requis pour chiffrer et enregistrer.");
       return;
     }
-    const keys: {
-      deepseek_api_key?: string;
-      google_generative_ai_api_key?: string;
-      anthropic_api_key?: string;
-      openai_api_key?: string;
-    } = {};
-    if (deepseekKey.trim()) keys.deepseek_api_key = deepseekKey.trim();
-    if (geminiKey.trim()) keys.google_generative_ai_api_key = geminiKey.trim();
-    if (anthropicKey.trim()) keys.anthropic_api_key = anthropicKey.trim();
-    if (openaiKey.trim()) keys.openai_api_key = openaiKey.trim();
+    const keys: VaultKeysPayload = {};
+    for (const [payloadKey, value] of Object.entries(keyValues) as [
+      keyof VaultKeysPayload,
+      string,
+    ][]) {
+      const trimmed = value.trim();
+      if (trimmed) {
+        keys[payloadKey] = trimmed;
+      }
+    }
 
     if (Object.keys(keys).length === 0 && !status?.has_vault) {
       setError("Saisissez au moins une clé API à enregistrer.");
@@ -206,10 +360,7 @@ export function SettingsPage() {
       "Clés enregistrées dans le coffre chiffré local. Elles ne sont pas stockées dans backend/.env.",
     );
     setMasterPassword("");
-    setDeepseekKey("");
-    setGeminiKey("");
-    setAnthropicKey("");
-    setOpenaiKey("");
+    clearApiKeyInputs(keySetters);
     await refreshStatus();
   }
 
@@ -319,20 +470,34 @@ export function SettingsPage() {
                 </dd>
               </div>
             </dl>
-            {effective ? (
-              <div className="flex flex-wrap gap-2 pt-2">
+            <div className="space-y-2 pt-2">
+              {effective ? (
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
+                    Fournisseurs LLM actifs :
+                  </span>
+                  {PROVIDER_LABELS.map((p) => (
+                    <ProviderBadge
+                      key={p.key}
+                      label={p.label}
+                      active={effective[p.key]}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
                 <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                  Fournisseurs actifs :
+                  Clés infra en coffre :
                 </span>
-                {PROVIDER_LABELS.map((p) => (
+                {INFRA_LABELS.map((p) => (
                   <ProviderBadge
                     key={p.key}
                     label={p.label}
-                    active={effective[p.key]}
+                    active={status.configured[p.key]}
                   />
                 ))}
               </div>
-            ) : null}
+            </div>
           </section>
 
           <section className="cyber-panel space-y-4 p-5">
@@ -417,61 +582,37 @@ export function SettingsPage() {
               Anthropic (CoreMindAI).
             </p>
 
-            <label className="block space-y-1">
-              <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                Clé API DeepSeek
-              </span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={deepseekKey}
-                onChange={(e) => setDeepseekKey(e.target.value)}
-                className="cyber-prompt-field min-h-0 font-mono text-xs"
-                placeholder={status.configured.deepseek ? "•••• (déjà en coffre)" : "sk-…"}
+            {LLM_API_FIELDS.map((field) => (
+              <ApiKeyInput
+                key={field.payloadKey}
+                label={field.label}
+                value={keyValues[field.payloadKey]}
+                onChange={keySetters[field.payloadKey]}
+                configured={status.configured[field.configuredKey]}
+                emptyPlaceholder={field.emptyPlaceholder}
               />
-            </label>
+            ))}
+          </section>
 
-            <label className="block space-y-1">
-              <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                Clé API Google Gemini
-              </span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={geminiKey}
-                onChange={(e) => setGeminiKey(e.target.value)}
-                className="cyber-prompt-field min-h-0 font-mono text-xs"
-                placeholder={status.configured.gemini ? "•••• (déjà en coffre)" : "AIza…"}
-              />
-            </label>
+          <section className="cyber-panel space-y-4 p-5">
+            <h2 className="text-sm font-semibold text-cyber-text">
+              Clés API infrastructure
+            </h2>
+            <p className="text-xs text-cyber-muted">
+              Déploiement, recherche web, génération d&apos;images et intégrations
+              Git. Laissez un champ vide pour ne pas modifier cette clé.
+            </p>
 
-            <label className="block space-y-1">
-              <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                Clé API Anthropic
-              </span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={anthropicKey}
-                onChange={(e) => setAnthropicKey(e.target.value)}
-                className="cyber-prompt-field min-h-0 font-mono text-xs"
-                placeholder={status.configured.anthropic ? "•••• (déjà en coffre)" : "sk-ant-…"}
+            {INFRA_API_FIELDS.map((field) => (
+              <ApiKeyInput
+                key={field.payloadKey}
+                label={field.label}
+                value={keyValues[field.payloadKey]}
+                onChange={keySetters[field.payloadKey]}
+                configured={status.configured[field.configuredKey]}
+                emptyPlaceholder={field.emptyPlaceholder}
               />
-            </label>
-
-            <label className="block space-y-1">
-              <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                Clé API OpenAI (optionnel)
-              </span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                className="cyber-prompt-field min-h-0 font-mono text-xs"
-                placeholder={status.configured.openai ? "•••• (déjà en coffre)" : "sk-…"}
-              />
-            </label>
+            ))}
 
             <button
               type="button"

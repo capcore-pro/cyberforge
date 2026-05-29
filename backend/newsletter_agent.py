@@ -24,7 +24,11 @@ from newsletter_db import (
     get_contact_by_email,
     update_contact,
 )
-from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG, get_effective_llm_key
+from security.llm_secrets import (
+    LLM_KEYS_UNAVAILABLE_MSG,
+    get_effective_llm_key,
+    get_effective_llm_key_for_http,
+)
 from tools.codegen_service import _parse_json_response, _utf8_json_body
 
 logger = logging.getLogger(__name__)
@@ -148,7 +152,10 @@ async def _call_deepseek(
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             DEEPSEEK_CHAT_URL,
-            headers={"Authorization": f"Bearer {api_key}", **headers},
+            headers={
+                "Authorization": f"Bearer {get_effective_llm_key_for_http('DEEPSEEK_API_KEY', s) or api_key}",
+                **headers,
+            },
             content=body,
         )
 

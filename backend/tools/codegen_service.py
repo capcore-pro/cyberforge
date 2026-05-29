@@ -1,7 +1,7 @@
 """
 Service de génération de code CoreMindAI — routage multi-fournisseurs par coût.
 
-Ordre : DeepSeek → Gemini Flash → Claude Haiku → Claude Sonnet (complexité élevée).
+Ordre : DeepSeek → Gemini → Claude Sonnet (si échec) ; Haiku en plus si complexité élevée.
 """
 
 from __future__ import annotations
@@ -17,7 +17,11 @@ from pydantic import BaseModel, Field
 
 from config import Settings, get_settings
 from cost_tracker import maybe_track_cost, usage_from_anthropic_payload, usage_from_openai_payload
-from security.llm_secrets import LLM_KEYS_UNAVAILABLE_MSG, get_effective_llm_key
+from security.llm_secrets import (
+    LLM_KEYS_UNAVAILABLE_MSG,
+    get_effective_llm_key,
+    get_effective_llm_key_for_http,
+)
 
 CODEGEN_SYSTEM_PROMPT = """Tu es CoreMindAI (CyberForge). Génère vite un prototype React + TypeScript + Tailwind.
 Règles strictes :
@@ -99,7 +103,7 @@ class _ProviderSpec:
 
 
 class CodeGenService:
-    """Routage DeepSeek → Gemini Flash → Claude Haiku → Claude Sonnet."""
+    """Routage DeepSeek → Gemini → Claude Sonnet (Anthropic en dernier recours)."""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
@@ -231,23 +235,21 @@ class CodeGenService:
         return specs
 
     def _generation_specs(self, complexity: CodeGenComplexity) -> list[_ProviderSpec]:
-        """Fournisseurs à tenter (limités pour respecter le budget temps)."""
+        """Fournisseurs à tenter dans l'ordre de la chaîne (coût croissant)."""
         all_specs = self._available_specs(complexity)
+        configured = len(all_specs)
+        if configured == 0:
+            return []
+
+        # Au moins 3 tentatives si Sonnet est dans la chaîne (après DeepSeek + Gemini).
+        sonnet_model = self._settings.coremind_sonnet_model
+        needs_sonnet_slot = self._anthropic_key() and any(
+            s.model == sonnet_model for s in all_specs
+        )
         limit = max(1, self._settings.coremind_max_provider_attempts)
-
-        if complexity == CodeGenComplexity.ELEVEE:
-            haiku = self._settings.coremind_haiku_model
-            sonnet = self._settings.coremind_sonnet_model
-            priority = [
-                s
-                for s in all_specs
-                if s.model in (haiku, sonnet)
-            ]
-            priority.sort(key=lambda s: 0 if s.model == haiku else 1)
-            rest = [s for s in all_specs if s not in priority]
-            all_specs = priority + rest
-
-        return all_specs[:limit]
+        if needs_sonnet_slot:
+            limit = max(limit, 3)
+        return all_specs[: min(limit, configured)]
 
     def _http_timeout(self) -> httpx.Timeout:
         seconds = self._settings.coremind_llm_timeout_seconds
@@ -259,15 +261,18 @@ class CodeGenService:
     def _model_chain(
         self, complexity: CodeGenComplexity
     ) -> list[tuple[str, str]]:
-        """Ordre de coût croissant ; Sonnet uniquement si complexité élevée."""
+        """
+        Ordre de fallback : DeepSeek → Gemini → Claude Sonnet (ANTHROPIC_API_KEY).
+        Haiku inséré avant Sonnet uniquement en complexité élevée (coût intermédiaire).
+        """
         s = self._settings
         chain: list[tuple[str, str]] = [
             ("deepseek", s.coremind_deepseek_model),
             ("gemini", s.coremind_gemini_model),
-            ("anthropic", s.coremind_haiku_model),
         ]
         if complexity == CodeGenComplexity.ELEVEE:
-            chain.append(("anthropic", s.coremind_sonnet_model))
+            chain.append(("anthropic", s.coremind_haiku_model))
+        chain.append(("anthropic", s.coremind_sonnet_model))
         return chain
 
     def _deepseek_key(self) -> str | None:
@@ -296,7 +301,7 @@ class CodeGenService:
         response = await client.post(
             "https://api.deepseek.com/chat/completions",
             headers={
-                "Authorization": f"Bearer {self._deepseek_key()}",
+                "Authorization": f"Bearer {get_effective_llm_key_for_http('DEEPSEEK_API_KEY', self._settings) or ''}",
                 **content_headers,
             },
             content=body,
@@ -313,10 +318,12 @@ class CodeGenService:
     async def _call_gemini(
         self, prompt: str, model: str, client: httpx.AsyncClient
     ) -> str:
-        key = self._gemini_key()
+        key = get_effective_llm_key_for_http(
+            "GOOGLE_GENERATIVE_AI_API_KEY", self._settings
+        )
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:generateContent?key={key}"
+            f"{model}:generateContent?key={key or ''}"
         )
         body, content_headers = _utf8_json_body(
             {
@@ -362,7 +369,10 @@ class CodeGenService:
         response = await client.post(
             "https://api.anthropic.com/v1/messages",
             headers={
-                "x-api-key": self._anthropic_key() or "",
+                "x-api-key": get_effective_llm_key_for_http(
+                    "ANTHROPIC_API_KEY", self._settings
+                )
+                or "",
                 "anthropic-version": "2023-06-01",
                 **content_headers,
             },

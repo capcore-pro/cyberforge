@@ -20,6 +20,8 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from security.secret_encoding import normalize_secret_map, normalize_secret_text
+
 
 class VaultLockedError(Exception):
     pass
@@ -106,6 +108,16 @@ class SecretVault:
                 "gemini": bool(
                     self._secrets and self._secrets.get("GOOGLE_GENERATIVE_AI_API_KEY")
                 ),
+                "v0": bool(self._secrets and self._secrets.get("V0_API_KEY")),
+                "replicate": bool(
+                    self._secrets and self._secrets.get("REPLICATE_API_KEY")
+                ),
+                "tavily": bool(self._secrets and self._secrets.get("TAVILY_API_KEY")),
+                "railway": bool(
+                    self._secrets and self._secrets.get("RAILWAY_API_KEY")
+                ),
+                "vercel": bool(self._secrets and self._secrets.get("VERCEL_TOKEN")),
+                "github": bool(self._secrets and self._secrets.get("GITHUB_TOKEN")),
             }
             return VaultStatus(
                 has_vault=self.has_vault(),
@@ -123,14 +135,18 @@ class SecretVault:
             if self._secrets is None:
                 return None
             value = self._secrets.get(key)
-            return value if value else None
+            if not value:
+                return None
+            return normalize_secret_text(value) or None
 
     def get(self, key: str) -> str | None:
         with self._lock:
             if self._secrets is None:
                 raise VaultLockedError("Coffre verrouillé.")
             value = self._secrets.get(key)
-            return value if value else None
+            if not value:
+                return None
+            return normalize_secret_text(value) or None
 
     def unlock(self, password: str) -> None:
         with self._lock:
@@ -158,9 +174,9 @@ class SecretVault:
             secrets = json.loads(clear.decode("utf-8"))
             if not isinstance(secrets, dict):
                 raise ValueError("Coffre corrompu (format).")
-            self._secrets = {
-                str(k): str(v) for k, v in secrets.items() if isinstance(v, str)
-            }
+            self._secrets = normalize_secret_map(
+                {str(k): str(v) for k, v in secrets.items() if isinstance(v, str)}
+            )
 
     def _decrypt_payload(self, password: str, payload: dict[str, Any]) -> dict[str, str]:
         kdf_info = payload.get("kdf") or {}
@@ -176,7 +192,9 @@ class SecretVault:
         secrets = json.loads(clear.decode("utf-8"))
         if not isinstance(secrets, dict):
             raise ValueError("Coffre corrompu (format).")
-        return {str(k): str(v) for k, v in secrets.items() if isinstance(v, str)}
+        return normalize_secret_map(
+            {str(k): str(v) for k, v in secrets.items() if isinstance(v, str)}
+        )
 
     def save(self, password: str, *, secrets: dict[str, str | None]) -> None:
         """
@@ -196,7 +214,9 @@ class SecretVault:
                 name = str(k)
                 if not v:
                     continue
-                merged[name] = str(v).strip()
+                normalized = normalize_secret_text(v)
+                if normalized:
+                    merged[name] = normalized
 
             self._write_encrypted(password, merged)
 
@@ -205,7 +225,8 @@ class SecretVault:
         iterations = self._ITERATIONS
         fernet_key = _derive_fernet_key(password, salt=salt, iterations=iterations)
         f = Fernet(fernet_key)
-        clear = json.dumps(secrets, ensure_ascii=False, separators=(",", ":")).encode(
+        normalized = normalize_secret_map(secrets)
+        clear = json.dumps(normalized, ensure_ascii=False, separators=(",", ":")).encode(
             "utf-8"
         )
         ciphertext = f.encrypt(clear).decode("ascii")
@@ -219,7 +240,7 @@ class SecretVault:
             "ciphertext": ciphertext,
         }
         self._path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        self._secrets = dict(secrets)
+        self._secrets = dict(normalized)
 
     def change_master_password(self, old_password: str, new_password: str) -> None:
         """Déchiffre avec l'ancien mot de passe et rechiffre avec le nouveau."""

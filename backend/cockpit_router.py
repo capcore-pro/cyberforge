@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import cockpit_db as db
+from config import get_settings
 from cockpit_connectors import get_connector
 from cockpit_connectors.manual import ManualConnector
 from cockpit_sync import evaluate_threshold_alerts
@@ -76,10 +77,29 @@ def _normalize_service(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _api_key_for_service(service: dict[str, Any]) -> str:
+    from security.llm_secrets import get_effective_llm_key
+    from security.secret_encoding import read_env_secret, secret_for_http_header
+    from security.secret_vault import get_secret_vault
+
     env_name = (service.get("api_key_env") or "").strip()
     if not env_name:
         return ""
-    return (os.environ.get(env_name) or "").strip()
+
+    if env_name in (
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "GOOGLE_GENERATIVE_AI_API_KEY",
+    ):
+        settings = get_settings()
+        llm = get_effective_llm_key(env_name, settings)
+        if llm:
+            return secret_for_http_header(llm)
+
+    vault_val = get_secret_vault().peek(env_name)
+    if vault_val:
+        return secret_for_http_header(vault_val)
+    return secret_for_http_header(read_env_secret(env_name))
 
 
 def _resolve_connector(service: dict[str, Any]):

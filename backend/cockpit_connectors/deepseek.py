@@ -12,6 +12,7 @@ from cockpit_connectors._helpers import (
     usd_to_eur,
 )
 from cockpit_connectors.base import BaseConnector
+from security.secret_encoding import secret_for_http_header
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,12 @@ _BALANCE_URL = "https://api.deepseek.com/user/balance"
 
 class DeepSeekConnector(BaseConnector):
     def _auth_headers(self) -> dict[str, str]:
-        token = self.api_key
+        token = secret_for_http_header(self.api_key)
         if token.lower().startswith("bearer "):
             token = token[7:].strip()
         return {
             "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
+            "Accept": "application/json; charset=utf-8",
         }
 
     def get_balance(self) -> float:

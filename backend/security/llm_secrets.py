@@ -7,6 +7,7 @@ from __future__ import annotations
 from pydantic import SecretStr
 
 from config import Settings, plain_secret_str
+from security.secret_encoding import normalize_secret_text, secret_for_http_header
 from security.secret_vault import get_secret_vault
 
 LLM_ENV_KEYS = (
@@ -33,7 +34,8 @@ def get_effective_llm_key(env_name: str, settings: Settings) -> str | None:
     """Clé depuis le coffre déverrouillé, sinon depuis l'environnement (.env)."""
     vault_value = get_secret_vault().peek(env_name)
     if vault_value:
-        return vault_value
+        text = normalize_secret_text(vault_value)
+        return text or None
 
     field = _SETTINGS_FIELD_BY_ENV.get(env_name)
     if not field:
@@ -41,11 +43,17 @@ def get_effective_llm_key(env_name: str, settings: Settings) -> str | None:
     raw = getattr(settings, field, None)
     if raw is None:
         return None
-    if isinstance(raw, SecretStr):
-        text = plain_secret_str(raw)
-        return text or None
-    text = str(raw).strip()
+    text = plain_secret_str(raw)
     return text or None
+
+
+def get_effective_llm_key_for_http(env_name: str, settings: Settings) -> str | None:
+    """Clé LLM normalisée pour en-têtes HTTP Authorization (ASCII)."""
+    key = get_effective_llm_key(env_name, settings)
+    if not key:
+        return None
+    safe = secret_for_http_header(key)
+    return safe or None
 
 
 def any_llm_key_configured(settings: Settings) -> bool:

@@ -15,11 +15,12 @@ from pydantic import BaseModel
 
 from config import Settings, get_settings, plain_secret_str
 from cost_tracker import maybe_track_cost, usage_from_openai_payload
-from security.llm_secrets import get_effective_llm_key
+from security.llm_secrets import get_effective_llm_key, get_effective_llm_key_for_http
 from tools.codegen_service import (
     CodeGenerateResult,
     GeneratedFile,
     _parse_json_response,
+    _utf8_json_body,
 )
 
 logger = logging.getLogger(__name__)
@@ -230,9 +231,11 @@ class DeepSeekBuilderClient:
                 {"role": "user", "content": prompt},
             ],
         }
+        http_key = get_effective_llm_key_for_http("DEEPSEEK_API_KEY", self._settings) or api_key
+        body_bytes, content_headers = _utf8_json_body(body)
         headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
+            "Authorization": f"Bearer {http_key}",
+            **content_headers,
         }
         timeout = httpx.Timeout(self._settings.builder_http_timeout_seconds)
 
@@ -240,8 +243,8 @@ class DeepSeekBuilderClient:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(
                     "https://api.deepseek.com/chat/completions",
-                    json=body,
                     headers=headers,
+                    content=body_bytes,
                 )
         except httpx.HTTPError as exc:
             logger.warning("DeepSeek Builder indisponible : %s", exc)

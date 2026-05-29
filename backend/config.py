@@ -19,20 +19,22 @@ def load_env_files() -> None:
     Charge les fichiers .env dans os.environ.
     backend/.env écrase la racine (override) pour que SUPABASE_* soit bien lu.
     """
-    load_dotenv(_ROOT / ".env")
-    load_dotenv(_BACKEND / ".env", override=True)
+    load_dotenv(_ROOT / ".env", encoding="utf-8")
+    load_dotenv(_BACKEND / ".env", override=True, encoding="utf-8")
 
 
 load_env_files()
 
 
 def plain_secret_str(value: SecretStr | str | None) -> str:
-    """Extrait une chaîne utilisable depuis un SecretStr pydantic."""
+    """Extrait une chaîne utilisable depuis un SecretStr pydantic (UTF-8)."""
+    from security.secret_encoding import normalize_secret_text
+
     if value is None:
         return ""
     if isinstance(value, SecretStr):
-        return value.get_secret_value().strip()
-    return str(value).strip()
+        return normalize_secret_text(value.get_secret_value())
+    return normalize_secret_text(value)
 
 
 class Settings(BaseSettings):
@@ -89,7 +91,9 @@ class Settings(BaseSettings):
         default=2048, alias="COREMIND_MAX_OUTPUT_TOKENS"
     )
     coremind_max_provider_attempts: int = Field(
-        default=2, alias="COREMIND_MAX_PROVIDER_ATTEMPTS"
+        default=4,
+        alias="COREMIND_MAX_PROVIDER_ATTEMPTS",
+        description="Nombre max de fournisseurs LLM tentés (DeepSeek, Gemini, Sonnet…).",
     )
 
     v0_api_key: SecretStr | None = Field(default=None, alias="V0_API_KEY")
@@ -266,6 +270,16 @@ class Settings(BaseSettings):
         default=None,
         alias="STRIPE_ECOMMERCE_WEBHOOK_SECRET",
         description="Secret de signature webhook Stripe pour ecommerce (optionnel en dev).",
+    )
+    stripe_desktop_webhook_secret: SecretStr | None = Field(
+        default=None,
+        alias="STRIPE_DESKTOP_WEBHOOK_SECRET",
+        description="Secret de signature webhook Stripe pour mini-apps desktop.",
+    )
+    capcore_site_url: str = Field(
+        default="https://capcore.pro",
+        alias="CAPCORE_SITE_URL",
+        description="URL publique du site capcore.pro (Checkout success/cancel).",
     )
 
     unsplash_access_key: SecretStr | None = Field(

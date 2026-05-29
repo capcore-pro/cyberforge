@@ -8,20 +8,40 @@ export interface ProviderFlags {
   gemini: boolean;
 }
 
+export interface InfraFlags {
+  v0: boolean;
+  replicate: boolean;
+  tavily: boolean;
+  railway: boolean;
+  vercel: boolean;
+  github: boolean;
+}
+
+export type VaultConfiguredFlags = ProviderFlags & InfraFlags;
+
 export interface SecretsStatusResponse {
   has_vault: boolean;
   locked: boolean;
-  configured: ProviderFlags;
+  configured: VaultConfiguredFlags;
   effective: ProviderFlags;
   vault_path: string;
 }
 
-export interface LlmKeysPayload {
+export interface VaultKeysPayload {
   openai_api_key?: string | null;
   anthropic_api_key?: string | null;
   deepseek_api_key?: string | null;
   google_generative_ai_api_key?: string | null;
+  v0_api_key?: string | null;
+  replicate_api_key?: string | null;
+  tavily_api_key?: string | null;
+  railway_api_key?: string | null;
+  vercel_token?: string | null;
+  github_token?: string | null;
 }
+
+/** @deprecated Utiliser VaultKeysPayload */
+export type LlmKeysPayload = VaultKeysPayload;
 
 export async function fetchSecretsStatus() {
   return apiRequest<SecretsStatusResponse>({
@@ -45,7 +65,7 @@ export async function lockSecrets() {
   });
 }
 
-export async function saveSecrets(password: string, keys: LlmKeysPayload) {
+export async function saveSecrets(password: string, keys: VaultKeysPayload) {
   return apiRequest<{
     ok: boolean;
     has_vault: boolean;

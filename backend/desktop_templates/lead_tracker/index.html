@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{APP_TITLE}}</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>{{APP_TITLE}}</h1>
+      <p>{{CLIENT_NAME}} — Commande {{ORDER_ID}}</p>
+    </header>
+    <main>
+      <form id="leadForm">
+        <input id="name" type="text" placeholder="Nom / société" required />
+        <input id="email" type="email" placeholder="Email" />
+        <select id="status">
+          <option value="nouveau">Nouveau</option>
+          <option value="contacte">Contacté</option>
+          <option value="qualifie">Qualifié</option>
+          <option value="gagne">Gagné</option>
+          <option value="perdu">Perdu</option>
+        </select>
+        <input id="notes" type="text" placeholder="Notes" />
+        <button type="submit" class="btn-primary">Ajouter</button>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Email</th>
+            <th>Statut</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="leadBody"></tbody>
+      </table>
+
+      <div class="actions">
+        <button type="button" class="btn-secondary" id="exportCsv">Exporter CSV</button>
+        <button type="button" class="btn-secondary" id="clearAll">Tout effacer</button>
+      </div>
+    </main>
+    <script>
+      const STORAGE_KEY = "lead_tracker_{{ORDER_ID}}";
+
+      function loadLeads() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        } catch {
+          return [];
+        }
+      }
+
+      function saveLeads(leads) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
+      }
+
+      function render() {
+        const body = document.getElementById("leadBody");
+        const leads = loadLeads();
+        body.innerHTML = "";
+        leads.forEach((lead, index) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${escapeHtml(lead.name)}</td>
+            <td>${escapeHtml(lead.email || "")}</td>
+            <td>${escapeHtml(lead.status)}</td>
+            <td>${escapeHtml(lead.notes || "")}</td>
+            <td><button type="button" data-index="${index}" class="btn-secondary del">Suppr.</button></td>
+          `;
+          tr.querySelector(".del").addEventListener("click", () => {
+            const list = loadLeads();
+            list.splice(index, 1);
+            saveLeads(list);
+            render();
+          });
+          body.appendChild(tr);
+        });
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      document.getElementById("leadForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const leads = loadLeads();
+        leads.push({
+          name: document.getElementById("name").value.trim(),
+          email: document.getElementById("email").value.trim(),
+          status: document.getElementById("status").value,
+          notes: document.getElementById("notes").value.trim(),
+        });
+        saveLeads(leads);
+        e.target.reset();
+        render();
+      });
+
+      document.getElementById("exportCsv").addEventListener("click", () => {
+        const leads = loadLeads();
+        const header = ["nom", "email", "statut", "notes"];
+        const rows = leads.map((l) =>
+          [l.name, l.email || "", l.status, l.notes || ""]
+            .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+            .join(",")
+        );
+        const csv = [header.join(","), ...rows].join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "prospects-{{ORDER_ID}}.csv";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+
+      document.getElementById("clearAll").addEventListener("click", () => {
+        if (confirm("Supprimer tous les prospects ?")) {
+          saveLeads([]);
+          render();
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>

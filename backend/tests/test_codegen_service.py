@@ -1,6 +1,7 @@
 """Tests unitaires du routage CoreMindAI."""
 
 import json
+from unittest.mock import patch
 
 from tools.codegen_service import (
     CodeGenComplexity,
@@ -19,26 +20,76 @@ def test_complexity_from_score() -> None:
     assert complexity_from_score(9) == CodeGenComplexity.ELEVEE
 
 
-def test_model_chain_faible_excludes_sonnet() -> None:
+def test_model_chain_includes_sonnet_after_gemini() -> None:
     service = CodeGenService()
-    chain = service._model_chain(CodeGenComplexity.FAIBLE)
-    models = [m for _, m in chain]
-    assert service._settings.coremind_sonnet_model not in models
-    assert len(chain) == 3
+    for complexity in (
+        CodeGenComplexity.FAIBLE,
+        CodeGenComplexity.MOYENNE,
+        CodeGenComplexity.ELEVEE,
+    ):
+        chain = service._model_chain(complexity)
+        providers = [p for p, _ in chain]
+        models = [m for _, m in chain]
+        assert providers[:2] == ["deepseek", "gemini"]
+        assert service._settings.coremind_sonnet_model in models
+        assert models.index(service._settings.coremind_sonnet_model) >= 2
 
 
-def test_model_chain_elevee_includes_sonnet() -> None:
+def test_model_chain_elevee_haiku_before_sonnet() -> None:
     service = CodeGenService()
     chain = service._model_chain(CodeGenComplexity.ELEVEE)
     models = [m for _, m in chain]
-    assert service._settings.coremind_sonnet_model in models
-    assert len(chain) == 4
+    assert models.index(service._settings.coremind_haiku_model) < models.index(
+        service._settings.coremind_sonnet_model
+    )
 
 
-def test_generation_specs_limited_attempts() -> None:
+def test_generation_specs_includes_sonnet_when_anthropic_configured() -> None:
     service = CodeGenService()
-    specs = service._generation_specs(CodeGenComplexity.FAIBLE)
-    assert len(specs) <= service._settings.coremind_max_provider_attempts
+    sonnet = service._settings.coremind_sonnet_model
+    with patch.object(
+        CodeGenService, "_anthropic_key", return_value="sk-ant-test"
+    ), patch.object(
+        CodeGenService, "_deepseek_key", return_value=None
+    ), patch.object(
+        CodeGenService, "_gemini_key", return_value=None
+    ):
+        specs = service._generation_specs(CodeGenComplexity.MOYENNE)
+        assert any(s.model == sonnet for s in specs)
+
+
+def test_generation_specs_tries_sonnet_after_deepseek_and_gemini() -> None:
+    service = CodeGenService()
+    sonnet = service._settings.coremind_sonnet_model
+    with patch.object(
+        CodeGenService, "_deepseek_key", return_value="sk-ds"
+    ), patch.object(
+        CodeGenService, "_gemini_key", return_value="gem"
+    ), patch.object(
+        CodeGenService, "_anthropic_key", return_value="sk-ant"
+    ):
+        specs = service._generation_specs(CodeGenComplexity.FAIBLE)
+        models = [s.model for s in specs]
+        assert models[:2] == [
+            service._settings.coremind_deepseek_model,
+            service._settings.coremind_gemini_model,
+        ]
+        assert sonnet in models
+        assert models.index(sonnet) == 2
+
+
+def test_generation_specs_respects_min_three_for_sonnet_fallback() -> None:
+    service = CodeGenService()
+    service._settings.coremind_max_provider_attempts = 2
+    with patch.object(
+        CodeGenService, "_deepseek_key", return_value="sk-ds"
+    ), patch.object(
+        CodeGenService, "_gemini_key", return_value="gem"
+    ), patch.object(
+        CodeGenService, "_anthropic_key", return_value="sk-ant"
+    ):
+        specs = service._generation_specs(CodeGenComplexity.FAIBLE)
+        assert len(specs) >= 3
 
 
 def test_http_timeout_uses_settings() -> None:

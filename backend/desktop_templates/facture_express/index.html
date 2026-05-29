@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{APP_TITLE}}</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>{{APP_TITLE}}</h1>
+      <p>Client : {{CLIENT_NAME}} — Commande {{ORDER_ID}}</p>
+    </header>
+    <main>
+      <div class="grid-2">
+        <div>
+          <label for="docType">Type de document</label>
+          <select id="docType">
+            <option value="devis">Devis</option>
+            <option value="facture">Facture</option>
+          </select>
+        </div>
+        <div>
+          <label for="docNumber">Numéro</label>
+          <input id="docNumber" type="text" placeholder="FAC-2026-001" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <label for="clientName">Nom du client</label>
+          <input id="clientName" type="text" value="{{CLIENT_NAME}}" />
+        </div>
+        <div>
+          <label for="clientEmail">Email</label>
+          <input id="clientEmail" type="email" placeholder="client@example.com" />
+        </div>
+      </div>
+      <div class="lines">
+        <h2 style="margin-top: 0; font-size: 1rem">Lignes</h2>
+        <div id="lineContainer"></div>
+        <button type="button" class="btn-secondary" id="addLine">+ Ligne</button>
+        <p class="total">Total TTC : <span id="totalTtc">0,00 €</span></p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn-primary" id="exportPdf">Exporter PDF</button>
+        <button type="button" class="btn-secondary" id="resetForm">Réinitialiser</button>
+      </div>
+    </main>
+    <script>
+      const lineContainer = document.getElementById("lineContainer");
+      const totalEl = document.getElementById("totalTtc");
+
+      function formatMoney(n) {
+        return new Intl.NumberFormat("fr-FR", {
+          style: "currency",
+          currency: "EUR",
+        }).format(n);
+      }
+
+      function recalc() {
+        let total = 0;
+        lineContainer.querySelectorAll(".line-row").forEach((row) => {
+          const qty = parseFloat(row.querySelector(".qty").value) || 0;
+          const price = parseFloat(row.querySelector(".price").value) || 0;
+          const lineTotal = qty * price;
+          row.querySelector(".line-total").textContent = formatMoney(lineTotal);
+          total += lineTotal;
+        });
+        totalEl.textContent = formatMoney(total);
+        return total;
+      }
+
+      function addLine(desc = "", qty = 1, price = 0) {
+        const row = document.createElement("div");
+        row.className = "line-row";
+        row.innerHTML = `
+          <input class="desc" type="text" placeholder="Description" value="${desc}" />
+          <input class="qty" type="number" min="0" step="1" value="${qty}" />
+          <input class="price" type="number" min="0" step="0.01" value="${price}" />
+          <span class="line-total">${formatMoney(qty * price)}</span>
+          <button type="button" class="btn-danger remove">×</button>
+        `;
+        row.querySelectorAll("input").forEach((el) =>
+          el.addEventListener("input", recalc)
+        );
+        row.querySelector(".remove").addEventListener("click", () => {
+          row.remove();
+          recalc();
+        });
+        lineContainer.appendChild(row);
+        recalc();
+      }
+
+      document.getElementById("addLine").addEventListener("click", () => addLine());
+      document.getElementById("resetForm").addEventListener("click", () => {
+        lineContainer.innerHTML = "";
+        addLine("Prestation", 1, 100);
+      });
+
+      document.getElementById("exportPdf").addEventListener("click", () => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const type = document.getElementById("docType").value;
+        const number = document.getElementById("docNumber").value || "SANS-NUMERO";
+        const client = document.getElementById("clientName").value;
+        const total = recalc();
+
+        doc.setFontSize(18);
+        doc.text(type === "facture" ? "FACTURE" : "DEVIS", 14, 20);
+        doc.setFontSize(11);
+        doc.text(`N° ${number}`, 14, 28);
+        doc.text(`Client : ${client}`, 14, 36);
+        doc.text(`Commande : {{ORDER_ID}}`, 14, 44);
+
+        let y = 56;
+        doc.text("Description", 14, y);
+        doc.text("Qté", 120, y);
+        doc.text("P.U.", 140, y);
+        doc.text("Total", 170, y);
+        y += 8;
+
+        lineContainer.querySelectorAll(".line-row").forEach((row) => {
+          const desc = row.querySelector(".desc").value;
+          const qty = row.querySelector(".qty").value;
+          const price = row.querySelector(".price").value;
+          const lt =
+            (parseFloat(qty) || 0) * (parseFloat(price) || 0);
+          doc.text(desc.slice(0, 40), 14, y);
+          doc.text(String(qty), 120, y);
+          doc.text(String(price), 140, y);
+          doc.text(formatMoney(lt), 170, y);
+          y += 8;
+        });
+
+        doc.setFontSize(13);
+        doc.text(`Total TTC : ${formatMoney(total)}`, 14, y + 6);
+        doc.save(`${type}-${number}.pdf`);
+      });
+
+      addLine("Prestation", 1, 100);
+    </script>
+  </body>
+</html>

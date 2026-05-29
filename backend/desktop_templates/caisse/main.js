@@ -1,0 +1,24 @@
+const { app, BrowserWindow } = require("electron");
+const path = require("path");
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 900,
+    minHeight: 650,
+    title: "{{APP_TITLE}}",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  win.loadFile(path.join(__dirname, "index.html"));
+}
+
+app.whenReady().then(createWindow);
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});

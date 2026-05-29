@@ -181,3 +181,9 @@ database/*.sqlite3
 backend/cockpit.db
 backend/documents/
 backend/media/
+
+# Builds desktop Electron (générateur)
+backend/temp_builds/*
+!backend/temp_builds/.gitkeep
+desktop_apps/*
+!desktop_apps/.gitkeep

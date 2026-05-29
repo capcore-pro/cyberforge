@@ -8,6 +8,7 @@ from agents.architect_pricing import (
     build_complexity_pricing,
     complexity_label_from_score,
     resolve_pricing_category,
+    _prompt_triggers_site_reservation,
 )
 from agents.coremind_agent import ProjectType
 
@@ -32,6 +33,23 @@ def test_ecommerce_prompt_high_complexity() -> None:
     assert pricing["market_price_max"] == 15000
     assert pricing["suggested_price_min"] == int(6000 * 0.4)
     assert pricing["suggested_price_max"] == int(15000 * 0.4)
+
+
+def test_site_reservation_not_triggered_by_service_list() -> None:
+    prompt = (
+        "Site vitrine pour notre agence. Nous proposons conseil, audit, "
+        "formation et réservation d'ateliers sur devis."
+    )
+    assert _prompt_triggers_site_reservation(prompt) is False
+    assert (
+        resolve_pricing_category(ProjectType.SITE_WEB, prompt) == "vitrine_next"
+    )
+
+
+def test_site_reservation_triggered_when_primary_subject() -> None:
+    prompt = "Application de réservation de tables pour restaurant italien"
+    assert _prompt_triggers_site_reservation(prompt) is True
+    assert resolve_pricing_category(ProjectType.SITE_WEB, prompt) == "site_reservation"
 
 
 def test_vitrine_generation_mode() -> None:
