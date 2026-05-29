@@ -48,6 +48,7 @@ class ExportResult(BaseModel):
     unlock_url: str | None = None
     manifest: dict[str, Any] = Field(default_factory=dict)
     message: str = ""
+    newsletter_triggered: bool = False
 
 
 class ExportAgent(BaseAgent):
@@ -263,6 +264,19 @@ class ExportAgent(BaseAgent):
         if project_id and provider == "railway" and production_url:
             maybe_track_cost(project_id, "railway", {"requests": 1})
 
+        newsletter_triggered = False
+        if success and project_id:
+            try:
+                from newsletter_router import trigger_welcome_sequence
+
+                await trigger_welcome_sequence(str(project_id))
+                newsletter_triggered = True
+            except Exception as exc:
+                logger.warning(
+                    "Newsletter sequence failed (non-blocking): %s",
+                    exc,
+                )
+
         return ExportResult(
             success=success,
             provider=provider,
@@ -273,4 +287,5 @@ class ExportAgent(BaseAgent):
             unlock_url=unlock_url,
             manifest=manifest.model_dump(),
             message=message,
+            newsletter_triggered=newsletter_triggered,
         )

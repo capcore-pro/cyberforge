@@ -793,6 +793,7 @@ async def export_node(
         export_provider=result.provider,
         github_url=result.github_url,
         unlock_url=result.unlock_url,
+        newsletter_triggered=bool(getattr(result, "newsletter_triggered", False)),
     )
     return {"export_result": result}
 

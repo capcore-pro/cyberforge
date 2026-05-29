@@ -289,6 +289,20 @@ def update_contact(contact_id: str, **fields: Any) -> dict[str, Any] | None:
             conn.close()
 
 
+def delete_contact(contact_id: str) -> bool:
+    with _lock:
+        conn = _connect()
+        try:
+            cur = conn.execute(
+                "DELETE FROM newsletter_contacts WHERE id = ?",
+                (contact_id.strip(),),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+        finally:
+            conn.close()
+
+
 # --- Sequences ---
 
 
@@ -477,6 +491,39 @@ def add_email(
             if result is None:
                 raise RuntimeError("Email non retrouvé après insertion.")
             return result
+        finally:
+            conn.close()
+
+
+def list_emails(
+    *,
+    sequence_id: str | None = None,
+    contact_id: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if sequence_id:
+        clauses.append("sequence_id = ?")
+        params.append(sequence_id.strip())
+    if contact_id:
+        clauses.append("contact_id = ?")
+        params.append(contact_id.strip())
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    safe_limit = max(1, min(int(limit), 2000))
+    with _lock:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT * FROM newsletter_emails
+                {where}
+                ORDER BY COALESCE(scheduled_at, created_at) ASC
+                LIMIT ?
+                """,
+                (*params, safe_limit),
+            ).fetchall()
+            return _rows_to_dicts(rows)
         finally:
             conn.close()
 

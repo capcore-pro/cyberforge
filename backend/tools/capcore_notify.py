@@ -67,22 +67,29 @@ async def _send_brevo_email(
     to_email: str,
     subject: str,
     body: str,
+    html_content: str | None = None,
+    to_name: str | None = None,
     project_id: str | None = None,
     attachment_path: str | Path | None = None,
     attachment_name: str | None = None,
-) -> None:
+) -> str | None:
     settings = get_settings()
     api_key = plain_secret_str(settings.brevo_api_key)
     if not api_key:
         raise RuntimeError("Brevo non configuré (BREVO_API_KEY).")
 
     sender_name, sender_email = _resolve_sender()
+    recipient: dict[str, str] = {"email": to_email.strip()}
+    if to_name and to_name.strip():
+        recipient["name"] = to_name.strip()
     payload: dict[str, object] = {
         "sender": {"name": sender_name, "email": sender_email},
-        "to": [{"email": to_email}],
+        "to": [recipient],
         "subject": subject,
         "textContent": body,
     }
+    if html_content:
+        payload["htmlContent"] = html_content
 
     if attachment_path:
         path = Path(attachment_path)
@@ -111,6 +118,40 @@ async def _send_brevo_email(
         raise RuntimeError(f"Brevo HTTP {resp.status_code}: {detail}")
 
     maybe_track_cost(project_id, "brevo", {"requests": 1})
+    try:
+        data = response.json()
+    except Exception:
+        return None
+    message_id = data.get("messageId")
+    if message_id:
+        return str(message_id)
+    message_ids = data.get("messageIds")
+    if isinstance(message_ids, list) and message_ids:
+        return str(message_ids[0])
+    return None
+
+
+async def send_html_email(
+    *,
+    to_email: str,
+    subject: str,
+    html_content: str,
+    to_name: str | None = None,
+    text_content: str | None = None,
+    project_id: str | None = None,
+) -> str | None:
+    """Envoie un email HTML via Brevo. Retourne le messageId Brevo si disponible."""
+    if not _brevo_configured():
+        raise RuntimeError("Brevo non configuré (BREVO_API_KEY).")
+    plain = text_content or "Consultez cet email au format HTML."
+    return await _send_brevo_email(
+        to_email=to_email,
+        to_name=to_name,
+        subject=subject,
+        body=plain,
+        html_content=html_content,
+        project_id=project_id,
+    )
 
 
 async def send_document_email_to_client(

@@ -17,6 +17,7 @@ from cost_tracker import maybe_track_cost, usage_from_openai_payload
 from db.managed_projects_store import ManagedProjectRow, get_managed_projects_store
 from db.supabase_store import get_supabase_store
 from newsletter_db import (
+    SequenceTrigger,
     add_email,
     create_sequence,
     get_contact,
@@ -397,8 +398,17 @@ def _project_type_hints(project_type: str) -> str:
     return "site web professionnel"
 
 
-async def generate_welcome_sequence(contact_id: str) -> list[dict[str, Any]]:
-    """Génère les 3 emails de bienvenue et les enregistre en base (draft)."""
+_DEFAULT_SCHEDULE_HOURS = {"welcome_j0": 0, "welcome_j1": 24, "welcome_j3": 72}
+
+
+async def generate_welcome_sequence(
+    contact_id: str,
+    *,
+    trigger: str = "project_delivered",
+    sequence_id: str | None = None,
+    schedule_offsets_hours: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Génère les 3 emails de bienvenue et les enregistre en base (scheduled)."""
     contact = get_contact(contact_id)
     if contact is None:
         raise NewsletterAgentError(f"Contact inconnu : {contact_id}")
@@ -451,26 +461,38 @@ async def generate_welcome_sequence(contact_id: str) -> list[dict[str, Any]]:
     if not isinstance(emails_raw, list) or len(emails_raw) < 3:
         raise NewsletterAgentError("Réponse DeepSeek invalide pour la séquence de bienvenue.")
 
-    seq = create_sequence(contact_id, "project_delivered", status="in_progress")
+    trig = trigger.strip().lower()
+    if trig not in ("project_delivered", "manual", "web_form"):
+        trig = "project_delivered"
+    if sequence_id:
+        seq_id = sequence_id.strip()
+    else:
+        seq_row = create_sequence(
+            contact_id,
+            trig,  # type: ignore[arg-type]
+            status="in_progress",
+        )
+        seq_id = str(seq_row["id"])
+
+    hours_map = schedule_offsets_hours or _DEFAULT_SCHEDULE_HOURS
     base_time = datetime.now(timezone.utc)
-    offsets = {"welcome_j0": 0, "welcome_j1": 1, "welcome_j3": 3}
     stored: list[dict[str, Any]] = []
 
     for item in emails_raw:
         kind = str(item.get("type", "")).strip().lower()
-        if kind not in offsets:
+        if kind not in hours_map:
             continue
         subject = str(item.get("subject", "")).strip()
         body = _sanitize_html(str(item.get("html_body", "")).strip())
         if not subject or not body:
             continue
-        scheduled = base_time + timedelta(days=offsets[kind])
+        scheduled = base_time + timedelta(hours=int(hours_map[kind]))
         html = wrap_email_html(body, preview_line=subject[:120])
         row = add_email(
             type=kind,  # type: ignore[arg-type]
             subject=subject,
             html_content=html,
-            sequence_id=str(seq["id"]),
+            sequence_id=seq_id,
             contact_id=contact_id,
             status="scheduled",
             scheduled_at=scheduled.isoformat(),

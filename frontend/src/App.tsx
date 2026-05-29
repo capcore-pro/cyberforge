@@ -24,6 +24,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { CockpitPage } from "./pages/CockpitPage";
 import { MediaLibraryPage } from "./pages/MediaLibraryPage";
 import { LegalPage } from "./pages/LegalPage";
+import { NewsletterPage } from "./pages/NewsletterPage";
 
 /**
  * Composant racine — navigation entre les pages principales.
@@ -94,6 +95,8 @@ function AppWithNotifications({
         return <MediaLibraryPage />;
       case "legal":
         return <LegalPage />;
+      case "newsletter":
+        return <NewsletterPage />;
       default:
         return (
           <HomePage
