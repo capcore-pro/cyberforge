@@ -37,6 +37,21 @@ function statusLabel(status: string): string {
   }
 }
 
+function statusBadgeClass(status: string): string {
+  switch (status) {
+    case "deployed":
+      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+    case "building":
+      return "border-cyber-accent/40 bg-cyber-accent/10 text-cyber-neon";
+    case "failed":
+      return "border-red-500/40 bg-red-500/10 text-red-200";
+    case "deleted":
+      return "border-cyber-border text-cyber-muted";
+    default:
+      return "border-cyber-border bg-cyber-bg/60 text-cyber-muted";
+  }
+}
+
 export function ApplicationWebPage() {
   const [items, setItems] = useState<ManagedProjectRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +84,7 @@ export function ApplicationWebPage() {
       setItems(next);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erreur chargement applications web.",
+        err instanceof Error ? err.message : "Erreur lors du chargement.",
       );
     } finally {
       setLoading(false);
@@ -140,7 +155,7 @@ export function ApplicationWebPage() {
     setActionError(null);
     const trimmed = prompt.trim();
     if (trimmed.length < 10) {
-      setActionError("Prompt trop court.");
+      setActionError("Le prompt doit contenir au moins 10 caractères.");
       return;
     }
     setCreateBusy(true);
@@ -160,7 +175,7 @@ export function ApplicationWebPage() {
 
   async function onUpdate(id: string) {
     setActionError(null);
-    const txt = window.prompt("Nouveau prompt (mise à jour app web) ?");
+    const txt = window.prompt("Nouveau prompt pour cette application web ?");
     if (!txt) return;
     const resp = await updateApplicationWeb(id, txt);
     if (!resp.ok) {
@@ -172,7 +187,9 @@ export function ApplicationWebPage() {
 
   async function onDelete(id: string) {
     setActionError(null);
-    if (!window.confirm("Supprimer l'app web ? (soft delete)")) return;
+    if (!window.confirm("Supprimer cette application web ? (suppression logique)")) {
+      return;
+    }
     const resp = await deleteApplicationWeb(id);
     if (!resp.ok) {
       setActionError(apiErrorMessage(resp, "Suppression impossible."));
@@ -183,125 +200,187 @@ export function ApplicationWebPage() {
 
   async function onHardDelete(id: string) {
     setActionError(null);
-    if (!window.confirm("Hard delete : GitHub + Vercel + Railway ?")) return;
+    if (
+      !window.confirm(
+        "Suppression définitive : dépôts GitHub, projet Vercel et service Railway ?",
+      )
+    ) {
+      return;
+    }
     const resp = await hardDeleteApplicationWeb(id);
     if (!resp.ok) {
-      setActionError(apiErrorMessage(resp, "Hard delete impossible."));
+      setActionError(apiErrorMessage(resp, "Suppression définitive impossible."));
       return;
     }
     await load();
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-        <div className="text-lg font-semibold">Applications web (Railway + Vercel)</div>
-        <div className="mt-2 grid gap-2 md:grid-cols-2">
-          <textarea
-            className="h-28 w-full rounded bg-black/30 p-2 text-sm outline-none"
-            placeholder="Prompt application web…"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-          <div className="space-y-2">
+    <div className="mx-auto max-w-5xl space-y-6">
+      <header>
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.35em] text-cyber-violet">
+          // applications_web
+        </p>
+        <h1 className="text-2xl font-bold text-cyber-neon md:text-3xl">
+          Applications web
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
+          Déploiement Railway (backend) et Vercel (frontend) à partir d&apos;un
+          prompt.
+        </p>
+      </header>
+
+      <section className="cyber-panel space-y-4 p-5">
+        <h2 className="text-sm font-semibold text-cyber-text">Nouvelle application</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="block space-y-1 md:col-span-2">
+            <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
+              Prompt
+            </span>
+            <textarea
+              className="cyber-prompt-field min-h-[7rem]"
+              placeholder="Décrivez l'application web à générer et déployer…"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
+              Slug (optionnel)
+            </span>
             <input
-              className="w-full rounded bg-black/30 p-2 text-sm outline-none"
-              placeholder="Slug (optionnel) ex: crm-agence"
+              className="cyber-prompt-field min-h-0"
+              placeholder="ex. crm-agence"
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
             />
+          </label>
+          <div className="flex items-end">
             <button
-              className="w-full rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/15 disabled:opacity-50"
+              type="button"
+              className="cyber-generate-btn w-full disabled:opacity-50"
               onClick={() => void onCreate()}
               disabled={createBusy}
             >
-              {createBusy ? "Création…" : "Créer + déployer"}
+              {createBusy ? "Création en cours…" : "Créer et déployer"}
             </button>
-            {actionError ? (
-              <div className="text-sm text-red-300">{actionError}</div>
-            ) : null}
           </div>
         </div>
-      </div>
+        {actionError ? (
+          <p className="rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+            {actionError}
+          </p>
+        ) : null}
+      </section>
 
-      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-lg font-semibold">Projets</div>
+      <section className="cyber-panel p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-cyber-text">Projets déployés</h2>
           <button
-            className="rounded bg-white/10 px-3 py-1 text-sm hover:bg-white/15"
+            type="button"
+            className="cyber-action-btn"
             onClick={() => void load()}
           >
             Rafraîchir
           </button>
         </div>
 
-        {loading ? <div className="mt-3 text-sm opacity-80">Chargement…</div> : null}
-        {error ? <div className="mt-3 text-sm text-red-300">{error}</div> : null}
+        {loading ? (
+          <p className="text-sm text-cyber-muted animate-pulse">Chargement…</p>
+        ) : null}
+        {error ? (
+          <p className="rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+            {error}
+          </p>
+        ) : null}
 
         <div className="mt-3 space-y-3">
           {items.map((p) => (
-            <div key={p.id} className="rounded border border-white/10 bg-black/20 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-semibold">
-                  {p.title || p.slug}{" "}
-                  <span className="ml-2 text-xs opacity-70">
-                    ({statusLabel(p.status)})
+            <article
+              key={p.id}
+              className="rounded-lg border border-cyber-border bg-cyber-bg/50 p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold text-cyber-text">
+                    {p.title || p.slug}
+                  </h3>
+                  <span
+                    className={`mt-1 inline-block rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusBadgeClass(p.status)}`}
+                  >
+                    {statusLabel(p.status)}
                   </span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
-                    className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/15"
+                    type="button"
+                    className="cyber-action-btn text-[10px]"
                     onClick={() => void onUpdate(p.id)}
                   >
                     Modifier
                   </button>
                   <button
-                    className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/15"
+                    type="button"
+                    className="cyber-action-btn text-[10px]"
                     onClick={() => void onDelete(p.id)}
                   >
                     Supprimer
                   </button>
                   <button
-                    className="rounded bg-red-500/20 px-2 py-1 text-xs hover:bg-red-500/30"
+                    type="button"
+                    className="cyber-action-btn border-red-500/40 text-[10px] text-red-300"
                     onClick={() => void onHardDelete(p.id)}
                   >
-                    Hard delete
+                    Suppression définitive
                   </button>
                 </div>
               </div>
 
-              <div className="mt-2 text-xs opacity-80">
-                Dernière maj: {formatDate(p.updated_at)}
-              </div>
+              <p className="mt-2 text-xs text-cyber-muted">
+                Dernière mise à jour : {formatDate(p.updated_at)}
+              </p>
 
               {p.url_production ? (
-                <div className="mt-2 text-sm">
-                  Frontend:{" "}
-                  <a className="underline" href={p.url_production} target="_blank" rel="noreferrer">
+                <p className="mt-2 text-sm text-cyber-text">
+                  Interface :{" "}
+                  <a
+                    className="text-cyber-neon underline hover:text-cyber-accent"
+                    href={p.url_production}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     {p.url_production}
                   </a>
-                </div>
+                </p>
               ) : null}
               {p.url_backend ? (
-                <div className="mt-1 text-sm">
-                  Backend:{" "}
-                  <a className="underline" href={p.url_backend} target="_blank" rel="noreferrer">
+                <p className="mt-1 text-sm text-cyber-text">
+                  API :{" "}
+                  <a
+                    className="text-cyber-neon underline hover:text-cyber-accent"
+                    href={p.url_backend}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     {p.url_backend}
                   </a>
-                </div>
+                </p>
               ) : null}
 
               {p.error_last ? (
-                <div className="mt-2 text-sm text-red-300">{p.error_last}</div>
+                <p className="mt-2 rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+                  {p.error_last}
+                </p>
               ) : null}
-            </div>
+            </article>
           ))}
-          {!items.length && !loading ? (
-            <div className="text-sm opacity-80">Aucune application web pour l’instant.</div>
+          {!items.length && !loading && !error ? (
+            <p className="text-sm text-cyber-muted">
+              Aucune application web pour l&apos;instant.
+            </p>
           ) : null}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
-

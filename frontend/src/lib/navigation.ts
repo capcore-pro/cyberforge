@@ -26,7 +26,8 @@ export interface NavItem {
   enabled: boolean;
 }
 
-export const NAV_ITEMS: NavItem[] = [
+/** Navigation principale (hors Paramètres, épinglé en bas de la barre latérale). */
+export const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Tableau de bord", icon: "◈", enabled: true },
   { id: "cockpit", label: "Cockpit", icon: "◐", enabled: true },
   { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
@@ -35,14 +36,31 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "generator", label: "Générateur", icon: "⚡", enabled: true },
   { id: "projects", label: "Projets", icon: "▤", enabled: true },
   { id: "vitrines", label: "Vitrines", icon: "▦", enabled: true },
-  { id: "application_web", label: "Apps web", icon: "▣", enabled: true },
+  {
+    id: "application_web",
+    label: "Applications web",
+    icon: "▣",
+    enabled: true,
+  },
   { id: "extensions", label: "Extensions", icon: "⬢", enabled: true },
   { id: "site_reservation", label: "Réservation", icon: "◷", enabled: true },
-  { id: "ecommerce", label: "Ecommerce", icon: "▧", enabled: true },
+  { id: "ecommerce", label: "E-commerce", icon: "▧", enabled: true },
   { id: "clients", label: "Clients", icon: "◎", enabled: true },
   { id: "perso", label: "Perso", icon: "◉", enabled: true },
   { id: "agents", label: "Agents", icon: "◇", enabled: false },
   { id: "tools", label: "Outils", icon: "⬡", enabled: false },
   { id: "reports", label: "Rapports", icon: "◫", enabled: false },
-  { id: "settings", label: "Paramètres", icon: "⚙", enabled: true },
+];
+
+export const SETTINGS_NAV_ITEM: NavItem = {
+  id: "settings",
+  label: "Paramètres",
+  icon: "⚙",
+  enabled: true,
+};
+
+/** Liste complète (tests, compatibilité). */
+export const NAV_ITEMS: NavItem[] = [
+  ...PRIMARY_NAV_ITEMS,
+  SETTINGS_NAV_ITEM,
 ];

@@ -20,7 +20,7 @@ export const PROJECT_TYPE_OPTIONS: ProjectTypeOption[] = [
   },
   {
     id: "application_web",
-    label: "App web",
+    label: "Application web",
     description: "SPA, dashboard, logique métier",
   },
   {

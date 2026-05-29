@@ -182,7 +182,7 @@ export function MediaLibraryPage() {
     const res = await syncMediaAssetR2(asset.id, true);
     setBusyId(null);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Sync R2 échouée."));
+      setError(apiErrorMessage(res, "Synchronisation R2 échouée."));
       return;
     }
     setToast("Asset synchronisé sur R2.");

@@ -175,10 +175,10 @@ export function ExtensionsPage() {
 
   async function onHardDelete(id: string) {
     setActionError(null);
-    if (!window.confirm("Hard delete : supprimer la branche GitHub ?")) return;
+    if (!window.confirm("Suppression définitive : supprimer la branche GitHub ?")) return;
     const resp = await hardDeleteExtension(id);
     if (!resp.ok) {
-      setActionError(apiErrorMessage(resp, "Hard delete impossible."));
+      setActionError(apiErrorMessage(resp, "Suppression définitive impossible."));
       return;
     }
     await load();
@@ -268,7 +268,7 @@ export function ExtensionsPage() {
                     className="rounded bg-red-500/20 px-2 py-1 text-xs hover:bg-red-500/30"
                     onClick={() => void onHardDelete(p.id)}
                   >
-                    Hard delete
+                    Suppression définitive
                   </button>
                 </div>
               </div>

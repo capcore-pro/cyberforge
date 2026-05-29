@@ -41,6 +41,11 @@ def evaluate_threshold_alerts(
     name = service_name or service_id
     balance = float(balance_eur)
 
+    balance_row = db.get_balance(service_id)
+    last_synced = (balance_row or {}).get("last_synced_at")
+    if balance <= 0 and not last_synced:
+        return []
+
     level: str | None = None
     if balance <= float(thresholds["urgent_eur"]):
         level = "urgent"

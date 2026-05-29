@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiErrorMessage } from "@/lib/api-errors";
+import { AgentsSettingsPanel } from "@/components/settings/AgentsSettingsPanel";
+import { GeneralSettingsPanel } from "@/components/settings/GeneralSettingsPanel";
 import {
   changeMasterPassword,
   fetchSecretsStatus,
@@ -255,15 +257,17 @@ export function SettingsPage() {
     <div className="mx-auto max-w-3xl space-y-8">
       <header>
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.35em] text-cyber-violet">
-          // secure_vault
+          // configuration
         </p>
         <h1 className="text-2xl font-bold text-cyber-neon md:text-3xl">Paramètres</h1>
         <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
-          Les clés API sont chiffrées avec votre mot de passe maître et stockées
-          localement sur cette machine. Le backend les charge en mémoire après
-          déverrouillage.
+          Coffre chiffré des clés API, préférences des agents et paramètres
+          généraux de l&apos;application.
         </p>
       </header>
+
+      <GeneralSettingsPanel />
+      <AgentsSettingsPanel />
 
       {loading ? (
         <section className="cyber-panel p-6 text-center text-sm text-cyber-neon animate-pulse">
@@ -285,7 +289,7 @@ export function SettingsPage() {
       {success ? (
         <section className="cyber-panel border-cyber-neon/30 p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-cyber-neon">
-            OK
+            Succès
           </p>
           <p className="mt-2 text-sm text-cyber-text">{success}</p>
         </section>
@@ -404,7 +408,9 @@ export function SettingsPage() {
           </section>
 
           <section className="cyber-panel space-y-4 p-5">
-            <h2 className="text-sm font-semibold text-cyber-text">Clés API LLM</h2>
+            <h2 className="text-sm font-semibold text-cyber-text">
+              Clés API des modèles
+            </h2>
             <p className="text-xs text-cyber-muted">
               Laissez un champ vide pour ne pas modifier cette clé. Pour une
               première configuration, renseignez au moins DeepSeek, Gemini ou
@@ -413,7 +419,7 @@ export function SettingsPage() {
 
             <label className="block space-y-1">
               <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                DeepSeek API key
+                Clé API DeepSeek
               </span>
               <input
                 type="password"
@@ -427,7 +433,7 @@ export function SettingsPage() {
 
             <label className="block space-y-1">
               <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                Google Gemini API key
+                Clé API Google Gemini
               </span>
               <input
                 type="password"
@@ -441,7 +447,7 @@ export function SettingsPage() {
 
             <label className="block space-y-1">
               <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                Anthropic API key
+                Clé API Anthropic
               </span>
               <input
                 type="password"
@@ -455,7 +461,7 @@ export function SettingsPage() {
 
             <label className="block space-y-1">
               <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                OpenAI API key (optionnel)
+                Clé API OpenAI (optionnel)
               </span>
               <input
                 type="password"

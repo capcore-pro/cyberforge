@@ -246,9 +246,9 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
               label="Backend FastAPI"
               value={
                 backendStatus === "online"
-                  ? "ONLINE"
+                  ? "En ligne"
                   : backendStatus === "offline"
-                    ? "OFFLINE"
+                    ? "Hors ligne"
                     : "…"
               }
               highlight={backendStatus === "online"}
@@ -256,7 +256,7 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
             <StatusMetric label="Transport" value={transportLabel} />
             <StatusMetric
               label="Shell Electron"
-              value={electronReady ? "ACTIF" : "WEB"}
+              value={electronReady ? "Actif" : "Web"}
             />
             <StatusMetric
               label="API"
@@ -283,7 +283,7 @@ export function HomePage({ onOpenGenerator, onOpenProjects }: HomePageProps) {
               Écosystème agents
             </h2>
             <p className="mt-1 text-xs text-cyber-muted">
-              {activeCount} / {totalAgents} agents ACTIF via le pipeline LangGraph
+              {activeCount} / {totalAgents} agents actifs via le pipeline LangGraph
               {pipelineRunning
                 ? " — génération en cours sur le Générateur (SSE)"
                 : " — pipeline LangGraph complet (7 agents) opérationnel"}

@@ -192,10 +192,10 @@ export function EcommercePage() {
 
   async function onHardDelete(id: string) {
     setActionError(null);
-    if (!window.confirm("Hard delete : supprimer branche GitHub + projet Vercel ?")) return;
+    if (!window.confirm("Suppression définitive : supprimer la branche GitHub et le projet Vercel ?")) return;
     const resp = await hardDeleteEcommerce(id);
     if (!resp.ok) {
-      setActionError(apiErrorMessage(resp, "Hard delete impossible."));
+      setActionError(apiErrorMessage(resp, "Suppression définitive impossible."));
       return;
     }
     await load();
@@ -352,7 +352,7 @@ export function EcommercePage() {
                     className="rounded bg-red-500/20 px-3 py-1 text-sm hover:bg-red-500/30"
                     onClick={() => void onHardDelete(p.id)}
                   >
-                    Hard delete
+                    Suppression définitive
                   </button>
                 </div>
               </div>

@@ -119,7 +119,7 @@ export function MediaAssetCard({
                   onSyncR2(asset);
                 }}
               >
-                Sync R2
+                Synchroniser R2
               </button>
             ) : null}
             {onDelete ? (

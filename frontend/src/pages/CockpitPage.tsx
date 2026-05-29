@@ -20,15 +20,22 @@ import {
   type CockpitTransaction,
   type TransactionType,
 } from "@/lib/cockpit-api";
+import {
+  balanceOf,
+  isBalanceUninitialized,
+} from "@/lib/cockpit-balance";
 
 type CockpitSection = "dashboard" | "wallet" | "thresholds" | "settings";
 
 const SECTIONS: { id: CockpitSection; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "wallet", label: "Wallet" },
+  { id: "dashboard", label: "Tableau de bord" },
+  { id: "wallet", label: "Portefeuille" },
   { id: "thresholds", label: "Seuils" },
   { id: "settings", label: "Paramètres" },
 ];
+
+const UNINITIALIZED_BALANCE_HINT =
+  "Solde non initialisé — cliquez sur Recharger pour définir votre solde actuel";
 
 const eurFmt = new Intl.NumberFormat("fr-FR", {
   style: "currency",
@@ -41,14 +48,11 @@ function formatEur(value: number): string {
   return eurFmt.format(value);
 }
 
-function balanceOf(service: CockpitService): number {
-  return Number(service.balance?.balance_eur ?? 0);
-}
-
 function thresholdAlertLevel(
   balance: number,
   thresholds: CockpitThresholds,
 ): AlertLevel | null {
+  if (balance <= 0) return null;
   if (balance <= thresholds.urgent_eur) return "urgent";
   if (balance <= thresholds.critical_eur) return "critical";
   if (balance <= thresholds.warning_eur) return "warning";
@@ -204,14 +208,17 @@ function DashboardSection({
           disabled={syncing}
           onClick={onSyncAll}
         >
-          {syncing ? "Sync en cours…" : "Sync tout"}
+          {syncing ? "Synchronisation…" : "Tout synchroniser"}
         </button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {dashboard.services.map((svc) => {
           const bal = balanceOf(svc);
-          const alertLvl = thresholdAlertLevel(bal, svc.thresholds);
+          const uninitialized = isBalanceUninitialized(svc);
+          const alertLvl = uninitialized
+            ? null
+            : thresholdAlertLevel(bal, svc.thresholds);
           return (
             <article
               key={svc.id}
@@ -237,7 +244,11 @@ function DashboardSection({
               <p className="mt-3 font-mono text-xl font-bold text-cyber-neon">
                 {formatEur(bal)}
               </p>
-              {alertLvl ? (
+              {uninitialized ? (
+                <p className="mt-2 text-[11px] leading-snug text-amber-200/90">
+                  {UNINITIALIZED_BALANCE_HINT}
+                </p>
+              ) : alertLvl ? (
                 <span
                   className={`mt-2 inline-block rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${alertBadgeClass(alertLvl)}`}
                 >
@@ -448,29 +459,37 @@ function WalletSection({
             </tr>
           </thead>
           <tbody>
-            {services.map((svc) => (
-              <tr
-                key={svc.id}
-                className="border-b border-cyber-border/60 hover:bg-cyber-bg/40"
-              >
-                <td className="py-3 pr-4">
-                  <span className="mr-2">{svc.icon || "◆"}</span>
-                  {svc.name}
-                </td>
-                <td className="py-3 pr-4 font-mono text-cyber-neon">
-                  {formatEur(balanceOf(svc))}
-                </td>
-                <td className="py-3">
-                  <button
-                    type="button"
-                    className="cyber-action-btn cyber-action-btn-primary"
-                    onClick={() => setTopupTarget(svc)}
-                  >
-                    Recharger
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {services.map((svc) => {
+              const uninitialized = isBalanceUninitialized(svc);
+              return (
+                <tr
+                  key={svc.id}
+                  className="border-b border-cyber-border/60 hover:bg-cyber-bg/40"
+                >
+                  <td className="py-3 pr-4">
+                    <span className="mr-2">{svc.icon || "◆"}</span>
+                    {svc.name}
+                    {uninitialized ? (
+                      <p className="mt-1 max-w-xs text-[11px] leading-snug text-amber-200/90">
+                        {UNINITIALIZED_BALANCE_HINT}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="py-3 pr-4 font-mono text-cyber-neon">
+                    {formatEur(balanceOf(svc))}
+                  </td>
+                  <td className="py-3">
+                    <button
+                      type="button"
+                      className="cyber-action-btn cyber-action-btn-primary"
+                      onClick={() => setTopupTarget(svc)}
+                    >
+                      Recharger
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -889,7 +908,7 @@ export function CockpitPage() {
     const res = await syncAllCockpitServices();
     setSyncing(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Sync globale échouée."));
+      setError(apiErrorMessage(res, "Synchronisation globale échouée."));
       return;
     }
     await load();

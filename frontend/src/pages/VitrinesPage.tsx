@@ -223,13 +223,13 @@ export function VitrinesPage() {
     setActionError(null);
     if (
       !window.confirm(
-        "Hard delete : supprimer la branche GitHub + nettoyer les déploiements Vercel ?",
+        "Suppression définitive : supprimer la branche GitHub et nettoyer les déploiements Vercel ?",
       )
     )
       return;
     const resp = await hardDeleteVitrine(id);
     if (!resp.ok) {
-      setActionError(apiErrorMessage(resp, "Hard delete impossible."));
+      setActionError(apiErrorMessage(resp, "Suppression définitive impossible."));
       return;
     }
     await load();
@@ -372,7 +372,7 @@ export function VitrinesPage() {
         alt: item.alt,
         photographer: item.photographer ?? null,
         photographerUrl: item.photographerUrl ?? null,
-        imageQuery: item.imageQuery ?? imagesQuery.trim() || null,
+        imageQuery: item.imageQuery ?? (imagesQuery.trim() || null),
       });
       if (!resp.ok) {
         setImagesError(apiErrorMessage(resp, "Remplacement image impossible."));
@@ -519,7 +519,7 @@ export function VitrinesPage() {
                     className="rounded bg-red-500/20 px-2 py-1 text-xs hover:bg-red-500/30"
                     onClick={() => void onHardDelete(p.id)}
                   >
-                    Hard delete
+                    Suppression définitive
                   </button>
                 </div>
               </div>
@@ -586,7 +586,7 @@ export function VitrinesPage() {
                 <div className="mb-2 flex items-center justify-between text-xs">
                   <span className="opacity-80">Screenshot</span>
                   <span className="opacity-60">
-                    {previewBusy ? "Génération…" : previewImage ? "OK" : "—"}
+                    {previewBusy ? "Génération…" : previewImage ? "Prêt" : "—"}
                   </span>
                 </div>
                 {previewImage ? (
