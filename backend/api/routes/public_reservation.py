@@ -6,15 +6,17 @@ Called by the Vercel Next.js reservation site.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from db.managed_projects_store import get_managed_projects_store
+from stripe_service import StripeServiceError, create_checkout_session, handle_webhook
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["reservation_public"])
@@ -239,6 +241,12 @@ class ReserveResponse(BaseModel):
     status: str
 
 
+class ReservationCheckoutResponse(BaseModel):
+    reservation_id: str
+    checkout_session_id: str
+    checkout_url: str
+
+
 @router.post("/reservation/{slug}/reserve", response_model=ReserveResponse)
 async def reserve(slug: str, body: ReserveRequest) -> ReserveResponse:
     project = await _get_project_by_slug(slug)
@@ -301,9 +309,177 @@ async def reserve(slug: str, body: ReserveRequest) -> ReserveResponse:
         return ReserveResponse(reservation_id=row["id"], status=row.get("status", "confirmed"))
 
 
+@router.post("/reservation/{slug}/checkout", response_model=ReservationCheckoutResponse)
+async def checkout_reservation(slug: str, body: ReserveRequest) -> ReservationCheckoutResponse:
+    """Crée une réservation en attente de paiement + session Stripe Checkout."""
+    project = await _get_project_by_slug(slug)
+    store = get_managed_projects_store()
+
+    starts = _parse_iso(body.starts_at)
+    svc_url = f"{store._rest_url()}/reservation_services"  # noqa: SLF001
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        rsvc = await client.get(
+            svc_url,
+            headers=store._headers(),  # noqa: SLF001
+            params={
+                "id": f"eq.{body.service_id}",
+                "project_id": f"eq.{project['id']}",
+                "select": "id,name,duration_min,price_cents,active",
+            },
+        )
+        if rsvc.status_code >= 400:
+            raise HTTPException(status_code=502, detail="Supabase error")
+        svc_rows = rsvc.json()
+        if not svc_rows:
+            raise HTTPException(status_code=404, detail="Service introuvable.")
+        svc = svc_rows[0]
+        if not svc.get("active", True):
+            raise HTTPException(status_code=400, detail="Service inactif.")
+        duration = int(svc["duration_min"])
+        service_name = str(svc.get("name") or "Prestation")
+        price_cents = int(svc.get("price_cents") or 0)
+
+    if price_cents <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Ce service est gratuit — utilisez /reserve sans paiement.",
+        )
+
+    ends = starts + timedelta(minutes=duration)
+    slot_check = await list_slots(
+        slug=slug,
+        service_id=body.service_id,
+        from_=starts.isoformat().replace("+00:00", "Z"),
+        to=(starts + timedelta(hours=6)).isoformat().replace("+00:00", "Z"),
+    )
+    if starts.isoformat().replace("+00:00", "Z") not in slot_check.slots:
+        raise HTTPException(status_code=409, detail="Créneau indisponible.")
+
+    res_url = f"{store._rest_url()}/reservations"  # noqa: SLF001
+    payload = {
+        "project_id": project["id"],
+        "service_id": body.service_id,
+        "customer_name": body.customer_name,
+        "customer_email": body.customer_email,
+        "starts_at": starts.isoformat(),
+        "ends_at": ends.isoformat(),
+        "status": "pending_payment",
+        "notes": body.notes,
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            res_url,
+            headers=store._headers("return=representation"),  # noqa: SLF001
+            json=payload,
+        )
+        if resp.status_code >= 400:
+            logger.warning("checkout reserve failed: %s", resp.text)
+            raise HTTPException(status_code=502, detail="Supabase error")
+        rows = resp.json()
+        row = rows[0] if isinstance(rows, list) and rows else rows
+        reservation_id = row["id"]
+
+    success_url = (
+        f"https://{slug}.vercel.app/success?session_id={{CHECKOUT_SESSION_ID}}"
+    )
+    cancel_url = f"https://{slug}.vercel.app/"
+
+    try:
+        session = create_checkout_session(
+            project_id=str(project["id"]),
+            items=[
+                {
+                    "name": service_name,
+                    "unit_amount": price_cents,
+                    "quantity": 1,
+                }
+            ],
+            customer_email=body.customer_email,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            mode="payment",
+            client_reference_id=reservation_id,
+            metadata={
+                "reservation_id": reservation_id,
+                "slug": slug,
+                "service_id": body.service_id,
+            },
+        )
+    except StripeServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    session_id = str(session.id)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        await client.patch(
+            res_url,
+            headers=store._headers(),  # noqa: SLF001
+            params={"id": f"eq.{reservation_id}"},
+            json={"stripe_checkout_session_id": session_id},
+        )
+
+    return ReservationCheckoutResponse(
+        reservation_id=reservation_id,
+        checkout_session_id=session_id,
+        checkout_url=str(session.url),
+    )
+
+
 @router.post("/reservation/{slug}/stripe/webhook")
-async def stripe_webhook_stub(slug: str) -> dict[str, str]:
-    # V2: implement real Stripe webhook validation + state changes.
-    _ = slug
-    return {"status": "disabled"}
+async def stripe_webhook(
+    slug: str,
+    request: Request,
+    stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
+) -> dict[str, str]:
+    project = await _get_project_by_slug(slug)
+    payload = await request.body()
+
+    try:
+        result = handle_webhook(
+            payload,
+            stripe_signature or "",
+            project_id=str(project["id"]),
+        )
+    except StripeServiceError as exc:
+        detail = str(exc)
+        status = 400 if "invalide" in detail.lower() else 502
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+    if result.get("type") != "checkout.session.completed":
+        return result
+
+    try:
+        event = json.loads(payload.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return result
+
+    obj = (event.get("data") or {}).get("object") or {}
+    metadata = obj.get("metadata") or {}
+    reservation_id = str(metadata.get("reservation_id") or "").strip()
+    session_id = str(obj.get("id") or "").strip()
+
+    store = get_managed_projects_store()
+    res_url = f"{store._rest_url()}/reservations"  # noqa: SLF001
+    patch: dict[str, Any] = {"status": "confirmed"}
+    if obj.get("customer_details"):
+        patch["customer_email"] = obj["customer_details"].get("email")
+        patch["customer_name"] = obj["customer_details"].get("name")
+
+    params: dict[str, str] = {}
+    if reservation_id:
+        params["id"] = f"eq.{reservation_id}"
+    elif session_id:
+        params["stripe_checkout_session_id"] = f"eq.{session_id}"
+    else:
+        return result
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.patch(
+            res_url,
+            headers=store._headers(),  # noqa: SLF001
+            params=params,
+            json=patch,
+        )
+        if r.status_code >= 400:
+            logger.warning("reservation webhook patch failed: %s", r.text[:200])
+    return {"status": "ok", "type": "checkout.session.completed"}
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import uuid
 from unittest.mock import patch
 
 import pytest
@@ -31,10 +32,15 @@ def desktop_client(monkeypatch: pytest.MonkeyPatch, tmp_path):
 
 def test_create_order_and_status(desktop_client) -> None:
     client, db = desktop_client
-    fake_session = type("S", (), {"id": "cs_test_123", "url": "https://checkout.stripe.test/x"})()
+    session_id = f"cs_test_{uuid.uuid4().hex[:12]}"
+    fake_session = type(
+        "S",
+        (),
+        {"id": session_id, "url": "https://checkout.stripe.test/x"},
+    )()
 
     with patch(
-        "desktop_app_router.create_desktop_checkout_session",
+        "desktop_app_router.create_checkout_session",
         return_value=fake_session,
     ):
         response = client.post(
@@ -61,17 +67,25 @@ def test_create_order_and_status(desktop_client) -> None:
 
 def test_webhook_triggers_generation(desktop_client) -> None:
     client, db = desktop_client
+    session_id = f"cs_webhook_{uuid.uuid4().hex[:12]}"
     order = db.create_order(
         app_type="lead_tracker",
         client_email="a@b.com",
-        stripe_session_id="cs_webhook_1",
+        stripe_session_id=session_id,
     )
 
-    with patch("desktop_app_router.verify_desktop_webhook_signature", return_value=True):
+    with patch(
+        "desktop_app_router.handle_webhook",
+        return_value={"status": "ok", "type": "checkout.session.completed"},
+    ):
         with patch("desktop_app_router._spawn_generate_exe") as spawn:
             response = client.post(
                 "/api/desktop/webhook/stripe",
-                content=b'{"type":"checkout.session.completed","data":{"object":{"id":"cs_webhook_1"}}}}',
+                content=(
+                    b'{"type":"checkout.session.completed","data":{"object":{"id":"'
+                    + session_id.encode()
+                    + b'"}}}'
+                ),
                 headers={"Stripe-Signature": "t=1,v1=test"},
             )
 

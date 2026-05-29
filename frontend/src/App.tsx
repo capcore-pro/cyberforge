@@ -25,6 +25,7 @@ import { CockpitPage } from "./pages/CockpitPage";
 import { MediaLibraryPage } from "./pages/MediaLibraryPage";
 import { LegalPage } from "./pages/LegalPage";
 import { NewsletterPage } from "./pages/NewsletterPage";
+import { StripePage } from "./pages/StripePage";
 
 /**
  * Composant racine — navigation entre les pages principales.
@@ -97,6 +98,8 @@ function AppWithNotifications({
         return <LegalPage />;
       case "newsletter":
         return <NewsletterPage />;
+      case "stripe":
+        return <StripePage />;
       default:
         return (
           <HomePage

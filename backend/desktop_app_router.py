@@ -25,11 +25,7 @@ from desktop_app_db import (
     update_order,
 )
 from desktop_app_generator import DesktopAppGeneratorError, generate_exe
-from tools.stripe_desktop import (
-    StripeEcommerceError,
-    create_desktop_checkout_session,
-    verify_desktop_webhook_signature,
-)
+from stripe_service import StripeServiceError, create_checkout_session, handle_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -132,16 +128,23 @@ async def post_create_order(body: CreateOrderBody) -> CreateOrderResponse:
     cancel_url = f"{site}/apps?cancelled=1"
 
     try:
-        session = await create_desktop_checkout_session(
-            order_id=order_id,
-            app_type=app_type,
-            app_title=_APP_TITLES[app_type],
-            client_email=email,
-            price_cents=body.price_cents,
+        session = create_checkout_session(
+            project_id="capcore",
+            items=[
+                {
+                    "name": _APP_TITLES[app_type],
+                    "unit_amount": max(50, int(body.price_cents)),
+                    "quantity": 1,
+                }
+            ],
+            customer_email=email,
             success_url=success_url,
             cancel_url=cancel_url,
+            mode="payment",
+            client_reference_id=order_id,
+            metadata={"order_id": order_id, "app_type": app_type},
         )
-    except StripeEcommerceError as exc:
+    except StripeServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     try:
@@ -157,7 +160,8 @@ async def post_create_order(body: CreateOrderBody) -> CreateOrderResponse:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return CreateOrderResponse(order_id=order_id, checkout_url=session.url)
+    checkout_url = str(getattr(session, "url", "") or "")
+    return CreateOrderResponse(order_id=order_id, checkout_url=checkout_url)
 
 
 @router.get("/orders/{order_id}/status", response_model=OrderStatusResponse)
@@ -214,14 +218,20 @@ async def stripe_webhook(
     stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
 ) -> dict[str, str]:
     payload = await request.body()
-    if not stripe_signature:
-        raise HTTPException(status_code=400, detail="En-tête Stripe-Signature requis.")
 
-    if not verify_desktop_webhook_signature(
-        payload_bytes=payload,
-        stripe_signature=stripe_signature,
-    ):
-        raise HTTPException(status_code=400, detail="Signature Stripe invalide.")
+    try:
+        stripe_result = handle_webhook(
+            payload,
+            stripe_signature or "",
+            project_id="capcore",
+        )
+    except StripeServiceError as exc:
+        detail = str(exc)
+        status = 400 if "invalide" in detail.lower() else 502
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+    if stripe_result.get("type") != "checkout.session.completed":
+        return stripe_result
 
     try:
         event = json.loads(payload.decode("utf-8") or "{}")

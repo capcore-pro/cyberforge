@@ -5,6 +5,7 @@ export type AppPage =
   | "media_library"
   | "legal"
   | "newsletter"
+  | "stripe"
   | "generator"
   | "projects"
   | "vitrines"
@@ -33,6 +34,7 @@ export const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
   { id: "legal", label: "Légal", icon: "⚖", enabled: true },
   { id: "newsletter", label: "Newsletter", icon: "✉", enabled: true },
+  { id: "stripe", label: "Stripe", icon: "$", enabled: true },
   { id: "generator", label: "Générateur", icon: "⚡", enabled: true },
   { id: "projects", label: "Projets", icon: "▤", enabled: true },
   { id: "vitrines", label: "Vitrines", icon: "▦", enabled: true },

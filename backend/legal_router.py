@@ -19,6 +19,7 @@ from agents.coremind_agent import PROJECT_TYPE_LABELS, ProjectType
 from config import get_settings
 from cost_tracker import build_costs_api_response
 from db.supabase_store import SupabaseStoreError, get_supabase_store
+from stripe_service import StripeServiceError, create_payment_link
 from tools.capcore_notify import send_document_email_to_client
 
 logger = logging.getLogger(__name__)
@@ -387,6 +388,36 @@ def download_document_pdf(document_id: str) -> FileResponse:
     )
 
 
+@router.post("/documents/{document_id}/payment-link")
+def create_invoice_payment_link(document_id: str) -> dict[str, str]:
+    """Génère un lien Stripe pour régler une facture."""
+    doc = db.get_document(document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document introuvable.")
+    if str(doc.get("type")) != "facture":
+        raise HTTPException(status_code=400, detail="Seules les factures ont un lien de paiement.")
+
+    amount_ttc = float(doc.get("total_ttc") or 0)
+    if amount_ttc <= 0:
+        raise HTTPException(status_code=400, detail="Montant TTC invalide.")
+
+    client = db.get_client(str(doc["client_id"])) if doc.get("client_id") else None
+    email = str(client["email"]) if client else None
+    project_id = str(doc.get("project_id") or "capcore")
+
+    try:
+        url = create_payment_link(
+            project_id=project_id,
+            amount_eur=amount_ttc,
+            description=f"Facture {doc.get('number', '')}",
+            customer_email=email,
+        )
+    except StripeServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {"url": url}
+
+
 @router.post("/documents/{document_id}/send")
 async def send_document(document_id: str, body: SendDocumentBody) -> dict[str, Any]:
     doc = db.get_document(document_id)
@@ -421,11 +452,30 @@ async def send_document(document_id: str, body: SendDocumentBody) -> dict[str, A
     default_subject = f"{kind_label} {doc.get('number', '')} — CapCore"
     subject = (body.subject or "").strip() or default_subject
 
+    payment_link_block = ""
+    if doc_type == "facture":
+        amount_ttc = float(doc.get("total_ttc") or 0)
+        if amount_ttc > 0:
+            project_id = str(doc.get("project_id") or "capcore")
+            try:
+                payment_url = create_payment_link(
+                    project_id=project_id,
+                    amount_eur=amount_ttc,
+                    description=f"Facture {doc.get('number', '')}",
+                    customer_email=str(client["email"]),
+                )
+                payment_link_block = (
+                    f"\n\nVous pouvez régler cette facture en ligne :\n{payment_url}\n"
+                )
+            except StripeServiceError as exc:
+                logger.warning("Lien de paiement Stripe indisponible : %s", exc)
+
     email_body = (
         f"Bonjour {client.get('name', '')},\n\n"
         f"{body.message.strip()}\n\n"
         f"Veuillez trouver ci-joint votre {kind_label.lower()} "
-        f"n° {doc.get('number', '')}.\n\n"
+        f"n° {doc.get('number', '')}."
+        f"{payment_link_block}\n\n"
         "Cordialement,\n"
         f"{get_settings().mat_legal_name}\n"
         f"{get_settings().mat_legal_brand}"

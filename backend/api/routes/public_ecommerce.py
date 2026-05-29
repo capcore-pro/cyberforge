@@ -13,9 +13,8 @@ import httpx
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from config import get_settings
 from db.managed_projects_store import get_managed_projects_store
-from tools.stripe_ecommerce import StripeEcommerceError, create_checkout_session, verify_webhook_signature
+from stripe_service import StripeServiceError, create_checkout_session, handle_webhook
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ecommerce_public"])
@@ -135,6 +134,8 @@ async def create_checkout(slug: str, body: CheckoutRequest) -> CheckoutResponse:
         )
 
     shipping = int(project["shipping_flat_cents"])
+    if shipping > 0:
+        line_items.append({"name": "Livraison", "unit_amount": shipping, "quantity": 1})
     total = subtotal + shipping
 
     # Create order
@@ -170,21 +171,19 @@ async def create_checkout(slug: str, body: CheckoutRequest) -> CheckoutResponse:
     success_url = f"https://{slug}.vercel.app/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"https://{slug}.vercel.app/cart"
 
-    settings = get_settings()
     try:
-        session = await create_checkout_session(
-            order_id=order_id,
-            slug=slug,
+        session = create_checkout_session(
+            project_id=str(project["id"]),
+            items=line_items,
             success_url=success_url,
             cancel_url=cancel_url,
-            currency=project["currency"],
-            shipping_cents=shipping,
-            line_items=line_items,
-            settings=settings,
+            mode="payment",
+            client_reference_id=order_id,
+            shipping_address_collection=True,
+            metadata={"order_id": order_id, "slug": slug},
         )
-    except (StripeEcommerceError, Exception) as exc:
-        await store.update_project(project["id"], patch={})  # noop just to ensure store configured
-        raise HTTPException(status_code=502, detail=f"Stripe error: {exc}") from exc
+    except StripeServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     # Update order with session id
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -230,33 +229,41 @@ async def stripe_webhook(
     request: Request,
     stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
 ) -> dict[str, str]:
-    _ = await _get_project(slug)
+    project = await _get_project(slug)
     payload = await request.body()
-    if stripe_signature and not verify_webhook_signature(payload_bytes=payload, stripe_signature=stripe_signature):
-        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    try:
+        result = handle_webhook(
+            payload,
+            stripe_signature or "",
+            project_id=str(project["id"]),
+        )
+    except StripeServiceError as exc:
+        detail = str(exc)
+        status = 400 if "invalide" in detail.lower() else 502
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+    if result.get("type") != "checkout.session.completed":
+        return result
+
     try:
         event = json.loads(payload.decode("utf-8") or "{}")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid payload")
+    except json.JSONDecodeError:
+        return result
 
-    etype = event.get("type")
     obj = (event.get("data") or {}).get("object") or {}
     session_id = obj.get("id")
     if not session_id:
-        return {"status": "ignored"}
+        return result
 
     store = get_managed_projects_store()
     orders_url = f"{store._rest_url()}/ecommerce_orders"  # noqa: SLF001
-    patch: dict[str, Any] = {}
-    if etype in ("checkout.session.completed",):
-        patch["status"] = "paid"
-        if obj.get("customer_details"):
-            patch["customer_email"] = (obj["customer_details"].get("email") or None)
-            patch["customer_name"] = (obj["customer_details"].get("name") or None)
-        if obj.get("shipping_details") and obj["shipping_details"].get("address"):
-            patch["shipping_address_json"] = obj["shipping_details"]["address"]
-    else:
-        return {"status": "ignored"}
+    patch: dict[str, Any] = {"status": "paid"}
+    if obj.get("customer_details"):
+        patch["customer_email"] = (obj["customer_details"].get("email") or None)
+        patch["customer_name"] = (obj["customer_details"].get("name") or None)
+    if obj.get("shipping_details") and obj["shipping_details"].get("address"):
+        patch["shipping_address_json"] = obj["shipping_details"]["address"]
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.patch(
@@ -267,5 +274,5 @@ async def stripe_webhook(
         )
         if r.status_code >= 400:
             logger.warning("webhook order update failed: %s", r.text[:200])
-    return {"status": "ok"}
+    return {"status": "ok", "type": "checkout.session.completed"}
 

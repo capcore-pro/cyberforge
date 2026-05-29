@@ -276,6 +276,11 @@ class Settings(BaseSettings):
         alias="STRIPE_DESKTOP_WEBHOOK_SECRET",
         description="Secret de signature webhook Stripe pour mini-apps desktop.",
     )
+    stripe_webhook_secret: SecretStr | None = Field(
+        default=None,
+        alias="STRIPE_WEBHOOK_SECRET",
+        description="Secret webhook Stripe global (stripe_service).",
+    )
     capcore_site_url: str = Field(
         default="https://capcore.pro",
         alias="CAPCORE_SITE_URL",
