@@ -11,6 +11,7 @@ import {
   type CockpitAlert,
 } from "@/lib/cockpit-api";
 import { fetchLegalClients } from "@/lib/legal-api";
+import { fetchStripeDashboard } from "@/lib/stripe-api";
 import {
   GENERATOR_KINDS,
   resolveGenerationMode,
@@ -40,7 +41,8 @@ function formatEur(value: number): string {
 }
 
 function projectTypeLabel(type: string): string {
-  return PROJECT_TYPE_OPTIONS.find((o) => o.id === type)?.label ?? type;
+  const fromKind = GENERATOR_KINDS.find((k) => k.projectType === type);
+  return fromKind?.title ?? type;
 }
 
 function formatRelativeDate(iso: string): string {

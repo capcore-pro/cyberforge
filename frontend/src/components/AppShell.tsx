@@ -1,14 +1,14 @@
-import type { ReactNode } from "react";
-import { APP_NAME } from "@shared/constants";
+import { type ReactNode } from "react";
 import { BackendStatusBanner } from "@/components/BackendStatusBanner";
 import { ContactNotificationToast } from "@/components/ContactNotificationToast";
 import { useContactNotifications } from "@/context/ContactNotificationsContext";
 import { useAgentsStatus } from "@/context/AgentsStatusContext";
 import { enabledAgentCount } from "@/lib/agent-preferences";
 import {
-  PRIMARY_NAV_ITEMS,
   SETTINGS_NAV_ITEM,
+  SIDEBAR_NAV_GROUPS,
   type AppPage,
+  type NavItem,
 } from "@/lib/navigation";
 
 interface AppShellProps {
@@ -24,7 +24,7 @@ function NavButton({
   unreadCount,
   onNavigate,
 }: {
-  item: (typeof PRIMARY_NAV_ITEMS)[number] | typeof SETTINGS_NAV_ITEM;
+  item: NavItem | typeof SETTINGS_NAV_ITEM;
   currentPage: AppPage;
   unreadCount: number;
   onNavigate: (page: AppPage) => void;
@@ -72,22 +72,41 @@ export function AppShell({
     <div className="flex h-full min-h-0 w-full">
       <aside className="cyber-sidebar">
         <div className="border-b border-cf-border px-4 py-5">
-          <p className="cf-section-label">Navigation</p>
-          <p className="mt-1 text-sm font-medium text-cf-text">{APP_NAME}</p>
+          <button
+            type="button"
+            onClick={() => onNavigate("dashboard")}
+            className="block w-full text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-gold/50"
+            aria-label="Accueil CapCore"
+          >
+            <img
+              src="/logo-capcore-dark.svg"
+              alt="CapCore Studio Digital"
+              className="h-9 w-auto max-w-full"
+              width={195}
+              height={45}
+            />
+          </button>
         </div>
 
         <nav
           className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3"
           aria-label="Navigation principale"
         >
-          {PRIMARY_NAV_ITEMS.map((item) => (
-            <NavButton
-              key={item.id}
-              item={item}
-              currentPage={currentPage}
-              unreadCount={unreadCount}
-              onNavigate={onNavigate}
-            />
+          {SIDEBAR_NAV_GROUPS.map((group, groupIndex) => (
+            <div
+              key={group.id}
+              className={groupIndex > 0 ? "mt-2 border-t border-cf-border pt-2" : ""}
+            >
+              {group.items.map((item) => (
+                <NavButton
+                  key={item.id}
+                  item={item}
+                  currentPage={currentPage}
+                  unreadCount={unreadCount}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </div>
           ))}
 
           <div className="mt-auto border-t border-cf-border pt-2">

@@ -18,6 +18,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import (
+    Flowable,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -37,6 +38,8 @@ _DEPOSIT_PERCENT = 30
 _COLOR_PRIMARY = colors.HexColor("#1e3a5f")
 _COLOR_MUTED = colors.HexColor("#64748b")
 _COLOR_LINE = colors.HexColor("#e2e8f0")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_LOGO_LIGHT_SVG = _REPO_ROOT / "frontend" / "public" / "logo-capcore-light.svg"
 
 
 @dataclass(frozen=True)
@@ -157,6 +160,47 @@ def _footer_canvas(canvas, doc, mat: MatProfile) -> None:  # noqa: ARG001
     )
     canvas.drawCentredString(A4[0] / 2, 1.2 * cm, footer)
     canvas.restoreState()
+
+
+class _SvgLogoFlowable(Flowable):
+    """Flowable ReportLab pour un drawing SVG (svglib)."""
+
+    def __init__(self, drawing: Any, width: float, height: float) -> None:
+        super().__init__()
+        self.drawing = drawing
+        self.width = width
+        self.height = height
+
+    def draw(self) -> None:
+        from reportlab.graphics import renderPDF
+
+        self.canv.saveState()
+        renderPDF.draw(self.drawing, self.canv, 0, 0)
+        self.canv.restoreState()
+
+
+def _logo_header_block() -> list[Any]:
+    """Logo CapCore (version fond clair) en tête des PDFs commerciaux."""
+    if not _LOGO_LIGHT_SVG.is_file():
+        return []
+    try:
+        from svglib.svglib import svg2rlg
+    except ImportError:
+        return []
+
+    drawing = svg2rlg(str(_LOGO_LIGHT_SVG))
+    if drawing is None or not drawing.width or not drawing.height:
+        return []
+
+    target_w = 6.5 * cm
+    scale = target_w / float(drawing.width)
+    drawing.width = target_w
+    drawing.height = float(drawing.height) * scale
+    drawing.scale(scale, scale)
+    return [
+        _SvgLogoFlowable(drawing, drawing.width, drawing.height),
+        Spacer(1, 0.35 * cm),
+    ]
 
 
 def _issuer_block(mat: MatProfile, st: dict[str, ParagraphStyle]) -> list[Any]:
@@ -314,6 +358,7 @@ def _build_commercial_pdf(
     )
 
     story: list[Any] = [
+        *_logo_header_block(),
         _header_table(mat, client, st),
         Spacer(1, 0.5 * cm),
         Paragraph(title, st["title"]),
