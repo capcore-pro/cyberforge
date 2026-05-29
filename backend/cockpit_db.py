@@ -245,9 +245,11 @@ def init_db() -> None:
 
     from legal_db import init_legal_db
     from media_db import init_media_db
+    from newsletter_db import init_newsletter_db
 
     init_media_db()
     init_legal_db()
+    init_newsletter_db()
 
 
 def get_all_services(*, enabled_only: bool = False) -> list[dict[str, Any]]:

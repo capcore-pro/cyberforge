@@ -176,3 +176,8 @@ database/*.db
 database/*.sqlite
 database/*.sqlite3
 !database/.gitkeep
+
+# Données locales backend (cockpit, médiathèque, PDFs juridiques)
+backend/cockpit.db
+backend/documents/
+backend/media/
