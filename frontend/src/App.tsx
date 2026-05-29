@@ -11,21 +11,15 @@ import { getPublicDemoToken } from "@/lib/demo-route";
 import type { AppPage } from "./lib/navigation";
 import { ClientDemoPage } from "./pages/ClientDemoPage";
 import { GeneratorPage } from "./pages/GeneratorPage";
-import { HomePage } from "./pages/HomePage";
+import { DashboardPage } from "./pages/DashboardPage";
 import { ClientsPage } from "./pages/ClientsPage";
 import { PersoPage } from "./pages/PersoPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
-import { VitrinesPage } from "./pages/VitrinesPage";
-import { ApplicationWebPage } from "./pages/ApplicationWebPage";
-import { ExtensionsPage } from "./pages/ExtensionsPage";
-import { SiteReservationPage } from "./pages/SiteReservationPage";
-import { EcommercePage } from "./pages/EcommercePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { CockpitPage } from "./pages/CockpitPage";
 import { MediaLibraryPage } from "./pages/MediaLibraryPage";
-import { LegalPage } from "./pages/LegalPage";
+import { AccountingPage } from "./pages/AccountingPage";
 import { NewsletterPage } from "./pages/NewsletterPage";
-import { StripePage } from "./pages/StripePage";
 
 /**
  * Composant racine — navigation entre les pages principales.
@@ -73,17 +67,7 @@ function AppWithNotifications({
       case "generator":
         return <GeneratorPage onOpenProjects={() => setPage("projects")} />;
       case "projects":
-        return <ProjectsPage />;
-      case "vitrines":
-        return <VitrinesPage />;
-      case "application_web":
-        return <ApplicationWebPage />;
-      case "extensions":
-        return <ExtensionsPage />;
-      case "site_reservation":
-        return <SiteReservationPage />;
-      case "ecommerce":
-        return <EcommercePage />;
+        return <ProjectsPage onNavigate={setPage} />;
       case "clients":
         return <ClientsPage onOpenGenerator={() => setPage("generator")} />;
       case "perso":
@@ -94,19 +78,12 @@ function AppWithNotifications({
         return <CockpitPage />;
       case "media_library":
         return <MediaLibraryPage />;
-      case "legal":
-        return <LegalPage />;
+      case "accounting":
+        return <AccountingPage />;
       case "newsletter":
         return <NewsletterPage />;
-      case "stripe":
-        return <StripePage />;
       default:
-        return (
-          <HomePage
-            onOpenGenerator={() => setPage("generator")}
-            onOpenProjects={() => setPage("projects")}
-          />
-        );
+        return <DashboardPage onNavigate={setPage} />;
     }
   }
 

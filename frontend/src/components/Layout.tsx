@@ -12,13 +12,12 @@ export function Layout({ children }: LayoutProps) {
   const platform = window.cyberforge?.getPlatform() ?? "—";
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-cyber-bg">
+    <div className="flex h-screen flex-col overflow-hidden bg-cf-main">
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {children}
       </main>
 
-      <footer className="flex shrink-0 items-center justify-between border-t border-cyber-border bg-cyber-surfaceAlt px-4 py-2 text-xs text-cyber-muted">
-        <span>Logiciel desktop IA — usage éthique et légal uniquement</span>
+      <footer className="flex shrink-0 items-center justify-end border-t border-cf-border bg-cf-sidebar px-4 py-2 text-xs text-cf-muted">
         <span>
           Electron v{version} · {platform}
         </span>

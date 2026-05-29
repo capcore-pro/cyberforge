@@ -94,17 +94,13 @@ function SubTabs({
   onChange: (s: CockpitSection) => void;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap gap-2 border-b border-cyber-border pb-3">
+    <div className="cf-subtabs">
       {SECTIONS.map((s) => (
         <button
           key={s.id}
           type="button"
           onClick={() => onChange(s.id)}
-          className={`rounded-md px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${
-            current === s.id
-              ? "border border-cyber-neon bg-cyber-accent/10 text-cyber-neon shadow-neonCyan"
-              : "border border-transparent text-cyber-muted hover:border-cyber-border hover:text-cyber-text"
-          }`}
+          className={`cf-subtab ${current === s.id ? "cf-subtab-active" : ""}`}
         >
           {s.label}
         </button>
@@ -615,7 +611,7 @@ function ThresholdsSection({
           <thead>
             <tr className="border-b border-cyber-border text-[10px] uppercase tracking-wider text-cyber-muted">
               <th className="py-2 pr-4">Service</th>
-              <th className="py-2 pr-4">Warning (€)</th>
+              <th className="py-2 pr-4">Alerte (€)</th>
               <th className="py-2 pr-4">Critical (€)</th>
               <th className="py-2 pr-4">Urgent (€)</th>
               <th className="py-2" />
@@ -928,13 +924,9 @@ export function CockpitPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <header className="mb-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyber-violet">
-          FinOps
-        </p>
-        <h1 className="cyber-glitch-title mt-1 text-2xl font-bold text-cyber-text md:text-3xl">
-          Cockpit
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
+        <p className="cf-section-label">FinOps</p>
+        <h1 className="cf-page-title mt-1">Cockpit</h1>
+        <p className="mt-2 max-w-2xl text-sm text-cf-muted">
           Soldes fournisseurs, recharges, seuils d&apos;alerte et synchronisation API.
         </p>
       </header>

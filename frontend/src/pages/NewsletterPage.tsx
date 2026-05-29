@@ -19,17 +19,13 @@ function SubTabs({
   onChange: (s: NewsletterSection) => void;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap gap-2 border-b border-cyber-border pb-3">
+    <div className="cf-subtabs">
       {SECTIONS.map((s) => (
         <button
           key={s.id}
           type="button"
           onClick={() => onChange(s.id)}
-          className={`rounded-md px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${
-            current === s.id
-              ? "border border-cyber-neon bg-cyber-accent/10 text-cyber-neon shadow-neonCyan"
-              : "border border-transparent text-cyber-muted hover:border-cyber-border hover:text-cyber-text"
-          }`}
+          className={`cf-subtab ${current === s.id ? "cf-subtab-active" : ""}`}
         >
           {s.label}
         </button>

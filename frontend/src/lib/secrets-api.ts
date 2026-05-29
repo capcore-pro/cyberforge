@@ -15,6 +15,8 @@ export interface InfraFlags {
   railway: boolean;
   vercel: boolean;
   github: boolean;
+  brevo: boolean;
+  stripe: boolean;
 }
 
 export type VaultConfiguredFlags = ProviderFlags & InfraFlags;
@@ -38,6 +40,8 @@ export interface VaultKeysPayload {
   railway_api_key?: string | null;
   vercel_token?: string | null;
   github_token?: string | null;
+  brevo_api_key?: string | null;
+  stripe_secret_key?: string | null;
 }
 
 /** @deprecated Utiliser VaultKeysPayload */
@@ -91,5 +95,13 @@ export async function changeMasterPassword(
     method: "POST",
     path: `${API_PREFIX}/secrets/change-password`,
     body: { old_password: oldPassword, new_password: newPassword },
+  });
+}
+
+export async function testSecretKey(provider: string, apiKey?: string) {
+  return apiRequest<{ valid: boolean; message: string }>({
+    method: "POST",
+    path: `${API_PREFIX}/secrets/test`,
+    body: { provider, api_key: apiKey?.trim() || null },
   });
 }

@@ -15,7 +15,7 @@ export function GeneratorPreviewModal({
       aria-modal="true"
       aria-label="Prévisualisation du code généré"
     >
-      <div className="flex h-[min(90vh,720px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-cyber-accent/40 bg-cyber-surface shadow-neonCyan">
+      <div className="flex h-[min(90vh,720px)] w-full max-w-5xl flex-col overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyber-border px-4 py-3">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-neon">

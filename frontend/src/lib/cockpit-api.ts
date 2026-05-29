@@ -94,6 +94,14 @@ export const COCKPIT_CONNECTOR_OPTIONS: { value: string; label: string }[] = [
   { value: "manual", label: "Manuel" },
 ];
 
+export function fetchCockpitAlerts(limit = 100) {
+  return apiRequest<CockpitAlert[]>({
+    method: "GET",
+    path: `${COCKPIT}/alerts?limit=${limit}`,
+    timeoutMs: 60_000,
+  });
+}
+
 export function fetchCockpitDashboard() {
   return apiRequest<CockpitDashboard>({
     method: "GET",

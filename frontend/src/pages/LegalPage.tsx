@@ -20,17 +20,13 @@ function SubTabs({
   onChange: (s: LegalSection) => void;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap gap-2 border-b border-cyber-border pb-3">
+    <div className="cf-subtabs">
       {SECTIONS.map((s) => (
         <button
           key={s.id}
           type="button"
           onClick={() => onChange(s.id)}
-          className={`rounded-md px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${
-            current === s.id
-              ? "border border-cyber-neon bg-cyber-accent/10 text-cyber-neon shadow-neonCyan"
-              : "border border-transparent text-cyber-muted hover:border-cyber-border hover:text-cyber-text"
-          }`}
+          className={`cf-subtab ${current === s.id ? "cf-subtab-active" : ""}`}
         >
           {s.label}
         </button>
@@ -42,19 +38,21 @@ function SubTabs({
 /**
  * Module Légal — devis, factures, mentions légales, CGV et carnet clients.
  */
-export function LegalPage() {
+export function LegalPage({ embedded = false }: { embedded?: boolean }) {
   const [section, setSection] = useState<LegalSection>("devis");
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-cyber-text">
-          Légal &amp; commercial
-        </h1>
-        <p className="mt-1 text-sm text-cyber-muted">
-          Devis, factures, documents juridiques et carnet clients CapCore.
-        </p>
-      </header>
+    <div className={embedded ? "" : "mx-auto max-w-6xl px-4 py-6 md:px-6"}>
+      {!embedded ? (
+        <header className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight text-cyber-text">
+            Légal &amp; commercial
+          </h1>
+          <p className="mt-1 text-sm text-cyber-muted">
+            Devis, factures, documents juridiques et carnet clients CapCore.
+          </p>
+        </header>
+      ) : null}
 
       <SubTabs current={section} onChange={setSection} />
 

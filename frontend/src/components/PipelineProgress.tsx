@@ -17,9 +17,24 @@ const DEFAULT_STEPS: PipelineStepState[] = [
   { id: "bughunter", label: "BugHunterAI", status: "pending" },
 ];
 
+const FRIENDLY_LABELS: Record<string, string> = {
+  architect: "Plan du projet",
+  builder: "Structure des pages",
+  coremind: "Rédaction du contenu",
+  visionui: "Mise en forme visuelle",
+  bughunter: "Contrôle qualité",
+  testpilot: "Tests finaux",
+  export: "Publication en ligne",
+  autofix: "Ajustements automatiques",
+};
+
+function friendlyLabel(step: PipelineStepState): string {
+  return FRIENDLY_LABELS[step.id] ?? step.label.replace(/AI$/i, "").trim();
+}
+
 const STATUS_STYLES: Record<PipelineStepStatus, string> = {
   pending: "border-cyber-border text-cyber-muted",
-  active: "border-cyber-accent text-cyber-neon shadow-[0_0_12px_rgba(0,255,200,0.15)]",
+  active: "border-cf-gold text-cf-gold",
   done: "border-green-400/50 text-green-400",
   error: "border-red-400/50 text-red-400",
 };
@@ -90,11 +105,17 @@ export function applyPipelineStepEvent(
 
 interface PipelineProgressProps {
   steps: PipelineStepState[];
+  /** Libellés grand public (sans jargon technique). */
+  friendly?: boolean;
 }
 
-export function PipelineProgress({ steps }: PipelineProgressProps) {
+export function PipelineProgress({ steps, friendly = false }: PipelineProgressProps) {
   return (
-    <ul className="space-y-2" aria-live="polite" aria-label="Progression du pipeline IA">
+    <ul
+      className="space-y-2"
+      aria-live="polite"
+      aria-label={friendly ? "Progression de la génération" : "Progression du pipeline IA"}
+    >
       {steps.map((step) => (
         <li
           key={step.id}
@@ -102,7 +123,9 @@ export function PipelineProgress({ steps }: PipelineProgressProps) {
         >
           <StepIcon status={step.status} />
           <div className="min-w-0 flex-1">
-            <span className="font-semibold">{step.label}</span>
+            <span className="font-semibold">
+              {friendly ? friendlyLabel(step) : step.label}
+            </span>
             {step.message ? (
               <p className="mt-0.5 text-xs opacity-90">{step.message}</p>
             ) : null}

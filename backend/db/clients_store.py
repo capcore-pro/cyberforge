@@ -29,6 +29,10 @@ class ClientRow(BaseModel):
     company: str | None = None
     email: str | None = None
     phone: str | None = None
+    address: str | None = None
+    siret: str | None = None
+    active: bool = True
+    legal_client_id: str | None = None
     primary_color: str | None = None
     logo_url: str | None = None
     created_at: str
@@ -109,6 +113,10 @@ class ClientsStore:
         company: str | None = None,
         email: str | None = None,
         phone: str | None = None,
+        address: str | None = None,
+        siret: str | None = None,
+        active: bool = True,
+        legal_client_id: str | None = None,
         primary_color: str | None = None,
         logo_url: str | None = None,
         kind: ClientKind = "client",
@@ -121,6 +129,10 @@ class ClientsStore:
             company=company,
             email=email,
             phone=phone,
+            address=address,
+            siret=siret,
+            active=active,
+            legal_client_id=legal_client_id,
             primary_color=primary_color,
             logo_url=logo_url,
             kind=kind,
@@ -151,6 +163,10 @@ class ClientsStore:
         company: str | None = None,
         email: str | None = None,
         phone: str | None = None,
+        address: str | None = None,
+        siret: str | None = None,
+        active: bool | None = None,
+        legal_client_id: str | None = None,
         primary_color: str | None = None,
         logo_url: str | None = None,
         kind: ClientKind | None = None,
@@ -167,6 +183,14 @@ class ClientsStore:
             patch["email"] = _optional_str(email)
         if phone is not None:
             patch["telephone"] = _optional_str(phone)
+        if address is not None:
+            patch["adresse"] = _optional_str(address)
+        if siret is not None:
+            patch["siret"] = _optional_str(siret)
+        if active is not None:
+            patch["actif"] = active
+        if legal_client_id is not None:
+            patch["legal_client_id"] = _optional_str(legal_client_id)
         if primary_color is not None:
             patch["couleur"] = _optional_str(primary_color)
         if logo_url is not None:
@@ -246,11 +270,15 @@ def _row_to_db(
     company: str | None,
     email: str | None,
     phone: str | None,
+    address: str | None = None,
+    siret: str | None = None,
+    active: bool = True,
+    legal_client_id: str | None = None,
     primary_color: str | None,
     logo_url: str | None,
     kind: ClientKind,
 ) -> dict[str, Any]:
-    return {
+    body: dict[str, Any] = {
         "nom": name.strip(),
         "entreprise": _optional_str(company),
         "email": _optional_str(email),
@@ -258,10 +286,20 @@ def _row_to_db(
         "couleur": _optional_str(primary_color) or "#6366f1",
         "logo_url": _optional_str(logo_url),
         "est_perso": kind == "perso",
+        "actif": active,
     }
+    if address is not None:
+        body["adresse"] = _optional_str(address)
+    if siret is not None:
+        body["siret"] = _optional_str(siret)
+    if legal_client_id is not None:
+        body["legal_client_id"] = _optional_str(legal_client_id)
+    return body
 
 
 def _client_from_row(row: dict[str, Any]) -> ClientRow:
+    actif_raw = row.get("actif")
+    active = True if actif_raw is None else bool(actif_raw)
     return ClientRow(
         id=str(row["id"]),
         kind=_kind_from_row(row),
@@ -269,6 +307,10 @@ def _client_from_row(row: dict[str, Any]) -> ClientRow:
         company=row.get("entreprise") if row.get("entreprise") is not None else row.get("company"),
         email=row.get("email"),
         phone=row.get("telephone") if row.get("telephone") is not None else row.get("phone"),
+        address=row.get("adresse") if row.get("adresse") is not None else row.get("address"),
+        siret=row.get("siret"),
+        active=active,
+        legal_client_id=row.get("legal_client_id"),
         primary_color=row.get("couleur") if row.get("couleur") is not None else row.get("primary_color"),
         logo_url=row.get("logo_url"),
         created_at=str(row.get("created_at") or ""),

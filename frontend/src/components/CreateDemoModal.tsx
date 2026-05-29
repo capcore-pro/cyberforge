@@ -62,11 +62,9 @@ export function CreateDemoModal({
       aria-modal="true"
       aria-label="Créer une démo client"
     >
-      <div className="w-full max-w-lg space-y-4 rounded-lg border border-cyber-violet/40 bg-cyber-surface p-6 shadow-neonViolet">
+      <div className="w-full max-w-lg space-y-4 rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
         <header>
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-cyber-violet">
-            // client_demo
-          </p>
+          <p className="cf-section-label">Démo client</p>
           <h2 className="mt-1 text-lg font-bold text-cyber-neon">
             Créer une démo client
           </h2>

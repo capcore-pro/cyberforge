@@ -218,9 +218,7 @@ export function ApplicationWebPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header>
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.35em] text-cyber-violet">
-          // applications_web
-        </p>
+        <p className="cf-section-label mb-2">Applications web</p>
         <h1 className="text-2xl font-bold text-cyber-neon md:text-3xl">
           Applications web
         </h1>

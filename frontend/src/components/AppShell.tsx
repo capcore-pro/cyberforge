@@ -39,11 +39,11 @@ function NavButton({
         currentPage === item.id ? "cyber-nav-item-active" : ""
       } ${!item.enabled ? "cursor-not-allowed opacity-40" : ""}`}
     >
-      <span className="relative text-cyber-accent" aria-hidden>
+      <span className="relative text-cf-gold" aria-hidden>
         {item.icon}
         {item.id === "clients" && unreadCount > 0 ? (
           <span
-            className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white"
+            className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-cf-alert px-1 text-[9px] font-bold text-black"
             aria-label={`${unreadCount} nouveau(x) contact(s)`}
           >
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -71,11 +71,9 @@ export function AppShell({
   return (
     <div className="flex h-full min-h-0 w-full">
       <aside className="cyber-sidebar">
-        <div className="border-b border-cyber-border px-4 py-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyber-violet">
-            Navigation
-          </p>
-          <p className="mt-1 text-xs text-cyber-muted">{APP_NAME}</p>
+        <div className="border-b border-cf-border px-4 py-5">
+          <p className="cf-section-label">Navigation</p>
+          <p className="mt-1 text-sm font-medium text-cf-text">{APP_NAME}</p>
         </div>
 
         <nav
@@ -92,7 +90,7 @@ export function AppShell({
             />
           ))}
 
-          <div className="mt-auto border-t border-cyber-border pt-2">
+          <div className="mt-auto border-t border-cf-border pt-2">
             <NavButton
               item={SETTINGS_NAV_ITEM}
               currentPage={currentPage}
@@ -103,28 +101,21 @@ export function AppShell({
         </nav>
 
         {sidebarFooter ?? (
-          <div className="border-t border-cyber-border p-4">
-            <p className="text-[10px] uppercase tracking-wider text-cyber-muted">
-              Agents (interface)
-            </p>
-            <p className="mt-1 text-2xl font-bold text-cyber-neon">
+          <div className="border-t border-cf-border p-4">
+            <p className="cf-section-label">Agents</p>
+            <p className="mt-1 text-2xl font-medium tabular-nums text-cf-gold">
               {localEnabled} / {totalAgents}
             </p>
-            <p className="text-[10px] text-cyber-muted">
-              {activeCount} actifs côté serveur · CoreMindAI opérationnel
+            <p className="text-[11px] text-cf-muted">
+              {activeCount} actifs côté serveur
             </p>
           </div>
         )}
       </aside>
 
-      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-cf-main">
         <ContactNotificationToast />
         <BackendStatusBanner />
-        <div
-          className="pointer-events-none absolute inset-0 bg-cyber-grid bg-cyber-grid opacity-40"
-          aria-hidden
-        />
-        <div className="cyber-scanline" aria-hidden />
         <div className="relative flex-1 overflow-y-auto p-6 md:p-8">{children}</div>
       </div>
     </div>

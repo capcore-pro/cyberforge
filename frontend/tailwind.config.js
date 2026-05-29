@@ -4,58 +4,61 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Palette CyberForge — thème sombre orienté sécurité
+        cf: {
+          main: "#0d0d0d",
+          sidebar: "#111111",
+          card: "#111111",
+          secondary: "#161616",
+          active: "#1c1a12",
+          border: "#222222",
+          "border-input": "#2a2a2a",
+          gold: "#c9a84c",
+          "gold-hover": "#e0be6a",
+          "gold-subtle": "#1c1a12",
+          text: "#f0f0f0",
+          body: "#cccccc",
+          muted: "#888888",
+          tertiary: "#444444",
+          label: "#666666",
+          success: "#4caf50",
+          alert: "#e8a020",
+          info: "#5b8dd9",
+        },
         cyber: {
-          bg: "#0a0e17",
-          surface: "#111827",
-          surfaceAlt: "#0d1220",
-          border: "#1f2937",
-          borderGlow: "#4c1d95",
-          accent: "#06b6d4",
-          accentMuted: "#0891b2",
-          violet: "#a855f7",
-          violetMuted: "#7c3aed",
-          neon: "#22d3ee",
-          text: "#e5e7eb",
-          muted: "#9ca3af",
+          bg: "#0d0d0d",
+          surface: "#111111",
+          surfaceAlt: "#111111",
+          border: "#222222",
+          borderGlow: "#c9a84c",
+          accent: "#c9a84c",
+          accentMuted: "#e0be6a",
+          violet: "#c9a84c",
+          violetMuted: "#e0be6a",
+          neon: "#c9a84c",
+          text: "#f0f0f0",
+          muted: "#888888",
         },
       },
-      boxShadow: {
-        neonCyan: "0 0 20px rgba(6, 182, 212, 0.35), 0 0 40px rgba(6, 182, 212, 0.15)",
-        neonViolet: "0 0 20px rgba(168, 85, 247, 0.35), 0 0 40px rgba(168, 85, 247, 0.15)",
-        card: "0 0 0 1px rgba(168, 85, 247, 0.2), inset 0 1px 0 rgba(34, 211, 238, 0.08)",
-      },
-      backgroundImage: {
-        "cyber-grid":
-          "linear-gradient(rgba(168, 85, 247, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.06) 1px, transparent 1px)",
-      },
-      backgroundSize: {
-        "cyber-grid": "32px 32px",
-      },
-      animation: {
-        glitch: "glitch 3s infinite",
-        pulseNeon: "pulseNeon 2.5s ease-in-out infinite",
-        scan: "scan 4s linear infinite",
-      },
-      keyframes: {
-        glitch: {
-          "0%, 100%": { transform: "translate(0)" },
-          "20%": { transform: "translate(-2px, 1px)" },
-          "40%": { transform: "translate(2px, -1px)" },
-          "60%": { transform: "translate(-1px, -1px)" },
-          "80%": { transform: "translate(1px, 1px)" },
-        },
-        pulseNeon: {
-          "0%, 100%": { opacity: "1" },
-          "50%": { opacity: "0.65" },
-        },
-        scan: {
-          "0%": { transform: "translateY(-100%)" },
-          "100%": { transform: "translateY(100%)" },
-        },
+      borderRadius: {
+        card: "10px",
+        control: "8px",
       },
       fontFamily: {
-        sans: ["JetBrains Mono", "ui-monospace", "monospace"],
+        sans: [
+          "Inter",
+          "Segoe UI",
+          "system-ui",
+          "-apple-system",
+          "sans-serif",
+        ],
+      },
+      fontSize: {
+        body: ["13px", { lineHeight: "1.5" }],
+        label: ["11px", { lineHeight: "1.4", letterSpacing: "0.06em" }],
+      },
+      boxShadow: {
+        card: "0 1px 0 rgba(255, 255, 255, 0.04) inset",
+        gold: "0 0 0 1px rgba(201, 168, 76, 0.25)",
       },
     },
   },

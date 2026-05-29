@@ -95,29 +95,44 @@ class SecretVault:
         with self._lock:
             return self._secrets is None
 
+    def _stored_key_names(self) -> set[str]:
+        with self._lock:
+            if self._secrets is not None:
+                return {k for k, v in self._secrets.items() if v}
+            if not self._path.exists():
+                return set()
+            try:
+                payload = json.loads(self._path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return set()
+            stored = payload.get("stored_keys")
+            if isinstance(stored, list):
+                return {str(k) for k in stored if k}
+            return set()
+
     def status(self) -> VaultStatus:
         with self._lock:
+            stored = self._stored_key_names()
+            secrets = self._secrets or {}
+
+            def _has(env_key: str) -> bool:
+                if secrets.get(env_key):
+                    return True
+                return env_key in stored
+
             configured = {
-                "openai": bool(self._secrets and self._secrets.get("OPENAI_API_KEY")),
-                "anthropic": bool(
-                    self._secrets and self._secrets.get("ANTHROPIC_API_KEY")
-                ),
-                "deepseek": bool(
-                    self._secrets and self._secrets.get("DEEPSEEK_API_KEY")
-                ),
-                "gemini": bool(
-                    self._secrets and self._secrets.get("GOOGLE_GENERATIVE_AI_API_KEY")
-                ),
-                "v0": bool(self._secrets and self._secrets.get("V0_API_KEY")),
-                "replicate": bool(
-                    self._secrets and self._secrets.get("REPLICATE_API_KEY")
-                ),
-                "tavily": bool(self._secrets and self._secrets.get("TAVILY_API_KEY")),
-                "railway": bool(
-                    self._secrets and self._secrets.get("RAILWAY_API_KEY")
-                ),
-                "vercel": bool(self._secrets and self._secrets.get("VERCEL_TOKEN")),
-                "github": bool(self._secrets and self._secrets.get("GITHUB_TOKEN")),
+                "openai": _has("OPENAI_API_KEY"),
+                "anthropic": _has("ANTHROPIC_API_KEY"),
+                "deepseek": _has("DEEPSEEK_API_KEY"),
+                "gemini": _has("GOOGLE_GENERATIVE_AI_API_KEY"),
+                "v0": _has("V0_API_KEY"),
+                "replicate": _has("REPLICATE_API_KEY"),
+                "tavily": _has("TAVILY_API_KEY"),
+                "railway": _has("RAILWAY_API_KEY"),
+                "vercel": _has("VERCEL_TOKEN"),
+                "github": _has("GITHUB_TOKEN"),
+                "brevo": _has("BREVO_API_KEY"),
+                "stripe": _has("STRIPE_SECRET_KEY"),
             }
             return VaultStatus(
                 has_vault=self.has_vault(),
@@ -238,6 +253,7 @@ class SecretVault:
                 "iterations": iterations,
             },
             "ciphertext": ciphertext,
+            "stored_keys": sorted(normalized.keys()),
         }
         self._path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         self._secrets = dict(normalized)

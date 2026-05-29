@@ -139,9 +139,7 @@ export function ClientDemoPage({ token }: ClientDemoPageProps) {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
       <header className="mb-8 text-center">
-        <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-cyber-violet">
-          CyberForge
-        </p>
+        <p className="cf-section-label">Démo client</p>
         <h1 className="mt-2 text-xl font-bold text-cyber-neon">{title}</h1>
         {expiresAt && !expired ? (
           <p className="mt-2 text-xs text-cyber-muted">

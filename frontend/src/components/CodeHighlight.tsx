@@ -61,12 +61,12 @@ function tokenizeLine(line: string): Token[] {
 }
 
 const KIND_CLASS: Record<TokenKind, string> = {
-  plain: "text-cyber-text",
-  keyword: "text-cyber-violet",
-  string: "text-green-400",
-  comment: "text-cyber-muted italic",
-  tag: "text-cyber-neon",
-  number: "text-amber-400",
+  plain: "text-cf-text",
+  keyword: "text-cf-gold",
+  string: "text-cf-success",
+  comment: "text-cf-muted italic",
+  tag: "text-cf-info",
+  number: "text-cf-alert",
 };
 
 interface CodeHighlightProps {

@@ -16,6 +16,10 @@ export interface ClientRecord {
   company: string | null;
   email: string | null;
   phone: string | null;
+  address: string | null;
+  siret: string | null;
+  active: boolean;
+  legal_client_id: string | null;
   primary_color: string | null;
   logo_url: string | null;
   created_at: string;
@@ -51,6 +55,9 @@ export interface ClientPayload {
   company?: string | null;
   email?: string | null;
   phone?: string | null;
+  address?: string | null;
+  siret?: string | null;
+  active?: boolean;
   primary_color?: string | null;
   logo_url?: string | null;
 }

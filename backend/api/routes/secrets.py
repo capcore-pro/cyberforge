@@ -7,14 +7,59 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from config import get_settings
+from config import Settings, get_settings, plain_secret_str, refresh_settings
+from security.env_file import upsert_env_vars
 from security.llm_secrets import llm_provider_flags
 from security.secret_vault import (
     VaultInvalidPasswordError,
     get_secret_vault,
 )
+from tools.api_key_tester import test_api_key
 
 router = APIRouter(tags=["secrets"])
+
+_PROVIDER_ENV: dict[str, tuple[str, str]] = {
+    "anthropic": ("ANTHROPIC_API_KEY", "anthropic_api_key"),
+    "deepseek": ("DEEPSEEK_API_KEY", "deepseek_api_key"),
+    "v0": ("V0_API_KEY", "v0_api_key"),
+    "replicate": ("REPLICATE_API_KEY", "replicate_api_key"),
+    "tavily": ("TAVILY_API_KEY", "tavily_api_key"),
+    "railway": ("RAILWAY_API_KEY", "railway_api_key"),
+    "vercel": ("VERCEL_TOKEN", "vercel_token"),
+    "github": ("GITHUB_TOKEN", "github_token"),
+    "brevo": ("BREVO_API_KEY", "brevo_api_key"),
+    "stripe": ("STRIPE_SECRET_KEY", "stripe_secret_key"),
+}
+
+
+def _resolve_api_key(provider: str, override: str | None, settings: Settings) -> str | None:
+    key = (provider or "").strip().lower()
+    if override and override.strip():
+        return override.strip()
+    mapping = _PROVIDER_ENV.get(key)
+    if not mapping:
+        return None
+    env_name, field_name = mapping
+    vault_val = get_secret_vault().peek(env_name)
+    if vault_val:
+        return vault_val
+    raw = getattr(settings, field_name, None)
+    text = plain_secret_str(raw)
+    return text or None
+
+
+def _merge_configured_flags(
+    vault_configured: dict[str, bool],
+    settings: Settings,
+) -> dict[str, bool]:
+    merged = dict(vault_configured)
+    for provider, (_, field_name) in _PROVIDER_ENV.items():
+        if merged.get(provider):
+            continue
+        raw = getattr(settings, field_name, None)
+        if plain_secret_str(raw):
+            merged[provider] = True
+    return merged
 
 
 class UnlockRequest(BaseModel):
@@ -33,6 +78,18 @@ class SaveSecretsRequest(BaseModel):
     railway_api_key: str | None = None
     vercel_token: str | None = None
     github_token: str | None = None
+    brevo_api_key: str | None = None
+    stripe_secret_key: str | None = None
+
+
+class TestSecretRequest(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=32)
+    api_key: str | None = Field(default=None, max_length=512)
+
+
+class TestSecretResponse(BaseModel):
+    valid: bool
+    message: str
 
 
 class ChangeMasterPasswordRequest(BaseModel):
@@ -45,10 +102,11 @@ async def secrets_status() -> dict[str, object]:
     vault = get_secret_vault()
     status = vault.status()
     settings = get_settings()
+    configured = _merge_configured_flags(status.configured, settings)
     return {
         "has_vault": status.has_vault,
         "locked": status.locked,
-        "configured": status.configured,
+        "configured": configured,
         "effective": llm_provider_flags(settings),
         "vault_path": str(vault.path),
     }
@@ -99,6 +157,16 @@ async def secrets_change_password(body: ChangeMasterPasswordRequest) -> dict[str
     }
 
 
+@router.post("/secrets/test", response_model=TestSecretResponse)
+async def secrets_test(body: TestSecretRequest) -> TestSecretResponse:
+    settings = get_settings()
+    token = _resolve_api_key(body.provider, body.api_key, settings)
+    if not token:
+        return TestSecretResponse(valid=False, message="Clé manquante")
+    valid, message = test_api_key(body.provider, token)
+    return TestSecretResponse(valid=valid, message=message)
+
+
 @router.post("/secrets/save")
 async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
     vault = get_secret_vault()
@@ -116,18 +184,30 @@ async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
                 "RAILWAY_API_KEY": body.railway_api_key,
                 "VERCEL_TOKEN": body.vercel_token,
                 "GITHUB_TOKEN": body.github_token,
+                "BREVO_API_KEY": body.brevo_api_key,
+                "STRIPE_SECRET_KEY": body.stripe_secret_key,
             },
         )
     except VaultInvalidPasswordError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
+    env_updates: dict[str, str | None] = {}
+    if body.brevo_api_key and body.brevo_api_key.strip():
+        env_updates["BREVO_API_KEY"] = body.brevo_api_key.strip()
+    if body.stripe_secret_key and body.stripe_secret_key.strip():
+        env_updates["STRIPE_SECRET_KEY"] = body.stripe_secret_key.strip()
+    if env_updates:
+        upsert_env_vars(env_updates)
+        refresh_settings()
+
     status = vault.status()
     settings = get_settings()
+    configured = _merge_configured_flags(status.configured, settings)
     return {
         "ok": True,
         "has_vault": status.has_vault,
         "locked": status.locked,
-        "configured": status.configured,
+        "configured": configured,
         "effective": llm_provider_flags(settings),
     }
 

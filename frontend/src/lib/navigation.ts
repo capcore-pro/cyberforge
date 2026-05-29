@@ -3,16 +3,10 @@ export type AppPage =
   | "dashboard"
   | "cockpit"
   | "media_library"
-  | "legal"
+  | "accounting"
   | "newsletter"
-  | "stripe"
   | "generator"
   | "projects"
-  | "vitrines"
-  | "application_web"
-  | "extensions"
-  | "site_reservation"
-  | "ecommerce"
   | "clients"
   | "perso"
   | "agents"
@@ -32,21 +26,10 @@ export const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Tableau de bord", icon: "◈", enabled: true },
   { id: "cockpit", label: "Cockpit", icon: "◐", enabled: true },
   { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
-  { id: "legal", label: "Légal", icon: "⚖", enabled: true },
+  { id: "accounting", label: "Comptabilité", icon: "€", enabled: true },
   { id: "newsletter", label: "Newsletter", icon: "✉", enabled: true },
-  { id: "stripe", label: "Stripe", icon: "$", enabled: true },
   { id: "generator", label: "Générateur", icon: "⚡", enabled: true },
   { id: "projects", label: "Projets", icon: "▤", enabled: true },
-  { id: "vitrines", label: "Vitrines", icon: "▦", enabled: true },
-  {
-    id: "application_web",
-    label: "Applications web",
-    icon: "▣",
-    enabled: true,
-  },
-  { id: "extensions", label: "Extensions", icon: "⬢", enabled: true },
-  { id: "site_reservation", label: "Réservation", icon: "◷", enabled: true },
-  { id: "ecommerce", label: "E-commerce", icon: "▧", enabled: true },
   { id: "clients", label: "Clients", icon: "◎", enabled: true },
   { id: "perso", label: "Perso", icon: "◉", enabled: true },
   { id: "agents", label: "Agents", icon: "◇", enabled: false },

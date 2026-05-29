@@ -1,0 +1,59 @@
+/**
+ * CyberForge — thème premium noir / or
+ */
+:root {
+  /* Fonds */
+  --cf-bg-main: #0d0d0d;
+  --cf-bg-sidebar: #111111;
+  --cf-bg-card: #111111;
+  --cf-bg-secondary: #161616;
+  --cf-bg-active: #1c1a12;
+
+  /* Bordures */
+  --cf-border: #222222;
+  --cf-border-input: #2a2a2a;
+
+  /* Or */
+  --cf-gold: #c9a84c;
+  --cf-gold-hover: #e0be6a;
+  --cf-gold-subtle: #1c1a12;
+
+  /* Texte */
+  --cf-text-primary: #f0f0f0;
+  --cf-text-body: #cccccc;
+  --cf-text-secondary: #888888;
+  --cf-text-tertiary: #444444;
+  --cf-text-label: #666666;
+
+  /* Sémantique */
+  --cf-success: #4caf50;
+  --cf-alert: #e8a020;
+  --cf-info: #5b8dd9;
+
+  /* Typographie */
+  --cf-font-size-body: 13px;
+  --cf-font-size-label: 11px;
+  --cf-letter-spacing-label: 0.06em;
+
+  /* Rayons */
+  --cf-radius-card: 10px;
+  --cf-radius-control: 8px;
+
+  /* Scrollbar */
+  --cf-scrollbar: #2a2a2a;
+  --cf-scrollbar-track: transparent;
+
+  /* Compatibilité classes Tailwind `cyber-*` */
+  --cyber-bg: var(--cf-bg-main);
+  --cyber-surface: var(--cf-bg-card);
+  --cyber-surface-alt: var(--cf-bg-sidebar);
+  --cyber-border: var(--cf-border);
+  --cyber-border-glow: var(--cf-gold);
+  --cyber-accent: var(--cf-gold);
+  --cyber-accent-muted: var(--cf-gold-hover);
+  --cyber-violet: var(--cf-gold);
+  --cyber-violet-muted: var(--cf-gold-hover);
+  --cyber-neon: var(--cf-gold);
+  --cyber-text: var(--cf-text-primary);
+  --cyber-muted: var(--cf-text-secondary);
+}

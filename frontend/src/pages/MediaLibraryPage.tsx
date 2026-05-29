@@ -205,13 +205,9 @@ export function MediaLibraryPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <header className="mb-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyber-violet">
-          Assets
-        </p>
-        <h1 className="cyber-glitch-title mt-1 text-2xl font-bold text-cyber-text md:text-3xl">
-          Médiathèque
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-cyber-muted">
+        <p className="cf-section-label">Ressources</p>
+        <h1 className="cf-page-title mt-1">Médiathèque</h1>
+        <p className="mt-2 max-w-2xl text-sm text-cf-muted">
           Images générées (Replicate, Unsplash), uploads manuels et synchronisation Cloudflare R2.
         </p>
       </header>

@@ -1,8 +1,9 @@
+@import "./theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Styles globaux CyberForge */
 @layer base {
   html,
   body,
@@ -11,116 +12,141 @@
   }
 
   body {
-    @apply bg-cyber-bg text-cyber-text font-sans;
+    font-size: var(--cf-font-size-body);
+    color: var(--cf-text-body);
+    background-color: var(--cf-bg-main);
+    @apply font-sans antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--cf-text-primary);
+    font-weight: 500;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cf-scrollbar) var(--cf-scrollbar-track);
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--cf-scrollbar-track);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--cf-scrollbar);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #3a3a3a;
   }
 }
 
 @layer components {
+  .cf-section-label {
+    font-size: var(--cf-font-size-label);
+    font-weight: 500;
+    letter-spacing: var(--cf-letter-spacing-label);
+    text-transform: uppercase;
+    color: var(--cf-text-label);
+  }
+
+  .cf-page-title,
+  .cyber-glitch-title {
+    @apply text-2xl font-medium tracking-tight text-cf-text md:text-3xl lg:text-4xl;
+  }
+
+  .cf-subtabs {
+    @apply mb-6 flex flex-wrap gap-2 border-b border-cf-border pb-3;
+  }
+
+  .cf-subtab {
+    @apply rounded-control border border-transparent px-4 py-2 text-label font-medium uppercase text-cf-muted transition;
+  }
+
+  .cf-subtab-active {
+    @apply border-cf-border-input bg-cf-active text-cf-gold;
+  }
+
+  .cf-subtab:hover:not(.cf-subtab-active) {
+    @apply border-cf-border text-cf-text;
+  }
+
   .cyber-panel {
-    @apply rounded-lg border border-cyber-border bg-cyber-surface p-4 shadow-lg;
+    @apply rounded-card border border-cf-border-input bg-cf-card p-4 shadow-card;
   }
 
   .cyber-btn {
-    @apply rounded-md bg-cyber-accent px-4 py-2 text-sm font-medium text-cyber-bg transition hover:bg-cyber-accentMuted;
+    @apply rounded-control bg-cf-gold px-4 py-2 text-sm font-medium text-black transition hover:bg-cf-gold-hover;
   }
 
   .cyber-sidebar {
-    @apply flex w-56 shrink-0 flex-col border-r border-cyber-border bg-cyber-surfaceAlt;
+    @apply flex w-56 shrink-0 flex-col border-r border-cf-border bg-cf-sidebar;
   }
 
   .cyber-nav-item {
-    @apply flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-cyber-muted transition;
+    @apply flex items-center gap-3 rounded-control px-3 py-2.5 text-sm text-cf-muted transition;
   }
 
   .cyber-nav-item-active {
-    @apply border border-cyber-borderGlow bg-cyber-surface text-cyber-neon shadow-neonCyan;
+    @apply bg-cf-active text-cf-gold;
   }
 
-  .cyber-nav-item:hover:not(:disabled) {
-    @apply border border-cyber-border bg-cyber-surface text-cyber-text;
+  .cyber-nav-item-active span[aria-hidden] {
+    color: var(--cf-gold);
   }
 
-  .cyber-glitch-title {
-    @apply relative inline-block font-bold tracking-widest text-transparent;
-    text-shadow:
-      0 0 10px rgba(34, 211, 238, 0.8),
-      0 0 30px rgba(168, 85, 247, 0.5);
-    background: linear-gradient(90deg, #22d3ee, #a855f7, #06b6d4);
-    background-clip: text;
-    -webkit-background-clip: text;
-  }
-
-  .cyber-glitch-title::before,
-  .cyber-glitch-title::after {
-    content: attr(data-text);
-    @apply absolute left-0 top-0 w-full overflow-hidden;
-    background: inherit;
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-  }
-
-  .cyber-glitch-title::before {
-    left: 2px;
-    text-shadow: -2px 0 #a855f7;
-    animation: glitch 3s infinite reverse;
-    clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
-  }
-
-  .cyber-glitch-title::after {
-    left: -2px;
-    text-shadow: 2px 0 #22d3ee;
-    animation: glitch 2.5s infinite;
-    clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+  .cyber-nav-item:hover:not(:disabled):not(.cyber-nav-item-active) {
+    @apply bg-cf-secondary text-cf-text;
   }
 
   .cyber-agent-card {
-    @apply relative overflow-hidden rounded-lg border border-cyber-border bg-cyber-surface p-4 shadow-card transition duration-300;
+    @apply relative overflow-hidden rounded-card border border-cf-border-input bg-cf-card p-4 shadow-card transition duration-200;
   }
 
   .cyber-agent-card:hover {
-    @apply border-cyber-violet shadow-neonViolet;
-    transform: translateY(-2px);
-  }
-
-  .cyber-agent-card::before {
-    content: "";
-    @apply pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyber-neon to-transparent opacity-60;
+    @apply border-cf-gold/40;
+    transform: translateY(-1px);
   }
 
   .cyber-status-ring {
-    @apply relative flex h-16 w-16 items-center justify-center rounded-full border-2;
-  }
-
-  .cyber-scanline {
-    @apply pointer-events-none absolute inset-0 overflow-hidden opacity-[0.07];
-  }
-
-  .cyber-scanline::after {
-    content: "";
-    @apply absolute inset-x-0 h-24 w-full bg-gradient-to-b from-transparent via-cyber-neon to-transparent;
-    animation: scan 4s linear infinite;
+    @apply relative flex h-16 w-16 items-center justify-center rounded-full border-2 border-cf-border;
   }
 
   .cyber-prompt-field {
-    @apply w-full resize-y rounded-lg border border-cyber-violet/30 bg-cyber-bg/90 px-4 py-3 font-mono text-sm text-cyber-text shadow-[inset_0_0_24px_rgba(168,85,247,0.08)] transition;
-    @apply placeholder:text-cyber-muted/40 focus:border-cyber-neon focus:outline-none focus:ring-2 focus:ring-cyber-accent/30;
+    @apply w-full resize-y rounded-control border border-cf-border-input bg-cf-secondary px-4 py-3 text-sm text-cf-text transition;
+    @apply placeholder:text-cf-tertiary focus:border-cf-gold focus:outline-none focus:ring-1 focus:ring-cf-gold/30;
+  }
+
+  .cyber-input {
+    @apply rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text transition;
+    @apply placeholder:text-cf-tertiary focus:border-cf-gold focus:outline-none focus:ring-1 focus:ring-cf-gold/30;
   }
 
   .cyber-type-pill {
-    @apply rounded-lg border border-cyber-border bg-cyber-bg/60 px-3 py-2.5 text-left transition;
+    @apply rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2.5 text-left transition;
   }
 
   .cyber-type-pill-active {
-    @apply border-cyber-neon bg-gradient-to-br from-cyber-violet/20 to-cyber-accent/10 shadow-neonCyan;
+    @apply border-cf-gold/50 bg-cf-active text-cf-gold;
   }
 
   .cyber-type-pill:hover:not(:disabled) {
-    @apply border-cyber-violet/50 bg-cyber-surface;
+    @apply border-cf-border-input bg-cf-card;
   }
 
   .cyber-generate-btn {
-    @apply relative overflow-hidden rounded-lg bg-gradient-to-r from-cyber-violet to-cyber-accent px-6 py-3 text-sm font-bold uppercase tracking-wider text-cyber-bg shadow-neonCyan transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply relative overflow-hidden rounded-control bg-cf-gold px-6 py-3 text-sm font-medium text-black transition hover:bg-cf-gold-hover disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .cyber-generate-btn-loading::after {
@@ -130,24 +156,28 @@
   }
 
   .cyber-metric-tile {
-    @apply rounded-lg border border-cyber-border bg-cyber-bg/70 p-3 backdrop-blur-sm;
+    @apply rounded-card border border-cf-border-input bg-cf-secondary p-3;
   }
 
   .cyber-metric-tile-highlight {
-    @apply border-cyber-accent/40 shadow-[0_0_16px_rgba(6,182,212,0.15)];
+    @apply border-cf-gold/40;
   }
 
   .cyber-action-btn {
-    @apply rounded-md border border-cyber-border bg-cyber-bg/80 px-3 py-2 text-xs font-medium text-cyber-text transition hover:border-cyber-violet disabled:cursor-not-allowed disabled:opacity-40;
+    @apply rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-xs font-medium text-cf-text transition hover:border-cf-gold/50 disabled:cursor-not-allowed disabled:opacity-40;
   }
 
   .cyber-action-btn-primary {
-    @apply border-cyber-accent/50 text-cyber-neon hover:border-cyber-neon hover:bg-cyber-accent/10;
+    @apply border-cf-gold bg-cf-gold text-black hover:bg-cf-gold-hover hover:border-cf-gold-hover;
   }
 
   .cyber-contact-toast {
-    @apply pointer-events-auto fixed right-6 top-6 z-50 max-w-sm rounded-lg border border-cyber-borderGlow bg-cyber-surface px-4 py-3 shadow-neonCyan;
+    @apply pointer-events-auto fixed right-6 top-6 z-50 max-w-sm rounded-card border border-cf-border-input bg-cf-card px-4 py-3 shadow-card;
     animation: contact-toast-in 0.35s ease-out;
+  }
+
+  .cyber-code-viewer {
+    @apply rounded-card border border-cf-border-input bg-cf-secondary;
   }
 }
 

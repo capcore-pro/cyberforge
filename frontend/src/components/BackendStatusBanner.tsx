@@ -10,7 +10,7 @@ export function BackendStatusBanner() {
 
   return (
     <div
-      className="shrink-0 border-b border-amber-400/40 bg-amber-400/10 px-4 py-2 text-center text-xs text-amber-200"
+      className="shrink-0 border-b border-cf-alert/30 bg-cf-alert/10 px-4 py-2 text-center text-xs text-cf-alert"
       role="status"
     >
       Backend hors ligne — reconnexion automatique toutes les 3&nbsp;s. Les actions

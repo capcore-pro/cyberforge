@@ -22,6 +22,8 @@ from api.routes import (
     public_ecommerce,
     public_reservation,
     secrets,
+    settings_profile,
+    system,
     vitrine,
     vitrine_auth,
 )
@@ -42,6 +44,8 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
     (managed_ecommerce.router, "/api"),
     (clients.router, "/api"),
     (secrets.router, "/api"),
+    (settings_profile.router, "/api"),
+    (system.router, "/api"),
     (demos.router, "/api"),
     (notifications.router, "/api"),
     (vitrine.router, "/api"),

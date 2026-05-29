@@ -86,8 +86,14 @@ export async function createClientDemo(body: CreateDemoPayload) {
   });
 }
 
+export interface DemoIdByGenerationResponse {
+  demo_id: string | null;
+  url?: string | null;
+  unlock_url?: string | null;
+}
+
 export async function findDemoIdByGeneration(generationId: string) {
-  return apiRequest<{ demo_id: string | null }>({
+  return apiRequest<DemoIdByGenerationResponse>({
     method: "GET",
     path: `${API_PREFIX}/demos/by-generation/${generationId}`,
   });

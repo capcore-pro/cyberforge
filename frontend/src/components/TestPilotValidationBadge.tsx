@@ -29,7 +29,7 @@ export function TestPilotValidationBadge({
           : "border-amber-400/50 bg-amber-400/10"
       }`}
       role="status"
-      aria-label={`Validation TestPilotAI : ${label}`}
+      aria-label={`Contrôle qualité : ${label}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span
@@ -37,7 +37,7 @@ export function TestPilotValidationBadge({
             isValidated ? "text-green-400" : "text-amber-400"
           }`}
         >
-          TestPilotAI
+          Contrôle qualité
         </span>
         <span
           className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${

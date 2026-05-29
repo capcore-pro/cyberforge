@@ -26,7 +26,7 @@ export function ContactNotificationToast() {
       <p className="text-sm font-medium text-cyber-text">{latestToast}</p>
       <button
         type="button"
-        className="mt-2 text-xs text-cyber-muted underline hover:text-cyber-neon"
+        className="mt-2 text-xs text-cf-muted underline hover:text-cf-gold"
         onClick={dismissToast}
       >
         Fermer

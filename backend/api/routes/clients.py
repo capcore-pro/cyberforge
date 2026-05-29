@@ -27,6 +27,44 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["clients"])
 
 
+def _sync_legal_client(
+    *,
+    name: str,
+    email: str | None,
+    phone: str | None,
+    address: str | None,
+    siret: str | None,
+    legal_client_id: str | None,
+) -> str | None:
+    """Crée ou met à jour la fiche légale SQLite liée (devis / factures)."""
+    try:
+        import legal_db
+
+        legal_db.init_legal_db()
+        email_clean = (email or "").strip() or "contact@capcore.local"
+        if legal_client_id:
+            legal_db.update_client(
+                legal_client_id,
+                name=name.strip(),
+                email=email_clean,
+                phone=phone,
+                address=address,
+                siret=siret,
+            )
+            return legal_client_id
+        created = legal_db.add_client(
+            name=name.strip(),
+            email=email_clean,
+            phone=phone,
+            address=address,
+            siret=siret,
+        )
+        return str(created["id"])
+    except Exception:
+        logger.exception("Sync fiche légale client échouée")
+        return legal_client_id
+
+
 class ClientCreateRequest(BaseModel):
     kind: ClientKind = Field(
         default="client",
@@ -36,6 +74,9 @@ class ClientCreateRequest(BaseModel):
     company: str | None = Field(default=None, max_length=200)
     email: str | None = Field(default=None, max_length=200)
     phone: str | None = Field(default=None, max_length=40)
+    address: str | None = Field(default=None, max_length=500)
+    siret: str | None = Field(default=None, max_length=20)
+    active: bool = True
     primary_color: str | None = Field(default=None, max_length=16)
     logo_url: str | None = Field(default=None, max_length=600_000)
 
@@ -45,6 +86,9 @@ class ClientUpdateRequest(BaseModel):
     company: str | None = Field(default=None, max_length=200)
     email: str | None = Field(default=None, max_length=200)
     phone: str | None = Field(default=None, max_length=40)
+    address: str | None = Field(default=None, max_length=500)
+    siret: str | None = Field(default=None, max_length=20)
+    active: bool | None = None
     primary_color: str | None = Field(default=None, max_length=16)
     logo_url: str | None = Field(default=None, max_length=600_000)
 
@@ -96,11 +140,23 @@ async def create_client(body: ClientCreateRequest) -> ClientRow:
     if not store.is_configured():
         raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
     try:
+        legal_id = _sync_legal_client(
+            name=body.name,
+            email=body.email,
+            phone=body.phone,
+            address=body.address,
+            siret=body.siret,
+            legal_client_id=None,
+        )
         return await store.create_client(
             name=body.name,
             company=body.company,
             email=body.email,
             phone=body.phone,
+            address=body.address,
+            siret=body.siret,
+            active=body.active,
+            legal_client_id=legal_id,
             primary_color=body.primary_color,
             logo_url=body.logo_url,
             kind=body.kind,
@@ -162,12 +218,35 @@ async def update_client(client_id: str, body: ClientUpdateRequest) -> ClientRow:
     if not store.is_configured():
         raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
     try:
+        existing = await store.get_by_id(client_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Client introuvable.")
+
+        merged_name = body.name if body.name is not None else existing.name
+        merged_email = body.email if body.email is not None else existing.email
+        merged_phone = body.phone if body.phone is not None else existing.phone
+        merged_address = body.address if body.address is not None else existing.address
+        merged_siret = body.siret if body.siret is not None else existing.siret
+
+        legal_id = _sync_legal_client(
+            name=merged_name,
+            email=merged_email,
+            phone=merged_phone,
+            address=merged_address,
+            siret=merged_siret,
+            legal_client_id=existing.legal_client_id,
+        )
+
         updated = await store.update_client(
             client_id,
             name=body.name,
             company=body.company,
             email=body.email,
             phone=body.phone,
+            address=body.address,
+            siret=body.siret,
+            active=body.active,
+            legal_client_id=legal_id,
             primary_color=body.primary_color,
             logo_url=body.logo_url,
         )

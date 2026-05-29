@@ -424,6 +424,8 @@ async def create_client_demo(body: CreateDemoRequest) -> CreateDemoResponse:
 
 class DemoIdResponse(BaseModel):
     demo_id: str | None = None
+    url: str | None = None
+    unlock_url: str | None = None
 
 
 @router.get(
@@ -441,7 +443,13 @@ async def demo_id_for_generation(generation_id: str) -> DemoIdResponse:
     except SupabaseStoreError as exc:
         raise _http_error_from_supabase(exc, "GET /demos/by-generation/{id}") from exc
 
-    return DemoIdResponse(demo_id=row.id if row else None)
+    if row is None:
+        return DemoIdResponse()
+    return DemoIdResponse(
+        demo_id=row.id,
+        url=public_demo_url_for_token(row.token).rstrip("/"),
+        unlock_url=unlock_demo_url(row.token),
+    )
 
 
 class UpdateDemoStatusRequest(BaseModel):
