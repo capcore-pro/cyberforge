@@ -264,6 +264,39 @@ class ExportAgent(BaseAgent):
         if project_id and provider == "railway" and production_url:
             maybe_track_cost(project_id, "railway", {"requests": 1})
 
+        display_name = (
+            plan.project_type_label
+            or analysis.project_type_label
+            or project_name
+        )
+
+        from routers.notifications import notify
+
+        if success and production_url:
+            try:
+                await notify(
+                    "Projet livré ✅",
+                    "project_delivered",
+                    "success",
+                    f"{display_name} déployé sur {production_url}",
+                    project_id,
+                    display_name,
+                )
+            except Exception as exc:
+                logger.warning("Notification livraison ignorée : %s", exc)
+        elif not success:
+            try:
+                await notify(
+                    "Erreur de déploiement",
+                    "deploy_error",
+                    "error",
+                    message or "Export sans URL de production.",
+                    project_id,
+                    display_name,
+                )
+            except Exception as exc:
+                logger.warning("Notification erreur déploiement ignorée : %s", exc)
+
         newsletter_triggered = False
         if success and project_id:
             try:

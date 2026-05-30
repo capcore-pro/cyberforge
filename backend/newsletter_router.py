@@ -393,6 +393,19 @@ async def send_newsletter_to_all(email_id: str) -> dict[str, Any]:
     now = _utc_now()
     db.update_email(email_id, status="sent", sent_at=now)
 
+    if sent > 0:
+        from routers.notifications import notify
+
+        try:
+            await notify(
+                "Newsletter envoyée 📧",
+                "newsletter_sent",
+                "info",
+                f"Campagne envoyée à {sent} contacts",
+            )
+        except Exception as exc:
+            logger.warning("Notification newsletter ignorée : %s", exc)
+
     return {
         "email_id": email_id,
         "recipients": len(contacts),

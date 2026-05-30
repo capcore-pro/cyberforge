@@ -395,6 +395,28 @@ def _handle_checkout_completed(event: dict[str, Any], fallback_project_id: str |
             customer_email=email,
             description="Checkout Stripe",
         )
+        from routers.notifications import schedule_notify
+
+        client_name = None
+        if isinstance(details, dict):
+            client_name = details.get("name")
+        client_name = (
+            (str(client_name).strip() if client_name else "")
+            or (email or "")
+            or "Client"
+        )
+        amount_label = (
+            f"{amount_eur:.0f}€"
+            if amount_eur == int(amount_eur)
+            else f"{amount_eur:.2f}€"
+        )
+        schedule_notify(
+            "Paiement reçu 💳",
+            "payment_received",
+            "success",
+            f"{amount_label} — {client_name}",
+            ctx.project_id,
+        )
 
     if mode == "subscription":
         sub_stripe_id = str(session.get("subscription") or "")

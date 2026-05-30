@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   fetchNewsletterContacts,
@@ -151,6 +152,16 @@ export function NewsletterBroadcastPanel() {
       </div>
 
       <div className="cyber-panel flex min-h-[320px] flex-col border-cyber-border p-4">
+        {draft ? (
+          <BackButton
+            className="mb-3 self-start"
+            onClick={() => {
+              setDraft(null);
+              setMessage(null);
+              setError(null);
+            }}
+          />
+        ) : null}
         <h3 className="mb-2 text-sm font-bold uppercase tracking-wider text-cyber-muted">
           Aperçu HTML
         </h3>

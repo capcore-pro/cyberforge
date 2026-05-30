@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ProjectRecord } from "@shared/types";
+import { BackButton } from "@/components/BackButton";
 import { DocumentFormModal, type DocumentFormValues } from "@/components/legal/DocumentFormModal";
 import {
   DOCUMENT_STATUS_OPTIONS,
@@ -441,6 +442,7 @@ export function DocumentsTab({
       {projectPickerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
           <div className="cyber-panel w-full max-w-md border-cyber-violet/40">
+            <BackButton className="mb-3" onClick={() => setProjectPickerOpen(false)} />
             <h3 className="text-base font-semibold text-cyber-text">
               Devis depuis un projet
             </h3>
@@ -483,6 +485,7 @@ export function DocumentsTab({
       {sendDoc ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
           <div className="cyber-panel w-full max-w-lg border-cyber-neon/30">
+            <BackButton className="mb-3" onClick={() => setSendDoc(null)} />
             <h3 className="text-base font-semibold text-cyber-text">
               Envoyer {sendDoc.number}
             </h3>
@@ -518,6 +521,7 @@ export function DocumentsTab({
       {signedDevisPickerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
           <div className="cyber-panel w-full max-w-md border-cyber-violet/40">
+            <BackButton className="mb-3" onClick={() => setSignedDevisPickerOpen(false)} />
             <h3 className="text-base font-semibold text-cyber-text">
               Convertir en facture
             </h3>
@@ -581,6 +585,7 @@ export function DocumentsTab({
       {statusDoc ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
           <div className="cyber-panel w-full max-w-sm border-cyber-border">
+            <BackButton className="mb-3" onClick={() => setStatusDoc(null)} />
             <h3 className="text-base font-semibold text-cyber-text">
               Statut — {statusDoc.number}
             </h3>

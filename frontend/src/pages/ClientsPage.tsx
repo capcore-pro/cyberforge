@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BackButton } from "@/components/BackButton";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import {
   DocumentFormModal,
@@ -79,19 +80,6 @@ const DEMO_STATUS_CLASS: Record<DemoStatusSlug, string> = {
   validee: "text-cf-success",
   expiree: "text-cf-muted",
 };
-
-function BackButton({ onClick, label = "Retour" }: { onClick: () => void; label?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mb-4 inline-flex items-center gap-1.5 text-sm text-cf-muted transition hover:text-cf-gold"
-    >
-      <span aria-hidden>←</span>
-      {label}
-    </button>
-  );
-}
 
 function ClientCard({
   client,
@@ -453,6 +441,7 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
       {view === "form" ? (
         <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
           <BackButton
+            className="mb-4"
             onClick={() => {
               if (isNew) openList();
               else if (selectedId) {
@@ -547,7 +536,7 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
 
       {view === "detail" && selectedClient ? (
         <section className="space-y-6">
-          <BackButton onClick={openList} label="Retour à la liste" />
+          <BackButton className="mb-4" onClick={openList} />
 
           <div className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
             <div className="flex flex-wrap items-start justify-between gap-4">

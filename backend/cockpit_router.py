@@ -168,6 +168,32 @@ async def _run_sync(service_id: str) -> dict[str, Any]:
     return await loop.run_in_executor(_sync_pool, _sync_service_blocking, service_id)
 
 
+async def _notify_low_balance_from_sync(result: dict[str, Any]) -> None:
+    alerts = result.get("alerts_created") or []
+    if not alerts:
+        return
+
+    from routers.notifications import notify
+
+    service_id = str(result.get("service_id") or "")
+    service = db.get_service(service_id) if service_id else None
+    service_name = str(
+        (service or {}).get("name") or service_id or "Service API"
+    )
+    balance = float(result.get("balance_eur") or 0)
+    balance_label = f"{balance:.2f} €" if balance != int(balance) else f"{int(balance)} €"
+
+    try:
+        await notify(
+            "Solde API bas ⚠️",
+            "api_balance_low",
+            "warning",
+            f"{service_name} : {balance_label} restant",
+        )
+    except Exception as exc:
+        logger.warning("Notification solde API ignorée : %s", exc)
+
+
 def _require_service(service_id: str) -> dict[str, Any]:
     service = db.get_service(service_id)
     if not service:
@@ -244,7 +270,9 @@ async def list_balances() -> list[dict[str, Any]]:
 
 @router.post("/services/{service_id}/sync")
 async def sync_service(service_id: str) -> dict[str, Any]:
-    return await _run_sync(service_id)
+    result = await _run_sync(service_id)
+    await _notify_low_balance_from_sync(result)
+    return result
 
 
 @router.post("/sync-all")
@@ -262,6 +290,7 @@ async def sync_all_enabled() -> dict[str, Any]:
             errors.append({"service_id": sid, "error": str(result)})
         else:
             synced.append(result)
+            await _notify_low_balance_from_sync(result)
     return {"synced": synced, "errors": errors, "count": len(synced)}
 
 

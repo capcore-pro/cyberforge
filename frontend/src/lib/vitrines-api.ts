@@ -59,3 +59,32 @@ export async function hardDeleteVitrine(projectId: string) {
   });
 }
 
+export interface VitrineAuthInfo {
+  enabled: boolean;
+  client_email: string | null;
+  password: string | null;
+}
+
+export async function fetchVitrineAuth(projectId: string) {
+  return apiRequest<VitrineAuthInfo>({
+    method: "GET",
+    path: `${API_PREFIX}/managed-projects/vitrines/${projectId}/auth`,
+  });
+}
+
+export async function toggleVitrineAuth(projectId: string, enabled: boolean) {
+  return apiRequest<VitrineAuthInfo>({
+    method: "POST",
+    path: `${API_PREFIX}/managed-projects/vitrines/${projectId}/auth`,
+    body: { enabled },
+  });
+}
+
+export async function regenerateVitrinePassword(projectId: string) {
+  return apiRequest<VitrineAuthInfo>({
+    method: "POST",
+    path: `${API_PREFIX}/managed-projects/vitrines/${projectId}/auth`,
+    body: { generate_password: true },
+  });
+}
+

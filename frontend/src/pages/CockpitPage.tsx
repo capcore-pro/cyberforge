@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   COCKPIT_CONNECTOR_OPTIONS,
@@ -326,6 +327,7 @@ function TopupModal({
         className="cyber-panel w-full max-w-md border-cyber-violet/40"
         style={serviceBorderStyle(service.color)}
       >
+        <BackButton className="mb-3" onClick={onClose} />
         <h2 id="topup-title" className="text-lg font-semibold text-cyber-text">
           Recharger — {service.name}
         </h2>
@@ -744,6 +746,15 @@ function SettingsSection({
           onSubmit={(e) => void handleCreate(e)}
           className="cyber-panel grid gap-4 sm:grid-cols-2"
         >
+          <div className="sm:col-span-2">
+            <BackButton
+              className="mb-1"
+              onClick={() => {
+                setShowForm(false);
+                setError(null);
+              }}
+            />
+          </div>
           <label className="block space-y-1 sm:col-span-2">
             <span className="text-[10px] uppercase tracking-wider text-cyber-muted">
               Nom

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { BackButton } from "@/components/BackButton";
 import { MediaAssetCard } from "@/components/media/MediaAssetCard";
 import {
   MediaFiltersBar,
@@ -63,6 +64,7 @@ function UploadModal({
       aria-labelledby="upload-title"
     >
       <div className="cyber-panel w-full max-w-lg border-cyber-neon/30">
+        <BackButton className="mb-3" onClick={onClose} />
         <h2 id="upload-title" className="text-lg font-semibold text-cyber-text">
           Uploader des fichiers
         </h2>

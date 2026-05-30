@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PasswordRevealField } from "@/components/PasswordRevealField";
 import type { CreateDemoResponse, DemoDuration } from "@/lib/demos-api";
 import { copyTextToClipboard } from "@/lib/generation-export";
 import { buildClientDemoGmailComposeUrl } from "@/lib/gmail-compose-url";
@@ -163,21 +164,7 @@ export function CreateDemoModal({
                   Copier le lien accès
                 </button>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-cyber-muted">
-                  Mot de passe
-                </p>
-                <p className="mt-1 font-mono text-lg tracking-wide text-cyber-neon">
-                  {created.password}
-                </p>
-                <button
-                  type="button"
-                  className="cyber-action-btn mt-2"
-                  onClick={() => void handleCopy("Mot de passe copié", created.password)}
-                >
-                  Copier le mot de passe
-                </button>
-              </div>
+              <PasswordRevealField password={created.password} />
               <p className="text-[10px] text-cyber-muted">
                 Expire le {formatExpiry(created.expires_at)} · {created.title}
               </p>

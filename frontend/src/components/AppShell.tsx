@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { BackendStatusBanner } from "@/components/BackendStatusBanner";
 import { ContactNotificationToast } from "@/components/ContactNotificationToast";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useContactNotifications } from "@/context/ContactNotificationsContext";
 import { useAgentsStatus } from "@/context/AgentsStatusContext";
 import { enabledAgentCount } from "@/lib/agent-preferences";
@@ -133,6 +134,9 @@ export function AppShell({
       </aside>
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-cf-main">
+        <header className="flex shrink-0 items-center justify-end border-b border-cf-border px-6 py-3 md:px-8">
+          <NotificationBell />
+        </header>
         <ContactNotificationToast />
         <BackendStatusBanner />
         <div className="relative flex-1 overflow-y-auto p-6 md:p-8">{children}</div>

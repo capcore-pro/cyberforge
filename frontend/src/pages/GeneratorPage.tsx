@@ -6,6 +6,7 @@ import { usePipelineActivity } from "@/context/PipelineActivityContext";
 import { CodeHighlight } from "@/components/CodeHighlight";
 import { CodeOutputActions } from "@/components/CodeOutputActions";
 import { CustomizePanel, cloneCustomization } from "@/components/CustomizePanel";
+import { BackButton } from "@/components/BackButton";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
 import { PipelineProgress, initialPipelineSteps } from "@/components/PipelineProgress";
@@ -895,7 +896,12 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                 ) : null}
 
                 {customizeOpen && customization ? (
-                  <CustomizePanel
+                  <>
+                    <BackButton
+                      className="mb-3"
+                      onClick={() => patch({ customizeOpen: false })}
+                    />
+                    <CustomizePanel
                     value={customization}
                     onChange={(next) => patch({ customization: next })}
                     previewHtml={livePreviewHtml ?? previewHtml}
@@ -908,6 +914,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
                       if (html) patch({ previewHtml: html });
                     }}
                   />
+                  </>
                 ) : null}
 
                 {hasOutput ? (

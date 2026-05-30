@@ -261,6 +261,9 @@ class Settings(BaseSettings):
     )
     brevo_sender_name: str = Field(default="CapCore", alias="BREVO_SENDER_NAME")
 
+    telegram_bot_token: SecretStr | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+    telegram_chat_id: str | None = Field(default=None, alias="TELEGRAM_CHAT_ID")
+
     stripe_secret_key: SecretStr | None = Field(
         default=None,
         alias="STRIPE_SECRET_KEY",

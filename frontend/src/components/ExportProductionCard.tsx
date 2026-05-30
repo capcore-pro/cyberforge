@@ -1,3 +1,4 @@
+import { PasswordRevealField } from "@/components/PasswordRevealField";
 import { buildClientDemoGmailComposeUrl } from "@/lib/gmail-compose-url";
 
 interface ExportProductionCardProps {
@@ -47,10 +48,7 @@ export function ExportProductionCard({
       </div>
       <p className="break-all font-mono text-sm text-cyber-neon">{openUrl}</p>
       {demoPassword ? (
-        <p className="text-xs text-cyber-muted">
-          Mot de passe démo :{" "}
-          <span className="font-mono text-cyber-text">{demoPassword}</span>
-        </p>
+        <PasswordRevealField password={demoPassword} label="Mot de passe démo" />
       ) : null}
       <div className="flex flex-wrap gap-2">
         <a

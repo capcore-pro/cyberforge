@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ProjectDetail } from "@/components/ProjectDetail";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import type { AppPage } from "@/lib/navigation";
 import {
@@ -46,6 +47,7 @@ function ProjectCard({
   project,
   onEdit,
   onView,
+  onDetail,
   onConvert,
   onDelete,
   deleteBusy,
@@ -53,6 +55,7 @@ function ProjectCard({
   project: UnifiedProject;
   onEdit: () => void;
   onView: () => void;
+  onDetail: () => void;
   onConvert: () => void;
   onDelete: () => void;
   deleteBusy: boolean;
@@ -96,6 +99,13 @@ function ProjectCard({
       </div>
 
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-4 opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <button
+          type="button"
+          onClick={onDetail}
+          className="w-full max-w-[200px] rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
+        >
+          Fiche projet
+        </button>
         <button
           type="button"
           onClick={onEdit}
@@ -151,6 +161,7 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
 
   const [deleteTarget, setDeleteTarget] = useState<UnifiedProject | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [detailProject, setDetailProject] = useState<UnifiedProject | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -325,6 +336,7 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
               project={project}
               onEdit={() => handleEdit(project)}
               onView={() => handleView(project)}
+              onDetail={() => setDetailProject(project)}
               onConvert={() => handleConvert(project)}
               onDelete={() => requestDelete(project)}
               deleteBusy={deleteBusy && deleteTarget?.key === project.key}
@@ -368,6 +380,18 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {detailProject ? (
+        <ProjectDetail
+          project={detailProject}
+          onClose={() => setDetailProject(null)}
+          onEdit={() => {
+            handleEdit(detailProject);
+            setDetailProject(null);
+          }}
+          onView={() => handleView(detailProject)}
+        />
       ) : null}
     </div>
   );

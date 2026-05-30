@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   createNewsletterContact,
@@ -105,6 +106,15 @@ export function NewsletterContactsPanel() {
           onSubmit={handleAdd}
           className="cyber-panel grid gap-3 border-cyber-neon/20 p-4 sm:grid-cols-2"
         >
+          <div className="sm:col-span-2">
+            <BackButton
+              className="mb-1"
+              onClick={() => {
+                setShowForm(false);
+                setForm(emptyForm);
+              }}
+            />
+          </div>
           <input
             className="cyber-input"
             placeholder="Nom *"

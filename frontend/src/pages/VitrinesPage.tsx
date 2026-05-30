@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PasswordRevealField } from "@/components/PasswordRevealField";
 import type { ManagedProjectRecord } from "@shared/types";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   createVitrine,
   deleteVitrine,
+  fetchVitrineAuth,
   hardDeleteVitrine,
   listVitrines,
+  regenerateVitrinePassword,
+  toggleVitrineAuth,
   updateVitrine,
+  type VitrineAuthInfo,
 } from "@/lib/vitrines-api";
 import { API_PREFIX } from "@shared/constants";
 import { apiRequest } from "@/lib/api-client";
@@ -73,12 +78,7 @@ export function VitrinesPage() {
   const [imagesResults, setImagesResults] = useState<UnsplashSearchItem[]>([]);
   const [imagesError, setImagesError] = useState<string | null>(null);
 
-  const [authById, setAuthById] = useState<
-    Record<
-      string,
-      { enabled: boolean; client_email: string | null; password: string | null }
-    >
-  >({});
+  const [authById, setAuthById] = useState<Record<string, VitrineAuthInfo>>({});
   const [authBusyId, setAuthBusyId] = useState<string | null>(null);
 
   const hasBuilding = useMemo(
@@ -238,15 +238,8 @@ export function VitrinesPage() {
   async function loadAuth(id: string) {
     setAuthBusyId(id);
     try {
-      const resp = await apiRequest<{
-        enabled: boolean;
-        client_email: string | null;
-        password: string | null;
-      }>({
-        method: "GET",
-        path: `${API_PREFIX}/managed-projects/vitrines/${id}/auth`,
-      });
-      if (resp.ok) {
+      const resp = await fetchVitrineAuth(id);
+      if (resp.ok && resp.data) {
         setAuthById((prev) => ({ ...prev, [id]: resp.data }));
       } else {
         setActionError(apiErrorMessage(resp, "Chargement mot de passe impossible."));
@@ -259,16 +252,8 @@ export function VitrinesPage() {
   async function toggleAuth(id: string, enabled: boolean) {
     setAuthBusyId(id);
     try {
-      const resp = await apiRequest<{
-        enabled: boolean;
-        client_email: string | null;
-        password: string | null;
-      }>({
-        method: "POST",
-        path: `${API_PREFIX}/managed-projects/vitrines/${id}/auth`,
-        body: { enabled },
-      });
-      if (resp.ok) {
+      const resp = await toggleVitrineAuth(id, enabled);
+      if (resp.ok && resp.data) {
         setAuthById((prev) => ({ ...prev, [id]: resp.data }));
       } else {
         setActionError(apiErrorMessage(resp, "Mise à jour mot de passe impossible."));
@@ -281,16 +266,8 @@ export function VitrinesPage() {
   async function regeneratePassword(id: string) {
     setAuthBusyId(id);
     try {
-      const resp = await apiRequest<{
-        enabled: boolean;
-        client_email: string | null;
-        password: string | null;
-      }>({
-        method: "POST",
-        path: `${API_PREFIX}/managed-projects/vitrines/${id}/auth`,
-        body: { generate_password: true },
-      });
-      if (resp.ok) {
+      const resp = await regenerateVitrinePassword(id);
+      if (resp.ok && resp.data) {
         setAuthById((prev) => ({ ...prev, [id]: resp.data }));
       } else {
         setActionError(apiErrorMessage(resp, "Génération mot de passe impossible."));
@@ -443,32 +420,29 @@ export function VitrinesPage() {
               className="rounded border border-white/10 bg-black/20 p-3"
             >
               {authById[p.id] ? (
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs">
-                  <div className="opacity-80">
-                    Mot de passe:{" "}
-                    <span className="font-mono text-white">
-                      {authById[p.id].password || "—"}
-                    </span>{" "}
-                    <span className="ml-2 opacity-60">
+                <div className="mb-3 space-y-2 rounded border border-white/10 bg-white/5 p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs opacity-80">
                       ({authById[p.id].enabled ? "protégé" : "non protégé"})
                     </span>
+                    <div className="flex gap-2">
+                      <button
+                        className="rounded bg-white/10 px-2 py-0.5 text-xs hover:bg-white/15 disabled:opacity-50"
+                        onClick={() => void toggleAuth(p.id, !authById[p.id].enabled)}
+                        disabled={authBusyId === p.id}
+                      >
+                        {authById[p.id].enabled ? "Désactiver" : "Activer"}
+                      </button>
+                      <button
+                        className="rounded bg-white/10 px-2 py-0.5 text-xs hover:bg-white/15 disabled:opacity-50"
+                        onClick={() => void regeneratePassword(p.id)}
+                        disabled={authBusyId === p.id}
+                      >
+                        Nouveau
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      className="rounded bg-white/10 px-2 py-0.5 hover:bg-white/15 disabled:opacity-50"
-                      onClick={() => void toggleAuth(p.id, !authById[p.id].enabled)}
-                      disabled={authBusyId === p.id}
-                    >
-                      {authById[p.id].enabled ? "Désactiver" : "Activer"}
-                    </button>
-                    <button
-                      className="rounded bg-white/10 px-2 py-0.5 hover:bg-white/15 disabled:opacity-50"
-                      onClick={() => void regeneratePassword(p.id)}
-                      disabled={authBusyId === p.id}
-                    >
-                      Nouveau
-                    </button>
-                  </div>
+                  <PasswordRevealField password={authById[p.id].password} />
                 </div>
               ) : (
                 <div className="mb-2 flex items-center justify-between gap-2 text-xs opacity-80">

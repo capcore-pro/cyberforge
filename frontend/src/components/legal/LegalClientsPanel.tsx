@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   createLegalClient,
@@ -182,6 +183,9 @@ export function LegalClientsPanel() {
         onSubmit={handleSubmit}
         className="cyber-panel h-fit space-y-3 border-cyber-border p-4"
       >
+        {editingId ? (
+          <BackButton className="mb-1" onClick={cancelEdit} />
+        ) : null}
         <h3 className="text-sm font-bold uppercase tracking-wider text-cyber-neon">
           {editingId ? "Modifier le client" : "Nouveau client"}
         </h3>

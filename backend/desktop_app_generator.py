@@ -218,6 +218,17 @@ def _build_and_publish(order: dict[str, Any]) -> str:
         exe_path,
         r2_url,
     )
+
+    app_name = _APP_TITLES.get(app_type, app_type.replace("_", " ").title())
+    from routers.notifications import schedule_notify
+
+    schedule_notify(
+        "Mini-app prête 📦",
+        "exe_ready",
+        "success",
+        f"{app_name}.exe disponible au téléchargement",
+    )
+
     return r2_url
 
 

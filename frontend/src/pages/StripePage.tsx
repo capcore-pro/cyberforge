@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   cancelStripeSubscription,
@@ -231,14 +232,15 @@ function ModalShell({
       aria-labelledby="stripe-modal-title"
     >
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-cyber-border bg-cyber-panel shadow-xl">
-        <div className="flex items-center justify-between border-b border-cyber-border px-4 py-3">
-          <h2 id="stripe-modal-title" className="text-sm font-bold text-cyber-text">
+        <div className="flex items-center gap-3 border-b border-cyber-border px-4 py-3">
+          <BackButton onClick={onClose} className="shrink-0" />
+          <h2 id="stripe-modal-title" className="min-w-0 flex-1 text-sm font-bold text-cyber-text">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 text-cyber-muted hover:bg-cyber-border/50 hover:text-cyber-text"
+            className="shrink-0 rounded px-2 py-1 text-cyber-muted hover:bg-cyber-border/50 hover:text-cyber-text"
             aria-label="Fermer"
           >
             ✕

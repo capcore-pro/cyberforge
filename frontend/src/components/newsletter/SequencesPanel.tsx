@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectRecord } from "@shared/types";
+import { BackButton } from "@/components/BackButton";
 import { EmailTimeline } from "@/components/newsletter/EmailTimeline";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
@@ -213,6 +214,10 @@ export function SequencesPanel() {
       {projectPickerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
           <div className="cyber-panel w-full max-w-md border-cyber-violet/40">
+            <BackButton
+              className="mb-3"
+              onClick={() => setProjectPickerOpen(false)}
+            />
             <h3 className="text-base font-semibold text-cyber-text">
               Déclencher une séquence bienvenue
             </h3>

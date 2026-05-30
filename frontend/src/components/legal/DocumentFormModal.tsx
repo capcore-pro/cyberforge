@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   createLegalClient,
@@ -132,6 +133,7 @@ export function DocumentFormModal({
         className="cyber-panel my-4 flex max-h-[92vh] w-full max-w-3xl flex-col border-cyber-neon/30"
       >
         <div className="border-b border-cyber-border px-5 py-4">
+          <BackButton className="mb-3" onClick={onClose} />
           <h2 className="text-lg font-semibold text-cyber-text">
             {mode === "create" ? `Nouveau ${docTypeLabel.toLowerCase()}` : `Modifier ${docTypeLabel.toLowerCase()}`}
           </h2>
