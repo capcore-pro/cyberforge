@@ -8,6 +8,7 @@ export type AppPage =
   | "newsletter"
   | "cockpit"
   | "media_library"
+  | "toolbox"
   | "settings"
   /** Routes internes (hors sidebar) */
   | "perso"
@@ -46,6 +47,7 @@ export const SECONDARY_NAV_GROUP: NavGroup = {
   items: [
     { id: "cockpit", label: "Cockpit", icon: "◐", enabled: true },
     { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
+    { id: "toolbox", label: "Toolbox", icon: "◆", enabled: true },
   ],
 };
 

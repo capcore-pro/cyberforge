@@ -28,6 +28,7 @@ from tools.builder_generators import (
     V0Client,
 )
 from tools.codegen_service import CodeGenerateResult
+from tools.toolbox_branding import apply_toolbox_to_generation, build_toolbox_builder_context
 
 logger = logging.getLogger(__name__)
 
@@ -158,10 +159,12 @@ class BuilderAgent(BaseAgent):
         """Tente v0 ou DeepSeek ; signale le fallback CoreMind si échec."""
         resolved = settings or self._settings
         decision = self.select_provider(prompt, plan=plan, analysis=analysis)
+        toolbox_block = build_toolbox_builder_context(plan)
         enriched = (
             f"Type : {plan.project_type_label}.\n"
             f"Template : {plan.template_label}.\n"
             f"Complexité CoreMind : {analysis.complexity.value}.\n\n"
+            f"{toolbox_block}"
             f"{prompt.strip()}"
         )
 
@@ -186,7 +189,7 @@ class BuilderAgent(BaseAgent):
                 fallback_to_coremind=True,
             )
 
-        generation = outcome.generation
+        generation = apply_toolbox_to_generation(outcome.generation, plan)
         preview_html = preview_html_from_generation(
             generation,
             title=plan.project_type_label,

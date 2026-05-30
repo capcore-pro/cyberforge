@@ -20,6 +20,7 @@ import { CockpitPage } from "./pages/CockpitPage";
 import { MediaLibraryPage } from "./pages/MediaLibraryPage";
 import { AccountingPage } from "./pages/AccountingPage";
 import { NewsletterPage } from "./pages/NewsletterPage";
+import { ToolboxPage } from "./pages/ToolboxPage";
 
 /**
  * Composant racine — navigation entre les pages principales.
@@ -78,6 +79,8 @@ function AppWithNotifications({
         return <CockpitPage />;
       case "media_library":
         return <MediaLibraryPage />;
+      case "toolbox":
+        return <ToolboxPage />;
       case "accounting":
         return <AccountingPage />;
       case "newsletter":

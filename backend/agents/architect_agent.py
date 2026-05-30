@@ -30,6 +30,7 @@ from tools.demo_template_service import (
     VALID_TEMPLATES,
     detect_template_from_prompt,
 )
+from tools.toolbox_sectors import detect_sector_from_prompt, get_sector_bundle
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,17 @@ def resolve_forced_type_token(token: str) -> tuple[ProjectType, PricingCategory 
     return project_type, None, None
 
 
+class ToolboxPalette(BaseModel):
+    primary: str
+    secondary: str
+    accent: str
+
+
+class ToolboxTypo(BaseModel):
+    heading: str
+    body: str
+
+
 class ArchitectPlan(BaseModel):
     """Plan d'architecture produit par ArchitectAI."""
 
@@ -114,6 +126,13 @@ class ArchitectPlan(BaseModel):
     template_label: str
     rationale: str
     used_llm: bool = False
+    secteur: str | None = Field(
+        default=None,
+        description="Secteur toolbox détecté (restauration, immobilier, …)",
+    )
+    palette: ToolboxPalette | None = None
+    typo: ToolboxTypo | None = None
+    composants_recommandes: list[str] = Field(default_factory=list)
     complexity_score: int = Field(
         ge=1,
         le=10,
@@ -226,6 +245,12 @@ class ArchitectAgent(BaseAgent):
                         **self._pricing_fields(pricing),
                     }
                 )
+            llm_plan = self._apply_toolbox(
+                llm_plan,
+                work_prompt,
+                analysis,
+                str(pricing["pricing_category"]),
+            )
             return llm_plan, analysis
 
         template = detect_template_from_prompt(
@@ -253,6 +278,12 @@ class ArchitectAgent(BaseAgent):
             used_llm=False,
             **pricing,
         )
+        plan = self._apply_toolbox(
+            plan,
+            work_prompt,
+            analysis,
+            str(pricing["pricing_category"]),
+        )
         return plan, analysis
 
     @staticmethod
@@ -266,6 +297,36 @@ class ArchitectAgent(BaseAgent):
             "suggested_price_max": int(pricing["suggested_price_max"]),
             "pricing_category": str(pricing["pricing_category"]),
         }
+
+    def _apply_toolbox(
+        self,
+        plan: ArchitectPlan,
+        prompt: str,
+        analysis: CoreMindAnalysis,
+        pricing_category: str | None,
+    ) -> ArchitectPlan:
+        """Charge GET /toolbox/secteur/{secteur} (données locales) et enrichit le plan."""
+        sector_key = detect_sector_from_prompt(
+            prompt,
+            project_type=analysis.project_type,
+            pricing_category=pricing_category,
+        )
+        bundle = get_sector_bundle(sector_key)
+        if bundle is None:
+            return plan
+
+        toolbox_note = (
+            f" Secteur toolbox « {bundle.nom} » — palette et composants transmis à BuilderAI."
+        )
+        return plan.model_copy(
+            update={
+                "secteur": bundle.nom,
+                "palette": ToolboxPalette(**bundle.palette),
+                "typo": ToolboxTypo(**bundle.typo),
+                "composants_recommandes": list(bundle.composants),
+                "rationale": (plan.rationale + toolbox_note)[:500],
+            }
+        )
 
     def _anthropic_key(self) -> str:
         raw = self._settings.anthropic_api_key

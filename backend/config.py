@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     replicate_html_model: str | None = Field(
         default=None, alias="REPLICATE_HTML_MODEL"
     )
+    replicate_image_model: str | None = Field(
+        default=None,
+        alias="REPLICATE_IMAGE_MODEL",
+        description="Modèle Replicate text-to-image (fallback VisionUI).",
+    )
     vision_screenshot_width: int = Field(default=1280, alias="VISION_SCREENSHOT_WIDTH")
     vision_screenshot_height: int = Field(default=720, alias="VISION_SCREENSHOT_HEIGHT")
     vision_html_max_chars: int = Field(default=120_000, alias="VISION_HTML_MAX_CHARS")
@@ -300,6 +305,17 @@ class Settings(BaseSettings):
         alias="UNSPLASH_HTTP_TIMEOUT_SECONDS",
     )
 
+    pexels_api_key: SecretStr | None = Field(
+        default=None,
+        alias="PEXELS_API_KEY",
+        description="Clé API Pexels (boîte à outils photos).",
+    )
+    toolbox_http_timeout_seconds: float = Field(
+        default=12.0,
+        alias="TOOLBOX_HTTP_TIMEOUT_SECONDS",
+        description="Timeout HTTP des appels toolbox (Pexels, Iconify, unDraw).",
+    )
+
     tavily_api_key: SecretStr | None = Field(
         default=None,
         alias="TAVILY_API_KEY",
@@ -370,6 +386,11 @@ class Settings(BaseSettings):
     def unsplash_configured(self) -> bool:
         """True si l'API Unsplash est disponible pour les vitrines Next.js."""
         return bool(plain_secret_str(self.unsplash_access_key))
+
+    @property
+    def pexels_configured(self) -> bool:
+        """True si l'API Pexels est disponible pour la toolbox photos."""
+        return bool(plain_secret_str(self.pexels_api_key))
 
     @property
     def cloudflare_configured(self) -> bool:

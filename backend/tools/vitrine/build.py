@@ -5,8 +5,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from config import Settings, get_settings
+
+if TYPE_CHECKING:
+    from agents.architect_agent import ArchitectPlan
 from tools.codegen_service import CodeGenerateResult, GeneratedFile
 from tools.vitrine.content_agent import VitrineContentAgent, VitrineContentError
 from tools.vitrine.content_schema import ClientBranding, VitrineSiteContent
@@ -61,16 +65,24 @@ async def build_vitrine_site(
     output_dir: Path | None = None,
     settings: Settings | None = None,
     project_id: str | None = None,
+    architect_plan: ArchitectPlan | None = None,
 ) -> VitrineBuildResult:
     """
     Génère le JSON de contenu puis matérialise le projet Next.js dans output_dir.
     """
+    from tools.toolbox_branding import (
+        apply_toolbox_vitrine_scaffold,
+        build_toolbox_content_agent_block,
+    )
+
+    plan = architect_plan
     resolved = settings or get_settings()
     agent = VitrineContentAgent(resolved)
+    content_prompt = f"{build_toolbox_content_agent_block(plan)}{prompt}"
 
     try:
         content = await agent.generate(
-            prompt,
+            content_prompt,
             project_type_label=project_type_label,
             branding=branding,
             project_id=project_id,
@@ -95,6 +107,8 @@ async def build_vitrine_site(
 
     try:
         scaffold = render_vitrine_scaffold(content, output_dir=output_dir)
+        if plan:
+            apply_toolbox_vitrine_scaffold(scaffold.output_dir, plan)
     except ScaffoldRenderError:
         raise
     except Exception as exc:

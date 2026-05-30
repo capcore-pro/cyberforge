@@ -31,6 +31,7 @@ _ALLOWED_MIME: dict[str, tuple[MediaType, str]] = {
     "image/png": ("image", "image/png"),
     "image/webp": ("image", "image/webp"),
     "image/gif": ("image", "image/gif"),
+    "image/svg+xml": ("image", "image/svg+xml"),
     "application/zip": ("zip", "application/zip"),
     "application/pdf": ("pdf", "application/pdf"),
 }
@@ -52,6 +53,7 @@ def detect_media_type(content_type: str | None, filename: str) -> tuple[MediaTyp
         ".png": ("image", "image/png"),
         ".webp": ("image", "image/webp"),
         ".gif": ("image", "image/gif"),
+        ".svg": ("image", "image/svg+xml"),
         ".zip": ("zip", "application/zip"),
         ".pdf": ("pdf", "application/pdf"),
     }
@@ -128,6 +130,62 @@ async def save_generated_asset(
             asset = updated
 
     return _enrich_asset(asset)
+
+
+async def save_svg_asset(
+    svg_markup: str,
+    filename: str,
+    project_id: str | None,
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
+    """Persiste un SVG (Iconify, unDraw) dans la médiathèque."""
+    data = svg_markup.encode("utf-8")
+    if len(data) > MAX_DOWNLOAD_BYTES:
+        raise ValueError("SVG trop volumineux.")
+
+    media_type, mime_type = detect_media_type("image/svg+xml", filename)
+    asset_id = str(uuid.uuid4())
+    local_path = save_local(data, filename, media_type)
+    draft = {"id": asset_id, "filename": filename, "type": media_type}
+    r2_key = default_r2_key(draft)
+
+    asset = db.add_asset(
+        filename=filename,
+        type=media_type,
+        mime_type=mime_type,
+        size_bytes=len(data),
+        local_path=local_path,
+        source="generated",  # type: ignore[arg-type]
+        tags=tags,
+        project_id=project_id,
+        r2_key=r2_key,
+        asset_id=asset_id,
+    )
+
+    r2_url = sync_to_r2(local_path, r2_key)
+    if r2_url:
+        updated = update_asset_r2(asset_id, r2_url, r2_key)
+        if updated:
+            asset = updated
+
+    return _enrich_asset(asset)
+
+
+async def try_save_svg_asset(
+    svg_markup: str,
+    filename: str,
+    project_id: str | None,
+    tags: list[str] | None = None,
+) -> dict[str, Any] | None:
+    try:
+        return await save_svg_asset(
+            svg_markup, filename, project_id, tags=tags
+        )
+    except Exception as exc:
+        logger.warning(
+            "Médiathèque SVG — enregistrement ignoré (%s): %s", filename, exc
+        )
+        return None
 
 
 async def try_save_generated_asset(

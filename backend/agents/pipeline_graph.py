@@ -41,6 +41,11 @@ from tools.demo_template_service import (
 )
 from tools.pricing import estimate_cost_usd
 from tools.demo_template_service import TEMPLATE_MODEL, TEMPLATE_PROVIDER
+from tools.toolbox_branding import (
+    apply_toolbox_to_generation,
+    apply_toolbox_vitrine_scaffold,
+    build_toolbox_builder_context,
+)
 from tools.vitrine.build import VitrineContentError, build_vitrine_site
 from tools.vitrine.scaffold_renderer import ScaffoldRenderError
 
@@ -251,6 +256,8 @@ def _route_after_builder(state: PipelineState) -> str:
 def _inject_package_json(
     generation: Any,
     project_label: str,
+    *,
+    plan: ArchitectPlan | None = None,
 ) -> Any:
     """
     Ajoute package.json + src/main.tsx + index.html si absents de la génération
@@ -290,7 +297,12 @@ def _inject_package_json(
                 "vite": "^5.4.1",
             },
         }
-        extra.append(GeneratedFile(path="package.json", content=_json.dumps(pkg, indent=2, ensure_ascii=False)))
+        pkg_content = _json.dumps(pkg, indent=2, ensure_ascii=False) + "\n"
+        if plan and plan.palette:
+            from tools.toolbox_branding import _merge_package_json
+
+            pkg_content = _merge_package_json(pkg_content, plan)
+        extra.append(GeneratedFile(path="package.json", content=pkg_content))
 
     if "index.html" not in existing_paths and "src/main.tsx" not in existing_paths:
         extra.append(GeneratedFile(
@@ -315,6 +327,30 @@ def _inject_package_json(
                 '  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);\n'
             ),
         ))
+
+    if plan and plan.palette and "package.json" in existing_paths:
+        from tools.toolbox_branding import _merge_package_json
+
+        updated_files: list[GeneratedFile] = []
+        for f in generation.files:
+            if f.path == "package.json":
+                updated_files.append(
+                    GeneratedFile(
+                        path=f.path,
+                        content=_merge_package_json(f.content, plan),
+                    )
+                )
+            else:
+                updated_files.append(f)
+        generation = CodeGenerateResult(
+            summary=generation.summary,
+            code=generation.code,
+            files=updated_files,
+            stack=list(generation.stack),
+            model=generation.model,
+            provider=generation.provider,
+            demo_seed=generation.demo_seed,
+        )
 
     if not extra:
         return generation
@@ -371,7 +407,9 @@ async def coremind_node(
         enriched_vitrine = (
             f"Type de projet : {type_label}.\n"
             f"Contexte : site vitrine multi-pages (accueil, services, contact).\n"
-            f"Texte UI en français.\n\n{prompt}"
+            f"Texte UI en français.\n\n"
+            f"{build_toolbox_builder_context(plan)}"
+            f"{prompt}"
         )
         try:
             vitrine = await build_vitrine_site(
@@ -379,6 +417,7 @@ async def coremind_node(
                 project_type_label=type_label,
                 settings=settings,
                 project_id=state.get("project_id"),
+                architect_plan=plan,
             )
         except (VitrineContentError, ScaffoldRenderError) as exc:
             return {"error": f"Génération vitrine : {exc}"}
@@ -416,7 +455,9 @@ async def coremind_node(
         enriched_real = (
             f"Type de projet : {type_label}.\n"
             f"Contexte : application React/TypeScript déployable sur Railway ou Vercel.\n"
-            f"Texte UI en français.\n\n{prompt}"
+            f"Texte UI en français.\n\n"
+            f"{build_toolbox_builder_context(plan)}"
+            f"{prompt}"
         )
         generation = await codegen.generate_code(
             enriched_real,
@@ -424,8 +465,8 @@ async def coremind_node(
             demo_html=False,
             project_id=state.get("project_id"),
         )
-        # Injecte package.json si absent
-        generation = _inject_package_json(generation, type_label)
+        generation = apply_toolbox_to_generation(generation, plan)
+        generation = _inject_package_json(generation, type_label, plan=plan)
         code_chars = len(generation.code or "")
         file_count = len(generation.files)
         await _step(
@@ -446,7 +487,9 @@ async def coremind_node(
     await _step(cb, "coremind", "start", "Génération HTML et seed adaptée au template…")
     enriched = (
         f"Type de projet cible : {type_label}.\n"
-        f"Template premium : {plan.template_label} ({plan.template}).\n\n{prompt}"
+        f"Template premium : {plan.template_label} ({plan.template}).\n\n"
+        f"{build_toolbox_builder_context(plan)}"
+        f"{prompt}"
     )
 
     svc = DemoTemplateService(settings)
@@ -522,7 +565,12 @@ async def visionui_node(
         await _step(cb, "visionui", "done", "Aucun HTML à capturer — étape ignorée.")
         return {}
 
-    await _step(cb, "visionui", "start", "Capture visuelle du HTML généré…")
+    await _step(
+        cb,
+        "visionui",
+        "start",
+        "Médias toolbox (photos, icônes, illustrations) puis capture…",
+    )
     settings = _settings_from_config(config)
     agent = VisionUIAgent(settings)
     result = await agent.capture(
@@ -531,6 +579,8 @@ async def visionui_node(
         settings=settings,
         project_id=state.get("project_id"),
         project_type=plan.project_type_label,
+        architect_plan=plan,
+        prompt=state.get("prompt"),
     )
     source_label = "Replicate" if result.preview_source == "replicate" else "HTML local"
 

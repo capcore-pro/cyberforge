@@ -14,6 +14,7 @@ from desktop_app_router import router as desktop_app_router
 from newsletter_router import router as newsletter_router
 from stripe_router import router as stripe_router
 from routers.notifications import router as system_notifications_router
+from routers.toolbox import router as toolbox_router
 
 init_db()
 app = create_app()
@@ -24,3 +25,4 @@ app.include_router(newsletter_router, prefix="/api/newsletter")
 app.include_router(desktop_app_router, prefix="/api/desktop")
 app.include_router(stripe_router, prefix="/api/stripe")
 app.include_router(system_notifications_router, prefix="/api")
+app.include_router(toolbox_router, prefix="/api")
