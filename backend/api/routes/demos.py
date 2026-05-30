@@ -426,6 +426,7 @@ class DemoIdResponse(BaseModel):
     demo_id: str | None = None
     url: str | None = None
     unlock_url: str | None = None
+    client_id: str | None = None
 
 
 @router.get(
@@ -449,6 +450,7 @@ async def demo_id_for_generation(generation_id: str) -> DemoIdResponse:
         demo_id=row.id,
         url=public_demo_url_for_token(row.token).rstrip("/"),
         unlock_url=unlock_demo_url(row.token),
+        client_id=row.client_id,
     )
 
 
@@ -626,6 +628,42 @@ async def update_demo_status(
     if updated is None:
         raise HTTPException(status_code=404, detail="Démo introuvable.")
     return UpdateDemoStatusResponse(id=updated.id, status=updated.status)
+
+
+class UpdateDemoClientRequest(BaseModel):
+    client_id: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Identifiant client Supabase, ou null pour dissocier.",
+    )
+
+
+class UpdateDemoClientResponse(BaseModel):
+    id: str
+    client_id: str | None
+
+
+@router.patch("/demos/{demo_id}/client", response_model=UpdateDemoClientResponse)
+async def update_demo_client(
+    demo_id: str,
+    body: UpdateDemoClientRequest,
+) -> UpdateDemoClientResponse:
+    """Associe ou dissocie un client à une démo."""
+    store = get_demos_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
+
+    try:
+        existing = await store.get_by_id(demo_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Démo introuvable.")
+        updated = await store.update_client_id(demo_id, body.client_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(exc, "PATCH /demos/{id}/client") from exc
+
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Démo introuvable.")
+    return UpdateDemoClientResponse(id=updated.id, client_id=updated.client_id)
 
 
 @router.post("/demos/{demo_id}/redeploy-pages", response_model=RedeployDemoPagesResponse)

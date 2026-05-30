@@ -32,35 +32,57 @@ export interface MediaListParams {
   limit?: number;
 }
 
-function resolveMediaUrl(path: string): string {
-  const normalized = path.startsWith("/") ? path : `/${path}`;
-  if (import.meta.env.DEV && typeof window !== "undefined") {
-    const useProxy =
-      !import.meta.env.VITE_API_BASE_URL?.trim() ||
-      import.meta.env.VITE_API_BASE_URL.includes("127.0.0.1:5173");
-    if (useProxy) {
-      return normalized;
-    }
+export interface ProjectCoverResponse {
+  project_key: string;
+  media_asset_id: string | null;
+  asset: MediaAsset | null;
+}
+
+function resolveMediaFileUrl(relativePath: string): string {
+  const normalized = relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
+  // Même logique que api-client : en dev, proxy Vite (/api → backend).
+  if (import.meta.env.DEV) {
+    return normalized;
   }
   return buildBackendApiUrl(normalized);
 }
 
-/** URL pour afficher ou télécharger le fichier (API locale ou R2 public). */
+/** URL locale pour afficher ou copier un asset (stockage disque, pas R2). */
 export function getAssetPublicUrl(asset: MediaAsset): string {
-  if (asset.r2_url?.trim()) {
-    return asset.r2_url.trim();
-  }
   if (asset.local_url?.startsWith("/")) {
-    return resolveMediaUrl(asset.local_url);
+    return resolveMediaFileUrl(asset.local_url);
   }
-  return resolveMediaUrl(`${MEDIA}/files/${encodeURIComponent(asset.id)}`);
+  return resolveMediaFileUrl(`${MEDIA}/files/${encodeURIComponent(asset.id)}`);
+}
+
+/** URL absolue pour copier/partager (clipboard, liens externes). */
+export function getAssetAbsolutePublicUrl(asset: MediaAsset): string {
+  const relative = getAssetPublicUrl(asset);
+  if (/^https?:\/\//i.test(relative)) {
+    return relative;
+  }
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    return `${window.location.origin}${relative}`;
+  }
+  return relative;
 }
 
 export function getAssetThumbnailUrl(asset: MediaAsset): string {
   if (asset.type !== "image") {
     return "";
   }
-  return resolveMediaUrl(`${MEDIA}/files/${encodeURIComponent(asset.id)}`);
+  return getAssetPublicUrl(asset);
+}
+
+export function providerLabel(asset: MediaAsset): string {
+  const tags = asset.tags.map((t) => t.toLowerCase());
+  if (tags.includes("pexels")) return "Pexels";
+  if (tags.includes("unsplash")) return "Unsplash";
+  if (tags.includes("pexels_unsplash")) return "Pexels / Unsplash";
+  if (tags.includes("replicate")) return "Replicate";
+  if (asset.source === "upload") return "Upload";
+  if (asset.source === "generated") return "Généré";
+  return "Local";
 }
 
 export function fetchMediaAssets(params: MediaListParams = {}) {
@@ -98,7 +120,7 @@ export async function uploadMediaAsset(
     form.append("tags", opts.tags.trim());
   }
 
-  const url = resolveMediaUrl(`${MEDIA}/upload`);
+  const url = resolveMediaFileUrl(`${MEDIA}/upload`);
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -129,6 +151,43 @@ export async function uploadMediaAsset(
   }
 }
 
+export function generateMediaImage(body: {
+  prompt: string;
+  project_id?: string;
+}) {
+  return apiRequest<MediaAsset>({
+    method: "POST",
+    path: `${MEDIA}/generate`,
+    body,
+    timeoutMs: 180_000,
+  });
+}
+
+export function importMediaFromUrl(body: {
+  url: string;
+  filename?: string;
+  tags?: string[];
+  project_id?: string;
+}) {
+  return apiRequest<MediaAsset>({
+    method: "POST",
+    path: `${MEDIA}/import-url`,
+    body,
+    timeoutMs: 120_000,
+  });
+}
+
+export function updateMediaAsset(
+  id: string,
+  body: { filename?: string; project_id?: string; tags?: string[] },
+) {
+  return apiRequest<MediaAsset>({
+    method: "PATCH",
+    path: `${MEDIA}/assets/${encodeURIComponent(id)}`,
+    body,
+  });
+}
+
 export function deleteMediaAsset(id: string) {
   return apiRequest<{ status: string; asset_id: string }>({
     method: "DELETE",
@@ -136,19 +195,25 @@ export function deleteMediaAsset(id: string) {
   });
 }
 
-export function syncMediaAssetR2(id: string, syncNow = true) {
-  const q = syncNow ? "?sync_now=true" : "";
-  return apiRequest<MediaAsset>({
-    method: "POST",
-    path: `${MEDIA}/assets/${encodeURIComponent(id)}/sync-r2${q}`,
-    timeoutMs: 120_000,
+export function fetchProjectCover(projectKey: string) {
+  return apiRequest<ProjectCoverResponse>({
+    method: "GET",
+    path: `${MEDIA}/project-covers/${encodeURIComponent(projectKey)}`,
   });
 }
 
-export function syncAllMediaR2() {
-  return apiRequest<{ status: string; message?: string }>({
-    method: "POST",
-    path: `${MEDIA}/sync-r2`,
+export function setProjectCover(projectKey: string, mediaAssetId: string) {
+  return apiRequest<ProjectCoverResponse>({
+    method: "PUT",
+    path: `${MEDIA}/project-covers/${encodeURIComponent(projectKey)}`,
+    body: { media_asset_id: mediaAssetId },
+  });
+}
+
+export function clearProjectCover(projectKey: string) {
+  return apiRequest<{ deleted: boolean }>({
+    method: "DELETE",
+    path: `${MEDIA}/project-covers/${encodeURIComponent(projectKey)}`,
   });
 }
 

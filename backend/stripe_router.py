@@ -11,6 +11,8 @@ from fastapi import APIRouter, HTTPException, Header, Query, Request
 from pydantic import BaseModel, Field
 
 import stripe_db as db
+from config import get_settings, plain_secret_str, refresh_settings
+from security.env_file import upsert_env_vars
 from stripe_service import (
     StripeServiceError,
     cancel_subscription,
@@ -24,6 +26,8 @@ from stripe_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["stripe"])
+
+_CAPCORE_PROJECT_ID = "capcore"
 
 StripeMode = Literal["test", "live"]
 CheckoutMode = Literal["payment", "subscription"]
@@ -105,6 +109,143 @@ class SubscriptionLinkBody(BaseModel):
     amount_eur: float = Field(gt=0)
     interval: SubscriptionInterval = "month"
     customer_email: str | None = None
+
+
+class CapcoreStripeBody(BaseModel):
+    secret_key: str = Field(min_length=1)
+    publishable_key: str | None = None
+    webhook_secret: str | None = None
+    mode: StripeMode = "test"
+
+
+class ClientStripeBody(BaseModel):
+    secret_key: str = Field(min_length=1)
+    webhook_secret: str | None = None
+    publishable_key: str | None = None
+    mode: StripeMode = "test"
+    project_name: str | None = None
+
+
+def _capcore_configured() -> bool:
+    cfg = db.get_config_by_project(_CAPCORE_PROJECT_ID)
+    if cfg and cfg.get("enabled"):
+        secret = db.decrypt_config_secret(cfg.get("secret_key_encrypted"))
+        if secret:
+            return True
+    return bool(plain_secret_str(get_settings().stripe_secret_key))
+
+
+def _client_configured(project_id: str) -> bool:
+    cfg = db.get_config_by_project(project_id.strip())
+    if not cfg or not cfg.get("enabled"):
+        return False
+    return bool(db.decrypt_config_secret(cfg.get("secret_key_encrypted")))
+
+
+def _infer_publishable_key(secret_key: str, override: str | None) -> str:
+    if override and override.strip():
+        return override.strip()
+    sk = secret_key.strip()
+    if sk.startswith("sk_live"):
+        return "pk_live_configured"
+    return "pk_test_configured"
+
+
+# --- CapCore (mes revenus) ---
+
+
+@router.get("/capcore")
+async def get_capcore_stripe() -> dict[str, Any]:
+    cfg = db.get_config_by_project(_CAPCORE_PROJECT_ID)
+    return {
+        "configured": _capcore_configured(),
+        "config": _mask_config(cfg) if cfg else None,
+    }
+
+
+@router.put("/capcore")
+async def upsert_capcore_stripe(body: CapcoreStripeBody) -> dict[str, Any]:
+    pk = _infer_publishable_key(body.secret_key, body.publishable_key)
+    try:
+        row = db.upsert_config_by_project(
+            project_id=_CAPCORE_PROJECT_ID,
+            project_name="CapCore — Mes revenus",
+            publishable_key=pk,
+            secret_key=body.secret_key.strip(),
+            webhook_secret=body.webhook_secret,
+            mode=body.mode,
+            enabled=True,
+        )
+    except ValueError as exc:
+        raise _value_error(exc) from exc
+
+    upsert_env_vars({"STRIPE_SECRET_KEY": body.secret_key.strip()})
+    refresh_settings()
+
+    return {"configured": True, "config": _mask_config(row)}
+
+
+# --- Client (par projet déployé) ---
+
+
+@router.get("/projects/{project_id}")
+async def get_client_stripe(project_id: str) -> dict[str, Any]:
+    pid = project_id.strip()
+    cfg = db.get_config_by_project(pid)
+    return {
+        "project_id": pid,
+        "configured": _client_configured(pid),
+        "config": _mask_config(cfg) if cfg else None,
+    }
+
+
+@router.put("/projects/{project_id}")
+async def upsert_client_stripe(
+    project_id: str,
+    body: ClientStripeBody,
+) -> dict[str, Any]:
+    pid = project_id.strip()
+    name = (body.project_name or f"Client — {pid[:8]}").strip()
+    pk = _infer_publishable_key(body.secret_key, body.publishable_key)
+    try:
+        row = db.upsert_config_by_project(
+            project_id=pid,
+            project_name=name,
+            publishable_key=pk,
+            secret_key=body.secret_key.strip(),
+            webhook_secret=body.webhook_secret,
+            mode=body.mode,
+            enabled=True,
+        )
+    except ValueError as exc:
+        raise _value_error(exc) from exc
+    return {
+        "project_id": pid,
+        "configured": True,
+        "config": _mask_config(row),
+    }
+
+
+@router.post("/projects/{project_id}/apply")
+async def apply_client_stripe(project_id: str) -> dict[str, Any]:
+    """Active la config client pour les paiements du projet (backend CyberForge)."""
+    pid = project_id.strip()
+    if not _client_configured(pid):
+        raise HTTPException(
+            status_code=400,
+            detail="Clés Stripe client manquantes — enregistrez-les avant d'appliquer.",
+        )
+    cfg = db.get_config_by_project(pid)
+    if cfg and not cfg.get("enabled"):
+        db.update_config(str(cfg["id"]), enabled=True)
+    return {
+        "applied": True,
+        "project_id": pid,
+        "message": (
+            "Clés Stripe client actives — les paiements du site utilisent "
+            "le compte Stripe du client via le backend CyberForge."
+        ),
+    }
 
 
 # --- Configs ---

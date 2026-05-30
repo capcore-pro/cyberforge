@@ -320,6 +320,135 @@ class SupabaseStore:
             )
         return True
 
+    async def update_project_metadata(
+        self,
+        project_id: str,
+        *,
+        title: str | None = None,
+        prompt: str | None = None,
+    ) -> ProjectRow | None:
+        """Met à jour le titre et/ou le prompt d'un projet."""
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        patch: dict[str, Any] = {"updated_at": datetime.now(UTC).isoformat()}
+        if title is not None:
+            clean = clean_project_title(title.strip())
+            if not clean:
+                raise SupabaseStoreError("Le titre du projet ne peut pas être vide.")
+            patch["title"] = clean
+        if prompt is not None:
+            trimmed = prompt.strip()
+            if len(trimmed) < 3:
+                raise SupabaseStoreError("Le prompt doit contenir au moins 3 caractères.")
+            patch["prompt"] = trimmed
+
+        if len(patch) == 1:
+            detail = await self.get_project(project_id)
+            return detail.project if detail else None
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.patch(
+                f"{self._rest_url()}/projects",
+                headers=self._headers("return=representation"),
+                params={"id": f"eq.{project_id}"},
+                json=patch,
+            )
+            _raise_for_status(
+                resp,
+                "update_project_metadata",
+                "PATCH",
+                f"{self._rest_url()}/projects",
+                self,
+            )
+            rows = resp.json()
+            if not isinstance(rows, list) or not rows:
+                return None
+            row = rows[0]
+            return ProjectRow(
+                id=str(row["id"]),
+                title=clean_project_title(str(row["title"])),
+                prompt=str(row["prompt"]),
+                project_type=str(row["project_type"]),
+                summary=row.get("summary"),
+                created_at=str(row["created_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+
+    async def duplicate_project(self, project_id: str) -> ProjectDetailResponse | None:
+        """Duplique un projet et sa dernière génération."""
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        detail = await self.get_project(project_id)
+        if detail is None:
+            return None
+
+        source = detail.project
+        copy_title = clean_project_title(f"Copie de {source.title}")
+        now = datetime.now(UTC).isoformat()
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            create_resp = await client.post(
+                f"{self._rest_url()}/projects",
+                headers=self._headers("return=representation"),
+                json={
+                    "title": copy_title,
+                    "prompt": source.prompt,
+                    "project_type": source.project_type,
+                    "summary": source.summary,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            _raise_for_status(
+                create_resp,
+                "duplicate_project",
+                "POST",
+                f"{self._rest_url()}/projects",
+                self,
+            )
+            created_rows = create_resp.json()
+            if not isinstance(created_rows, list) or not created_rows:
+                raise SupabaseStoreError("Duplication projet sans identifiant retourné.")
+            new_id = str(created_rows[0]["id"])
+
+            if detail.generations:
+                latest = detail.generations[0]
+                gen_payload = {
+                    "project_id": new_id,
+                    "prompt": latest.prompt,
+                    "project_type": latest.project_type,
+                    "model": latest.model,
+                    "provider": latest.provider,
+                    "complexity": latest.complexity,
+                    "complexity_score": latest.complexity_score,
+                    "duration_ms": latest.duration_ms,
+                    "estimated_cost_usd": latest.estimated_cost_usd,
+                    "code": latest.code,
+                    "files": latest.files,
+                    "stack": latest.stack,
+                    "analysis": latest.analysis,
+                    "generation_summary": latest.generation_summary,
+                    "planned_models": latest.planned_models,
+                    "preview_html": latest.preview_html,
+                    "created_at": now,
+                }
+                gen_resp = await client.post(
+                    f"{self._rest_url()}/generations",
+                    headers=self._headers("return=representation"),
+                    json=gen_payload,
+                )
+                _raise_for_status(
+                    gen_resp,
+                    "duplicate_generation",
+                    "POST",
+                    f"{self._rest_url()}/generations",
+                    self,
+                )
+
+        return await self.get_project(new_id)
+
     async def _find_or_create_project(
         self,
         prompt: str,

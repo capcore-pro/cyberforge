@@ -13,6 +13,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+import httpx
 
 import media_db as db
 from media_db import MediaSource, MediaType
@@ -58,6 +59,35 @@ class AssetResponse(BaseModel):
 class SyncR2Response(BaseModel):
     status: str = "started"
     message: str | None = None
+
+
+class GenerateImageRequest(BaseModel):
+    prompt: str = Field(..., min_length=3, max_length=500)
+    project_id: str | None = Field(default=None, max_length=128)
+
+
+class ImportUrlRequest(BaseModel):
+    url: str = Field(..., min_length=8, max_length=4000)
+    filename: str | None = Field(default=None, max_length=200)
+    tags: list[str] | None = None
+    project_id: str | None = Field(default=None, max_length=128)
+    source: Literal["upload", "generated"] = "generated"
+
+
+class UpdateAssetRequest(BaseModel):
+    filename: str | None = Field(default=None, min_length=1, max_length=200)
+    project_id: str | None = Field(default=None, max_length=128)
+    tags: list[str] | None = None
+
+
+class ProjectCoverRequest(BaseModel):
+    media_asset_id: str = Field(..., min_length=1, max_length=128)
+
+
+class ProjectCoverResponse(BaseModel):
+    project_key: str
+    media_asset_id: str | None = None
+    asset: AssetResponse | None = None
 
 
 def _enrich_asset(asset: dict[str, Any]) -> dict[str, Any]:
@@ -205,6 +235,7 @@ async def serve_local_file(asset_id: str) -> FileResponse:
         path,
         media_type=str(asset.get("mime_type") or "application/octet-stream"),
         filename=str(asset.get("filename") or path.name),
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 
@@ -242,6 +273,136 @@ async def delete_media_asset(asset_id: str) -> dict[str, str]:
     if not _delete_asset_full(asset_id):
         raise HTTPException(status_code=404, detail="Asset introuvable.")
     return {"status": "deleted", "asset_id": asset_id}
+
+
+@router.patch("/assets/{asset_id}", response_model=AssetResponse)
+async def patch_media_asset(asset_id: str, body: UpdateAssetRequest) -> AssetResponse:
+    if body.filename is None and body.project_id is None and body.tags is None:
+        raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour.")
+    try:
+        updated = db.update_asset(
+            asset_id,
+            filename=body.filename,
+            project_id=body.project_id,
+            tags=body.tags,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Asset introuvable.")
+    return _asset_response(updated)
+
+
+@router.post("/generate", response_model=AssetResponse, status_code=201)
+async def generate_media_image(body: GenerateImageRequest) -> AssetResponse:
+    """Génère une image via Replicate et l'enregistre localement."""
+    from tools.replicate_image_gen import ReplicateImageGenerator
+    from tools.replicate_screenshot import ReplicateScreenshotError
+
+    generator = ReplicateImageGenerator()
+    if not generator.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Replicate non configuré — ajoutez REPLICATE_API_KEY dans backend/.env.",
+        )
+
+    try:
+        image_url = await generator.generate_image(
+            body.prompt,
+            project_id=body.project_id,
+        )
+    except ReplicateScreenshotError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("generate_media_image failed")
+        raise HTTPException(status_code=502, detail=f"Génération Replicate échouée : {exc}") from exc
+
+    if not image_url:
+        raise HTTPException(
+            status_code=502,
+            detail="Replicate n'a pas renvoyé d'URL d'image. Vérifiez le modèle et la clé API.",
+        )
+
+    safe_name = f"replicate_{uuid.uuid4().hex[:12]}.png"
+    try:
+        asset = await save_generated_asset(
+            image_url,
+            safe_name,
+            body.project_id,
+            source="generated",
+            tags=["replicate", "generated", "manual"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Impossible de télécharger l'image générée : {exc}",
+        ) from exc
+
+    return _asset_response(asset)
+
+
+@router.post("/import-url", response_model=AssetResponse, status_code=201)
+async def import_media_from_url(body: ImportUrlRequest) -> AssetResponse:
+    """Télécharge une image distante (Pexels, Unsplash, etc.) en local."""
+    filename = (body.filename or f"import_{uuid.uuid4().hex[:10]}.jpg").strip()
+    try:
+        asset = await save_generated_asset(
+            body.url.strip(),
+            filename,
+            body.project_id,
+            source=body.source,
+            tags=body.tags or ["import"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Téléchargement impossible : {exc}",
+        ) from exc
+
+    return _asset_response(asset)
+
+
+@router.get("/project-covers/{project_key}", response_model=ProjectCoverResponse)
+async def get_project_cover(project_key: str) -> ProjectCoverResponse:
+    media_id = db.get_project_cover_media_id(project_key)
+    if not media_id:
+        return ProjectCoverResponse(project_key=project_key, media_asset_id=None, asset=None)
+    asset = db.get_asset(media_id)
+    if asset is None:
+        return ProjectCoverResponse(project_key=project_key, media_asset_id=None, asset=None)
+    return ProjectCoverResponse(
+        project_key=project_key,
+        media_asset_id=media_id,
+        asset=_asset_response(asset),
+    )
+
+
+@router.put("/project-covers/{project_key}", response_model=ProjectCoverResponse)
+async def set_project_cover(project_key: str, body: ProjectCoverRequest) -> ProjectCoverResponse:
+    asset = db.get_asset(body.media_asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Asset introuvable.")
+    if str(asset.get("type")) != "image":
+        raise HTTPException(status_code=400, detail="Seules les images peuvent servir de couverture.")
+    try:
+        db.set_project_cover(project_key, body.media_asset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ProjectCoverResponse(
+        project_key=project_key,
+        media_asset_id=body.media_asset_id,
+        asset=_asset_response(asset),
+    )
+
+
+@router.delete("/project-covers/{project_key}")
+async def clear_project_cover(project_key: str) -> dict[str, bool]:
+    deleted = db.delete_project_cover(project_key)
+    return {"deleted": deleted}
 
 
 @router.post("/sync-r2", response_model=SyncR2Response)

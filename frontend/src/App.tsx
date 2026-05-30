@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
@@ -56,6 +56,7 @@ function AppWithNotifications({
   setPage: (p: AppPage) => void;
 }) {
   const { markAllSeen } = useContactNotifications();
+  const [generatorFromProjects, setGeneratorFromProjects] = useState(false);
 
   useEffect(() => {
     if (page === "clients") {
@@ -63,12 +64,30 @@ function AppWithNotifications({
     }
   }, [page, markAllSeen]);
 
+  const openGeneratorFromProjects = useCallback(() => {
+    setGeneratorFromProjects(true);
+    setPage("generator");
+  }, [setPage]);
+
   function renderPage() {
     switch (page) {
       case "generator":
-        return <GeneratorPage onOpenProjects={() => setPage("projects")} />;
+        return (
+          <GeneratorPage
+            onOpenProjects={() => {
+              setGeneratorFromProjects(false);
+              setPage("projects");
+            }}
+            showBackToProjects={generatorFromProjects}
+          />
+        );
       case "projects":
-        return <ProjectsPage onNavigate={setPage} />;
+        return (
+          <ProjectsPage
+            onNavigate={setPage}
+            onOpenGenerator={openGeneratorFromProjects}
+          />
+        );
       case "clients":
         return <ClientsPage onOpenGenerator={() => setPage("generator")} />;
       case "perso":

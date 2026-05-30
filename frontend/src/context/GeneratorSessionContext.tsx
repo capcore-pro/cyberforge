@@ -25,6 +25,7 @@ export type GeneratorFlowPhase = "idle" | "running" | "done" | "error";
 
 export interface GeneratorSessionState {
   prompt: string;
+  projectName: string;
   projectType: ProjectType;
   generationMode: GenerationMode;
   phase: GeneratorFlowPhase;
@@ -55,6 +56,7 @@ export interface GeneratorSessionState {
 
 const initialSession = (): GeneratorSessionState => ({
   prompt: "",
+  projectName: "",
   projectType: "site_web",
   generationMode: "client_demo",
   phase: "idle",

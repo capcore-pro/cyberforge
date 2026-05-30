@@ -25,6 +25,10 @@ import {
   balanceOf,
   isBalanceUninitialized,
 } from "@/lib/cockpit-balance";
+import {
+  SUBSCRIPTION_SERVICES,
+  subscriptionMonthlyTotal,
+} from "@/lib/subscription-services";
 
 type CockpitSection = "dashboard" | "wallet" | "thresholds" | "settings";
 
@@ -32,7 +36,7 @@ const SECTIONS: { id: CockpitSection; label: string }[] = [
   { id: "dashboard", label: "Tableau de bord" },
   { id: "wallet", label: "Portefeuille" },
   { id: "thresholds", label: "Seuils" },
-  { id: "settings", label: "Paramètres" },
+  { id: "settings", label: "Services & Abonnements" },
 ];
 
 const UNINITIALIZED_BALANCE_HINT =
@@ -665,7 +669,65 @@ function ThresholdsSection({
   );
 }
 
-// --- Paramètres ---
+// --- Services & Abonnements ---
+
+function SubscriptionServicesPanel() {
+  const total = subscriptionMonthlyTotal();
+
+  return (
+    <div className="cyber-panel space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-cyber-text">
+            Abonnements SaaS récurrents
+          </h2>
+          <p className="mt-1 text-xs text-cyber-muted">
+            Coûts mensuels estimés des services utilisés par CyberForge.
+          </p>
+        </div>
+        <div className="rounded-lg border border-cf-gold/40 bg-cf-gold-subtle px-4 py-2 text-right">
+          <p className="text-[10px] uppercase tracking-wider text-cf-muted">
+            Total mensuel estimé
+          </p>
+          <p className="text-xl font-bold tabular-nums text-cf-gold">
+            {formatEur(total)}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {SUBSCRIPTION_SERVICES.map((svc) => (
+          <div
+            key={svc.id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyber-border bg-cyber-surface/80 px-4 py-3"
+          >
+            <div>
+              <p className="font-semibold text-cyber-text">
+                {svc.icon} {svc.name}
+              </p>
+              {svc.note ? (
+                <p className="text-xs text-cyber-muted">{svc.note}</p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="font-mono text-sm tabular-nums text-cyber-text">
+                {svc.monthlyEur > 0 ? `${formatEur(svc.monthlyEur)}/mois` : "Gratuit"}
+              </span>
+              <a
+                href={svc.billingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="cyber-action-btn text-[10px]"
+              >
+                Recharger
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function SettingsSection({
   services,
@@ -729,6 +791,17 @@ function SettingsSection({
 
   return (
     <div className="space-y-6">
+      <SubscriptionServicesPanel />
+
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-cyber-text">
+          Fournisseurs API (cockpit)
+        </h2>
+        <p className="mb-4 text-xs text-cyber-muted">
+          Connecteurs pour le suivi des soldes et consommations API.
+        </p>
+      </div>
+
       {error ? <ErrorBanner message={error} /> : null}
 
       <div className="flex flex-wrap gap-3">

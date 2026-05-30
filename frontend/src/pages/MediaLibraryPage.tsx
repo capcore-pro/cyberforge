@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { BackButton } from "@/components/BackButton";
+import { MediaAddPanel } from "@/components/media/MediaAddPanel";
 import { MediaAssetCard } from "@/components/media/MediaAssetCard";
+import { MediaAssetDetailModal } from "@/components/media/MediaAssetDetailModal";
 import {
   MediaFiltersBar,
   type SourceFilter,
@@ -10,124 +11,13 @@ import { apiErrorMessage } from "@/lib/api-errors";
 import {
   deleteMediaAsset,
   fetchMediaAssets,
+  getAssetAbsolutePublicUrl,
   getAssetPublicUrl,
-  syncMediaAssetR2,
-  uploadMediaAsset,
   type MediaAsset,
 } from "@/lib/media-api";
 
-function UploadModal({
-  open,
-  onClose,
-  onUploaded,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onUploaded: () => void;
-}) {
-  const [dragOver, setDragOver] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setError(null);
-      setDragOver(false);
-    }
-  }, [open]);
-
-  if (!open) return null;
-
-  async function handleFiles(files: FileList | File[]) {
-    const list = Array.from(files);
-    if (!list.length) return;
-    setBusy(true);
-    setError(null);
-    for (const file of list) {
-      const res = await uploadMediaAsset(file);
-      if (!res.ok) {
-        setError(apiErrorMessage(res, `Échec upload : ${file.name}`));
-        setBusy(false);
-        return;
-      }
-    }
-    setBusy(false);
-    onUploaded();
-    onClose();
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-      role="dialog"
-      aria-modal
-      aria-labelledby="upload-title"
-    >
-      <div className="cyber-panel w-full max-w-lg border-cyber-neon/30">
-        <BackButton className="mb-3" onClick={onClose} />
-        <h2 id="upload-title" className="text-lg font-semibold text-cyber-text">
-          Uploader des fichiers
-        </h2>
-        <p className="mt-1 text-xs text-cyber-muted">
-          Images (JPEG, PNG, WebP, GIF), ZIP ou PDF — max 50 Mo par fichier.
-        </p>
-        {error ? (
-          <p className="mt-3 rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
-            {error}
-          </p>
-        ) : null}
-        <div
-          className={`mt-4 flex min-h-[160px] flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition ${
-            dragOver
-              ? "border-cyber-neon bg-cyber-accent/10"
-              : "border-cyber-border bg-cyber-bg/40"
-          }`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            void handleFiles(e.dataTransfer.files);
-          }}
-        >
-          <p className="text-sm text-cyber-muted">Glissez-déposez ici</p>
-          <p className="my-2 text-xs text-cyber-muted">ou</p>
-          <label className="cyber-action-btn cyber-action-btn-primary cursor-pointer">
-            Parcourir…
-            <input
-              type="file"
-              className="sr-only"
-              multiple
-              accept="image/jpeg,image/png,image/webp,image/gif,application/zip,application/pdf,.zip,.pdf"
-              disabled={busy}
-              onChange={(e) => {
-                const files = e.target.files;
-                if (files?.length) void handleFiles(files);
-                e.target.value = "";
-              }}
-            />
-          </label>
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className="cyber-action-btn" onClick={onClose} disabled={busy}>
-            Annuler
-          </button>
-        </div>
-        {busy ? (
-          <p className="mt-2 text-center text-xs text-cyber-neon animate-pulse">
-            Envoi en cours…
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 /**
- * Médiathèque — grille d'assets, filtres et upload.
+ * Médiathèque — grille d'assets locaux, recherche et ajout manuel.
  */
 export function MediaLibraryPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("");
@@ -137,9 +27,11 @@ export function MediaLibraryPage() {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addInitialTab, setAddInitialTab] = useState<"search" | "generate" | "import">("search");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [detailAsset, setDetailAsset] = useState<MediaAsset | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(search), 300);
@@ -168,8 +60,13 @@ export function MediaLibraryPage() {
     void load();
   }, [load]);
 
+  function openAdd(tab: "search" | "generate" | "import" = "search") {
+    setAddInitialTab(tab);
+    setAddOpen(true);
+  }
+
   async function handleCopyUrl(asset: MediaAsset) {
-    const url = getAssetPublicUrl(asset);
+    const url = getAssetAbsolutePublicUrl(asset);
     try {
       await navigator.clipboard.writeText(url);
       setToast("URL copiée.");
@@ -177,19 +74,6 @@ export function MediaLibraryPage() {
       setToast(url);
     }
     window.setTimeout(() => setToast(null), 2500);
-  }
-
-  async function handleSyncR2(asset: MediaAsset) {
-    setBusyId(asset.id);
-    const res = await syncMediaAssetR2(asset.id, true);
-    setBusyId(null);
-    if (!res.ok) {
-      setError(apiErrorMessage(res, "Synchronisation R2 échouée."));
-      return;
-    }
-    setToast("Asset synchronisé sur R2.");
-    window.setTimeout(() => setToast(null), 2500);
-    void load();
   }
 
   async function handleDelete(asset: MediaAsset) {
@@ -204,14 +88,27 @@ export function MediaLibraryPage() {
     void load();
   }
 
+  const imageCount = assets.filter((a) => a.type === "image").length;
+
   return (
     <div className="mx-auto max-w-7xl">
-      <header className="mb-6">
-        <p className="cf-section-label">Ressources</p>
-        <h1 className="cf-page-title mt-1">Médiathèque</h1>
-        <p className="mt-2 max-w-2xl text-sm text-cf-muted">
-          Images générées (Replicate, Unsplash), uploads manuels et synchronisation Cloudflare R2.
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="cf-section-label">Ressources</p>
+          <h1 className="cf-page-title mt-1">Médiathèque</h1>
+          <p className="mt-2 max-w-2xl text-sm text-cf-muted">
+            Images stockées localement — recherche Pexels/Unsplash, génération Replicate et
+            imports manuels.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Ajouter une image"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-cf-gold/50 bg-cf-active text-xl font-light text-cf-gold transition hover:border-cf-gold hover:bg-cf-gold-subtle"
+          onClick={() => openAdd("search")}
+        >
+          +
+        </button>
       </header>
 
       <MediaFiltersBar
@@ -224,10 +121,10 @@ export function MediaLibraryPage() {
         trailing={
           <button
             type="button"
-            className="cyber-generate-btn px-5 py-2.5 text-xs"
-            onClick={() => setUploadOpen(true)}
+            className="cyber-action-btn cyber-action-btn-primary text-xs"
+            onClick={() => openAdd("import")}
           >
-            Uploader
+            Importer un fichier
           </button>
         }
       />
@@ -249,28 +146,56 @@ export function MediaLibraryPage() {
           Chargement de la médiathèque…
         </p>
       ) : assets.length === 0 ? (
-        <div className="cyber-panel py-12 text-center text-sm text-cyber-muted">
-          Aucun asset. Utilisez « Uploader » ou générez des images via le pipeline.
+        <div className="cyber-panel space-y-4 py-12 text-center">
+          <p className="text-sm text-cyber-muted">
+            Aucune image pour l&apos;instant — générez votre premier projet pour alimenter la
+            médiathèque
+          </p>
+          <button
+            type="button"
+            className="cyber-generate-btn px-5 py-2.5 text-xs"
+            onClick={() => openAdd("search")}
+          >
+            Rechercher des photos
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {assets.map((asset) => (
-            <MediaAssetCard
-              key={asset.id}
-              asset={asset}
-              busy={busyId === asset.id}
-              onCopyUrl={handleCopyUrl}
-              onSyncR2={handleSyncR2}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
+        <>
+          {imageCount === 0 ? (
+            <p className="mb-4 text-sm text-cf-muted">
+              Aucune image — utilisez « + » pour en ajouter via Pexels, Unsplash ou Replicate.
+            </p>
+          ) : null}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {assets.map((asset) => (
+              <MediaAssetCard
+                key={asset.id}
+                asset={asset}
+                busy={busyId === asset.id}
+                onOpen={setDetailAsset}
+                onCopyUrl={handleCopyUrl}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        </>
       )}
 
-      <UploadModal
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        onUploaded={() => void load()}
+      <MediaAddPanel
+        open={addOpen}
+        initialTab={addInitialTab}
+        onClose={() => setAddOpen(false)}
+        onAdded={() => {
+          void load();
+          setToast("Image ajoutée à la médiathèque.");
+          window.setTimeout(() => setToast(null), 2500);
+        }}
+      />
+
+      <MediaAssetDetailModal
+        asset={detailAsset}
+        onClose={() => setDetailAsset(null)}
+        onDeleted={() => void load()}
       />
     </div>
   );

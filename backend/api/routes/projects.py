@@ -3,9 +3,11 @@ Routes projets — historique Supabase des générations CoreMindAI.
 """
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from agents.coremind_agent import PROJECT_TYPE_LABELS, ProjectType
 from db.supabase_store import (
@@ -151,3 +153,97 @@ async def delete_project(project_id: str) -> dict[str, bool]:
         ) from exc
 
     return {"deleted": True}
+
+
+class UpdateProjectRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    prompt: str | None = Field(default=None, min_length=3, max_length=8000)
+
+
+class UpdateManagedProjectRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+@router.patch("/projects/{project_id}", response_model=ProjectRow)
+async def update_project(project_id: str, body: UpdateProjectRequest) -> ProjectRow:
+    """Met à jour le titre et/ou le prompt d'un projet Supabase."""
+    store = get_supabase_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail=_not_configured_detail(store))
+
+    if body.title is None and body.prompt is None:
+        raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour.")
+
+    try:
+        existing = await store.get_project(project_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(exc, f"PATCH /api/projects/{project_id}") from exc
+
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    try:
+        updated = await store.update_project_metadata(
+            project_id,
+            title=body.title,
+            prompt=body.prompt,
+        )
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(exc, f"PATCH /api/projects/{project_id}") from exc
+
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+    return updated
+
+
+@router.post("/projects/{project_id}/duplicate", response_model=ProjectDetailResponse)
+async def duplicate_project(project_id: str) -> ProjectDetailResponse:
+    """Duplique un projet Supabase et sa dernière génération."""
+    store = get_supabase_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail=_not_configured_detail(store))
+
+    try:
+        duplicated = await store.duplicate_project(project_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(
+            exc, f"POST /api/projects/{project_id}/duplicate"
+        ) from exc
+
+    if duplicated is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+    return duplicated
+
+
+@router.patch("/managed-projects/{project_id}", response_model=dict)
+async def update_managed_project_metadata(
+    project_id: str,
+    body: UpdateManagedProjectRequest,
+) -> dict[str, str]:
+    """Met à jour les métadonnées d'un projet géré (ex. titre)."""
+    from db.managed_projects_store import get_managed_projects_store
+
+    store = get_managed_projects_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail=_not_configured_detail(get_supabase_store()))
+
+    if body.title is None:
+        raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour.")
+
+    row = await store.get_project(project_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    try:
+        updated = await store.update_project(
+            project_id,
+            patch={
+                "title": body.title.strip(),
+                "updated_at": datetime.now(UTC).isoformat(),
+            },
+        )
+    except Exception as exc:
+        logger.exception("update_managed_project_metadata failed")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {"id": updated.id, "title": updated.title or updated.slug}

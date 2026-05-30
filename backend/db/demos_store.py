@@ -556,6 +556,29 @@ class DemosStore:
                 return None
             return _demo_from_row(rows[0])
 
+    async def update_client_id(
+        self,
+        demo_id: str,
+        client_id: str | None,
+    ) -> DemoRow | None:
+        """Associe ou dissocie un client à une démo."""
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        url = f"{self._rest_url()}/demos"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.patch(
+                url,
+                headers=self._supabase._headers("return=representation"),
+                params={"id": f"eq.{demo_id.strip()}"},
+                json={"client_id": client_id.strip() if client_id else None},
+            )
+            _raise_for_status(resp, "update_demo_client", "PATCH", url, self._supabase)
+            rows = resp.json()
+            if not isinstance(rows, list) or not rows:
+                return None
+            return _demo_from_row(rows[0])
+
     async def _fetch_password_hash(self, token: str) -> str | None:
         url = f"{self._rest_url()}/demos"
         async with httpx.AsyncClient(timeout=30.0) as client:

@@ -35,7 +35,8 @@ _TVA_MENTION = "TVA non applicable — article 293 B du CGI"
 _VALIDITY_DAYS = 30
 _DEPOSIT_PERCENT = 30
 
-_COLOR_PRIMARY = colors.HexColor("#1e3a5f")
+_COLOR_PRIMARY = colors.HexColor("#1a1a2e")
+_COLOR_GOLD = colors.HexColor("#C9A84C")
 _COLOR_MUTED = colors.HexColor("#64748b")
 _COLOR_LINE = colors.HexColor("#e2e8f0")
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -109,24 +110,27 @@ def _styles() -> dict[str, ParagraphStyle]:
         "title": ParagraphStyle(
             "LegalTitle",
             parent=base["Heading1"],
-            fontSize=18,
+            fontSize=20,
             textColor=_COLOR_PRIMARY,
-            spaceAfter=8,
+            spaceAfter=12,
+            spaceBefore=4,
+            leading=24,
         ),
         "heading": ParagraphStyle(
             "LegalHeading",
             parent=base["Heading2"],
-            fontSize=12,
-            textColor=_COLOR_PRIMARY,
-            spaceBefore=12,
-            spaceAfter=6,
+            fontSize=11,
+            textColor=_COLOR_GOLD,
+            spaceBefore=16,
+            spaceAfter=8,
+            fontName="Helvetica-Bold",
         ),
         "body": ParagraphStyle(
             "LegalBody",
             parent=base["Normal"],
             fontSize=10,
-            leading=14,
-            textColor=colors.black,
+            leading=16,
+            textColor=colors.HexColor("#1e293b"),
         ),
         "small": ParagraphStyle(
             "LegalSmall",
@@ -153,13 +157,34 @@ def _styles() -> dict[str, ParagraphStyle]:
 
 def _footer_canvas(canvas, doc, mat: MatProfile) -> None:  # noqa: ARG001
     canvas.saveState()
+    w = A4[0]
+    canvas.setStrokeColor(_COLOR_LINE)
+    canvas.setLineWidth(0.5)
+    canvas.line(2 * cm, 1.6 * cm, w - 2 * cm, 1.6 * cm)
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(_COLOR_MUTED)
-    footer = (
-        f"{mat.brand} — {mat.name} — {mat.status} — SIRET : {mat.siret} — {mat.email}"
+    canvas.drawCentredString(w / 2, 1.15 * cm, "capcore.pro · noreply@capcore.pro")
+    canvas.drawCentredString(
+        w / 2,
+        0.75 * cm,
+        f"{mat.brand} — {mat.name} — SIRET : {mat.siret}",
     )
-    canvas.drawCentredString(A4[0] / 2, 1.2 * cm, footer)
     canvas.restoreState()
+
+
+def _banner_canvas(canvas, doc) -> None:  # noqa: ARG001
+    """Bannière or CapCore en haut de chaque page."""
+    canvas.saveState()
+    w, h = A4
+    banner_h = 1.1 * cm
+    canvas.setFillColor(_COLOR_GOLD)
+    canvas.rect(0, h - banner_h, w, banner_h, fill=1, stroke=0)
+    canvas.restoreState()
+
+
+def _commercial_page(canvas, doc_tpl, mat: MatProfile) -> None:
+    _banner_canvas(canvas, doc_tpl)
+    _footer_canvas(canvas, doc_tpl, mat)
 
 
 class _SvgLogoFlowable(Flowable):
@@ -192,14 +217,14 @@ def _logo_header_block() -> list[Any]:
     if drawing is None or not drawing.width or not drawing.height:
         return []
 
-    target_w = 6.5 * cm
+    target_w = 5.5 * cm
     scale = target_w / float(drawing.width)
     drawing.width = target_w
     drawing.height = float(drawing.height) * scale
     drawing.scale(scale, scale)
     return [
         _SvgLogoFlowable(drawing, drawing.width, drawing.height),
-        Spacer(1, 0.35 * cm),
+        Spacer(1, 0.6 * cm),
     ]
 
 
@@ -284,7 +309,7 @@ def _line_items_table(items: list[dict[str, Any]], st: dict[str, ParagraphStyle]
     tbl.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), _COLOR_PRIMARY),
+                ("BACKGROUND", (0, 0), (-1, 0), _COLOR_GOLD),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -293,8 +318,10 @@ def _line_items_table(items: list[dict[str, Any]], st: dict[str, ParagraphStyle]
                 ("ALIGN", (1, 1), (1, -1), "CENTER"),
                 ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
             ]
         )
     )
@@ -319,10 +346,10 @@ def _totals_block(
             [
                 ("ALIGN", (1, 0), (1, -1), "RIGHT"),
                 ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-                ("LINEABOVE", (0, -1), (-1, -1), 1, _COLOR_PRIMARY),
+                ("LINEABOVE", (0, -1), (-1, -1), 1.5, _COLOR_GOLD),
                 ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ]
         )
     )
@@ -346,35 +373,35 @@ def _build_commercial_pdf(
     st = _styles()
 
     def on_page(canvas, doc_tpl):  # noqa: ANN001
-        _footer_canvas(canvas, doc_tpl, mat)
+        _commercial_page(canvas, doc_tpl, mat)
 
     pdf = SimpleDocTemplate(
         str(output_path),
         pagesize=A4,
         leftMargin=2 * cm,
         rightMargin=2 * cm,
-        topMargin=2 * cm,
-        bottomMargin=2.2 * cm,
+        topMargin=2.8 * cm,
+        bottomMargin=2.4 * cm,
     )
 
     story: list[Any] = [
         *_logo_header_block(),
         _header_table(mat, client, st),
-        Spacer(1, 0.5 * cm),
+        Spacer(1, 0.7 * cm),
         Paragraph(title, st["title"]),
     ]
     for line in meta_lines:
         story.append(Paragraph(line, st["body"]))
-    story.append(Spacer(1, 0.4 * cm))
+    story.append(Spacer(1, 0.5 * cm))
     if doc.get("title"):
         story.append(Paragraph(f"<b>Objet :</b> {doc['title']}", st["body"]))
     if doc.get("notes"):
         story.append(Paragraph(f"<i>{doc['notes']}</i>", st["small"]))
-    story.append(Spacer(1, 0.3 * cm))
-    story.append(_line_items_table(items, st))
-    story.append(Spacer(1, 0.4 * cm))
-    story.append(_totals_block(doc, mat, st))
     story.append(Spacer(1, 0.5 * cm))
+    story.append(_line_items_table(items, st))
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(_totals_block(doc, mat, st))
+    story.append(Spacer(1, 0.6 * cm))
     story.append(Paragraph("<b>Conditions</b>", st["heading"]))
     for cond in conditions:
         story.append(Paragraph(f"• {cond}", st["body"]))

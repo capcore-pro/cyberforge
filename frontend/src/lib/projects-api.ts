@@ -1,9 +1,9 @@
 import { API_PREFIX } from "@shared/constants";
-import type { DemoSeedPayload } from "@shared/types";
+import type { ProjectDetailResponse, ProjectRecord } from "@shared/types";
 import { apiRequest } from "@/lib/api-client";
 
 export async function fetchProjectDemoSeed(projectId: string) {
-  return apiRequest<DemoSeedPayload>({
+  return apiRequest<import("@shared/types").DemoSeedPayload>({
     method: "GET",
     path: `${API_PREFIX}/projects/${projectId}/demo-seed`,
   });
@@ -13,5 +13,31 @@ export async function deleteProject(projectId: string) {
   return apiRequest<{ deleted: boolean }>({
     method: "DELETE",
     path: `${API_PREFIX}/projects/${projectId}`,
+  });
+}
+
+export async function updateProject(
+  projectId: string,
+  body: { title?: string; prompt?: string },
+) {
+  return apiRequest<ProjectRecord>({
+    method: "PATCH",
+    path: `${API_PREFIX}/projects/${projectId}`,
+    body,
+  });
+}
+
+export async function duplicateSupabaseProject(projectId: string) {
+  return apiRequest<ProjectDetailResponse>({
+    method: "POST",
+    path: `${API_PREFIX}/projects/${projectId}/duplicate`,
+  });
+}
+
+export async function updateManagedProjectTitle(projectId: string, title: string) {
+  return apiRequest<{ id: string; title: string }>({
+    method: "PATCH",
+    path: `${API_PREFIX}/managed-projects/${projectId}`,
+    body: { title },
   });
 }

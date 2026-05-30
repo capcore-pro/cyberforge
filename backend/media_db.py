@@ -83,6 +83,12 @@ def init_media_db() -> None:
                     ON media_assets (project_id, created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_media_assets_source_created
                     ON media_assets (source, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS project_cover_images (
+                    project_key TEXT PRIMARY KEY,
+                    media_asset_id TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
             conn.commit()
@@ -276,6 +282,113 @@ def delete_asset(asset_id: str) -> bool:
             cur = conn.execute(
                 "DELETE FROM media_assets WHERE id = ?",
                 (asset_id.strip(),),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+        finally:
+            conn.close()
+
+
+def update_asset(
+    asset_id: str,
+    *,
+    filename: str | None = None,
+    project_id: str | None = None,
+    tags: list[str] | str | None = None,
+    clear_project_id: bool = False,
+) -> dict[str, Any] | None:
+    """Met à jour les métadonnées d'un asset."""
+    updates: dict[str, Any] = {}
+    if filename is not None:
+        clean = filename.strip()
+        if not clean:
+            raise ValueError("filename ne peut pas être vide.")
+        updates["filename"] = clean
+    if clear_project_id:
+        updates["project_id"] = None
+    elif project_id is not None:
+        updates["project_id"] = project_id.strip() if project_id.strip() else None
+    if tags is not None:
+        updates["tags"] = _normalize_tags(tags)
+
+    if not updates:
+        return get_asset(asset_id)
+
+    set_clause = ", ".join(f"{col} = ?" for col in updates)
+    params = list(updates.values()) + [asset_id.strip()]
+
+    with _lock:
+        conn = _connect()
+        try:
+            cur = conn.execute(
+                f"UPDATE media_assets SET {set_clause} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+            if cur.rowcount == 0:
+                return None
+            row = conn.execute(
+                "SELECT * FROM media_assets WHERE id = ?",
+                (asset_id.strip(),),
+            ).fetchone()
+            return _asset_from_row(row)
+        finally:
+            conn.close()
+
+
+def set_project_cover(project_key: str, media_asset_id: str) -> dict[str, Any]:
+    key = project_key.strip()
+    mid = media_asset_id.strip()
+    if not key or not mid:
+        raise ValueError("project_key et media_asset_id sont requis.")
+    now = _utc_now()
+    with _lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO project_cover_images (project_key, media_asset_id, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(project_key) DO UPDATE SET
+                    media_asset_id = excluded.media_asset_id,
+                    updated_at = excluded.updated_at
+                """,
+                (key, mid, now),
+            )
+            conn.commit()
+            return {"project_key": key, "media_asset_id": mid, "updated_at": now}
+        finally:
+            conn.close()
+
+
+def get_project_cover_media_id(project_key: str) -> str | None:
+    key = project_key.strip()
+    if not key:
+        return None
+    with _lock:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT media_asset_id FROM project_cover_images WHERE project_key = ?",
+                (key,),
+            ).fetchone()
+            if row is None:
+                return None
+            return str(row[0]) if row[0] else None
+        finally:
+            conn.close()
+
+
+def delete_project_cover(project_key: str) -> bool:
+    key = project_key.strip()
+    if not key:
+        return False
+    with _lock:
+        conn = _connect()
+        try:
+            cur = conn.execute(
+                "DELETE FROM project_cover_images WHERE project_key = ?",
+                (key,),
             )
             conn.commit()
             return cur.rowcount > 0

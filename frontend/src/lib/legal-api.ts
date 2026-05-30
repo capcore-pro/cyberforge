@@ -247,10 +247,14 @@ export async function fetchProjectsForLegal() {
   });
 }
 
-export function openPdfDownload(doc: LegalDocument) {
-  const url = resolveLegalUrl(
-    doc.pdf_url || `${LEGAL}/documents/${doc.id}/pdf`,
+export function getDocumentPdfUrl(doc: LegalDocument): string {
+  return resolveLegalUrl(
+    doc.pdf_url || `${LEGAL}/documents/${encodeURIComponent(doc.id)}/pdf`,
   );
+}
+
+export function openPdfDownload(doc: LegalDocument) {
+  const url = getDocumentPdfUrl(doc);
   window.open(url, "_blank", "noopener,noreferrer");
 }
 

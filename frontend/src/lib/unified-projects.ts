@@ -11,7 +11,15 @@ import { hardDeleteApplicationWeb, listApplicationWeb } from "@/lib/application-
 import { deleteClientDemo, findDemoIdByGeneration } from "@/lib/demos-api";
 import { hardDeleteEcommerce, listEcommerce } from "@/lib/ecommerce-api";
 import { hardDeleteExtension, listExtensions } from "@/lib/extensions-api";
-import { deleteProject } from "@/lib/projects-api";
+import { deleteProject, duplicateSupabaseProject, updateManagedProjectTitle, updateProject } from "@/lib/projects-api";
+import { updateDemoClient } from "@/lib/demos-api";
+import { createVitrine, updateVitrine } from "@/lib/vitrines-api";
+import { createApplicationWeb, updateApplicationWeb } from "@/lib/application-web-api";
+import { createEcommerce, updateEcommerce } from "@/lib/ecommerce-api";
+import { createReservationSite } from "@/lib/site-reservation-api";
+import { createExtension, updateExtension } from "@/lib/extensions-api";
+import { buildModificationPipelinePrompt } from "@/lib/project-modification";
+import { streamCoremindRun } from "@/lib/pipeline-stream";
 import { hardDeleteReservationSite, listReservationSites } from "@/lib/site-reservation-api";
 import { hardDeleteVitrine, listVitrines } from "@/lib/vitrines-api";
 
@@ -45,6 +53,7 @@ export interface UnifiedProject {
   supabaseProjectId?: string;
   demoId?: string;
   generationId?: string;
+  clientId?: string | null;
   projectType?: ProjectType;
   generationMode?: GenerationMode;
 }
@@ -181,6 +190,7 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
   let url: string | null = null;
   let demoId: string | undefined;
   let generationId: string | undefined;
+  let clientId: string | null | undefined;
   let prompt = project.prompt?.trim() || "";
 
   const detail = await fetchProjectDetail(project.id);
@@ -191,6 +201,7 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
     const demoLookup = await findDemoIdByGeneration(latestGen.id);
     if (demoLookup.ok && demoLookup.data?.demo_id) {
       demoId = demoLookup.data.demo_id;
+      clientId = demoLookup.data.client_id ?? null;
       status = "demo";
       url =
         demoLookup.data.url?.trim() ||
@@ -211,6 +222,7 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
     supabaseProjectId: project.id,
     demoId,
     generationId,
+    clientId,
     projectType: project.project_type,
     generationMode: status === "demo" ? "client_demo" : "real_app",
   };
@@ -372,4 +384,152 @@ export async function deleteUnifiedProject(project: UnifiedProject): Promise<{
 export function openProjectUrl(url: string) {
   const target = url.startsWith("http") ? url : `${window.location.origin}${url}`;
   window.open(target, "_blank", "noopener,noreferrer");
+}
+
+export async function renameUnifiedProject(
+  project: UnifiedProject,
+  name: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { ok: false, error: "Le nom du projet est requis." };
+  }
+
+  if (project.source === "supabase" && project.supabaseProjectId) {
+    const res = await updateProject(project.supabaseProjectId, { title: trimmed });
+    return res.ok ? { ok: true } : { ok: false, error: "Échec mise à jour du nom." };
+  }
+
+  if (project.managedId) {
+    const res = await updateManagedProjectTitle(project.managedId, trimmed);
+    return res.ok ? { ok: true } : { ok: false, error: "Échec mise à jour du nom." };
+  }
+
+  return { ok: false, error: "Projet non modifiable." };
+}
+
+export async function affiliateUnifiedProjectClient(
+  project: UnifiedProject,
+  clientId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!project.demoId) {
+    return {
+      ok: false,
+      error: "Association client disponible uniquement pour les projets avec démo.",
+    };
+  }
+  const res = await updateDemoClient(project.demoId, clientId);
+  return res.ok ? { ok: true } : { ok: false, error: "Échec association client." };
+}
+
+function managedUpdateFn(project: UnifiedProject) {
+  if (!project.managedId) return null;
+  switch (project.source) {
+    case "managed_vitrine":
+      return (prompt: string) => updateVitrine(project.managedId!, prompt);
+    case "managed_app_web":
+      return (prompt: string) => updateApplicationWeb(project.managedId!, prompt);
+    case "managed_ecommerce":
+      return (prompt: string) => updateEcommerce(project.managedId!, prompt);
+    case "managed_extension":
+      return (prompt: string) => updateExtension(project.managedId!, prompt);
+    default:
+      return null;
+  }
+}
+
+function managedCreateFn(project: UnifiedProject) {
+  const prompt = project.prompt;
+  switch (project.source) {
+    case "managed_vitrine":
+      return () => createVitrine(prompt);
+    case "managed_app_web":
+      return () => createApplicationWeb(prompt);
+    case "managed_ecommerce":
+      return () => createEcommerce(prompt);
+    case "managed_reservation":
+      return () => createReservationSite(prompt);
+    case "managed_extension":
+      return () => createExtension(prompt);
+    default:
+      return null;
+  }
+}
+
+export async function modifyUnifiedProject(
+  project: UnifiedProject,
+  modificationPrompt: string,
+  projectName: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { prompt, inspirationBrief } = buildModificationPipelinePrompt(
+    modificationPrompt,
+    projectName,
+    project.prompt,
+  );
+
+  const updater = managedUpdateFn(project);
+  if (updater) {
+    const composed = `${inspirationBrief}\n\nPrompt utilisateur :\n${prompt}`;
+    const res = await updater(composed);
+    return res.ok
+      ? { ok: true }
+      : { ok: false, error: "Échec de la modification du projet géré." };
+  }
+
+  const res = await streamCoremindRun({
+    prompt,
+    project_type: project.projectType ?? "site_web",
+    generation_mode: project.generationMode ?? "client_demo",
+    inspiration_brief: inspirationBrief,
+  });
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: res.statusText || "Échec du pipeline de modification.",
+    };
+  }
+
+  if (projectName.trim() && project.supabaseProjectId) {
+    await updateProject(project.supabaseProjectId, { title: projectName.trim() });
+  }
+
+  return { ok: true };
+}
+
+export async function duplicateUnifiedProject(
+  project: UnifiedProject,
+): Promise<{ ok: boolean; project?: UnifiedProject; error?: string }> {
+  const copyName = `Copie de ${project.name}`;
+
+  if (project.source === "supabase" && project.supabaseProjectId) {
+    const res = await duplicateSupabaseProject(project.supabaseProjectId);
+    if (!res.ok || !res.data) {
+      return { ok: false, error: "Échec duplication Supabase." };
+    }
+    const mapped = await mapSupabaseProject(res.data.project);
+    if (copyName !== mapped.name) {
+      await updateProject(res.data.project.id, { title: copyName });
+      mapped.name = copyName;
+    }
+    return { ok: true, project: mapped };
+  }
+
+  const creator = managedCreateFn(project);
+  if (!creator || !project.managedId) {
+    return { ok: false, error: "Duplication non supportée pour ce type." };
+  }
+
+  const res = await creator();
+  const created = res.data?.project as ManagedProjectRecord | undefined;
+  if (!res.ok || !created?.id) {
+    return { ok: false, error: "Échec duplication du projet géré." };
+  }
+
+  await updateManagedProjectTitle(created.id, copyName);
+  const mapped = mapManagedRecord(created, project.source);
+  if (!mapped) {
+    return { ok: false, error: "Projet dupliqué introuvable." };
+  }
+  return { ok: true, project: { ...mapped, name: copyName } };
 }

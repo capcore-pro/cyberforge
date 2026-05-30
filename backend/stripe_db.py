@@ -396,6 +396,46 @@ def update_config(config_id: str, **fields: Any) -> dict[str, Any] | None:
             conn.close()
 
 
+def upsert_config_by_project(
+    *,
+    project_id: str,
+    project_name: str,
+    secret_key: str,
+    publishable_key: str | None = None,
+    webhook_secret: str | None = None,
+    mode: StripeMode = "test",
+    currency: str = "eur",
+    enabled: bool = True,
+) -> dict[str, Any]:
+    """Crée ou met à jour une config Stripe pour un project_id."""
+    existing = get_config_by_project(project_id)
+    pk = (publishable_key or "").strip() or "pk_not_set"
+    if existing:
+        row = update_config(
+            str(existing["id"]),
+            project_name=project_name,
+            publishable_key=pk,
+            secret_key=secret_key,
+            webhook_secret=webhook_secret,
+            mode=mode,
+            currency=currency,
+            enabled=enabled,
+        )
+        if row is None:
+            raise ValueError("Mise à jour config Stripe impossible.")
+        return row
+    return add_config(
+        project_id=project_id,
+        project_name=project_name,
+        publishable_key=pk,
+        secret_key=secret_key,
+        webhook_secret=webhook_secret,
+        mode=mode,
+        currency=currency,
+        enabled=enabled,
+    )
+
+
 def delete_config(config_id: str) -> bool:
     cid = config_id.strip()
     if not cid:

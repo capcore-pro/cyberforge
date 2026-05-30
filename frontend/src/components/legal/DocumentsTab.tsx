@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ProjectRecord } from "@shared/types";
 import { BackButton } from "@/components/BackButton";
 import { DocumentFormModal, type DocumentFormValues } from "@/components/legal/DocumentFormModal";
+import { DocumentPreviewModal } from "@/components/legal/DocumentPreviewModal";
 import {
   DOCUMENT_STATUS_OPTIONS,
   StatusBadge,
@@ -23,7 +24,6 @@ import {
   fetchLegalClients,
   fetchLegalDocuments,
   fetchProjectsForLegal,
-  generateDocumentPdf,
   openPdfDownload,
   sendLegalDocument,
   updateDocumentStatus,
@@ -91,10 +91,15 @@ export function DocumentsTab({
   const [statusDoc, setStatusDoc] = useState<LegalDocument | null>(null);
   const [newStatus, setNewStatus] = useState<DocumentStatus>("draft");
 
-  const [signedDevisPickerOpen, setSignedDevisPickerOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<LegalDocument | null>(null);
   const [signedDevisList, setSignedDevisList] = useState<LegalDocument[]>([]);
   const [selectedSignedDevisId, setSelectedSignedDevisId] = useState("");
+  const [signedDevisPickerOpen, setSignedDevisPickerOpen] = useState(false);
   const [convertBusy, setConvertBusy] = useState(false);
+
+  function openPreview(doc: LegalDocument) {
+    setPreviewDoc(doc);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -318,7 +323,8 @@ export function DocumentsTab({
                 documents.map((doc) => (
                   <tr
                     key={doc.id}
-                    className="border-b border-cyber-border/60 hover:bg-cyber-accent/5"
+                    className="cursor-pointer border-b border-cyber-border/60 hover:bg-cyber-accent/5"
+                    onClick={() => openPreview(doc)}
                   >
                     <td className="px-3 py-2 font-mono text-xs text-cyber-neon">
                       {doc.number}
@@ -338,21 +344,12 @@ export function DocumentsTab({
                     <td className="px-3 py-2 text-xs text-cyber-muted">
                       {formatDate(doc.created_at)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-1">
                         <ActionBtn
-                          label="PDF"
-                          disabled={busyId === doc.id}
-                          onClick={() =>
-                            void runAction(doc.id, async () => {
-                              const res = await generateDocumentPdf(doc.id);
-                              if (!res.ok) {
-                                throw new Error(
-                                  apiErrorMessage(res, "Génération PDF échouée."),
-                                );
-                              }
-                            })
-                          }
+                          label="Aperçu"
+                          title="Aperçu PDF"
+                          onClick={() => openPreview(doc)}
                         />
                         <ActionBtn
                           label="↓"
@@ -391,7 +388,7 @@ export function DocumentsTab({
                           }}
                         />
                         <ActionBtn
-                          label="×"
+                          label="Supprimer"
                           title="Supprimer"
                           className="text-red-300"
                           disabled={busyId === doc.id}
@@ -619,6 +616,15 @@ export function DocumentsTab({
           </div>
         </div>
       ) : null}
+
+      <DocumentPreviewModal
+        doc={previewDoc}
+        docTypeLabel={docTypeLabel}
+        clients={clients}
+        onClose={() => setPreviewDoc(null)}
+        onDeleted={() => void load()}
+        onUpdated={() => void load()}
+      />
     </div>
   );
 }

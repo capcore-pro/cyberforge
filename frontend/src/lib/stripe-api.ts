@@ -3,6 +3,21 @@ import { apiRequest } from "@/lib/api-client";
 
 const STRIPE = `${API_PREFIX}/stripe`;
 
+/** Identifiant interne du compte CapCore (mes revenus). */
+export const STRIPE_CAPCORE_PROJECT_ID = "capcore";
+
+export interface StripeScopeStatus {
+  configured: boolean;
+  project_id?: string;
+  config: StripeConfig | null;
+}
+
+export interface ClientStripeApplyResult {
+  applied: boolean;
+  project_id: string;
+  message: string;
+}
+
 export type StripeMode = "test" | "live";
 export type TransactionStatus = "pending" | "paid" | "failed" | "refunded";
 export type TransactionType = "one_shot" | "subscription";
@@ -87,6 +102,57 @@ export interface SubscriptionLinkPayload {
   amount_eur: number;
   interval?: SubscriptionInterval;
   customer_email?: string | null;
+}
+
+export async function fetchCapcoreStripe() {
+  return apiRequest<StripeScopeStatus>({
+    method: "GET",
+    path: `${STRIPE}/capcore`,
+  });
+}
+
+export async function saveCapcoreStripe(body: {
+  secret_key: string;
+  publishable_key?: string | null;
+  webhook_secret?: string | null;
+  mode?: StripeMode;
+}) {
+  return apiRequest<StripeScopeStatus>({
+    method: "PUT",
+    path: `${STRIPE}/capcore`,
+    body,
+  });
+}
+
+export async function fetchClientStripe(projectId: string) {
+  return apiRequest<StripeScopeStatus>({
+    method: "GET",
+    path: `${STRIPE}/projects/${encodeURIComponent(projectId)}`,
+  });
+}
+
+export async function saveClientStripe(
+  projectId: string,
+  body: {
+    secret_key: string;
+    webhook_secret?: string | null;
+    publishable_key?: string | null;
+    mode?: StripeMode;
+    project_name?: string;
+  },
+) {
+  return apiRequest<StripeScopeStatus>({
+    method: "PUT",
+    path: `${STRIPE}/projects/${encodeURIComponent(projectId)}`,
+    body,
+  });
+}
+
+export async function applyClientStripe(projectId: string) {
+  return apiRequest<ClientStripeApplyResult>({
+    method: "POST",
+    path: `${STRIPE}/projects/${encodeURIComponent(projectId)}/apply`,
+  });
 }
 
 export async function fetchStripeDashboard(projectId?: string) {

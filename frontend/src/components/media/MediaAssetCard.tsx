@@ -3,6 +3,7 @@ import {
   formatBytes,
   getAssetPublicUrl,
   getAssetThumbnailUrl,
+  providerLabel,
   type MediaAsset,
 } from "@/lib/media-api";
 
@@ -19,17 +20,10 @@ function sourceBadge(source: MediaAsset["source"]) {
   return "border-violet-500/50 bg-violet-500/15 text-violet-200";
 }
 
-function r2Badge(synced: boolean) {
-  if (synced) {
-    return "border-emerald-500/50 bg-emerald-500/15 text-emerald-200";
-  }
-  return "border-cyber-border bg-cyber-bg/60 text-cyber-muted";
-}
-
 export interface MediaAssetCardProps {
   asset: MediaAsset;
+  onOpen?: (asset: MediaAsset) => void;
   onCopyUrl?: (asset: MediaAsset) => void;
-  onSyncR2?: (asset: MediaAsset) => void;
   onDelete?: (asset: MediaAsset) => void;
   onSelect?: (asset: MediaAsset) => void;
   selectable?: boolean;
@@ -38,17 +32,16 @@ export interface MediaAssetCardProps {
 
 export function MediaAssetCard({
   asset,
+  onOpen,
   onCopyUrl,
-  onSyncR2,
   onDelete,
   onSelect,
   selectable = false,
   busy = false,
 }: MediaAssetCardProps) {
   const [imgError, setImgError] = useState(false);
-  const synced = Boolean(asset.r2_url?.trim());
-  const thumb =
-    asset.type === "image" && !imgError ? getAssetThumbnailUrl(asset) : "";
+  const thumb = asset.type === "image" && !imgError ? getAssetThumbnailUrl(asset) : "";
+  const provider = providerLabel(asset);
 
   const dateLabel = new Date(asset.created_at).toLocaleString("fr-FR", {
     dateStyle: "short",
@@ -58,23 +51,27 @@ export function MediaAssetCard({
   function handleCardClick() {
     if (selectable && onSelect) {
       onSelect(asset);
+      return;
+    }
+    if (onOpen) {
+      onOpen(asset);
     }
   }
 
   return (
     <article
       className={`group relative flex flex-col overflow-hidden rounded-lg border border-cyber-border bg-cyber-surface/90 transition ${
-        selectable ? "cursor-pointer hover:border-cyber-neon/60" : ""
-      } ${busy ? "opacity-60 pointer-events-none" : ""}`}
+        selectable || onOpen ? "cursor-pointer hover:border-cyber-neon/60" : ""
+      } ${busy ? "pointer-events-none opacity-60" : ""}`}
       onClick={handleCardClick}
       onKeyDown={(e) => {
-        if (selectable && (e.key === "Enter" || e.key === " ")) {
+        if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelect?.(asset);
+          handleCardClick();
         }
       }}
-      role={selectable ? "button" : undefined}
-      tabIndex={selectable ? 0 : undefined}
+      role={selectable || onOpen ? "button" : undefined}
+      tabIndex={selectable || onOpen ? 0 : undefined}
     >
       <div className="relative aspect-[4/3] w-full bg-cyber-bg/80">
         {asset.type === "image" && thumb ? (
@@ -83,6 +80,7 @@ export function MediaAssetCard({
             alt={asset.filename}
             className="h-full w-full object-cover"
             loading="lazy"
+            decoding="async"
             onError={() => setImgError(true)}
           />
         ) : (
@@ -96,7 +94,7 @@ export function MediaAssetCard({
           </div>
         )}
 
-        {!selectable ? (
+        {!selectable && (onCopyUrl || onDelete) ? (
           <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/70 opacity-0 transition group-hover:opacity-100">
             {onCopyUrl ? (
               <button
@@ -110,22 +108,10 @@ export function MediaAssetCard({
                 Copier URL
               </button>
             ) : null}
-            {onSyncR2 ? (
-              <button
-                type="button"
-                className="cyber-action-btn cyber-action-btn-primary text-[10px]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSyncR2(asset);
-                }}
-              >
-                Synchroniser R2
-              </button>
-            ) : null}
             {onDelete ? (
               <button
                 type="button"
-                className="cyber-action-btn border-red-500/40 text-red-300 text-[10px]"
+                className="cyber-action-btn border-red-500/40 text-[10px] text-red-300"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete(asset);
@@ -161,15 +147,13 @@ export function MediaAssetCard({
           >
             {asset.source === "upload" ? "Upload" : "Généré"}
           </span>
-          <span
-            className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${r2Badge(synced)}`}
-          >
-            {synced ? "Syncé ☁️" : "Local only"}
+          <span className="rounded border border-cyber-border bg-cyber-bg/50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-cyber-muted">
+            {provider}
           </span>
         </div>
         {asset.tags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
-            {asset.tags.slice(0, 6).map((tag) => (
+            {asset.tags.slice(0, 4).map((tag) => (
               <span
                 key={tag}
                 className="rounded-full border border-cyber-border/80 bg-cyber-bg/50 px-2 py-0.5 text-[9px] text-cyber-muted"

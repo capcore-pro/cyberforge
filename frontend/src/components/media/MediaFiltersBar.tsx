@@ -65,7 +65,7 @@ export function MediaFiltersBar({
             type="search"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Nom, tags, projet…"
+            placeholder="Filtrer par nom ou tag…"
             className="cyber-prompt-field min-h-0 w-full text-sm"
           />
         </label>

@@ -17,8 +17,8 @@ DocumentStatus = Literal["draft", "sent", "signed", "paid", "cancelled"]
 _DOCUMENT_TYPES = frozenset({"devis", "facture", "mentions_legales", "cgv"})
 _DOCUMENT_STATUSES = frozenset({"draft", "sent", "signed", "paid", "cancelled"})
 _NUMBER_PREFIX: dict[str, str] = {
-    "devis": "DEV",
-    "facture": "FAC",
+    "devis": "DEVIS",
+    "facture": "FACTURE",
     "mentions_legales": "ML",
     "cgv": "CGV",
 }

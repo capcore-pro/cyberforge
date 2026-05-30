@@ -135,6 +135,12 @@ def _resolve_context(project_id: str | None) -> _StripeContext:
                 webhook_secret=webhook or None,
             )
 
+    if pid != _CAPCORE_FALLBACK_PROJECT:
+        raise StripeServiceError(
+            "Paiement client non configuré — renseignez les clés Stripe du client "
+            "dans la fiche projet (section Paiement client)."
+        )
+
     fallback = _get_or_create_capcore_fallback_config()
     secret = decrypt_config_secret(fallback.get("secret_key_encrypted")) or _default_secret_key()
     if not secret:

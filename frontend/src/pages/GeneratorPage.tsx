@@ -44,6 +44,7 @@ import { fetchTaskflowPreviewHtml } from "@/lib/preview-html-api";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { projectTitleFromPrompt } from "@/lib/project-title";
 import { fetchClientBranding } from "@/lib/clients-api";
+import { updateProject } from "@/lib/projects-api";
 import {
   clearSelectedClientId,
   getSelectedClientId,
@@ -122,6 +123,7 @@ function buildPromptFromInspiration(
 
 interface GeneratorPageProps {
   onOpenProjects?: () => void;
+  showBackToProjects?: boolean;
 }
 
 function StepHeading({ step, title }: { step: number; title: string }) {
@@ -138,10 +140,14 @@ function StepHeading({ step, title }: { step: number; title: string }) {
 /**
  * Page Générateur — parcours en 3 étapes (type, description, génération).
  */
-export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
+export function GeneratorPage({
+  onOpenProjects,
+  showBackToProjects = false,
+}: GeneratorPageProps) {
   const { status: backendStatus } = useBackendHealth();
   const {
     prompt,
+    projectName,
     projectType,
     generationMode,
     phase,
@@ -571,7 +577,13 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       );
       const serverPreview = normalized.preview_html?.trim();
       const persistedId = normalized.persistence?.project_id;
-      if (persistedId) setRunProjectId(persistedId);
+      if (persistedId) {
+        setRunProjectId(persistedId);
+        const customTitle = projectName.trim();
+        if (customTitle) {
+          void updateProject(persistedId, { title: customTitle });
+        }
+      }
 
       void fetchProjectCosts(persistedId ?? sessionProjectId).then((costsResp) => {
         if (costsResp.ok && costsResp.data) {
@@ -682,7 +694,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     setDemoError(null);
     const response = await createClientDemo({
       duration,
-      title: projectTitleFromPrompt(prompt),
+      title: projectName.trim() || projectTitleFromPrompt(prompt),
       files: [{ path: "index.html", content: result.generation.code }],
       stack: result.generation.stack,
       summary: result.generation.summary,
@@ -724,6 +736,11 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 pb-10">
+      {showBackToProjects && onOpenProjects ? (
+        <div className="sticky top-0 z-20 -mx-1 border-b border-cf-border-input/40 bg-cf-main/95 py-3 backdrop-blur-sm">
+          <BackButton onClick={onOpenProjects} label="Retour vers Projets" />
+        </div>
+      ) : null}
       <header>
         <p className="cf-section-label mb-2">Création de projet</p>
         <h1 className="cf-page-title">Générateur</h1>
@@ -784,6 +801,18 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
       {/* Étape 2 — Description */}
       <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
         <StepHeading step={2} title="Description du projet" />
+
+        <label className="mb-4 block">
+          <span className="mb-2 block text-xs text-cf-label">Nom du projet</span>
+          <input
+            type="text"
+            value={projectName}
+            onChange={(e) => patch({ projectName: e.target.value })}
+            disabled={isRunning}
+            placeholder="Ex : Site boulangerie Dupont"
+            className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+          />
+        </label>
 
         <label className="block">
           <span className="mb-2 flex items-center justify-between text-xs text-cf-label">

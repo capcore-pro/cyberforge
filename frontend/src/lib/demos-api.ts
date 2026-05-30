@@ -90,6 +90,7 @@ export interface DemoIdByGenerationResponse {
   demo_id: string | null;
   url?: string | null;
   unlock_url?: string | null;
+  client_id?: string | null;
 }
 
 export async function findDemoIdByGeneration(generationId: string) {
@@ -106,6 +107,14 @@ export async function deleteClientDemo(demoId: string) {
       path: `${API_PREFIX}/demos/${demoId}`,
     },
   );
+}
+
+export async function updateDemoClient(demoId: string, clientId: string | null) {
+  return apiRequest<{ id: string; client_id: string | null }>({
+    method: "PATCH",
+    path: `${API_PREFIX}/demos/${demoId}/client`,
+    body: { client_id: clientId },
+  });
 }
 
 /** Métadonnées démo — appel direct vers http://127.0.0.1:8002/api/public/demos/{token}/meta */

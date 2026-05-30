@@ -335,8 +335,17 @@ def update_document(
 
 @router.delete("/documents/{document_id}", status_code=204)
 def delete_document(document_id: str) -> None:
+    doc = db.get_document(document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document introuvable.")
+    pdf_path = (doc.get("pdf_path") or "").strip()
     if not db.delete_document(document_id):
         raise HTTPException(status_code=404, detail="Document introuvable.")
+    if pdf_path:
+        try:
+            Path(pdf_path).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 @router.put("/documents/{document_id}/status", response_model=DocumentResponse)
@@ -385,6 +394,7 @@ def download_document_pdf(document_id: str) -> FileResponse:
         path,
         media_type="application/pdf",
         filename=filename,
+        content_disposition_type="inline",
     )
 
 

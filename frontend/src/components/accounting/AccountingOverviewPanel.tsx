@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { formatDateFr, formatEur } from "@/lib/accounting-export";
 import { fetchCockpitDashboard } from "@/lib/cockpit-api";
-import { fetchStripeDashboard, type StripeTransaction } from "@/lib/stripe-api";
+import { fetchStripeDashboard, STRIPE_CAPCORE_PROJECT_ID, type StripeTransaction } from "@/lib/stripe-api";
 
 function MetricCard({
   label,
@@ -51,7 +51,7 @@ export function AccountingOverviewPanel() {
     const offline = "Backend injoignable — vérifiez que l'API tourne.";
 
     const [stripeRes, cockpitRes] = await Promise.all([
-      fetchStripeDashboard(),
+      fetchStripeDashboard(STRIPE_CAPCORE_PROJECT_ID),
       fetchCockpitDashboard(),
     ]);
 

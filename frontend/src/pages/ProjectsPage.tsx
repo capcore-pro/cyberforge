@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ProjectDetail } from "@/components/ProjectDetail";
+import { ProjectDetailView } from "@/components/ProjectDetailView";
+import { ProjectEditView } from "@/components/ProjectEditView";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import type { AppPage } from "@/lib/navigation";
 import {
@@ -16,8 +17,11 @@ import {
   type UnifiedProjectTypeFilter,
 } from "@/lib/unified-projects";
 
+type ProjectsView = "list" | "detail" | "edit";
+
 interface ProjectsPageProps {
-  onNavigate: (page: AppPage) => void;
+  onNavigate?: (page: AppPage) => void;
+  onOpenGenerator: () => void;
 }
 
 function formatDate(iso: string): string {
@@ -45,24 +49,28 @@ function truncateUrl(url: string, max = 42): string {
 
 function ProjectCard({
   project,
+  onOpen,
   onEdit,
   onView,
-  onDetail,
   onConvert,
   onDelete,
   deleteBusy,
 }: {
   project: UnifiedProject;
+  onOpen: () => void;
   onEdit: () => void;
   onView: () => void;
-  onDetail: () => void;
   onConvert: () => void;
   onDelete: () => void;
   deleteBusy: boolean;
 }) {
   return (
     <article className="group relative overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
-      <div className="flex h-full flex-col p-4">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex h-full w-full flex-col p-4 text-left transition hover:bg-cf-secondary/20"
+      >
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 text-sm font-medium text-cf-text">{project.name}</h3>
           <span className="shrink-0 rounded border border-cf-gold/30 bg-cf-gold-subtle px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-cf-gold">
@@ -80,14 +88,7 @@ function ProjectCard({
 
         <div className="mt-3 min-h-[2.5rem] text-xs">
           {project.url ? (
-            <button
-              type="button"
-              onClick={onView}
-              className="break-all text-left text-cf-info hover:text-cf-gold-hover hover:underline"
-              title={project.url}
-            >
-              {truncateUrl(project.url)}
-            </button>
+            <span className="break-all text-cf-info">{truncateUrl(project.url)}</span>
           ) : (
             <span className="text-cf-tertiary">—</span>
           )}
@@ -96,26 +97,35 @@ function ProjectCard({
         <p className="mt-auto pt-4 text-[11px] text-cf-label">
           Créé le {formatDate(project.createdAt)}
         </p>
-      </div>
+      </button>
 
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-4 opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
         <button
           type="button"
-          onClick={onDetail}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
           className="w-full max-w-[200px] rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
         >
           Fiche projet
         </button>
         <button
           type="button"
-          onClick={onEdit}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
           className="w-full max-w-[200px] rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold"
         >
           Modifier
         </button>
         <button
           type="button"
-          onClick={onView}
+          onClick={(e) => {
+            e.stopPropagation();
+            onView();
+          }}
           disabled={!project.url}
           className="w-full max-w-[200px] rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -124,7 +134,10 @@ function ProjectCard({
         {project.status === "demo" ? (
           <button
             type="button"
-            onClick={onConvert}
+            onClick={(e) => {
+              e.stopPropagation();
+              onConvert();
+            }}
             className="w-full max-w-[200px] rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
           >
             Convertir en app réelle
@@ -132,7 +145,10 @@ function ProjectCard({
         ) : null}
         <button
           type="button"
-          onClick={onDelete}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
           disabled={deleteBusy}
           className="w-full max-w-[200px] rounded-control border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
         >
@@ -143,16 +159,16 @@ function ProjectCard({
   );
 }
 
-/**
- * Hub unifié — vitrines, apps web, e-commerce, réservation, extensions et démos.
- */
-export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
-  const { patch } = useGeneratorSession();
+export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
+  const { resetSession, patch } = useGeneratorSession();
 
   const [projects, setProjects] = useState<UnifiedProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const [view, setView] = useState<ProjectsView>("list");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const [typeFilter, setTypeFilter] = useState<UnifiedProjectTypeFilter>("all");
   const [statusFilter, setStatusFilter] =
@@ -161,7 +177,11 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
 
   const [deleteTarget, setDeleteTarget] = useState<UnifiedProject | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [detailProject, setDetailProject] = useState<UnifiedProject | null>(null);
+
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.key === selectedKey) ?? null,
+    [projects, selectedKey],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -187,22 +207,37 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
     [projects, typeFilter, statusFilter, search],
   );
 
-  function handleEdit(project: UnifiedProject) {
-    patch({
-      prompt: project.prompt,
-      projectType: project.projectType ?? "site_web",
-      generationMode: project.generationMode ?? "client_demo",
-      phase: "idle",
-      error: null,
-      actionError: null,
-      result: null,
-    });
-    onNavigate("generator");
+  function openDetail(project: UnifiedProject) {
+    setSelectedKey(project.key);
+    setView("detail");
+    setActionError(null);
+  }
+
+  function openEdit(project: UnifiedProject) {
+    setSelectedKey(project.key);
+    setView("edit");
+    setActionError(null);
+  }
+
+  function backToList() {
+    setView("list");
+    setSelectedKey(null);
+  }
+
+  function backToDetail() {
+    setView("detail");
+  }
+
+  function handleNewProject() {
+    resetSession();
+    onOpenGenerator();
   }
 
   function handleConvert(project: UnifiedProject) {
+    resetSession();
     patch({
       prompt: project.prompt,
+      projectName: project.name,
       projectType: project.projectType ?? "site_web",
       generationMode: "real_app",
       phase: "idle",
@@ -210,12 +245,30 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
       actionError: null,
       result: null,
     });
-    onNavigate("generator");
+    onOpenGenerator();
   }
 
   function handleView(project: UnifiedProject) {
     if (!project.url) return;
     openProjectUrl(project.url);
+  }
+
+  function upsertProject(updated: UnifiedProject) {
+    setProjects((prev) => {
+      const idx = prev.findIndex((p) => p.key === updated.key);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      }
+      return [updated, ...prev];
+    });
+  }
+
+  function handleDuplicate(project: UnifiedProject) {
+    upsertProject(project);
+    setSelectedKey(project.key);
+    setView("detail");
   }
 
   function requestDelete(project: UnifiedProject) {
@@ -235,10 +288,48 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
         return;
       }
       setDeleteTarget(null);
+      if (selectedKey === deleteTarget.key) {
+        backToList();
+      }
       await load();
     } finally {
       setDeleteBusy(false);
     }
+  }
+
+  if (view === "detail" && selectedProject) {
+    return (
+      <>
+        <ProjectDetailView
+          project={selectedProject}
+          onBack={backToList}
+          onEdit={() => openEdit(selectedProject)}
+          onView={() => handleView(selectedProject)}
+          onProjectUpdated={upsertProject}
+          onDuplicate={handleDuplicate}
+        />
+        {deleteTarget ? (
+          <DeleteDialog
+            project={deleteTarget}
+            busy={deleteBusy}
+            onCancel={() => setDeleteTarget(null)}
+            onConfirm={() => void confirmDelete()}
+          />
+        ) : null}
+      </>
+    );
+  }
+
+  if (view === "edit" && selectedProject) {
+    return (
+      <ProjectEditView
+        project={selectedProject}
+        onBack={backToDetail}
+        onSaved={() => {
+          void load().then(() => backToDetail());
+        }}
+      />
+    );
   }
 
   return (
@@ -252,7 +343,7 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
         </div>
         <button
           type="button"
-          onClick={() => onNavigate("generator")}
+          onClick={handleNewProject}
           className="rounded-control border border-cf-gold/50 bg-cf-active px-4 py-2 text-sm font-medium text-cf-gold hover:border-cf-gold hover:bg-cf-gold-subtle"
         >
           Nouveau projet
@@ -322,7 +413,7 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
           <p className="text-sm text-cf-muted">Aucun projet ne correspond aux filtres.</p>
           <button
             type="button"
-            onClick={() => onNavigate("generator")}
+            onClick={handleNewProject}
             className="mt-4 text-sm text-cf-gold hover:text-cf-gold-hover hover:underline"
           >
             Créer un projet
@@ -334,9 +425,9 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
             <ProjectCard
               key={project.key}
               project={project}
-              onEdit={() => handleEdit(project)}
+              onOpen={() => openDetail(project)}
+              onEdit={() => openEdit(project)}
               onView={() => handleView(project)}
-              onDetail={() => setDetailProject(project)}
               onConvert={() => handleConvert(project)}
               onDelete={() => requestDelete(project)}
               deleteBusy={deleteBusy && deleteTarget?.key === project.key}
@@ -346,53 +437,62 @@ export function ProjectsPage({ onNavigate }: ProjectsPageProps) {
       )}
 
       {deleteTarget ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="delete-project-title"
-        >
-          <div className="w-full max-w-md rounded-card border border-red-500/30 bg-cf-card p-5 shadow-card">
-            <h2 id="delete-project-title" className="text-sm font-semibold text-cf-text">
-              Supprimer « {deleteTarget.name} » ?
-            </h2>
-            <p className="mt-2 text-xs text-cf-muted">
-              Cette action est irréversible. Les ressources associées (GitHub, Vercel,
-              Cloudflare, Railway, Supabase) seront supprimées selon le type de projet.
-            </p>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-control border border-cf-border-input px-3 py-1.5 text-xs text-cf-muted hover:text-cf-text"
-                disabled={deleteBusy}
-                onClick={() => setDeleteTarget(null)}
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                className="rounded-control border border-red-500/50 bg-red-950/40 px-3 py-1.5 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
-                disabled={deleteBusy}
-                onClick={() => void confirmDelete()}
-              >
-                {deleteBusy ? "Suppression…" : "Supprimer définitivement"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {detailProject ? (
-        <ProjectDetail
-          project={detailProject}
-          onClose={() => setDetailProject(null)}
-          onEdit={() => {
-            handleEdit(detailProject);
-            setDetailProject(null);
-          }}
-          onView={() => handleView(detailProject)}
+        <DeleteDialog
+          project={deleteTarget}
+          busy={deleteBusy}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => void confirmDelete()}
         />
       ) : null}
+    </div>
+  );
+}
+
+function DeleteDialog({
+  project,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  project: UnifiedProject;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="delete-project-title"
+    >
+      <div className="w-full max-w-md rounded-card border border-red-500/30 bg-cf-card p-5 shadow-card">
+        <h2 id="delete-project-title" className="text-sm font-semibold text-cf-text">
+          Supprimer « {project.name} » ?
+        </h2>
+        <p className="mt-2 text-xs text-cf-muted">
+          Cette action est irréversible. Les ressources associées (GitHub, Vercel,
+          Cloudflare, Railway, Supabase) seront supprimées selon le type de projet.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-control border border-cf-border-input px-3 py-1.5 text-xs text-cf-muted hover:text-cf-text"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            className="rounded-control border border-red-500/50 bg-red-950/40 px-3 py-1.5 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy ? "Suppression…" : "Supprimer définitivement"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

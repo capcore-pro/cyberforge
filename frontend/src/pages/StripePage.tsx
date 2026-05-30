@@ -365,10 +365,7 @@ function DashboardSection({
     () => revenueByMonth(transactions, 3),
     [transactions],
   );
-  const rows =
-    transactions.length > 0
-      ? transactions.slice(0, 25)
-      : dashboard.recent_transactions;
+  const rows = transactions.slice(0, 25);
 
   return (
     <div className="space-y-6">
@@ -419,7 +416,7 @@ function DashboardSection({
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-6 text-center text-cyber-muted">
-                    Aucune transaction enregistrée.
+                    Aucune transaction pour l&apos;instant.
                   </td>
                 </tr>
               ) : (

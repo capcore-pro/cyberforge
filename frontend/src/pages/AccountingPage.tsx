@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { AccountingExportPanel } from "@/components/accounting/AccountingExportPanel";
 import { AccountingOverviewPanel } from "@/components/accounting/AccountingOverviewPanel";
+import { StripeCapcorePanel } from "@/components/accounting/StripeCapcorePanel";
 import { LegalPage } from "@/pages/LegalPage";
-import { StripePage } from "@/pages/StripePage";
 
 type AccountingTab = "overview" | "legal" | "stripe" | "export";
 
 const TABS: { id: AccountingTab; label: string }[] = [
   { id: "overview", label: "Vue d'ensemble" },
   { id: "legal", label: "Devis & Factures" },
-  { id: "stripe", label: "Stripe" },
+  { id: "stripe", label: "Mes revenus" },
   { id: "export", label: "Export" },
 ];
 
@@ -51,7 +51,7 @@ export function AccountingPage() {
       >
         {tab === "overview" ? <AccountingOverviewPanel /> : null}
         {tab === "legal" ? <LegalPage embedded /> : null}
-        {tab === "stripe" ? <StripePage embedded /> : null}
+        {tab === "stripe" ? <StripeCapcorePanel /> : null}
         {tab === "export" ? <AccountingExportPanel /> : null}
       </section>
     </div>
