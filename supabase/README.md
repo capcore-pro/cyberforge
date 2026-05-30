@@ -8,6 +8,8 @@
    - `migrations/002_demos.sql`
    - `migrations/003_generations_preview_html.sql`
    - `migrations/004_clients_table_fr.sql` (table `clients` + lien démos)
+   - `migrations/005_clients_address_siret_actif.sql` (adresse, SIRET, actif, lien fiche légale)
+   - `migrations/006_demo_interest_contact.sql` (notifications contact démo)
 3. Copiez dans `backend/.env` :
    - `SUPABASE_URL` — URL du projet (Settings → API)
    - `SUPABASE_ANON_KEY` — clé anon (référence future ; le frontend passe par FastAPI)

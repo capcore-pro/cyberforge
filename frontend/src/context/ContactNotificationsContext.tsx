@@ -15,6 +15,7 @@ import {
 import { useBackendHealth } from "@/context/BackendHealthContext";
 
 const POLL_MS = 20_000;
+const INITIAL_DELAY_MS = 2_000;
 
 interface ContactNotificationsValue {
   unreadCount: number;
@@ -38,7 +39,7 @@ export function ContactNotificationsProvider({ children }: { children: ReactNode
   const initializedRef = useRef(false);
 
   const refresh = useCallback(async () => {
-    if (backendStatus !== "ok") return;
+    if (backendStatus !== "online") return;
     try {
       const data = await fetchContactNotifications();
       const count = data.unread_count;
@@ -70,10 +71,17 @@ export function ContactNotificationsProvider({ children }: { children: ReactNode
   const dismissToast = useCallback(() => setLatestToast(null), []);
 
   useEffect(() => {
-    void refresh();
-    if (backendStatus !== "ok") return;
-    const id = window.setInterval(() => void refresh(), POLL_MS);
-    return () => window.clearInterval(id);
+    if (backendStatus !== "online") return;
+
+    const initialTimer = window.setTimeout(() => {
+      void refresh();
+    }, INITIAL_DELAY_MS);
+
+    const pollId = window.setInterval(() => void refresh(), POLL_MS);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(pollId);
+    };
   }, [refresh, backendStatus]);
 
   return (

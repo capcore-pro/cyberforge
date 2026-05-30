@@ -152,12 +152,7 @@ async def delete_ecommerce_route(project_id: str, body: DeleteEcommerceRequest) 
 
     if body.hard_delete:
         settings = get_settings()
-
-        async def _run() -> None:
-            await hard_delete_ecommerce(project_id=project_id, settings=settings, store=store)
-
-        asyncio.create_task(_run())
-        return {"deleted": True}
+        return await hard_delete_ecommerce(project_id=project_id, settings=settings, store=store)
 
     await store.update_project(project_id, patch={"status": "deleted", "deleted_at": datetime.now(tz=UTC).isoformat()})
     return {"deleted": True}

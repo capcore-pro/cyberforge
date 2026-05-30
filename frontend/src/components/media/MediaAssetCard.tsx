@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { LazyImage } from "@/components/LazyImage";
 import {
   formatBytes,
   getAssetPublicUrl,
@@ -30,7 +31,7 @@ export interface MediaAssetCardProps {
   busy?: boolean;
 }
 
-export function MediaAssetCard({
+export const MediaAssetCard = memo(function MediaAssetCard({
   asset,
   onOpen,
   onCopyUrl,
@@ -43,12 +44,16 @@ export function MediaAssetCard({
   const thumb = asset.type === "image" && !imgError ? getAssetThumbnailUrl(asset) : "";
   const provider = providerLabel(asset);
 
-  const dateLabel = new Date(asset.created_at).toLocaleString("fr-FR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  const dateLabel = useMemo(
+    () =>
+      new Date(asset.created_at).toLocaleString("fr-FR", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }),
+    [asset.created_at],
+  );
 
-  function handleCardClick() {
+  const handleCardClick = useCallback(() => {
     if (selectable && onSelect) {
       onSelect(asset);
       return;
@@ -56,7 +61,7 @@ export function MediaAssetCard({
     if (onOpen) {
       onOpen(asset);
     }
-  }
+  }, [asset, onOpen, onSelect, selectable]);
 
   return (
     <article
@@ -75,12 +80,10 @@ export function MediaAssetCard({
     >
       <div className="relative aspect-[4/3] w-full bg-cyber-bg/80">
         {asset.type === "image" && thumb ? (
-          <img
+          <LazyImage
             src={thumb}
             alt={asset.filename}
-            className="h-full w-full object-cover"
-            loading="lazy"
-            decoding="async"
+            className="h-full w-full"
             onError={() => setImgError(true)}
           />
         ) : (
@@ -166,4 +169,4 @@ export function MediaAssetCard({
       </div>
     </article>
   );
-}
+});

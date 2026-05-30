@@ -1,4 +1,5 @@
 import type { ManagedProjectRecord } from "@shared/types";
+import type { DeletionReport } from "@/lib/deletion-report";
 
 export interface ApiResp<T> {
   ok: boolean;
@@ -53,7 +54,7 @@ export async function deleteReservationSite(projectId: string) {
 }
 
 export async function hardDeleteReservationSite(projectId: string) {
-  return api<any>(`/api/managed-projects/site-reservation/${projectId}/delete`, {
+  return api<DeletionReport>(`/api/managed-projects/site-reservation/${projectId}/delete`, {
     method: "POST",
     body: JSON.stringify({ hard_delete: true }),
   });

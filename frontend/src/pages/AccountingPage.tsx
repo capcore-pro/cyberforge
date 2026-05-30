@@ -1,8 +1,24 @@
-import { useState } from "react";
-import { AccountingExportPanel } from "@/components/accounting/AccountingExportPanel";
-import { AccountingOverviewPanel } from "@/components/accounting/AccountingOverviewPanel";
-import { StripeCapcorePanel } from "@/components/accounting/StripeCapcorePanel";
-import { LegalPage } from "@/pages/LegalPage";
+import { lazy, Suspense, useState } from "react";
+import { PageLoader } from "@/components/PageLoader";
+
+const AccountingOverviewPanel = lazy(() =>
+  import("@/components/accounting/AccountingOverviewPanel").then((m) => ({
+    default: m.AccountingOverviewPanel,
+  })),
+);
+const AccountingExportPanel = lazy(() =>
+  import("@/components/accounting/AccountingExportPanel").then((m) => ({
+    default: m.AccountingExportPanel,
+  })),
+);
+const StripeCapcorePanel = lazy(() =>
+  import("@/components/accounting/StripeCapcorePanel").then((m) => ({
+    default: m.StripeCapcorePanel,
+  })),
+);
+const LegalPage = lazy(() =>
+  import("@/pages/LegalPage").then((m) => ({ default: m.LegalPage })),
+);
 
 type AccountingTab = "overview" | "legal" | "stripe" | "export";
 
@@ -49,10 +65,12 @@ export function AccountingPage() {
             : "rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card"
         }
       >
-        {tab === "overview" ? <AccountingOverviewPanel /> : null}
-        {tab === "legal" ? <LegalPage embedded /> : null}
-        {tab === "stripe" ? <StripeCapcorePanel /> : null}
-        {tab === "export" ? <AccountingExportPanel /> : null}
+        <Suspense fallback={<PageLoader />}>
+          {tab === "overview" ? <AccountingOverviewPanel /> : null}
+          {tab === "legal" ? <LegalPage embedded /> : null}
+          {tab === "stripe" ? <StripeCapcorePanel /> : null}
+          {tab === "export" ? <AccountingExportPanel /> : null}
+        </Suspense>
       </section>
     </div>
   );

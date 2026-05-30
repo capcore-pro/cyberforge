@@ -19,6 +19,7 @@ from config import Settings, get_settings
 from cost_tracker import maybe_track_cost
 from db.managed_projects_store import ManagedProjectsStore
 from tools.export_github import delete_github_branch, push_vitrine_site_to_github
+from tools.project_deletion import hard_delete_managed_project
 from tools.export_railway import (
     RailwayExportError,
     delete_railway_service,
@@ -309,57 +310,12 @@ async def hard_delete_application_web(
     project_id: str,
     settings: Settings | None = None,
     store: ManagedProjectsStore,
-) -> None:
-    resolved = settings or get_settings()
-    st = store
-    project = await st.get_project(project_id)
-    if not project:
-        return
-
-    run = await st.create_run(project_id, action="delete")
-    await st.update_project(project_id, patch={"status": "deleting", "error_last": None})
-
-    artifacts: dict[str, Any] = {}
-
-    # Vercel cleanup
-    try:
-        if project.vercel_frontend_project_id or project.vercel_project_id:
-            pid = project.vercel_frontend_project_id or project.vercel_project_id
-            if pid:
-                await delete_deployments_for_branch(
-                    branch=project.github_branch,
-                    project_id=pid,
-                    settings=resolved,
-                    limit=20,
-                )
-                deleted = await delete_project(pid, settings=resolved)
-                artifacts["vercel_project_deleted"] = deleted
-    except Exception as exc:
-        artifacts["vercel_error"] = str(exc)
-
-    # Railway cleanup
-    try:
-        token = (getattr(resolved, "railway_api_key", None) or None)
-        # resolved.railway_api_key is SecretStr; reuse deploy_railway's token extraction
-        from config import plain_secret_str
-
-        api_token = plain_secret_str(token)
-        if api_token and project.railway_service_id:
-            artifacts["railway_service_deleted"] = await delete_railway_service(
-                service_id=project.railway_service_id,
-                token=api_token,
-            )
-        # Option C: keep shared project, do not delete it.
-    except Exception as exc:
-        artifacts["railway_error"] = str(exc)
-
-    # GitHub branch cleanup
-    try:
-        deleted_branch = await delete_github_branch(repo=project.github_repo, branch=project.github_branch, settings=resolved)
-        artifacts["github_branch_deleted"] = deleted_branch
-    except Exception as exc:
-        artifacts["github_branch_error"] = str(exc)
-
-    await st.update_project(project_id, patch={"status": "deleted", "deleted_at": _now()})
-    await st.finish_run(run.id, status="succeeded", artifacts=artifacts)
+) -> dict[str, Any]:
+    return await hard_delete_managed_project(
+        project_id=project_id,
+        settings=settings,
+        store=store,
+        include_railway=True,
+        include_pipeline_projects=True,
+    )
 

@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from config import get_settings, plain_secret_str
+from cache import ttl_cache
 from security.llm_secrets import get_effective_llm_key, get_effective_llm_key_for_http
 from tools.codegen_service import _parse_json_response, _utf8_json_body
 from tools.toolbox_media import (
@@ -973,6 +974,7 @@ def _composant_to_model(comp_id: str, data: dict[str, Any]) -> ComposantEntry:
 
 
 @router.get("/toolbox/secteurs", response_model=SecteursResponse)
+@ttl_cache(seconds=30.0)
 async def list_secteurs() -> SecteursResponse:
     """Retourne tous les secteurs avec palette, typo, composants et mots-clés visuels."""
     items = [_sector_to_model(key, data) for key, data in SECTEURS.items()]

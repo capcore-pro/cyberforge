@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
+import { PageLoader } from "./components/PageLoader";
 import { BackendHealthProvider } from "@/context/BackendHealthContext";
 import { AgentsStatusProvider } from "@/context/AgentsStatusContext";
 import { GeneratorSessionProvider } from "@/context/GeneratorSessionContext";
@@ -10,17 +11,40 @@ import { ContactNotificationsProvider, useContactNotifications } from "@/context
 import { getPublicDemoToken } from "@/lib/demo-route";
 import type { AppPage } from "./lib/navigation";
 import { ClientDemoPage } from "./pages/ClientDemoPage";
-import { GeneratorPage } from "./pages/GeneratorPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { ClientsPage } from "./pages/ClientsPage";
-import { PersoPage } from "./pages/PersoPage";
-import { ProjectsPage } from "./pages/ProjectsPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { CockpitPage } from "./pages/CockpitPage";
-import { MediaLibraryPage } from "./pages/MediaLibraryPage";
-import { AccountingPage } from "./pages/AccountingPage";
-import { NewsletterPage } from "./pages/NewsletterPage";
-import { ToolboxPage } from "./pages/ToolboxPage";
+
+const DashboardPage = lazy(() =>
+  import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })),
+);
+const GeneratorPage = lazy(() =>
+  import("./pages/GeneratorPage").then((m) => ({ default: m.GeneratorPage })),
+);
+const ProjectsPage = lazy(() =>
+  import("./pages/ProjectsPage").then((m) => ({ default: m.ProjectsPage })),
+);
+const ClientsPage = lazy(() =>
+  import("./pages/ClientsPage").then((m) => ({ default: m.ClientsPage })),
+);
+const PersoPage = lazy(() =>
+  import("./pages/PersoPage").then((m) => ({ default: m.PersoPage })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+const CockpitPage = lazy(() =>
+  import("./pages/CockpitPage").then((m) => ({ default: m.CockpitPage })),
+);
+const MediaLibraryPage = lazy(() =>
+  import("./pages/MediaLibraryPage").then((m) => ({ default: m.MediaLibraryPage })),
+);
+const AccountingPage = lazy(() =>
+  import("./pages/AccountingPage").then((m) => ({ default: m.AccountingPage })),
+);
+const NewsletterPage = lazy(() =>
+  import("./pages/NewsletterPage").then((m) => ({ default: m.NewsletterPage })),
+);
+const ToolboxPage = lazy(() =>
+  import("./pages/ToolboxPage").then((m) => ({ default: m.ToolboxPage })),
+);
 
 /**
  * Composant racine — navigation entre les pages principales.
@@ -81,7 +105,6 @@ function AppWithNotifications({
       setGeneratorFromPerso(true);
       setGeneratorFromProjects(false);
       setPage("generator");
-      // Options applied via GeneratorPage effect reading sessionStorage bridge
       sessionStorage.setItem(
         "cyberforge.personalProjectDraft",
         JSON.stringify(opts),
@@ -90,21 +113,25 @@ function AppWithNotifications({
     [setPage],
   );
 
+  const openProjects = useCallback(() => {
+    setGeneratorFromProjects(false);
+    setGeneratorFromPerso(false);
+    setPage("projects");
+  }, [setPage]);
+
+  const openPerso = useCallback(() => {
+    setGeneratorFromProjects(false);
+    setGeneratorFromPerso(false);
+    setPage("perso");
+  }, [setPage]);
+
   function renderPage() {
     switch (page) {
       case "generator":
         return (
           <GeneratorPage
-            onOpenProjects={() => {
-              setGeneratorFromProjects(false);
-              setGeneratorFromPerso(false);
-              setPage("projects");
-            }}
-            onOpenPerso={() => {
-              setGeneratorFromProjects(false);
-              setGeneratorFromPerso(false);
-              setPage("perso");
-            }}
+            onOpenProjects={openProjects}
+            onOpenPerso={openPerso}
             showBackToProjects={generatorFromProjects}
             showBackToPerso={generatorFromPerso}
             personalMode={generatorFromPerso}
@@ -144,7 +171,7 @@ function AppWithNotifications({
         <PipelineActivityProvider>
           <Layout>
             <AppShell currentPage={page} onNavigate={setPage}>
-              {renderPage()}
+              <Suspense fallback={<PageLoader />}>{renderPage()}</Suspense>
             </AppShell>
           </Layout>
         </PipelineActivityProvider>

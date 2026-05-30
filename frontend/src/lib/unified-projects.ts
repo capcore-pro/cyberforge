@@ -7,6 +7,7 @@ import type {
   ProjectType,
 } from "@shared/types";
 import { apiRequest } from "@/lib/api-client";
+import type { DeletionReport, DeletionReportItem } from "@/lib/deletion-report";
 import { hardDeleteApplicationWeb, listApplicationWeb } from "@/lib/application-web-api";
 import { deleteClientDemo, findDemoIdByGeneration } from "@/lib/demos-api";
 import { hardDeleteEcommerce, listEcommerce } from "@/lib/ecommerce-api";
@@ -317,58 +318,75 @@ export function filterUnifiedProjects(
 export async function deleteUnifiedProject(project: UnifiedProject): Promise<{
   ok: boolean;
   error?: string;
+  report?: DeletionReport;
 }> {
   try {
     switch (project.source) {
       case "managed_vitrine": {
         if (!project.managedId) return { ok: false, error: "Identifiant manquant." };
         const res = await hardDeleteVitrine(project.managedId);
-        return res.ok
-          ? { ok: true }
-          : { ok: false, error: "Échec suppression vitrine." };
+        if (!res.ok || !res.data) {
+          return { ok: false, error: "Échec suppression vitrine." };
+        }
+        return { ok: res.data.ok ?? true, report: res.data };
       }
       case "managed_app_web": {
         if (!project.managedId) return { ok: false, error: "Identifiant manquant." };
         const res = await hardDeleteApplicationWeb(project.managedId);
-        return res.ok
-          ? { ok: true }
-          : { ok: false, error: "Échec suppression application web." };
+        if (!res.ok || !res.data) {
+          return { ok: false, error: "Échec suppression application web." };
+        }
+        return { ok: res.data.ok ?? true, report: res.data };
       }
       case "managed_ecommerce": {
         if (!project.managedId) return { ok: false, error: "Identifiant manquant." };
         const res = await hardDeleteEcommerce(project.managedId);
-        return res.ok
-          ? { ok: true }
-          : { ok: false, error: "Échec suppression e-commerce." };
+        if (!res.ok || !res.data) {
+          return { ok: false, error: "Échec suppression e-commerce." };
+        }
+        return { ok: res.data.ok ?? true, report: res.data };
       }
       case "managed_reservation": {
         if (!project.managedId) return { ok: false, error: "Identifiant manquant." };
         const res = await hardDeleteReservationSite(project.managedId);
-        return res.ok
-          ? { ok: true }
-          : { ok: false, error: "Échec suppression réservation." };
+        if (!res.ok || !res.data) {
+          return { ok: false, error: "Échec suppression réservation." };
+        }
+        return { ok: res.data.ok ?? true, report: res.data };
       }
       case "managed_extension": {
         if (!project.managedId) return { ok: false, error: "Identifiant manquant." };
         const res = await hardDeleteExtension(project.managedId);
-        return res.ok
-          ? { ok: true }
-          : { ok: false, error: "Échec suppression extension." };
+        if (!res.ok || !res.data) {
+          return { ok: false, error: "Échec suppression extension." };
+        }
+        return { ok: res.data.ok ?? true, report: res.data };
       }
       case "supabase": {
         if (!project.supabaseProjectId) {
           return { ok: false, error: "Identifiant manquant." };
         }
+        const items: DeletionReportItem[] = [];
         if (project.demoId) {
           const demoDel = await deleteClientDemo(project.demoId);
-          if (!demoDel.ok) {
-            return { ok: false, error: "Échec suppression démo Cloudflare." };
-          }
+          items.push({
+            label: "Cloudflare démo",
+            status: demoDel.ok ? "ok" : "error",
+            detail: demoDel.ok ? undefined : "Échec suppression démo",
+          });
         }
         const projDel = await deleteProject(project.supabaseProjectId);
-        return projDel.ok
-          ? { ok: true }
-          : { ok: false, error: "Échec suppression projet Supabase." };
+        items.push({
+          label: "Supabase",
+          status: projDel.ok ? "ok" : "error",
+          detail: projDel.ok ? "projects + generations" : "Échec suppression",
+        });
+        const report: DeletionReport = {
+          deleted: true,
+          ok: items.every((i) => i.status !== "error"),
+          items,
+        };
+        return { ok: report.ok, report };
       }
       default:
         return { ok: false, error: "Type de projet inconnu." };

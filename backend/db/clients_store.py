@@ -1,6 +1,9 @@
 """
 Persistance Supabase — fiches clients (Mode Client).
-Colonnes PostgREST : nom, entreprise, telephone, couleur, est_perso.
+
+Schéma public.clients (Supabase) :
+  Base (004) : id, nom, entreprise, email, telephone, couleur, logo_url, est_perso, created_at
+  Étendu (005) : adresse, siret, actif, legal_client_id
 """
 
 from __future__ import annotations
@@ -20,6 +23,15 @@ from db.supabase_store import (
 )
 
 ClientKind = Literal["client", "perso"]
+
+# Colonnes garanties par migration 004
+CLIENT_BASE_SELECT = (
+    "id,est_perso,nom,entreprise,email,telephone,couleur,logo_url,created_at"
+)
+# Colonnes ajoutées par migration 005 (comptabilité / fiche légale)
+CLIENT_EXTENDED_SELECT = "adresse,siret,actif,legal_client_id"
+CLIENT_LIST_SELECT = f"{CLIENT_BASE_SELECT},{CLIENT_EXTENDED_SELECT}"
+CLIENT_DETAIL_SELECT = CLIENT_LIST_SELECT
 
 
 class ClientRow(BaseModel):
@@ -69,7 +81,7 @@ class ClientsStore:
         if not self.is_configured():
             raise SupabaseStoreError("Supabase non configuré.")
 
-        params: dict[str, str] = {"select": "*", "order": "created_at.desc"}
+        params: dict[str, str] = {"select": CLIENT_LIST_SELECT, "order": "created_at.desc"}
         if kind == "perso":
             params["est_perso"] = "eq.true"
         elif kind == "client":
@@ -98,7 +110,7 @@ class ClientsStore:
             resp = await client.get(
                 url,
                 headers=self._supabase._headers(),
-                params={"id": f"eq.{client_id}", "select": "*"},
+                params={"id": f"eq.{client_id}", "select": CLIENT_DETAIL_SELECT},
             )
             _raise_for_status(resp, "get_client", "GET", url, self._supabase)
             rows = resp.json()

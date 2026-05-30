@@ -356,6 +356,121 @@ class ManagedProjectsStore:
             row = data[0] if isinstance(data, list) and data else data
             return ManagedProjectAuthRow(**row)
 
+    async def _delete_where(
+        self,
+        table: str,
+        *,
+        params: dict[str, str],
+    ) -> None:
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+        url = f"{self._rest_url()}/{table}"
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.delete(
+                url,
+                headers=self._headers("return=minimal"),
+                params=params,
+            )
+            _raise_for_status(resp, f"delete_{table}", "DELETE", url, self._base)
+
+    async def delete_project_auth(self, project_id: str) -> None:
+        await self._delete_where(
+            "managed_project_auth",
+            params={"project_id": f"eq.{project_id}"},
+        )
+
+    async def delete_project_runs(self, project_id: str) -> None:
+        await self._delete_where(
+            "managed_project_runs",
+            params={"project_id": f"eq.{project_id}"},
+        )
+
+    async def purge_ecommerce_data(self, project_id: str) -> None:
+        """Supprime produits, commandes et lignes e-commerce liés au projet."""
+        import httpx as _httpx
+
+        if not self.is_configured():
+            return
+        base = self._rest_url()
+        headers = self._headers()
+        async with _httpx.AsyncClient(timeout=60.0) as client:
+            orders_resp = await client.get(
+                f"{base}/ecommerce_orders",
+                headers=headers,
+                params={"project_id": f"eq.{project_id}", "select": "id"},
+            )
+            _raise_for_status(orders_resp, "list_ecommerce_orders", "GET", base, self._base)
+            order_rows = orders_resp.json() if isinstance(orders_resp.json(), list) else []
+            for row in order_rows:
+                oid = str(row.get("id") or "")
+                if not oid:
+                    continue
+                await client.delete(
+                    f"{base}/ecommerce_order_items",
+                    headers=headers,
+                    params={"order_id": f"eq.{oid}"},
+                )
+            await self._delete_where("ecommerce_orders", params={"project_id": f"eq.{project_id}"})
+            await self._delete_where("ecommerce_products", params={"project_id": f"eq.{project_id}"})
+
+    async def purge_reservation_data(self, project_id: str) -> None:
+        """Supprime réservations, blocs, dispos et services liés au projet."""
+        await self._delete_where("reservations", params={"project_id": f"eq.{project_id}"})
+        await self._delete_where("reservation_blocks", params={"project_id": f"eq.{project_id}"})
+        await self._delete_where(
+            "reservation_availability",
+            params={"project_id": f"eq.{project_id}"},
+        )
+        await self._delete_where("reservation_services", params={"project_id": f"eq.{project_id}"})
+
+    async def delete_pipeline_projects_by_slug(
+        self,
+        supabase: SupabaseStore,
+        *,
+        slug: str,
+        title: str | None,
+    ) -> int:
+        """Supprime les entrées pipeline `projects` (cascade generations) par slug/titre."""
+        if not supabase.is_configured():
+            return 0
+        slug_clean = (slug or "").strip()
+        title_clean = (title or "").strip()
+        if not slug_clean and not title_clean:
+            return 0
+
+        url = f"{supabase._rest_url()}/projects"
+        deleted = 0
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            for match in {slug_clean, title_clean}:
+                if not match:
+                    continue
+                resp = await client.get(
+                    url,
+                    headers=supabase._headers(),
+                    params={"title": f"eq.{match}", "select": "id"},
+                )
+                _raise_for_status(resp, "list_pipeline_projects", "GET", url, supabase)
+                rows = resp.json()
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    pid = str(row.get("id") or "")
+                    if not pid:
+                        continue
+                    del_resp = await client.delete(
+                        url,
+                        headers=supabase._headers("return=minimal"),
+                        params={"id": f"eq.{pid}"},
+                    )
+                    _raise_for_status(del_resp, "delete_pipeline_project", "DELETE", url, supabase)
+                    deleted += 1
+        return deleted
+
+    async def purge_managed_project_row(self, project_id: str) -> None:
+        """Supprime runs puis la ligne managed_projects."""
+        await self.delete_project_runs(project_id)
+        await self._delete_where("managed_projects", params={"id": f"eq.{project_id}"})
+
 
 _managed_store: ManagedProjectsStore | None = None
 

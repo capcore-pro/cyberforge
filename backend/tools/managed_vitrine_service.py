@@ -21,6 +21,7 @@ from tools.export_github import (
     push_vitrine_site_to_github,
     vitrine_branch_name,
 )
+from tools.project_deletion import hard_delete_managed_project
 from tools.vercel_api import (
     VercelError,
     delete_deployments_for_branch,
@@ -236,59 +237,11 @@ async def hard_delete_vitrine(
     settings: Settings | None = None,
     store: ManagedProjectsStore | None = None,
 ) -> dict[str, Any]:
-    """
-    V2: suppression complète.
-    - supprime les déploiements Vercel liés à la branche
-    - supprime la branche GitHub
-    - marque le projet deleted
-    """
-    resolved = settings or get_settings()
-    st = store or get_managed_projects_store()
-    project = await st.get_project(project_id)
-    if not project:
-        raise ManagedVitrineError("Projet introuvable.")
-
-    run = await st.create_run(project_id, action="delete")
-    await st.update_project(project_id, patch={"status": "deleting", "error_last": None})
-
-    artifacts: dict[str, Any] = {}
-    try:
-        if project.vercel_project_id:
-            artifacts["vercel_cleanup"] = await delete_deployments_for_branch(
-                branch=project.github_branch,
-                project_id=project.vercel_project_id,
-                settings=resolved,
-                limit=25,
-            )
-            artifacts["vercel_project_deleted"] = await vercel_delete_project(
-                project.vercel_project_id,
-                settings=resolved,
-            )
-
-        artifacts["github_branch_deleted"] = await delete_github_branch(
-            repo=project.github_repo,
-            branch=project.github_branch,
-            settings=resolved,
-        )
-
-        await st.update_project(
-            project_id,
-            patch={
-                "status": "deleted",
-                "deleted_at": datetime.now(tz=UTC).isoformat(),
-                "url_preview": None,
-                "url_production": None,
-                "error_last": None,
-            },
-        )
-        await st.finish_run(run.id, status="succeeded", artifacts=artifacts)
-    except (GitHubExportError, VercelError, ManagedVitrineError) as exc:
-        await st.update_project(project_id, patch={"status": "failed", "error_last": str(exc)})
-        await st.finish_run(run.id, status="failed", error=str(exc), artifacts=artifacts)
-    except Exception as exc:
-        logger.exception("hard_delete_vitrine unexpected failure")
-        await st.update_project(project_id, patch={"status": "failed", "error_last": str(exc)})
-        await st.finish_run(run.id, status="failed", error=str(exc), artifacts=artifacts)
-
-    return {"ok": True}
+    """Suppression complète vitrine — Vercel, GitHub, auth, Supabase."""
+    return await hard_delete_managed_project(
+        project_id=project_id,
+        settings=settings,
+        store=store,
+        include_pipeline_projects=True,
+    )
 

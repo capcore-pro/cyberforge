@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ProjectCard } from "@/components/projects/ProjectCard";
 import { ProjectDetailView } from "@/components/ProjectDetailView";
 import { ProjectEditView } from "@/components/ProjectEditView";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
@@ -9,154 +10,18 @@ import {
   loadAllUnifiedProjects,
   openProjectUrl,
   STATUS_FILTER_OPTIONS,
-  STATUS_LABELS,
   TYPE_FILTER_OPTIONS,
-  TYPE_LABELS,
   type UnifiedProject,
   type UnifiedProjectStatusFilter,
   type UnifiedProjectTypeFilter,
 } from "@/lib/unified-projects";
+import { formatDeletionReport } from "@/lib/deletion-report";
 
 type ProjectsView = "list" | "detail" | "edit";
 
 interface ProjectsPageProps {
   onNavigate?: (page: AppPage) => void;
   onOpenGenerator: () => void;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("fr-FR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
-function statusDotClass(status: UnifiedProject["status"]): string {
-  if (status === "online") return "bg-cf-success";
-  if (status === "demo") return "bg-cf-info";
-  return "bg-red-500";
-}
-
-function truncateUrl(url: string, max = 42): string {
-  if (url.length <= max) return url;
-  return `${url.slice(0, max - 1)}…`;
-}
-
-function ProjectCard({
-  project,
-  onOpen,
-  onEdit,
-  onView,
-  onConvert,
-  onDelete,
-  deleteBusy,
-}: {
-  project: UnifiedProject;
-  onOpen: () => void;
-  onEdit: () => void;
-  onView: () => void;
-  onConvert: () => void;
-  onDelete: () => void;
-  deleteBusy: boolean;
-}) {
-  return (
-    <article className="group relative overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex h-full w-full flex-col p-4 text-left transition hover:bg-cf-secondary/20"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="line-clamp-2 text-sm font-medium text-cf-text">{project.name}</h3>
-          <span className="shrink-0 rounded border border-cf-gold/30 bg-cf-gold-subtle px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-cf-gold">
-            {TYPE_LABELS[project.type]}
-          </span>
-        </div>
-
-        <div className="mt-3 flex items-center gap-2 text-xs text-cf-muted">
-          <span
-            className={`inline-block h-2 w-2 shrink-0 rounded-full ${statusDotClass(project.status)}`}
-            aria-hidden
-          />
-          <span>{STATUS_LABELS[project.status]}</span>
-        </div>
-
-        <div className="mt-3 min-h-[2.5rem] text-xs">
-          {project.url ? (
-            <span className="break-all text-cf-info">{truncateUrl(project.url)}</span>
-          ) : (
-            <span className="text-cf-tertiary">—</span>
-          )}
-        </div>
-
-        <p className="mt-auto pt-4 text-[11px] text-cf-label">
-          Créé le {formatDate(project.createdAt)}
-        </p>
-      </button>
-
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-4 opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen();
-          }}
-          className="w-full max-w-[200px] rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
-        >
-          Fiche projet
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          className="w-full max-w-[200px] rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold"
-        >
-          Modifier
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onView();
-          }}
-          disabled={!project.url}
-          className="w-full max-w-[200px] rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Voir
-        </button>
-        {project.status === "demo" ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConvert();
-            }}
-            className="w-full max-w-[200px] rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
-          >
-            Convertir en app réelle
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          disabled={deleteBusy}
-          className="w-full max-w-[200px] rounded-control border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
-        >
-          Supprimer
-        </button>
-      </div>
-    </article>
-  );
 }
 
 export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
@@ -177,6 +42,7 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
 
   const [deleteTarget, setDeleteTarget] = useState<UnifiedProject | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteReport, setDeleteReport] = useState<string | null>(null);
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.key === selectedKey) ?? null,
@@ -207,16 +73,24 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
     [projects, typeFilter, statusFilter, search],
   );
 
-  function openDetail(project: UnifiedProject) {
-    setSelectedKey(project.key);
+  const openDetailByKey = useCallback((key: string) => {
+    setSelectedKey(key);
     setView("detail");
     setActionError(null);
+  }, []);
+
+  const openEditByKey = useCallback((key: string) => {
+    setSelectedKey(key);
+    setView("edit");
+    setActionError(null);
+  }, []);
+
+  function openDetail(project: UnifiedProject) {
+    openDetailByKey(project.key);
   }
 
   function openEdit(project: UnifiedProject) {
-    setSelectedKey(project.key);
-    setView("edit");
-    setActionError(null);
+    openEditByKey(project.key);
   }
 
   function backToList() {
@@ -233,25 +107,33 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
     onOpenGenerator();
   }
 
-  function handleConvert(project: UnifiedProject) {
-    resetSession();
-    patch({
-      prompt: project.prompt,
-      projectName: project.name,
-      projectType: project.projectType ?? "site_web",
-      generationMode: "real_app",
-      phase: "idle",
-      error: null,
-      actionError: null,
-      result: null,
-    });
-    onOpenGenerator();
-  }
-
-  function handleView(project: UnifiedProject) {
+  const handleView = useCallback((project: UnifiedProject) => {
     if (!project.url) return;
     openProjectUrl(project.url);
-  }
+  }, []);
+
+  const handleConvert = useCallback(
+    (project: UnifiedProject) => {
+      resetSession();
+      patch({
+        prompt: project.prompt,
+        projectName: project.name,
+        projectType: project.projectType ?? "site_web",
+        generationMode: "real_app",
+        phase: "idle",
+        error: null,
+        actionError: null,
+        result: null,
+      });
+      onOpenGenerator();
+    },
+    [onOpenGenerator, patch, resetSession],
+  );
+
+  const requestDelete = useCallback((project: UnifiedProject) => {
+    setActionError(null);
+    setDeleteTarget(project);
+  }, []);
 
   function upsertProject(updated: UnifiedProject) {
     setProjects((prev) => {
@@ -271,11 +153,6 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
     setView("detail");
   }
 
-  function requestDelete(project: UnifiedProject) {
-    setActionError(null);
-    setDeleteTarget(project);
-  }
-
   async function confirmDelete() {
     if (!deleteTarget) return;
 
@@ -283,9 +160,12 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
     setActionError(null);
     try {
       const result = await deleteUnifiedProject(deleteTarget);
-      if (!result.ok) {
+      if (!result.ok && !result.report) {
         setActionError(result.error ?? "Suppression impossible.");
         return;
+      }
+      if (result.report?.items.length) {
+        setDeleteReport(formatDeletionReport(result.report.items));
       }
       setDeleteTarget(null);
       if (selectedKey === deleteTarget.key) {
@@ -399,6 +279,25 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
         </p>
       ) : null}
 
+      {deleteReport ? (
+        <div
+          className="rounded-card border border-cf-border-input bg-cf-card px-4 py-3 shadow-card"
+          role="status"
+        >
+          <p className="mb-2 text-sm font-medium text-cf-text">Rapport de suppression</p>
+          <pre className="whitespace-pre-wrap text-xs leading-relaxed text-cf-muted">
+            {deleteReport}
+          </pre>
+          <button
+            type="button"
+            className="mt-3 text-xs text-cf-gold hover:underline"
+            onClick={() => setDeleteReport(null)}
+          >
+            Fermer
+          </button>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -425,11 +324,11 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
             <ProjectCard
               key={project.key}
               project={project}
-              onOpen={() => openDetail(project)}
-              onEdit={() => openEdit(project)}
-              onView={() => handleView(project)}
-              onConvert={() => handleConvert(project)}
-              onDelete={() => requestDelete(project)}
+              onOpenDetail={openDetailByKey}
+              onEditDetail={openEditByKey}
+              onViewProject={handleView}
+              onConvertProject={handleConvert}
+              onDeleteProject={requestDelete}
               deleteBusy={deleteBusy && deleteTarget?.key === project.key}
             />
           ))}
@@ -471,8 +370,8 @@ function DeleteDialog({
           Supprimer « {project.name} » ?
         </h2>
         <p className="mt-2 text-xs text-cf-muted">
-          Cette action est irréversible. Les ressources associées (GitHub, Vercel,
-          Cloudflare, Railway, Supabase) seront supprimées selon le type de projet.
+          Cette action est irréversible et effacera le site déployé, le repo GitHub et
+          toutes les données associées.
         </p>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button

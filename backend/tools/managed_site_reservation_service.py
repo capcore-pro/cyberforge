@@ -13,6 +13,7 @@ from typing import Any
 from config import Settings, get_settings
 from db.managed_projects_store import ManagedProjectsStore
 from tools.export_github import delete_github_branch, push_vitrine_site_to_github
+from tools.project_deletion import hard_delete_managed_project
 from tools.vercel_api import (
     VercelError,
     delete_project,
@@ -158,38 +159,12 @@ async def hard_delete_site_reservation(
     project_id: str,
     settings: Settings | None,
     store: ManagedProjectsStore,
-) -> None:
-    resolved = settings or get_settings()
-    st = store
-    project = await st.get_project(project_id)
-    if not project:
-        return
-    run = await st.create_run(project_id, action="delete")
-    await st.update_project(project_id, patch={"status": "deleting", "error_last": None})
-
-    artifacts: dict[str, Any] = {}
-    try:
-        pid = project.vercel_frontend_project_id or project.vercel_project_id
-        if pid:
-            artifacts["vercel_cleanup"] = await delete_deployments_for_branch(
-                branch=project.github_branch,
-                project_id=pid,
-                settings=resolved,
-                limit=20,
-            )
-            artifacts["vercel_project_deleted"] = await delete_project(pid, settings=resolved)
-    except Exception as exc:
-        artifacts["vercel_error"] = str(exc)
-
-    try:
-        artifacts["github_branch_deleted"] = await delete_github_branch(
-            repo=project.github_repo,
-            branch=project.github_branch,
-            settings=resolved,
-        )
-    except Exception as exc:
-        artifacts["github_branch_error"] = str(exc)
-
-    await st.update_project(project_id, patch={"status": "deleted", "deleted_at": _now()})
-    await st.finish_run(run.id, status="succeeded", artifacts=artifacts)
+) -> dict[str, Any]:
+    return await hard_delete_managed_project(
+        project_id=project_id,
+        settings=settings,
+        store=store,
+        include_reservation=True,
+        include_pipeline_projects=True,
+    )
 

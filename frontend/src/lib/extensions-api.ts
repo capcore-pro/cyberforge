@@ -1,6 +1,7 @@
 import { API_PREFIX } from "@shared/constants";
 import type { ManagedProjectRecord, ManagedProjectRunRecord } from "@shared/types";
 import { apiRequest } from "@/lib/api-client";
+import type { DeletionReport } from "@/lib/deletion-report";
 
 export async function listExtensions() {
   return apiRequest<ManagedProjectRecord[]>({
@@ -37,7 +38,7 @@ export async function deleteExtension(projectId: string) {
 }
 
 export async function hardDeleteExtension(projectId: string) {
-  return apiRequest<{ deleted: boolean }>({
+  return apiRequest<DeletionReport>({
     method: "POST",
     path: `${API_PREFIX}/managed-projects/extensions/${projectId}/delete`,
     body: { hard_delete: true },

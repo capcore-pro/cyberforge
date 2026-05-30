@@ -1,7 +1,21 @@
-import { useState } from "react";
-import { NewsletterBroadcastPanel } from "@/components/newsletter/NewsletterBroadcastPanel";
-import { NewsletterContactsPanel } from "@/components/newsletter/NewsletterContactsPanel";
-import { SequencesPanel } from "@/components/newsletter/SequencesPanel";
+import { lazy, Suspense, useState } from "react";
+import { PageLoader } from "@/components/PageLoader";
+
+const SequencesPanel = lazy(() =>
+  import("@/components/newsletter/SequencesPanel").then((m) => ({
+    default: m.SequencesPanel,
+  })),
+);
+const NewsletterBroadcastPanel = lazy(() =>
+  import("@/components/newsletter/NewsletterBroadcastPanel").then((m) => ({
+    default: m.NewsletterBroadcastPanel,
+  })),
+);
+const NewsletterContactsPanel = lazy(() =>
+  import("@/components/newsletter/NewsletterContactsPanel").then((m) => ({
+    default: m.NewsletterContactsPanel,
+  })),
+);
 
 type NewsletterSection = "sequences" | "broadcast" | "contacts";
 
@@ -53,9 +67,11 @@ export function NewsletterPage() {
 
       <SubTabs current={section} onChange={setSection} />
 
-      {section === "sequences" ? <SequencesPanel /> : null}
-      {section === "broadcast" ? <NewsletterBroadcastPanel /> : null}
-      {section === "contacts" ? <NewsletterContactsPanel /> : null}
+      <Suspense fallback={<PageLoader />}>
+        {section === "sequences" ? <SequencesPanel /> : null}
+        {section === "broadcast" ? <NewsletterBroadcastPanel /> : null}
+        {section === "contacts" ? <NewsletterContactsPanel /> : null}
+      </Suspense>
     </div>
   );
 }

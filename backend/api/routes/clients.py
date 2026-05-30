@@ -24,6 +24,8 @@ from tools.demo_urls import unlock_demo_url
 
 logger = logging.getLogger(__name__)
 
+from cache import ttl_cache
+
 router = APIRouter(tags=["clients"])
 
 
@@ -124,6 +126,7 @@ def _effective_demo_status(
 
 
 @router.get("/clients", response_model=list[ClientRow])
+@ttl_cache(seconds=30.0)
 async def list_clients(kind: ClientKind | None = None) -> list[ClientRow]:
     store = get_clients_store()
     if not store.is_configured():

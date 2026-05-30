@@ -179,12 +179,7 @@ async def delete_application_web_route(project_id: str, body: DeleteAppWebReques
 
     if body.hard_delete:
         settings = get_settings()
-
-        async def _run() -> None:
-            await hard_delete_application_web(project_id=project_id, settings=settings, store=store)
-
-        asyncio.create_task(_run())
-        return {"deleted": True}
+        return await hard_delete_application_web(project_id=project_id, settings=settings, store=store)
 
     await store.update_project(
         project_id,

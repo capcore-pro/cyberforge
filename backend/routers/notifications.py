@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config import get_settings, plain_secret_str
+from cache import ttl_cache
 from db.supabase_store import SupabaseStoreError, _raise_for_status, _raise_transport_error, get_supabase_store
 
 logger = logging.getLogger(__name__)
@@ -323,6 +324,7 @@ async def notifications_stream() -> StreamingResponse:
 
 
 @router.get("/notifications/unread-count", response_model=UnreadCountResponse)
+@ttl_cache(seconds=30.0)
 async def notifications_unread_count() -> UnreadCountResponse:
     store = _require_store()
     url = f"{store._rest_url()}/notifications"

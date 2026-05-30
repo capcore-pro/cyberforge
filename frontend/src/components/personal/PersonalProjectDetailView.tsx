@@ -3,6 +3,7 @@ import { BackButton } from "@/components/BackButton";
 import { PersoBadge } from "@/components/PersoBadge";
 import { ProjectDetailView } from "@/components/ProjectDetailView";
 import { apiErrorMessage } from "@/lib/api-errors";
+import { formatDeletionReport } from "@/lib/deletion-report";
 import { listClients, type ClientRecord } from "@/lib/clients-api";
 import {
   convertPersonalToClient,
@@ -10,7 +11,7 @@ import {
   USAGE_LABELS,
   type PersonalProject,
 } from "@/lib/personal-projects-api";
-import type { UnifiedProject } from "@/lib/unified-projects";
+import { deleteUnifiedProject, type UnifiedProject } from "@/lib/unified-projects";
 
 function formatEur(n: number): string {
   return new Intl.NumberFormat("fr-FR", {
@@ -37,6 +38,7 @@ export function PersonalProjectDetailView({
   const [convertBusy, setConvertBusy] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteReport, setDeleteReport] = useState<string | null>(null);
 
   const isSale = personal.usage_type === "one_shot" || personal.usage_type === "subscription";
 
@@ -64,12 +66,36 @@ export function PersonalProjectDetailView({
   }
 
   async function handleDelete() {
-    if (!window.confirm(`Supprimer « ${personal.title} » de la liste perso ?`)) return;
+    const msg = linkedProject
+      ? `Supprimer « ${personal.title} » ? Cette action est irréversible et effacera le site déployé, le repo GitHub et toutes les données associées.`
+      : `Supprimer « ${personal.title} » de la liste perso ?`;
+    if (!window.confirm(msg)) return;
+
     setDeleteBusy(true);
+    setConvertError(null);
+    setDeleteReport(null);
+
+    let reportText: string | null = null;
+    if (linkedProject) {
+      const result = await deleteUnifiedProject(linkedProject);
+      if (result.report?.items.length) {
+        reportText = formatDeletionReport(result.report.items);
+      }
+      if (!result.ok && !result.report) {
+        setConvertError(result.error ?? "Suppression du projet lié impossible.");
+        setDeleteBusy(false);
+        return;
+      }
+    }
+
     const res = await deletePersonalProject(personal.id);
     setDeleteBusy(false);
     if (!res.ok) {
       setConvertError(apiErrorMessage(res, "Suppression impossible."));
+      return;
+    }
+    if (reportText) {
+      setDeleteReport(reportText);
       return;
     }
     onBack();
@@ -130,6 +156,22 @@ export function PersonalProjectDetailView({
       </section>
 
       {isSale ? <CommercializationSection personal={personal} /> : null}
+
+      {deleteReport ? (
+        <section className="rounded-card border border-cf-border-input bg-cf-card p-5 shadow-card">
+          <h2 className="text-sm font-semibold text-cf-text">Rapport de suppression</h2>
+          <pre className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-cf-muted">
+            {deleteReport}
+          </pre>
+          <button
+            type="button"
+            className="mt-3 text-xs text-cf-gold hover:underline"
+            onClick={onBack}
+          >
+            Retour à la liste
+          </button>
+        </section>
+      ) : null}
 
       <ConvertToClientSection
         clients={clients}

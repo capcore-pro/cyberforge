@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
@@ -91,7 +91,7 @@ function serviceBorderStyle(color: string | null): CSSProperties {
   };
 }
 
-function SubTabs({
+const SubTabs = memo(function SubTabs({
   current,
   onChange,
 }: {
@@ -112,7 +112,7 @@ function SubTabs({
       ))}
     </div>
   );
-}
+});
 
 function LoadingBlock() {
   return (
@@ -953,29 +953,33 @@ export function CockpitPage() {
   const [syncing, setSyncing] = useState(false);
   const [dismissingAlerts, setDismissingAlerts] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetSection: CockpitSection = section) => {
     setLoading(true);
     setError(null);
-    const [dashRes, svcRes] = await Promise.all([
-      fetchCockpitDashboard(),
-      fetchCockpitServices(),
-    ]);
-    setLoading(false);
-    if (!dashRes.ok) {
-      setError(apiErrorMessage(dashRes, "Impossible de charger le dashboard."));
-      return;
+    try {
+      if (targetSection === "dashboard") {
+        const dashRes = await fetchCockpitDashboard();
+        if (!dashRes.ok) {
+          setError(apiErrorMessage(dashRes, "Impossible de charger le dashboard."));
+          return;
+        }
+        setDashboard(dashRes.data ?? null);
+      } else {
+        const svcRes = await fetchCockpitServices();
+        if (!svcRes.ok) {
+          setError(apiErrorMessage(svcRes, "Impossible de charger les services."));
+          return;
+        }
+        setServices(svcRes.data ?? []);
+      }
+    } finally {
+      setLoading(false);
     }
-    if (!svcRes.ok) {
-      setError(apiErrorMessage(svcRes, "Impossible de charger les services."));
-      return;
-    }
-    setDashboard(dashRes.data ?? null);
-    setServices(svcRes.data ?? []);
-  }, []);
+  }, [section]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(section);
+  }, [section, load]);
 
   const serviceList = useMemo(() => {
     if (services.length) return services;
@@ -991,7 +995,11 @@ export function CockpitPage() {
       setError(apiErrorMessage(res, "Synchronisation globale échouée."));
       return;
     }
-    await load();
+    if (section === "dashboard") {
+      await load("dashboard");
+    } else {
+      await load(section);
+    }
   }
 
   async function handleDismissAlerts() {
@@ -1002,7 +1010,7 @@ export function CockpitPage() {
       setError(apiErrorMessage(res, "Impossible de marquer les alertes."));
       return;
     }
-    await load();
+    await load(section);
   }
 
   return (
@@ -1031,18 +1039,18 @@ export function CockpitPage() {
       ) : null}
 
       {!loading && section === "wallet" ? (
-        <WalletSection services={serviceList} onRefresh={() => void load()} />
+        <WalletSection services={serviceList} onRefresh={() => void load("wallet")} />
       ) : null}
 
       {!loading && section === "thresholds" ? (
         <ThresholdsSection
           services={serviceList}
-          onRefresh={() => void load()}
+          onRefresh={() => void load("thresholds")}
         />
       ) : null}
 
       {!loading && section === "settings" ? (
-        <SettingsSection services={serviceList} onRefresh={() => void load()} />
+        <SettingsSection services={serviceList} onRefresh={() => void load("settings")} />
       ) : null}
     </div>
   );

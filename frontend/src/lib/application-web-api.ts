@@ -1,6 +1,7 @@
 import { API_PREFIX } from "@shared/constants";
 import type { ManagedProjectRecord, ManagedProjectRunRecord } from "@shared/types";
 import { apiRequest } from "@/lib/api-client";
+import type { DeletionReport } from "@/lib/deletion-report";
 
 export async function listApplicationWeb() {
   return apiRequest<ManagedProjectRecord[]>({
@@ -51,7 +52,7 @@ export async function deleteApplicationWeb(projectId: string) {
 }
 
 export async function hardDeleteApplicationWeb(projectId: string) {
-  return apiRequest<{ deleted: boolean }>({
+  return apiRequest<DeletionReport>({
     method: "POST",
     path: `${API_PREFIX}/managed-projects/application-web/${projectId}/delete`,
     body: { hard_delete: true },

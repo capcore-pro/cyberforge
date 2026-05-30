@@ -19,6 +19,10 @@ from tools.demo_preview_html import build_demo_preview_html
 
 logger = logging.getLogger(__name__)
 
+PROJECT_LIST_SELECT = (
+    "id,title,prompt,project_type,summary,created_at,updated_at"
+)
+
 
 class SupabaseErrorDetail(BaseModel):
     """Détail d'une erreur PostgREST (sans secrets)."""
@@ -200,7 +204,7 @@ class SupabaseStore:
                     url,
                     headers=self._headers(),
                     params={
-                        "select": "*",
+                        "select": PROJECT_LIST_SELECT,
                         "order": "updated_at.desc",
                         "limit": str(limit),
                     },
@@ -245,7 +249,7 @@ class SupabaseStore:
             project_resp = await client.get(
                 f"{self._rest_url()}/projects",
                 headers=self._headers(),
-                params={"id": f"eq.{project_id}", "select": "*"},
+                params={"id": f"eq.{project_id}", "select": PROJECT_LIST_SELECT},
             )
             _raise_for_status(
                 project_resp,

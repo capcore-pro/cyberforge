@@ -286,13 +286,14 @@ export function GeneratorPage({
     patch(synced);
   }, [selectedKind, deployMode, patch]);
 
-  useEffect(() => {
+  const loadToolboxSecteurs = useCallback(() => {
+    if (toolboxSecteurs.length > 0) return;
     void fetchToolboxSecteurs().then((res) => {
       if (res.ok && res.data?.secteurs.length) {
         setToolboxSecteurs(res.data.secteurs);
       }
     });
-  }, []);
+  }, [toolboxSecteurs.length]);
 
   useEffect(() => {
     if (phase !== "running" || !runProjectId) return;
@@ -918,6 +919,7 @@ export function GeneratorPage({
                   setInspirationUrl(e.target.value);
                   setInspirationError(null);
                 }}
+                onFocus={loadToolboxSecteurs}
                 placeholder="https://site-inspiration.fr"
                 disabled={isRunning || inspirationAnalyzing}
                 className="w-full rounded-control border border-cf-border-input bg-cf-main px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"

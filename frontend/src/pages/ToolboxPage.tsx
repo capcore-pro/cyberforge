@@ -669,39 +669,56 @@ function SeoTab({ secteurs }: { secteurs: SectorData[] }) {
  */
 export function ToolboxPage() {
   const [tab, setTab] = useState<MainTab>("palettes");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [secteurs, setSecteurs] = useState<SectorData[]>([]);
   const [composants, setComposants] = useState<ToolboxComposant[]>([]);
+  const [secteursLoaded, setSecteursLoaded] = useState(false);
+  const [composantsLoaded, setComposantsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+
+    async function loadSecteurs() {
+      if (secteursLoaded) return;
       setLoading(true);
       setError(null);
-      const [sRes, cRes] = await Promise.all([
-        fetchToolboxSecteurs(),
-        fetchToolboxComposants(),
-      ]);
+      const res = await fetchToolboxSecteurs();
       if (cancelled) return;
       setLoading(false);
-      if (!sRes.ok || !sRes.data) {
-        setError(apiErrorMessage(sRes, "Impossible de charger les secteurs."));
+      if (!res.ok || !res.data) {
+        setError(apiErrorMessage(res, "Impossible de charger les secteurs."));
         return;
       }
-      if (!cRes.ok || !cRes.data) {
-        setError(apiErrorMessage(cRes, "Impossible de charger les composants."));
-        setSecteurs(sRes.data.secteurs);
-        return;
-      }
-      setSecteurs(sRes.data.secteurs);
-      setComposants(cRes.data.composants);
+      setSecteurs(res.data.secteurs);
+      setSecteursLoaded(true);
     }
-    void load();
+
+    async function loadComposants() {
+      if (composantsLoaded) return;
+      setLoading(true);
+      setError(null);
+      const res = await fetchToolboxComposants();
+      if (cancelled) return;
+      setLoading(false);
+      if (!res.ok || !res.data) {
+        setError(apiErrorMessage(res, "Impossible de charger les composants."));
+        return;
+      }
+      setComposants(res.data.composants);
+      setComposantsLoaded(true);
+    }
+
+    if (tab === "composants") {
+      void loadComposants();
+    } else {
+      void loadSecteurs();
+    }
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [tab, secteursLoaded, composantsLoaded]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">

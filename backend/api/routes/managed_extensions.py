@@ -151,12 +151,7 @@ async def delete_extension_route(project_id: str, body: DeleteExtensionRequest) 
         raise HTTPException(status_code=404, detail="Projet introuvable.")
     if body.hard_delete:
         settings = get_settings()
-
-        async def _run() -> None:
-            await hard_delete_extension(project_id=project_id, settings=settings, store=store)
-
-        asyncio.create_task(_run())
-        return {"deleted": True}
+        return await hard_delete_extension(project_id=project_id, settings=settings, store=store)
 
     await store.update_project(
         project_id,

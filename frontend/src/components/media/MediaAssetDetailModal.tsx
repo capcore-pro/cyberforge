@@ -41,16 +41,16 @@ export function MediaAssetDetailModal({
     setToast(null);
     setConfirmDelete(false);
     setSelectedProjectKey("");
+    setProjects([]);
   }, [asset?.id]);
 
-  useEffect(() => {
-    if (!asset) return;
+  async function loadProjectsIfNeeded() {
+    if (projects.length > 0 || projectsLoading) return;
     setProjectsLoading(true);
-    void loadAllUnifiedProjects().then((items) => {
-      setProjects(items);
-      setProjectsLoading(false);
-    });
-  }, [asset?.id]);
+    const items = await loadAllUnifiedProjects();
+    setProjects(items);
+    setProjectsLoading(false);
+  }
 
   if (!asset) return null;
 
@@ -196,6 +196,7 @@ export function MediaAssetDetailModal({
                 <select
                   value={selectedProjectKey}
                   disabled={busy || projectsLoading}
+                  onFocus={() => void loadProjectsIfNeeded()}
                   onChange={(e) => setSelectedProjectKey(e.target.value)}
                   className="cyber-prompt-field w-full text-xs"
                 >

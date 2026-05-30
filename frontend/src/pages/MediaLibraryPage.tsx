@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MediaAddPanel } from "@/components/media/MediaAddPanel";
 import { MediaAssetCard } from "@/components/media/MediaAssetCard";
 import { MediaAssetDetailModal } from "@/components/media/MediaAssetDetailModal";
@@ -88,7 +88,10 @@ export function MediaLibraryPage() {
     void load();
   }
 
-  const imageCount = assets.filter((a) => a.type === "image").length;
+  const imageCount = useMemo(
+    () => assets.filter((a) => a.type === "image").length,
+    [assets],
+  );
 
   return (
     <div className="mx-auto max-w-7xl">

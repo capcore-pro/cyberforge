@@ -417,12 +417,7 @@ async def delete_vitrine_project(project_id: str, body: DeleteVitrineRequest) ->
         from tools.managed_vitrine_service import hard_delete_vitrine
 
         settings = get_settings()
-
-        async def _run() -> None:
-            await hard_delete_vitrine(project_id=project_id, settings=settings, store=store)
-
-        asyncio.create_task(_run())
-        return {"deleted": True}
+        return await hard_delete_vitrine(project_id=project_id, settings=settings, store=store)
 
     # V1 behavior: soft delete
     await store.update_project(
