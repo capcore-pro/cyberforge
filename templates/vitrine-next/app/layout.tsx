@@ -48,6 +48,28 @@ export default function RootLayout({
           } as React.CSSProperties
         }
       >
+        <span
+          hidden
+          data-cms="color"
+          data-cms-key="meta.primaryColor"
+          data-cms-label="Couleur principale"
+          data-cms-css-var="--primary"
+          data-cms-value={content.meta.primaryColor}
+        />
+        <span
+          hidden
+          data-cms="color"
+          data-cms-key="palette.secondary"
+          data-cms-label="Couleur secondaire"
+          data-cms-css-var="--secondary"
+        />
+        <span
+          hidden
+          data-cms="color"
+          data-cms-key="palette.accent"
+          data-cms-label="Couleur accent"
+          data-cms-css-var="--accent"
+        />
         <div className="flex min-h-screen flex-col">
           <SiteHeader content={content} />
           <main className="flex-1">{children}</main>

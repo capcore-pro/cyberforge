@@ -482,7 +482,9 @@ async def coremind_node(
             demo_html=False,
             project_id=state.get("project_id"),
         )
-        generation = apply_toolbox_to_generation(generation, plan)
+        generation = apply_toolbox_to_generation(
+            generation, plan, project_id=state.get("project_id")
+        )
         generation = _inject_package_json(generation, type_label, plan=plan)
         code_chars = len(generation.code or "")
         file_count = len(generation.files)

@@ -29,6 +29,7 @@ from tools.builder_generators import (
 )
 from tools.codegen_service import CodeGenerateResult
 from tools.toolbox_branding import apply_toolbox_to_generation, build_toolbox_builder_context
+from tools.cms_panel_inject import CMS_BUILDER_HINT
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,7 @@ class BuilderAgent(BaseAgent):
             f"Type : {plan.project_type_label}.\n"
             f"Template : {plan.template_label}.\n"
             f"Complexité CoreMind : {analysis.complexity.value}.\n\n"
+            f"{CMS_BUILDER_HINT}"
             f"{toolbox_block}"
             f"{prompt.strip()}"
         )
@@ -189,7 +191,7 @@ class BuilderAgent(BaseAgent):
                 fallback_to_coremind=True,
             )
 
-        generation = apply_toolbox_to_generation(outcome.generation, plan)
+        generation = apply_toolbox_to_generation(outcome.generation, plan, project_id=project_id)
         preview_html = preview_html_from_generation(
             generation,
             title=plan.project_type_label,

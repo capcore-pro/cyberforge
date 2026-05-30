@@ -70,10 +70,18 @@ export function SiteHeader({ content }: SiteHeaderProps) {
           </span>
           <span className="min-w-0">
             <span className="block truncate font-display text-sm font-semibold tracking-tight md:text-base">
-              {meta.businessName}
+              <span
+                data-cms="text"
+                data-cms-key="meta.businessName"
+                data-cms-label="Nom entreprise"
+              >
+                {meta.businessName}
+              </span>
             </span>
             <span className="hidden truncate text-xs text-muted-foreground sm:block">
-              {meta.tagline}
+              <span data-cms="text" data-cms-key="meta.tagline" data-cms-label="Accroche">
+                {meta.tagline}
+              </span>
             </span>
           </span>
         </Link>

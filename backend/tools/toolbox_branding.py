@@ -10,6 +10,7 @@ from urllib.parse import quote_plus
 
 from agents.architect_agent import ArchitectPlan
 from tools.codegen_service import CodeGenerateResult, GeneratedFile
+from tools.cms_panel_inject import apply_cms_panel_to_generation
 
 
 def hex_to_hsl_channels(hex_color: str) -> str:
@@ -172,10 +173,12 @@ def _patch_file_content(path: str, content: str, plan: ArchitectPlan) -> str:
 def apply_toolbox_to_generation(
     generation: CodeGenerateResult,
     plan: ArchitectPlan | None,
+    *,
+    project_id: str | None = None,
 ) -> CodeGenerateResult:
-    """Injecte palette, polices et framer-motion dans les fichiers générés."""
+    """Injecte palette, polices, framer-motion et panneau CMS dans les fichiers générés."""
     if not plan or not plan.palette:
-        return generation
+        return apply_cms_panel_to_generation(generation, project_id=project_id)
 
     updated_files: list[GeneratedFile] = []
     touched = False
@@ -210,7 +213,7 @@ def apply_toolbox_to_generation(
         if tag not in stack:
             stack.append(tag)
 
-    return CodeGenerateResult(
+    result = CodeGenerateResult(
         summary=generation.summary,
         code=primary_code,
         files=updated_files,
@@ -219,6 +222,7 @@ def apply_toolbox_to_generation(
         provider=generation.provider,
         demo_seed=generation.demo_seed,
     )
+    return apply_cms_panel_to_generation(result, project_id=project_id)
 
 
 def apply_toolbox_vitrine_scaffold(output_dir: Path, plan: ArchitectPlan | None) -> None:

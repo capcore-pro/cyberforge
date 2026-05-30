@@ -56,6 +56,7 @@ class ManagedProjectRow(BaseModel):
     ecommerce_currency: str | None = None
     ecommerce_shipping_flat_cents: int | None = None
     error_last: str | None = None
+    cms_enabled: bool = True
     created_at: str
     updated_at: str
     deleted_at: str | None = None
@@ -321,6 +322,45 @@ class ManagedProjectsStore:
             if not rows:
                 return None
             return ManagedProjectAuthRow(**rows[0])
+
+    async def list_auth_by_email(self, email: str) -> list[ManagedProjectAuthRow]:
+        if not self.is_configured():
+            return []
+        cleaned = (email or "").strip().lower()
+        if not cleaned:
+            return []
+        url = f"{self._rest_url()}/managed_project_auth"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={
+                    "client_email": f"ilike.{cleaned}",
+                    "enabled": "eq.true",
+                    "select": "*",
+                },
+            )
+            _raise_for_status(resp, "list_managed_project_auth_by_email", "GET", url, self._base)
+            rows = resp.json()
+            if not isinstance(rows, list):
+                return []
+            return [ManagedProjectAuthRow(**row) for row in rows if isinstance(row, dict)]
+
+    async def get_run(self, run_id: str) -> ManagedProjectRunRow | None:
+        if not self.is_configured():
+            return None
+        url = f"{self._rest_url()}/managed_project_runs"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={"id": f"eq.{run_id}", "select": "*", "limit": "1"},
+            )
+            _raise_for_status(resp, "get_managed_run", "GET", url, self._base)
+            rows = resp.json()
+            if not isinstance(rows, list) or not rows:
+                return None
+            return ManagedProjectRunRow(**rows[0])
 
     async def upsert_project_auth(
         self,

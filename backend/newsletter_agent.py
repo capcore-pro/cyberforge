@@ -16,6 +16,7 @@ from config import Settings, get_settings
 from cost_tracker import maybe_track_cost, usage_from_openai_payload
 from db.managed_projects_store import ManagedProjectRow, get_managed_projects_store
 from db.supabase_store import get_supabase_store
+from tools.cms_project_settings import build_cms_login_url
 from newsletter_db import (
     SequenceTrigger,
     add_email,
@@ -88,7 +89,8 @@ Contraintes globales :
 - Signature exacte en fin de chaque email :
   <p style="margin-top:24px;color:#64748b;font-size:14px;">Mat — CapCore<br><a href="mailto:capcore.pro@gmail.com">capcore.pro@gmail.com</a></p>
 
-J0 "Votre site est en ligne" : annonce livraison + URL + 1 conseil secteur personnalisé
+J0 "Votre site est en ligne" : annonce livraison + URL + 1 conseil secteur personnalisé.
+Si cms_login_url est fourni dans le JSON client, mentionnez explicitement le lien d'édition CMS (modifier textes/images/couleurs) avec cette URL.
 J+1 "Comment bien démarrer" : 3 actions concrètes selon le type de projet (vitrine / ecommerce / réservation / app)
 J+3 "Un retour ?" : court, humain, demande feedback + modification gratuite si besoin + relation long terme"""
 
@@ -199,6 +201,8 @@ def _managed_context(row: ManagedProjectRow, auth_email: str | None) -> dict[str
     title = (row.title or row.slug or "Projet").strip()
     sector = _detect_sector(f"{prompt} {title}")
     site_url = (row.url_production or row.url_preview or "").strip() or None
+    cms_enabled = bool(getattr(row, "cms_enabled", True))
+    cms_login_url = build_cms_login_url(site_url) if cms_enabled and site_url else None
     return {
         "source": "managed",
         "project_id": row.id,
@@ -210,6 +214,8 @@ def _managed_context(row: ManagedProjectRow, auth_email: str | None) -> dict[str
         "prompt": prompt,
         "client_email": auth_email,
         "status": row.status,
+        "cms_enabled": cms_enabled,
+        "cms_login_url": cms_login_url,
     }
 
 
@@ -449,6 +455,8 @@ async def generate_welcome_sequence(
                 "sector": contact.get("sector"),
                 "project_type": contact.get("project_type") or ctx.get("project_type"),
                 "site_url": site_url,
+                "cms_enabled": ctx.get("cms_enabled", False),
+                "cms_login_url": ctx.get("cms_login_url"),
             },
             "personality": profile,
             "project_type_hints": _project_type_hints(
@@ -493,6 +501,10 @@ async def generate_welcome_sequence(
         body = _sanitize_html(str(item.get("html_body", "")).strip())
         if not subject or not body:
             continue
+        if kind == "welcome_j0" and ctx.get("cms_enabled") and ctx.get("cms_login_url"):
+            from tools.cms_delivery import append_cms_link_to_email_html
+
+            body = append_cms_link_to_email_html(body, str(ctx.get("cms_login_url")))
         scheduled = base_time + timedelta(hours=int(hours_map[kind]))
         html = wrap_email_html(body, preview_line=subject[:120])
         row = add_email(

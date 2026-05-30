@@ -109,6 +109,13 @@ async def build_vitrine_site(
         scaffold = render_vitrine_scaffold(content, output_dir=output_dir)
         if plan:
             apply_toolbox_vitrine_scaffold(scaffold.output_dir, plan)
+        from tools.cms_panel_inject import apply_cms_panel_vitrine_scaffold
+
+        apply_cms_panel_vitrine_scaffold(
+            scaffold.output_dir,
+            project_id=project_id,
+            settings=resolved,
+        )
     except ScaffoldRenderError:
         raise
     except Exception as exc:

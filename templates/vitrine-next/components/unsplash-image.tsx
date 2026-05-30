@@ -9,6 +9,8 @@ interface UnsplashImageProps {
   priority?: boolean;
   className?: string;
   sizes?: string;
+  cmsKey?: string;
+  cmsLabel?: string;
 }
 
 export function UnsplashImageBlock({
@@ -17,9 +19,20 @@ export function UnsplashImageBlock({
   priority = false,
   className,
   sizes = "(max-width: 768px) 100vw, 50vw",
+  cmsKey,
+  cmsLabel,
 }: UnsplashImageProps) {
   return (
-    <figure className={cn("relative overflow-hidden", className)}>
+    <figure
+      className={cn("relative overflow-hidden", className)}
+      {...(cmsKey
+        ? {
+            "data-cms": "image",
+            "data-cms-key": cmsKey,
+            "data-cms-label": cmsLabel,
+          }
+        : {})}
+    >
       <Image
         src={image.url}
         alt={image.alt}

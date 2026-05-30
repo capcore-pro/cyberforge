@@ -301,6 +301,7 @@ export interface ManagedProjectRecord {
   railway_project_id: string | null;
   railway_service_id: string | null;
   error_last: string | null;
+  cms_enabled?: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

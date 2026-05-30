@@ -14,6 +14,8 @@ export function HeroSection({ content }: { content: SiteContent }) {
         <UnsplashImageBlock
           image={hero.image}
           priority
+          cmsKey="home.hero.image.url"
+          cmsLabel="Image hero"
           className="h-full min-h-[520px] md:min-h-[640px]"
           sizes="100vw"
         />
@@ -26,16 +28,32 @@ export function HeroSection({ content }: { content: SiteContent }) {
             <ShieldCheck className="h-3.5 w-3.5" />
             Artisan certifié · Rouen & agglo
           </div>
-          <h1 className="font-display text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
+          <h1
+            className="font-display text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl"
+            data-cms="text"
+            data-cms-key="home.hero.title"
+            data-cms-label="Titre hero"
+          >
             {hero.title}
           </h1>
-          <p className="text-lg text-muted-foreground text-pretty sm:text-xl">
+          <p
+            className="text-lg text-muted-foreground text-pretty sm:text-xl"
+            data-cms="text"
+            data-cms-key="home.hero.subtitle"
+            data-cms-label="Sous-titre hero"
+          >
             {hero.subtitle}
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Button asChild size="lg">
               <Link href={hero.ctaPrimary.href}>
-                {hero.ctaPrimary.label}
+                <span
+                  data-cms="text"
+                  data-cms-key="home.hero.ctaPrimary.label"
+                  data-cms-label="Bouton principal"
+                >
+                  {hero.ctaPrimary.label}
+                </span>
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

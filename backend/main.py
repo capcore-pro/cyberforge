@@ -69,6 +69,11 @@ from routers.firecrawl import router as firecrawl_router
 
 _startup_mark("import routers.firecrawl")
 
+from routers.cms import panel_router as cms_panel_router
+from routers.cms import router as cms_router
+
+_startup_mark("import routers.cms")
+
 _t_init_db = time.perf_counter()
 init_db()
 logger.info("[startup] init_db done (%.0f ms)", (time.perf_counter() - _t_init_db) * 1000)
@@ -88,6 +93,8 @@ app.include_router(personal_projects_router, prefix="/api/personal-projects")
 app.include_router(system_notifications_router, prefix="/api")
 app.include_router(toolbox_router, prefix="/api")
 app.include_router(firecrawl_router, prefix="/api")
+app.include_router(cms_panel_router)
+app.include_router(cms_router, prefix="/api")
 logger.info("[startup] extra routers mounted (%.0f ms)", (time.perf_counter() - _t_routers) * 1000)
 
 logger.info(

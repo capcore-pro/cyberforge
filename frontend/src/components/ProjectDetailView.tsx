@@ -29,6 +29,12 @@ import {
   toggleVitrineAuth,
   type VitrineAuthInfo,
 } from "@/lib/vitrines-api";
+import {
+  fetchCmsProjectSettings,
+  patchCmsProjectSettings,
+  type CmsProjectSettings,
+} from "@/lib/cms-projects-api";
+import { copyTextToClipboard } from "@/lib/generation-export";
 
 interface ProjectDetailViewProps {
   project: UnifiedProject;
@@ -73,6 +79,13 @@ export function ProjectDetailView({
   extraSections,
 }: ProjectDetailViewProps) {
   const isVitrine = project.source === "managed_vitrine" && Boolean(project.managedId);
+  const isManaged = Boolean(project.managedId);
+
+  const [cmsSettings, setCmsSettings] = useState<CmsProjectSettings | null>(null);
+  const [cmsLoading, setCmsLoading] = useState(false);
+  const [cmsBusy, setCmsBusy] = useState(false);
+  const [cmsError, setCmsError] = useState<string | null>(null);
+  const [cmsCopyOk, setCmsCopyOk] = useState(false);
 
   const [name, setName] = useState(project.name);
   const [nameBusy, setNameBusy] = useState(false);
@@ -174,6 +187,55 @@ export function ProjectDetailView({
       void loadAuth();
     }
   }, [isVitrine, loadAuth]);
+
+  const loadCmsSettings = useCallback(async () => {
+    if (!project.managedId) return;
+    setCmsLoading(true);
+    setCmsError(null);
+    try {
+      const resp = await fetchCmsProjectSettings(project.managedId);
+      if (resp.ok && resp.data) {
+        setCmsSettings(resp.data);
+      } else {
+        setCmsError(apiErrorMessage(resp, "Impossible de charger le mode CMS."));
+      }
+    } finally {
+      setCmsLoading(false);
+    }
+  }, [project.managedId]);
+
+  useEffect(() => {
+    setCmsSettings(null);
+    setCmsError(null);
+    if (isManaged) {
+      void loadCmsSettings();
+    }
+  }, [isManaged, loadCmsSettings]);
+
+  async function handleToggleCms(enabled: boolean) {
+    if (!project.managedId) return;
+    setCmsBusy(true);
+    setCmsError(null);
+    const resp = await patchCmsProjectSettings(project.managedId, enabled);
+    setCmsBusy(false);
+    if (!resp.ok || !resp.data) {
+      setCmsError(apiErrorMessage(resp, "Mise à jour CMS impossible."));
+      return;
+    }
+    setCmsSettings(resp.data);
+  }
+
+  async function handleCopyCmsLink() {
+    const link = cmsSettings?.cms_login_url;
+    if (!link) return;
+    try {
+      await copyTextToClipboard(link);
+      setCmsCopyOk(true);
+      window.setTimeout(() => setCmsCopyOk(false), 2000);
+    } catch {
+      setCmsError("Copie impossible.");
+    }
+  }
 
   async function saveName() {
     const trimmed = name.trim();
@@ -405,6 +467,78 @@ export function ProjectDetailView({
         />
 
         {extraSections}
+
+        {isManaged ? (
+          <div className="space-y-3 rounded-card border border-cf-border-input bg-cf-secondary/40 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium text-cf-text">Mode CMS client</p>
+              {cmsSettings ? (
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                    cmsSettings.cms_enabled
+                      ? "border-emerald-500/40 bg-emerald-950/40 text-emerald-300"
+                      : "border-cf-border-input text-cf-muted"
+                  }`}
+                >
+                  {cmsSettings.cms_enabled ? "Activé" : "Désactivé"}
+                </span>
+              ) : null}
+            </div>
+            <p className="text-[11px] leading-relaxed text-cf-muted">
+              Le client peut modifier textes, images et couleurs depuis son site avec le panneau
+              d&apos;édition (?cms=1).
+            </p>
+            {cmsLoading ? (
+              <p className="animate-pulse text-xs text-cf-muted">Chargement…</p>
+            ) : cmsSettings ? (
+              <>
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-cf-text">
+                  <input
+                    type="checkbox"
+                    checked={cmsSettings.cms_enabled}
+                    disabled={cmsBusy}
+                    onChange={(e) => void handleToggleCms(e.target.checked)}
+                  />
+                  Mode CMS activé
+                </label>
+                {cmsSettings.cms_enabled && cmsSettings.cms_login_url ? (
+                  <div className="space-y-2 rounded-control border border-cf-gold/25 bg-cf-active/30 p-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
+                      Lien connexion client
+                    </p>
+                    <p className="break-all font-mono text-xs text-cf-gold">
+                      {cmsSettings.cms_login_url}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyCmsLink()}
+                      className="rounded-control border border-cf-gold/40 bg-cf-secondary px-3 py-1.5 text-xs text-cf-gold hover:border-cf-gold"
+                    >
+                      {cmsCopyOk ? "Copié !" : "Copier le lien"}
+                    </button>
+                    <p className="text-[10px] text-cf-muted">
+                      Inclus automatiquement dans l&apos;email de livraison (séquence bienvenue J0).
+                    </p>
+                  </div>
+                ) : cmsSettings.cms_enabled && !project.url ? (
+                  <p className="text-xs text-amber-200/90">
+                    URL de production requise pour générer le lien CMS.
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={cmsLoading}
+                onClick={() => void loadCmsSettings()}
+                className="rounded-control border border-cf-border-input bg-cf-secondary px-3 py-1.5 text-xs text-cf-gold hover:border-cf-gold/50"
+              >
+                Charger les paramètres CMS
+              </button>
+            )}
+            {cmsError ? <p className="text-xs text-red-300">{cmsError}</p> : null}
+          </div>
+        ) : null}
 
         {isVitrine ? (
           <div className="space-y-3 rounded-card border border-cf-border-input bg-cf-secondary/40 p-4">

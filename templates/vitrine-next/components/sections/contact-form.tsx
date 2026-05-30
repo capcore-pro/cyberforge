@@ -56,8 +56,22 @@ export function ContactForm({ content }: { content: SiteContent }) {
     <div className="grid gap-10 lg:grid-cols-5">
       <Card className="lg:col-span-3">
         <CardHeader>
-          <CardTitle className="font-display text-2xl">{page.headline}</CardTitle>
-          <p className="text-sm text-muted-foreground">{page.subtext}</p>
+          <CardTitle
+            className="font-display text-2xl"
+            data-cms="text"
+            data-cms-key="contactPage.headline"
+            data-cms-label="Titre contact"
+          >
+            {page.headline}
+          </CardTitle>
+          <p
+            className="text-sm text-muted-foreground"
+            data-cms="text"
+            data-cms-key="contactPage.subtext"
+            data-cms-label="Sous-titre contact"
+          >
+            {page.subtext}
+          </p>
         </CardHeader>
         <CardContent>
           {status === "success" ? (
