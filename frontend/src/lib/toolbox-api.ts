@@ -132,3 +132,25 @@ export function generateToolboxSeoMeta(body: SeoMetaPayload) {
     timeoutMs: 90_000,
   });
 }
+
+export interface ApplyPalettePayload {
+  project_id: string;
+  palette: SectorPalette;
+  typo?: SectorTypography;
+  secteur?: string;
+}
+
+export interface ApplyPaletteResult {
+  scheduled: boolean;
+  run_id: string;
+  message: string;
+}
+
+export function applyToolboxPalette(body: ApplyPalettePayload) {
+  return apiRequest<ApplyPaletteResult>({
+    method: "POST",
+    path: `${TOOLBOX}/apply-palette`,
+    body,
+    timeoutMs: 30_000,
+  });
+}

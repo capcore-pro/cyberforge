@@ -43,11 +43,12 @@ import {
 import { fetchTaskflowPreviewHtml } from "@/lib/preview-html-api";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { projectTitleFromPrompt } from "@/lib/project-title";
-import { fetchClientBranding } from "@/lib/clients-api";
+import { fetchClientBranding, listClients, type ClientRecord } from "@/lib/clients-api";
 import { updateProject } from "@/lib/projects-api";
 import {
   clearSelectedClientId,
   getSelectedClientId,
+  setSelectedClientId,
 } from "@/lib/selected-client";
 import { fetchProjectCosts } from "@/lib/costs-api";
 import { createPersonalProject, USAGE_LABELS, type PersonalUsage } from "@/lib/personal-projects-api";
@@ -70,6 +71,12 @@ import {
   type ScrapeSectionOut,
 } from "@/lib/firecrawl-api";
 import { fetchToolboxSecteurs, type SectorData } from "@/lib/toolbox-api";
+import {
+  computeProjectEstimation,
+  formatEur,
+} from "@/lib/generator-estimation";
+
+type ProjectOwnerMode = "client" | "perso";
 
 const DESCRIPTION_PLACEHOLDER =
   "Décrivez votre projet… (ex : site vitrine pour une boulangerie artisanale à Nantes, ton chaleureux, couleurs chaudes)";
@@ -193,6 +200,23 @@ export function GeneratorPage({
 
   const isPersonal = personalMode || sessionPersonalMode;
 
+  const [projectOwnerMode, setProjectOwnerMode] = useState<ProjectOwnerMode>(() =>
+    personalMode || sessionPersonalMode ? "perso" : "client",
+  );
+  const [clientOptions, setClientOptions] = useState<ClientRecord[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [inlinePersoUsage, setInlinePersoUsage] = useState<PersonalUsage>(
+    personalUsage ?? "personal",
+  );
+  const [inlinePersoPrice, setInlinePersoPrice] = useState(
+    personalPriceEur != null ? String(personalPriceEur) : "",
+  );
+  const [inlinePersoDescription, setInlinePersoDescription] = useState(
+    personalCommercialDescription ?? "",
+  );
+
+  const isPersonalFlow = projectOwnerMode === "perso" || isPersonal;
+
   const [selectedKind, setSelectedKind] = useState<GeneratorKindId>(() =>
     inferKindFromSession(projectType, generationMode, prompt),
   );
@@ -231,6 +255,62 @@ export function GeneratorPage({
     () => getGeneratorKind(selectedKind),
     [selectedKind],
   );
+
+  const estimation = useMemo(
+    () => computeProjectEstimation(selectedKind, prompt),
+    [selectedKind, prompt],
+  );
+
+  const loadClientOptions = useCallback(() => {
+    if (clientOptions.length > 0 || clientsLoading) return;
+    setClientsLoading(true);
+    void listClients("client").then((res) => {
+      setClientsLoading(false);
+      if (res.ok && res.data) setClientOptions(res.data);
+    });
+  }, [clientOptions.length, clientsLoading]);
+
+  function selectProjectOwner(mode: ProjectOwnerMode) {
+    if (isRunning) return;
+    setProjectOwnerMode(mode);
+    if (mode === "perso") {
+      clearSelectedClientId();
+      setLinkedClientId(null);
+      setLinkedClientLabel(null);
+      setLinkedClientPerso(false);
+      patch({
+        personalMode: true,
+        personalUsage: inlinePersoUsage,
+        personalPriceEur:
+          inlinePersoUsage === "personal"
+            ? null
+            : Number.parseFloat(inlinePersoPrice) || null,
+        personalCommercialDescription:
+          inlinePersoUsage === "personal" ? "" : inlinePersoDescription,
+      });
+    } else {
+      patch({ personalMode: false });
+    }
+  }
+
+  function handleClientSelect(clientId: string) {
+    if (!clientId) {
+      clearSelectedClientId();
+      setLinkedClientId(null);
+      setLinkedClientLabel(null);
+      setLinkedClientPerso(false);
+      return;
+    }
+    setSelectedClientId(clientId);
+    setLinkedClientId(clientId);
+    void fetchClientBranding(clientId).then((response) => {
+      if (response.ok && response.data) {
+        const label = response.data.company?.trim() || response.data.name;
+        setLinkedClientLabel(label);
+        setLinkedClientPerso(response.data.kind === "perso");
+      }
+    });
+  }
 
   useEffect(() => {
     if (isPersonal) return;
@@ -671,15 +751,25 @@ export function GeneratorPage({
         githubExportUrl: normalized.github_export_url ?? null,
       });
 
-      if (isPersonal && persistedId) {
+      if ((projectOwnerMode === "perso" || isPersonal) && persistedId) {
+        const usage = personalUsage ?? inlinePersoUsage;
+        const price =
+          personalPriceEur ??
+          (inlinePersoUsage === "personal"
+            ? null
+            : Number.parseFloat(inlinePersoPrice) || null);
+        const commercial =
+          personalCommercialDescription.trim() ||
+          inlinePersoDescription.trim() ||
+          null;
         void createPersonalProject({
           title:
             projectName.trim() ||
             personalDraftTitle.trim() ||
             projectTitleFromPrompt(trimmed),
-          usage_type: personalUsage,
-          price_eur: personalPriceEur,
-          commercial_description: personalCommercialDescription.trim() || null,
+          usage_type: usage,
+          price_eur: price,
+          commercial_description: commercial,
           project_key: `supabase:${persistedId}`,
           supabase_project_id: persistedId,
         });
@@ -765,7 +855,7 @@ export function GeneratorPage({
       generation_id: result.persistence?.generation_id ?? null,
       prompt: prompt.trim(),
       demo_seed: effectiveDemoSeed() ?? result.generation.demo_seed ?? null,
-      ...(isPersonal ? {} : { client_id: linkedClientId }),
+      ...(isPersonalFlow ? {} : { client_id: linkedClientId }),
     });
     setDemoBusy(false);
     if (!response.ok || !response.data) {
@@ -812,15 +902,18 @@ export function GeneratorPage({
         <p className="cf-section-label mb-2">Création de projet</p>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="cf-page-title">Générateur</h1>
-          {isPersonal ? <PersoBadge /> : null}
+          {isPersonalFlow ? <PersoBadge /> : null}
         </div>
-        {isPersonal ? (
+        {isPersonalFlow ? (
           <p className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-control border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-100">
-            Projet perso · {USAGE_LABELS[personalUsage]}
-            {personalPriceEur != null ? ` · ${personalPriceEur} €` : ""}
+            Projet perso · {USAGE_LABELS[personalUsage ?? inlinePersoUsage]}
+            {(personalPriceEur ?? (inlinePersoPrice ? Number.parseFloat(inlinePersoPrice) : null)) !=
+            null
+              ? ` · ${personalPriceEur ?? inlinePersoPrice} €`
+              : ""}
           </p>
         ) : null}
-        {!isPersonal && linkedClientId && linkedClientLabel ? (
+        {!isPersonalFlow && linkedClientId && linkedClientLabel ? (
           <p className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-control border border-cf-gold/30 bg-cf-active px-3 py-2 text-xs text-cf-gold">
             Projet pour {linkedClientPerso ? "la fiche perso" : "le client"} :{" "}
             <strong className="text-cf-text">{linkedClientLabel}</strong>
@@ -843,6 +936,146 @@ export function GeneratorPage({
       {/* Étape 1 — Type */}
       <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
         <StepHeading step={1} title="Choix du type de projet" />
+
+        <div className="mb-6 grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={isRunning}
+            onClick={() => selectProjectOwner("client")}
+            className={`flex min-h-[120px] flex-col items-start rounded-card border p-5 text-left transition ${
+              projectOwnerMode === "client"
+                ? "border-cf-gold bg-cf-active shadow-gold"
+                : "border-cf-border-input bg-cf-secondary hover:border-cf-gold/40"
+            } disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            <span className="text-base font-medium text-cf-text">Projet Client</span>
+            <span className="mt-2 text-sm leading-relaxed text-cf-muted">
+              Je crée pour un client, je facture — client affilié et estimation prix marché.
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={isRunning}
+            onClick={() => selectProjectOwner("perso")}
+            className={`flex min-h-[120px] flex-col items-start rounded-card border p-5 text-left transition ${
+              projectOwnerMode === "perso"
+                ? "border-fuchsia-400/60 bg-fuchsia-500/10 shadow-gold"
+                : "border-cf-border-input bg-cf-secondary hover:border-fuchsia-400/30"
+            } disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            <span className="text-base font-medium text-cf-text">Projet Perso</span>
+            <span className="mt-2 text-sm leading-relaxed text-cf-muted">
+              Je crée pour moi — usage interne, vente one-shot ou abonnement.
+            </span>
+          </button>
+        </div>
+
+        {projectOwnerMode === "client" ? (
+          <div className="mb-6 rounded-control border border-cf-border-input bg-cf-secondary/60 p-4">
+            <label className="block space-y-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
+                Client affilié
+              </span>
+              <select
+                value={linkedClientId ?? ""}
+                onFocus={loadClientOptions}
+                onChange={(e) => handleClientSelect(e.target.value)}
+                disabled={isRunning}
+                className="w-full rounded-control border border-cf-border-input bg-cf-main px-3 py-2.5 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+              >
+                <option value="">— Sélectionner un client —</option>
+                {clientOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.company?.trim() || c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {clientsLoading ? (
+              <p className="mt-2 text-xs text-cf-muted">Chargement des clients…</p>
+            ) : null}
+            <p className="mt-3 text-xs text-cf-muted">
+              Estimation prix marché ({kindOption.title}) :{" "}
+              <strong className="text-cf-gold">
+                {formatEur(estimation.marketPriceMin)} –{" "}
+                {formatEur(estimation.marketPriceMax)}
+              </strong>
+            </p>
+          </div>
+        ) : (
+          <div className="mb-6 space-y-4 rounded-control border border-fuchsia-400/25 bg-fuchsia-500/5 p-4">
+            <fieldset className="space-y-2">
+              <legend className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
+                Usage
+              </legend>
+              {(["personal", "one_shot", "subscription"] as PersonalUsage[]).map((usage) => (
+                <label key={usage} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="inline-perso-usage"
+                    checked={inlinePersoUsage === usage}
+                    disabled={isRunning}
+                    onChange={() => {
+                      setInlinePersoUsage(usage);
+                      patch({
+                        personalMode: true,
+                        personalUsage: usage,
+                        personalPriceEur:
+                          usage === "personal"
+                            ? null
+                            : Number.parseFloat(inlinePersoPrice) || null,
+                      });
+                    }}
+                  />
+                  {USAGE_LABELS[usage]}
+                </label>
+              ))}
+            </fieldset>
+            {inlinePersoUsage !== "personal" ? (
+              <>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
+                    Prix (€)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={inlinePersoPrice}
+                    disabled={isRunning}
+                    onChange={(e) => {
+                      setInlinePersoPrice(e.target.value);
+                      patch({
+                        personalPriceEur: Number.parseFloat(e.target.value) || null,
+                      });
+                    }}
+                    className="w-full rounded-control border border-cf-border-input bg-cf-main px-3 py-2 text-sm text-cf-text"
+                    placeholder={inlinePersoUsage === "subscription" ? "9.99 / mois" : "49"}
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
+                    Description commerciale
+                  </span>
+                  <textarea
+                    rows={2}
+                    value={inlinePersoDescription}
+                    disabled={isRunning}
+                    onChange={(e) => {
+                      setInlinePersoDescription(e.target.value);
+                      patch({ personalCommercialDescription: e.target.value });
+                    }}
+                    className="w-full resize-y rounded-control border border-cf-border-input bg-cf-main px-3 py-2 text-sm text-cf-text"
+                    placeholder="Ce que l'acheteur obtient…"
+                  />
+                </label>
+              </>
+            ) : null}
+          </div>
+        )}
+
+        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-cf-label">
+          Type technique
+        </p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {GENERATOR_KINDS.map((kind) => {
             const selected = selectedKind === kind.id;
@@ -904,6 +1137,51 @@ export function GeneratorPage({
             className="w-full resize-y rounded-control border border-cf-border-input bg-cf-secondary px-4 py-3 text-sm leading-relaxed text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
           />
         </label>
+
+        <div className="mt-5 rounded-control border border-cf-gold/25 bg-cf-active/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-cf-gold">
+            Estimation
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-cf-label">Complexité</p>
+              <p className="mt-1 text-sm font-medium text-cf-text">
+                {estimation.complexityLabel}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-cf-label">Coût API</p>
+              <p className="mt-1 text-sm font-medium text-cf-text">
+                ~{formatEur(estimation.apiCostEur)} en API
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <p className="text-[10px] uppercase tracking-wider text-cf-label">Hébergement</p>
+              <p className="mt-1 text-sm text-cf-text">
+                {estimation.hosting.providers.length > 0
+                  ? estimation.hosting.providers.join(" + ")
+                  : "Aucun"}
+                {estimation.hosting.monthlyEur === 0
+                  ? " · gratuit"
+                  : estimation.hosting.monthlyEur != null
+                    ? ` · ~${formatEur(estimation.hosting.monthlyEur)}/mois`
+                    : ""}
+              </p>
+              <p className="mt-1 text-xs text-cf-muted">{estimation.hosting.note}</p>
+            </div>
+            {projectOwnerMode === "client" ? (
+              <div className="sm:col-span-2">
+                <p className="text-[10px] uppercase tracking-wider text-cf-label">
+                  Prix marché indicatif
+                </p>
+                <p className="mt-1 text-sm text-cf-gold">
+                  {formatEur(estimation.marketPriceMin)} –{" "}
+                  {formatEur(estimation.marketPriceMax)}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </div>
 
         <div className="mt-5 rounded-control border border-cf-border-input bg-cf-secondary/60 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-cf-label">

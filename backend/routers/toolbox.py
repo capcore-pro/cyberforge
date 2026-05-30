@@ -1291,6 +1291,48 @@ async def compress_toolbox_image(body: CompressImageRequest) -> CompressImageRes
     )
 
 
+class ApplyPaletteRequest(BaseModel):
+    project_id: str = Field(..., min_length=8, max_length=64)
+    palette: SectorPalette
+    typo: SectorTypography | None = None
+    secteur: str | None = Field(default=None, max_length=64)
+
+
+class ApplyPaletteResponse(BaseModel):
+    scheduled: bool
+    run_id: str
+    message: str
+
+
+@router.post("/toolbox/apply-palette", response_model=ApplyPaletteResponse)
+async def apply_palette_to_project(body: ApplyPaletteRequest) -> ApplyPaletteResponse:
+    """Applique une palette toolbox à un projet managé (GitHub + redéploiement Vercel)."""
+    from tools.palette_apply import apply_palette_to_managed_project
+
+    typo = body.typo
+    try:
+        result = await apply_palette_to_managed_project(
+            body.project_id,
+            primary=body.palette.primary,
+            secondary=body.palette.secondary,
+            accent=body.palette.accent,
+            heading=typo.heading if typo else "Inter",
+            body=typo.body if typo else "Inter",
+            secteur=body.secteur,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("apply_palette_to_project")
+        raise HTTPException(status_code=500, detail="Application palette impossible.") from exc
+
+    return ApplyPaletteResponse(
+        scheduled=bool(result.get("scheduled")),
+        run_id=str(result.get("run_id", "")),
+        message=str(result.get("message", "Palette appliquée — redéploiement en cours")),
+    )
+
+
 @router.get("/toolbox/temp/{filename}")
 async def serve_toolbox_temp_image(filename: str) -> FileResponse:
     """Sert une image compressée depuis backend/temp/."""

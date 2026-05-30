@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { copyTextToClipboard } from "@/lib/generation-export";
 import {
+  applyToolboxPalette,
   fetchToolboxComposants,
   fetchToolboxSecteurs,
   generateToolboxSeoMeta,
@@ -9,6 +10,8 @@ import {
   searchToolboxIllustrations,
   searchToolboxPhotos,
   type SectorData,
+  type SectorPalette,
+  type SectorTypography,
   type SeoMetaPayload,
   type SeoMetaResult,
   type ToolboxComposant,
@@ -20,6 +23,7 @@ import {
   importToolboxPhotoToMedia,
   importToolboxSvgToMedia,
 } from "@/lib/toolbox-media-import";
+import { loadAllUnifiedProjects, type UnifiedProject } from "@/lib/unified-projects";
 import { ToolboxCompetitorTab } from "@/components/ToolboxCompetitorTab";
 
 type MainTab = "palettes" | "visuels" | "composants" | "seo" | "concurrents";
@@ -111,64 +115,363 @@ function ComposantPreview({ categorie }: { categorie: string }) {
   );
 }
 
-function PalettesTab({ secteurs }: { secteurs: SectorData[] }) {
+function PaletteInfoTooltip({ sector }: { sector: SectorData }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {secteurs.map((s) => {
-        const paletteText = `${s.palette.primary}, ${s.palette.secondary}, ${s.palette.accent}`;
-        return (
-          <article
-            key={s.nom}
-            className="rounded-card border border-cf-border-input bg-cf-card p-4 shadow-card"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="text-sm font-semibold text-cf-text">{sectorLabel(s.nom)}</h3>
-              <CopyButton label="Copier palette" text={paletteText} />
-            </div>
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Détails de la palette"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-cf-border-input text-xs text-cf-muted transition hover:border-cf-gold/50 hover:text-cf-gold"
+      >
+        i
+      </button>
+      {open ? (
+        <div
+          role="tooltip"
+          className="absolute right-0 top-full z-30 mt-2 w-72 rounded-card border border-cf-gold/30 bg-cf-main p-4 text-left shadow-lg"
+        >
+          <p className="text-[10px] font-medium uppercase tracking-wider text-cf-gold">
+            Couleurs
+          </p>
+          <ul className="mt-2 space-y-2 text-xs text-cf-text">
+            {(
+              [
+                ["Principale", sector.palette.primary, "Boutons, liens, en-têtes"],
+                ["Secondaire", sector.palette.secondary, "Arrière-plans, cartes"],
+                ["Accent", sector.palette.accent, "Badges, surlignages"],
+              ] as const
+            ).map(([role, hex, hint]) => (
+              <li key={role} className="flex items-center gap-2">
+                <span
+                  className="h-5 w-5 shrink-0 rounded border border-cf-border-input"
+                  style={{ backgroundColor: hex }}
+                />
+                <span>
+                  <strong>{role}</strong>{" "}
+                  <span className="font-mono text-cf-muted">{hex}</span>
+                  <span className="block text-[10px] text-cf-muted">{hint}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
 
-            <div className="mt-3 flex gap-2">
-              {(
-                [
-                  ["primary", s.palette.primary],
-                  ["secondary", s.palette.secondary],
-                  ["accent", s.palette.accent],
-                ] as const
-              ).map(([key, hex]) => (
-                <div key={key} className="flex-1 text-center">
-                  <div
-                    className="h-12 w-full rounded-control border border-cf-border-input"
-                    style={{ backgroundColor: hex }}
-                    title={hex}
-                  />
-                  <p className="mt-1 font-mono text-[10px] text-cf-muted">{hex}</p>
-                </div>
-              ))}
-            </div>
-
-            <p className="mt-3 text-xs text-cf-muted">
-              <span className="text-cf-label">Titres :</span> {s.typo.heading}
-              <br />
-              <span className="text-cf-label">Corps :</span> {s.typo.body}
+          <p className="mt-4 text-[10px] font-medium uppercase tracking-wider text-cf-gold">
+            Typographies
+          </p>
+          <div className="mt-2 space-y-2 rounded-control border border-cf-border-input bg-cf-secondary/60 p-3">
+            <p
+              className="text-base leading-tight text-cf-text"
+              style={{ fontFamily: `'${sector.typo.heading}', serif` }}
+            >
+              {sector.typo.heading}
             </p>
+            <p
+              className="text-xs text-cf-muted"
+              style={{ fontFamily: `'${sector.typo.body}', sans-serif` }}
+            >
+              Corps — {sector.typo.body}
+            </p>
+          </div>
 
-            <div className="mt-3">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
-                Composants recommandés
-              </p>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {s.composants.map((c) => (
-                  <span
-                    key={c}
-                    className="rounded border border-cf-gold/25 bg-cf-gold-subtle px-2 py-0.5 text-[10px] text-cf-gold"
-                  >
-                    {c}
-                  </span>
+          <p className="mt-4 text-[10px] font-medium uppercase tracking-wider text-cf-gold">
+            Composants secteur
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {sector.composants.map((c) => (
+              <span
+                key={c}
+                className="rounded border border-cf-gold/25 bg-cf-gold-subtle px-1.5 py-0.5 text-[10px] text-cf-gold"
+              >
+                {c}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ApplyPaletteDropdown({
+  palette,
+  typo,
+  secteur,
+  projects,
+  onApplied,
+}: {
+  palette: SectorPalette;
+  typo: SectorTypography;
+  secteur: string;
+  projects: UnifiedProject[];
+  onApplied: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const eligible = projects.filter(
+    (p) =>
+      p.managedId &&
+      p.source !== "managed_extension" &&
+      p.source !== "supabase",
+  );
+
+  async function handleApply(project: UnifiedProject) {
+    if (!project.managedId) return;
+    setBusyId(project.managedId);
+    setError(null);
+    const res = await applyToolboxPalette({
+      project_id: project.managedId,
+      palette,
+      typo,
+      secteur,
+    });
+    setBusyId(null);
+    if (!res.ok || !res.data) {
+      setError(apiErrorMessage(res, "Application impossible."));
+      return;
+    }
+    setOpen(false);
+    onApplied(res.data.message);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={eligible.length === 0 || Boolean(busyId)}
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-control border border-cf-gold/50 bg-cf-active px-3 py-1.5 text-xs font-medium text-cf-gold transition hover:border-cf-gold disabled:opacity-50"
+      >
+        {busyId ? "Application…" : "Appliquer à un projet"}
+      </button>
+      {open && eligible.length > 0 ? (
+        <div className="absolute right-0 top-full z-20 mt-1 max-h-52 w-56 overflow-y-auto rounded-card border border-cf-border-input bg-cf-main py-1 shadow-lg">
+          {eligible.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              disabled={busyId === p.managedId}
+              onClick={() => void handleApply(p)}
+              className="block w-full px-3 py-2 text-left text-xs text-cf-text hover:bg-cf-active disabled:opacity-50"
+            >
+              <span className="font-medium">{p.name}</span>
+              <span className="block text-[10px] text-cf-muted">{p.type}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {error ? <p className="mt-1 text-[10px] text-red-300">{error}</p> : null}
+    </div>
+  );
+}
+
+function CustomPaletteCreator({
+  projects,
+  onApplied,
+}: {
+  projects: UnifiedProject[];
+  onApplied: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [primary, setPrimary] = useState("#0284c7");
+  const [secondary, setSecondary] = useState("#0f172a");
+  const [accent, setAccent] = useState("#f59e0b");
+  const [name, setName] = useState("Ma palette");
+
+  const customSector: SectorData = {
+    nom: "custom",
+    palette: { primary, secondary, accent },
+    typo: { heading: "Inter", body: "Inter" },
+    composants: ["hero", "contact"],
+    mots_cles_visuels: [],
+  };
+
+  return (
+    <div className="rounded-card border border-dashed border-cf-gold/40 bg-cf-card p-5 shadow-card">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between text-sm font-medium text-cf-gold"
+      >
+        Créer une palette personnalisée
+        <span aria-hidden>{open ? "−" : "+"}</span>
+      </button>
+      {open ? (
+        <div className="mt-4 space-y-4">
+          <label className="block space-y-1">
+            <span className="text-[10px] uppercase tracking-wider text-cf-label">Nom</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text"
+            />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(
+              [
+                ["Principale", primary, setPrimary],
+                ["Secondaire", secondary, setSecondary],
+                ["Accent", accent, setAccent],
+              ] as const
+            ).map(([label, value, setter]) => (
+              <label key={label} className="space-y-1">
+                <span className="text-[10px] uppercase tracking-wider text-cf-label">
+                  {label}
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={value}
+                    onChange={(e) => setter(e.target.value)}
+                    className="h-10 w-12 cursor-pointer rounded border border-cf-border-input bg-transparent"
+                  />
+                  <span className="font-mono text-xs text-cf-muted">{value}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            {([primary, secondary, accent] as const).map((hex, i) => (
+              <div
+                key={i}
+                className="h-10 flex-1 rounded-control border border-cf-border-input"
+                style={{ backgroundColor: hex }}
+              />
+            ))}
+          </div>
+          <ApplyPaletteDropdown
+            palette={customSector.palette}
+            typo={customSector.typo}
+            secteur="custom"
+            projects={projects}
+            onApplied={onApplied}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PalettesTab({ secteurs }: { secteurs: SectorData[] }) {
+  const [projects, setProjects] = useState<UnifiedProject[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProjectsLoading(true);
+    void loadAllUnifiedProjects().then((rows) => {
+      if (!cancelled) {
+        setProjects(rows);
+        setProjectsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleApplied(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 5000);
+  }
+
+  return (
+    <div className="space-y-4">
+      {toast ? (
+        <p className="rounded-card border border-emerald-500/40 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-200">
+          {toast}
+        </p>
+      ) : null}
+
+      <CustomPaletteCreator projects={projects} onApplied={handleApplied} />
+
+      {projectsLoading ? (
+        <p className="text-xs text-cf-muted">Chargement des projets…</p>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {secteurs.map((s) => {
+          const paletteText = `${s.palette.primary}, ${s.palette.secondary}, ${s.palette.accent}`;
+          return (
+            <article
+              key={s.nom}
+              className="rounded-card border border-cf-border-input bg-cf-card p-4 shadow-card"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-cf-text">{sectorLabel(s.nom)}</h3>
+                  <PaletteInfoTooltip sector={s} />
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <CopyButton label="Copier palette" text={paletteText} />
+                  <ApplyPaletteDropdown
+                    palette={s.palette}
+                    typo={s.typo}
+                    secteur={s.nom}
+                    projects={projects}
+                    onApplied={handleApplied}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                {(
+                  [
+                    ["Principale", s.palette.primary],
+                    ["Secondaire", s.palette.secondary],
+                    ["Accent", s.palette.accent],
+                  ] as const
+                ).map(([role, hex]) => (
+                  <div key={role} className="flex-1 text-center">
+                    <div
+                      className="h-12 w-full rounded-control border border-cf-border-input"
+                      style={{ backgroundColor: hex }}
+                      title={`${role} — ${hex}`}
+                    />
+                    <p className="mt-1 text-[10px] text-cf-muted">{role}</p>
+                    <p className="font-mono text-[10px] text-cf-muted">{hex}</p>
+                  </div>
                 ))}
               </div>
-            </div>
-          </article>
-        );
-      })}
+
+              <p className="mt-3 text-xs text-cf-muted">
+                <span className="text-cf-label">Titres :</span>{" "}
+                <span style={{ fontFamily: `'${s.typo.heading}', serif` }}>
+                  {s.typo.heading}
+                </span>
+                <br />
+                <span className="text-cf-label">Corps :</span>{" "}
+                <span style={{ fontFamily: `'${s.typo.body}', sans-serif` }}>
+                  {s.typo.body}
+                </span>
+              </p>
+
+              <div className="mt-3">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
+                  Composants recommandés
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {s.composants.map((c) => (
+                    <span
+                      key={c}
+                      className="rounded border border-cf-gold/25 bg-cf-gold-subtle px-2 py-0.5 text-[10px] text-cf-gold"
+                    >
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </div>
   );
 }
