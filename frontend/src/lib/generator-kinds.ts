@@ -154,3 +154,22 @@ export function syncSessionFromKind(
     generationMode: resolveGenerationMode(kind, deployMode),
   };
 }
+
+/** Secteur toolbox par défaut pour Firecrawl (clone / analyse). */
+export function kindToToolboxSecteur(kind: GeneratorKindId): string {
+  switch (kind) {
+    case "reservation":
+      return "restauration";
+    case "ecommerce":
+      return "commerce";
+    case "app_web":
+      return "technologie";
+    case "extension":
+      return "technologie";
+    case "desktop":
+      return "technologie";
+    case "vitrine":
+    default:
+      return "commerce";
+  }
+}

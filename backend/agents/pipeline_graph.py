@@ -77,6 +77,7 @@ REAL_APP_STEP_MESSAGES: dict[str, str] = {
 
 class PipelineState(TypedDict, total=False):
     prompt: str
+    inspiration_brief: str | None
     project_id: str | None
     project_type_hint: ProjectType | None
     # "client_demo" (défaut) → pipeline HTML premium ; "real_app" → React/Next.js
@@ -145,6 +146,22 @@ def _callback_from_config(config: dict[str, Any] | None) -> PipelineEventCallbac
     return _configurable(config).get("on_event")
 
 
+def _architect_input_prompt(state: PipelineState) -> str:
+    """Fusionne le brief d'inspiration Firecrawl et le prompt utilisateur."""
+    base = (state.get("prompt") or "").strip()
+    brief = (state.get("inspiration_brief") or "").strip()
+    if not brief:
+        return base
+    if not base:
+        return brief
+    return (
+        "## Brief d'inspiration (site source analysé)\n\n"
+        f"{brief}\n\n"
+        "## Prompt utilisateur\n\n"
+        f"{base}"
+    )
+
+
 async def architect_node(
     state: PipelineState,
     config: dict[str, Any] | None = None,
@@ -154,7 +171,7 @@ async def architect_node(
     settings = _settings_from_config(config)
     agent = ArchitectAgent(settings)
     plan, coremind_analysis = await agent.plan_with_analysis(
-        state["prompt"],
+        _architect_input_prompt(state),
         project_type_hint=state.get("project_type_hint"),
         generation_mode=state.get("generation_mode"),
     )
@@ -1031,6 +1048,7 @@ async def run_generation_pipeline(
     project_type_hint: ProjectType | None = None,
     generation_mode: str | None = None,
     project_id: str | None = None,
+    inspiration_brief: str | None = None,
     settings: Settings | None = None,
     on_event: PipelineEventCallback | None = None,
 ) -> CoreMindRunResult:
@@ -1041,8 +1059,10 @@ async def run_generation_pipeline(
     """
     resolved_settings = settings or get_settings()
     pipeline_started = time.perf_counter()
+    brief = (inspiration_brief or "").strip() or None
     initial: PipelineState = {
         "prompt": prompt.strip(),
+        "inspiration_brief": brief,
         "project_id": project_id,
         "project_type_hint": project_type_hint,
         "generation_mode": generation_mode or "client_demo",

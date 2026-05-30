@@ -55,14 +55,70 @@ import {
   getGeneratorKind,
   inferDeployModeFromSession,
   inferKindFromSession,
+  kindToToolboxSecteur,
   resolveGenerationMode,
   syncSessionFromKind,
   type DeployMode,
   type GeneratorKindId,
 } from "@/lib/generator-kinds";
+import {
+  cloneFirecrawlInspiration,
+  type CloneInspirationResult,
+  type ScrapeSectionOut,
+} from "@/lib/firecrawl-api";
+import { fetchToolboxSecteurs, type SectorData } from "@/lib/toolbox-api";
 
 const DESCRIPTION_PLACEHOLDER =
   "Décrivez votre projet… (ex : site vitrine pour une boulangerie artisanale à Nantes, ton chaleureux, couleurs chaudes)";
+
+const SECTION_TYPE_LABELS: Record<string, string> = {
+  hero: "hero",
+  about: "à propos",
+  services: "services",
+  pricing: "tarifs",
+  contact: "contact",
+  testimonials: "témoignages",
+  faq: "FAQ",
+  other: "autre",
+};
+
+const SECTOR_LABELS: Record<string, string> = {
+  restauration: "Restauration",
+  nautisme: "Nautisme",
+  immobilier: "Immobilier",
+  sante: "Santé",
+  artisanat: "Artisanat",
+  beaute: "Beauté",
+  sport: "Sport",
+  technologie: "Technologie",
+  education: "Éducation",
+  commerce: "Commerce",
+};
+
+function formatStructureSummary(sections: ScrapeSectionOut[]): string {
+  const labels = sections.map(
+    (s) => SECTION_TYPE_LABELS[s.type] ?? s.type,
+  );
+  return [...new Set(labels)].join(" + ");
+}
+
+function buildPromptFromInspiration(
+  result: CloneInspirationResult,
+  structureSummary: string,
+): string {
+  const colors = Object.entries(result.palette)
+    .slice(0, 3)
+    .map(([key, value]) => `${key} ${value}`)
+    .join(", ");
+  return [
+    `Projet inspiré de ${result.url} pour ${result.nom_client}.`,
+    structureSummary ? `Structure cible : ${structureSummary}.` : "",
+    colors ? `Palette : ${colors}.` : "",
+    "Reproduire le rythme visuel et l'ordre des sections avec une exécution premium CapCore.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 interface GeneratorPageProps {
   onOpenProjects?: () => void;
@@ -137,6 +193,17 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   const [customizeSaveBusy, setCustomizeSaveBusy] = useState(false);
   const [runProjectId, setRunProjectId] = useState<string | null>(null);
   const [pricingLive, setPricingLive] = useState<PricingLiveData | null>(null);
+  const [inspirationUrl, setInspirationUrl] = useState("");
+  const [inspirationSecteur, setInspirationSecteur] = useState(() =>
+    kindToToolboxSecteur(selectedKind),
+  );
+  const [toolboxSecteurs, setToolboxSecteurs] = useState<SectorData[]>([]);
+  const [inspirationAnalyzing, setInspirationAnalyzing] = useState(false);
+  const [inspirationError, setInspirationError] = useState<string | null>(null);
+  const [inspirationStructureSummary, setInspirationStructureSummary] = useState<
+    string | null
+  >(null);
+  const [inspirationBrief, setInspirationBrief] = useState<string | null>(null);
   const { dispatchPipelineEvent } = usePipelineActivity();
 
   const kindOption = useMemo(
@@ -165,6 +232,14 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
     const synced = syncSessionFromKind(selectedKind, deployMode);
     patch(synced);
   }, [selectedKind, deployMode, patch]);
+
+  useEffect(() => {
+    void fetchToolboxSecteurs().then((res) => {
+      if (res.ok && res.data?.secteurs.length) {
+        setToolboxSecteurs(res.data.secteurs);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (phase !== "running" || !runProjectId) return;
@@ -318,9 +393,54 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
   function selectKind(kind: GeneratorKindId) {
     if (isRunning) return;
     setSelectedKind(kind);
+    setInspirationSecteur(kindToToolboxSecteur(kind));
     const option = getGeneratorKind(kind);
     if (!prompt.trim() && option.defaultDescription) {
       patch({ prompt: option.defaultDescription });
+    }
+  }
+
+  async function handleAnalyzeInspiration() {
+    const trimmedUrl = inspirationUrl.trim();
+    if (!trimmedUrl) {
+      setInspirationError("Indiquez l'URL du site d'inspiration.");
+      return;
+    }
+    setInspirationAnalyzing(true);
+    setInspirationError(null);
+    setInspirationStructureSummary(null);
+
+    const nomClient =
+      linkedClientLabel?.trim() ||
+      projectTitleFromPrompt(prompt) ||
+      "Mon projet";
+
+    const response = await cloneFirecrawlInspiration({
+      url: trimmedUrl,
+      secteur: inspirationSecteur,
+      nom_client: nomClient,
+    });
+    setInspirationAnalyzing(false);
+
+    if (!response.ok || !response.data) {
+      setInspirationError(
+        apiErrorMessage(response, "Analyse du site d'inspiration impossible."),
+      );
+      return;
+    }
+
+    const data = response.data;
+    const summary = formatStructureSummary(data.sections);
+    setInspirationStructureSummary(summary || null);
+    setInspirationBrief(data.brief_builder);
+
+    if (!prompt.trim()) {
+      patch({
+        prompt: buildPromptFromInspiration(
+          data,
+          summary ? summary : "sections détectées",
+        ),
+      });
     }
   }
 
@@ -419,6 +539,7 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
           project_type: synced.projectType,
           generation_mode: synced.generationMode,
           project_id: sessionProjectId,
+          inspiration_brief: inspirationBrief?.trim() || null,
         },
         { onStep },
       );
@@ -678,6 +799,84 @@ export function GeneratorPage({ onOpenProjects }: GeneratorPageProps) {
             className="w-full resize-y rounded-control border border-cf-border-input bg-cf-secondary px-4 py-3 text-sm leading-relaxed text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
           />
         </label>
+
+        <div className="mt-5 rounded-control border border-cf-border-input bg-cf-secondary/60 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-cf-label">
+            Site d&apos;inspiration (optionnel)
+          </p>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="block min-w-0 flex-1">
+              <span className="sr-only">URL du site d&apos;inspiration</span>
+              <input
+                type="url"
+                value={inspirationUrl}
+                onChange={(e) => {
+                  setInspirationUrl(e.target.value);
+                  setInspirationError(null);
+                }}
+                placeholder="https://site-inspiration.fr"
+                disabled={isRunning || inspirationAnalyzing}
+                className="w-full rounded-control border border-cf-border-input bg-cf-main px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+              />
+            </label>
+            {toolboxSecteurs.length > 0 ? (
+              <label className="block shrink-0">
+                <span className="mb-1 block text-[10px] text-cf-muted">Secteur</span>
+                <select
+                  value={inspirationSecteur}
+                  onChange={(e) => setInspirationSecteur(e.target.value)}
+                  disabled={isRunning || inspirationAnalyzing}
+                  className="rounded-control border border-cf-border-input bg-cf-main px-3 py-2.5 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+                >
+                  {toolboxSecteurs.map((s) => (
+                    <option key={s.nom} value={s.nom}>
+                      {SECTOR_LABELS[s.nom] ?? s.nom}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <button
+              type="button"
+              disabled={isRunning || inspirationAnalyzing || !inspirationUrl.trim()}
+              onClick={() => void handleAnalyzeInspiration()}
+              className="shrink-0 whitespace-nowrap rounded-control border border-cf-gold/50 bg-cf-secondary px-4 py-2.5 text-sm font-medium text-cf-gold transition hover:border-cf-gold hover:bg-cf-active disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {inspirationAnalyzing ? "Analyse…" : "Analyser"}
+            </button>
+          </div>
+
+          {inspirationAnalyzing ? (
+            <div
+              className="mt-4 flex items-center gap-3 rounded-control border border-cf-gold/25 bg-cf-active px-3 py-3"
+              role="status"
+            >
+              <span
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-cf-gold border-t-transparent"
+                aria-hidden
+              />
+              <p className="text-sm text-cf-muted">
+                Scraping Firecrawl et préparation du brief…
+              </p>
+            </div>
+          ) : null}
+
+          {inspirationError ? (
+            <p className="mt-3 text-sm text-red-300">{inspirationError}</p>
+          ) : null}
+
+          {inspirationStructureSummary ? (
+            <p className="mt-3 text-sm text-cf-text">
+              <span className="font-medium text-cf-gold">Structure détectée :</span>{" "}
+              {inspirationStructureSummary}
+              {inspirationBrief ? (
+                <span className="mt-1 block text-xs text-cf-muted">
+                  Brief transmis à ArchitectAI au lancement de la génération.
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
 
         <div className="mt-4 rounded-control border border-cf-border-input bg-cf-secondary/60 p-4">
           <p className="text-xs font-medium text-cf-gold">

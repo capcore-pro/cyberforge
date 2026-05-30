@@ -28,6 +28,7 @@ _SECRET_ENV_NAMES = frozenset(
         "TAVILY_API_KEY",
         "UNSPLASH_ACCESS_KEY",
         "PEXELS_API_KEY",
+        "FIRECRAWL_API_KEY",
         "CLOUDFLARE_API_TOKEN",
         "CLOUDFLARE_ACCOUNT_ID",
         "CLOUDFLARE_R2_ACCESS_KEY_ID",

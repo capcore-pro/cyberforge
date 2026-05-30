@@ -67,6 +67,8 @@ export interface CoreMindRequest {
   generation_mode?: GenerationMode | null;
   /** Suivi coûts API (cost_tracker) — UUID client ou id projet Supabase */
   project_id?: string | null;
+  /** Brief Firecrawl (clone-inspiration) transmis à ArchitectAI */
+  inspiration_brief?: string | null;
 }
 
 /** Tarification ArchitectAI (SSE ou GET /projects/{id}/costs) */

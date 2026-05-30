@@ -316,6 +316,16 @@ class Settings(BaseSettings):
         description="Timeout HTTP des appels toolbox (Pexels, Iconify, unDraw).",
     )
 
+    firecrawl_api_key: SecretStr | None = Field(
+        default=None,
+        alias="FIRECRAWL_API_KEY",
+        description="Clé API Firecrawl (scrape concurrent / inspiration).",
+    )
+    firecrawl_http_timeout_seconds: float = Field(
+        default=90.0,
+        alias="FIRECRAWL_HTTP_TIMEOUT_SECONDS",
+    )
+
     tavily_api_key: SecretStr | None = Field(
         default=None,
         alias="TAVILY_API_KEY",
@@ -391,6 +401,11 @@ class Settings(BaseSettings):
     def pexels_configured(self) -> bool:
         """True si l'API Pexels est disponible pour la toolbox photos."""
         return bool(plain_secret_str(self.pexels_api_key))
+
+    @property
+    def firecrawl_configured(self) -> bool:
+        """True si Firecrawl est configuré."""
+        return bool(plain_secret_str(self.firecrawl_api_key))
 
     @property
     def cloudflare_configured(self) -> bool:

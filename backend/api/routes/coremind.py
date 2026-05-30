@@ -55,6 +55,11 @@ class CoreMindRequest(BaseModel):
         max_length=128,
         description="Identifiant projet pour le suivi des coûts API",
     )
+    inspiration_brief: str | None = Field(
+        default=None,
+        max_length=24_000,
+        description="Brief enrichi (Firecrawl clone-inspiration) pour ArchitectAI",
+    )
 
 
 class CoreMindRunResponse(CoreMindRunResult):
@@ -142,6 +147,7 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
             project_type_hint=body.project_type,
             generation_mode=body.generation_mode,
             project_id=body.project_id,
+            inspiration_brief=body.inspiration_brief,
         )
         if result.demo_pipeline is not None:
             logger.info(

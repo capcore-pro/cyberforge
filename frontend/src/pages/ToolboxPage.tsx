@@ -20,8 +20,9 @@ import {
   importToolboxPhotoToMedia,
   importToolboxSvgToMedia,
 } from "@/lib/toolbox-media-import";
+import { ToolboxCompetitorTab } from "@/components/ToolboxCompetitorTab";
 
-type MainTab = "palettes" | "visuels" | "composants" | "seo";
+type MainTab = "palettes" | "visuels" | "composants" | "seo" | "concurrents";
 type VisuelSubTab = "photos" | "icones" | "illustrations";
 
 const MAIN_TABS: { id: MainTab; label: string }[] = [
@@ -29,6 +30,7 @@ const MAIN_TABS: { id: MainTab; label: string }[] = [
   { id: "visuels", label: "Visuels" },
   { id: "composants", label: "Composants" },
   { id: "seo", label: "SEO" },
+  { id: "concurrents", label: "Analyse concurrents" },
 ];
 
 const VISUEL_TABS: { id: VisuelSubTab; label: string }[] = [
@@ -739,6 +741,9 @@ export function ToolboxPage() {
       {!loading && tab === "visuels" ? <VisuelsTab secteurs={secteurs} /> : null}
       {!loading && tab === "composants" ? <ComposantsTab composants={composants} /> : null}
       {!loading && tab === "seo" ? <SeoTab secteurs={secteurs} /> : null}
+      {!loading && tab === "concurrents" ? (
+        <ToolboxCompetitorTab secteurs={secteurs} />
+      ) : null}
     </div>
   );
 }
