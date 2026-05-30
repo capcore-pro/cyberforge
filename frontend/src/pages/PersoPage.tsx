@@ -1,10 +1,15 @@
-import { FichesModePage } from "@/components/FichesModePage";
+import { PersonalProjectsPage } from "@/pages/PersonalProjectsPage";
 
 interface PersoPageProps {
-  onOpenGenerator?: () => void;
+  onOpenGenerator: (opts: {
+    usage: import("@/lib/personal-projects-api").PersonalUsage;
+    priceEur: number | null;
+    commercialDescription: string;
+    title: string;
+  }) => void;
 }
 
-/** Projets personnels de Mat (est_perso = true). */
+/** Projets personnels Mat — distincts des projets clients. */
 export function PersoPage({ onOpenGenerator }: PersoPageProps) {
-  return <FichesModePage kind="perso" onOpenGenerator={onOpenGenerator} />;
+  return <PersonalProjectsPage onOpenGenerator={onOpenGenerator} />;
 }

@@ -50,6 +50,8 @@ import {
   getSelectedClientId,
 } from "@/lib/selected-client";
 import { fetchProjectCosts } from "@/lib/costs-api";
+import { createPersonalProject, USAGE_LABELS, type PersonalUsage } from "@/lib/personal-projects-api";
+import { PersoBadge } from "@/components/PersoBadge";
 import { architectPlanFromPipelineEvent } from "@/lib/pricing-sse";
 import {
   GENERATOR_KINDS,
@@ -123,7 +125,10 @@ function buildPromptFromInspiration(
 
 interface GeneratorPageProps {
   onOpenProjects?: () => void;
+  onOpenPerso?: () => void;
   showBackToProjects?: boolean;
+  showBackToPerso?: boolean;
+  personalMode?: boolean;
 }
 
 function StepHeading({ step, title }: { step: number; title: string }) {
@@ -142,7 +147,10 @@ function StepHeading({ step, title }: { step: number; title: string }) {
  */
 export function GeneratorPage({
   onOpenProjects,
+  onOpenPerso,
   showBackToProjects = false,
+  showBackToPerso = false,
+  personalMode = false,
 }: GeneratorPageProps) {
   const { status: backendStatus } = useBackendHealth();
   const {
@@ -174,9 +182,16 @@ export function GeneratorPage({
     unlockUrl,
     demoPassword,
     githubExportUrl,
+    personalMode: sessionPersonalMode,
+    personalUsage,
+    personalPriceEur,
+    personalCommercialDescription,
+    personalDraftTitle,
     patch,
     applyPipelineStep,
   } = useGeneratorSession();
+
+  const isPersonal = personalMode || sessionPersonalMode;
 
   const [selectedKind, setSelectedKind] = useState<GeneratorKindId>(() =>
     inferKindFromSession(projectType, generationMode, prompt),
@@ -191,7 +206,7 @@ export function GeneratorPage({
   const [demoError, setDemoError] = useState<string | null>(null);
   const [demoCreated, setDemoCreated] = useState<CreateDemoResponse | null>(null);
   const [linkedClientId, setLinkedClientId] = useState<string | null>(() =>
-    getSelectedClientId(),
+    personalMode ? null : getSelectedClientId(),
   );
   const [linkedClientLabel, setLinkedClientLabel] = useState<string | null>(null);
   const [linkedClientPerso, setLinkedClientPerso] = useState(false);
@@ -218,6 +233,7 @@ export function GeneratorPage({
   );
 
   useEffect(() => {
+    if (isPersonal) return;
     const id = getSelectedClientId();
     setLinkedClientId(id);
     if (!id) {
@@ -232,7 +248,38 @@ export function GeneratorPage({
         setLinkedClientPerso(response.data.kind === "perso");
       }
     });
-  }, []);
+  }, [isPersonal]);
+
+  useEffect(() => {
+    if (!personalMode) return;
+    const raw = sessionStorage.getItem("cyberforge.personalProjectDraft");
+    if (!raw) {
+      patch({ personalMode: true });
+      return;
+    }
+    try {
+      const draft = JSON.parse(raw) as {
+        usage: PersonalUsage;
+        priceEur: number | null;
+        commercialDescription: string;
+        title: string;
+      };
+      sessionStorage.removeItem("cyberforge.personalProjectDraft");
+      patch({
+        personalMode: true,
+        personalUsage: draft.usage,
+        personalPriceEur: draft.priceEur,
+        personalCommercialDescription: draft.commercialDescription,
+        personalDraftTitle: draft.title,
+        projectName: draft.title,
+      });
+      clearSelectedClientId();
+      setLinkedClientId(null);
+      setLinkedClientLabel(null);
+    } catch {
+      patch({ personalMode: true });
+    }
+  }, [personalMode, patch]);
 
   useEffect(() => {
     const synced = syncSessionFromKind(selectedKind, deployMode);
@@ -622,6 +669,20 @@ export function GeneratorPage({
         demoPassword: normalized.demo_password ?? null,
         githubExportUrl: normalized.github_export_url ?? null,
       });
+
+      if (isPersonal && persistedId) {
+        void createPersonalProject({
+          title:
+            projectName.trim() ||
+            personalDraftTitle.trim() ||
+            projectTitleFromPrompt(trimmed),
+          usage_type: personalUsage,
+          price_eur: personalPriceEur,
+          commercial_description: personalCommercialDescription.trim() || null,
+          project_key: `supabase:${persistedId}`,
+          supabase_project_id: persistedId,
+        });
+      }
     } catch (err) {
       patch({
         phase: "error",
@@ -703,7 +764,7 @@ export function GeneratorPage({
       generation_id: result.persistence?.generation_id ?? null,
       prompt: prompt.trim(),
       demo_seed: effectiveDemoSeed() ?? result.generation.demo_seed ?? null,
-      client_id: linkedClientId,
+      ...(isPersonal ? {} : { client_id: linkedClientId }),
     });
     setDemoBusy(false);
     if (!response.ok || !response.data) {
@@ -736,6 +797,11 @@ export function GeneratorPage({
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 pb-10">
+      {showBackToPerso && onOpenPerso ? (
+        <div className="sticky top-0 z-20 -mx-1 border-b border-fuchsia-500/20 bg-cf-main/95 py-3 backdrop-blur-sm">
+          <BackButton onClick={onOpenPerso} label="Retour vers Projets Perso" />
+        </div>
+      ) : null}
       {showBackToProjects && onOpenProjects ? (
         <div className="sticky top-0 z-20 -mx-1 border-b border-cf-border-input/40 bg-cf-main/95 py-3 backdrop-blur-sm">
           <BackButton onClick={onOpenProjects} label="Retour vers Projets" />
@@ -743,8 +809,17 @@ export function GeneratorPage({
       ) : null}
       <header>
         <p className="cf-section-label mb-2">Création de projet</p>
-        <h1 className="cf-page-title">Générateur</h1>
-        {linkedClientId && linkedClientLabel ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="cf-page-title">Générateur</h1>
+          {isPersonal ? <PersoBadge /> : null}
+        </div>
+        {isPersonal ? (
+          <p className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-control border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-100">
+            Projet perso · {USAGE_LABELS[personalUsage]}
+            {personalPriceEur != null ? ` · ${personalPriceEur} €` : ""}
+          </p>
+        ) : null}
+        {!isPersonal && linkedClientId && linkedClientLabel ? (
           <p className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-control border border-cf-gold/30 bg-cf-active px-3 py-2 text-xs text-cf-gold">
             Projet pour {linkedClientPerso ? "la fiche perso" : "le client"} :{" "}
             <strong className="text-cf-text">{linkedClientLabel}</strong>

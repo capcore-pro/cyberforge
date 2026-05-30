@@ -35,6 +35,7 @@ export const MAIN_NAV_GROUP: NavGroup = {
     { id: "dashboard", label: "Accueil", icon: "◈", enabled: true },
     { id: "generator", label: "Générateur", icon: "⚡", enabled: true },
     { id: "projects", label: "Projets", icon: "▤", enabled: true },
+    { id: "perso", label: "Perso", icon: "◇", enabled: true },
     { id: "clients", label: "Clients", icon: "◎", enabled: true },
     { id: "accounting", label: "Comptabilité", icon: "€", enabled: true },
     { id: "newsletter", label: "Newsletter", icon: "✉", enabled: true },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BackButton } from "@/components/BackButton";
 import { MediaPicker } from "@/components/MediaPicker";
 import { PasswordRevealField } from "@/components/PasswordRevealField";
@@ -37,6 +37,9 @@ interface ProjectDetailViewProps {
   onView: () => void;
   onProjectUpdated: (project: UnifiedProject) => void;
   onDuplicate: (project: UnifiedProject) => void;
+  /** Masque l'affiliation client (projets perso). */
+  hideClientAffiliate?: boolean;
+  extraSections?: ReactNode;
 }
 
 function formatDate(iso: string): string {
@@ -66,6 +69,8 @@ export function ProjectDetailView({
   onView,
   onProjectUpdated,
   onDuplicate,
+  hideClientAffiliate = false,
+  extraSections,
 }: ProjectDetailViewProps) {
   const isVitrine = project.source === "managed_vitrine" && Boolean(project.managedId);
 
@@ -339,7 +344,9 @@ export function ProjectDetailView({
           <p className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
             Client affilié
           </p>
-          {project.demoId ? (
+          {hideClientAffiliate ? (
+            <p className="mt-2 text-sm text-cf-muted">— Projet perso (sans client)</p>
+          ) : project.demoId ? (
             <select
               value={clientId}
               disabled={clientBusy || clientsLoading}
@@ -396,6 +403,8 @@ export function ProjectDetailView({
           project={project}
           onConfiguredChange={setClientStripeConfigured}
         />
+
+        {extraSections}
 
         {isVitrine ? (
           <div className="space-y-3 rounded-card border border-cf-border-input bg-cf-secondary/40 p-4">

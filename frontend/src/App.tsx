@@ -57,6 +57,7 @@ function AppWithNotifications({
 }) {
   const { markAllSeen } = useContactNotifications();
   const [generatorFromProjects, setGeneratorFromProjects] = useState(false);
+  const [generatorFromPerso, setGeneratorFromPerso] = useState(false);
 
   useEffect(() => {
     if (page === "clients") {
@@ -66,8 +67,28 @@ function AppWithNotifications({
 
   const openGeneratorFromProjects = useCallback(() => {
     setGeneratorFromProjects(true);
+    setGeneratorFromPerso(false);
     setPage("generator");
   }, [setPage]);
+
+  const openGeneratorFromPerso = useCallback(
+    (opts: {
+      usage: import("@/lib/personal-projects-api").PersonalUsage;
+      priceEur: number | null;
+      commercialDescription: string;
+      title: string;
+    }) => {
+      setGeneratorFromPerso(true);
+      setGeneratorFromProjects(false);
+      setPage("generator");
+      // Options applied via GeneratorPage effect reading sessionStorage bridge
+      sessionStorage.setItem(
+        "cyberforge.personalProjectDraft",
+        JSON.stringify(opts),
+      );
+    },
+    [setPage],
+  );
 
   function renderPage() {
     switch (page) {
@@ -76,9 +97,17 @@ function AppWithNotifications({
           <GeneratorPage
             onOpenProjects={() => {
               setGeneratorFromProjects(false);
+              setGeneratorFromPerso(false);
               setPage("projects");
             }}
+            onOpenPerso={() => {
+              setGeneratorFromProjects(false);
+              setGeneratorFromPerso(false);
+              setPage("perso");
+            }}
             showBackToProjects={generatorFromProjects}
+            showBackToPerso={generatorFromPerso}
+            personalMode={generatorFromPerso}
           />
         );
       case "projects":
@@ -91,7 +120,7 @@ function AppWithNotifications({
       case "clients":
         return <ClientsPage onOpenGenerator={() => setPage("generator")} />;
       case "perso":
-        return <PersoPage onOpenGenerator={() => setPage("generator")} />;
+        return <PersoPage onOpenGenerator={openGeneratorFromPerso} />;
       case "settings":
         return <SettingsPage />;
       case "cockpit":

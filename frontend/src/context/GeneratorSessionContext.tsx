@@ -13,6 +13,7 @@ import type {
   ValidationStatus,
   VisionPreviewSource,
 } from "@shared/types";
+import type { PersonalUsage } from "@/lib/personal-projects-api";
 import {
   applyPipelineStepEvent,
   initialPipelineSteps,
@@ -52,6 +53,11 @@ export interface GeneratorSessionState {
   unlockUrl: string | null;
   demoPassword: string | null;
   githubExportUrl: string | null;
+  personalMode: boolean;
+  personalUsage: PersonalUsage;
+  personalPriceEur: number | null;
+  personalCommercialDescription: string;
+  personalDraftTitle: string;
 }
 
 const initialSession = (): GeneratorSessionState => ({
@@ -83,6 +89,11 @@ const initialSession = (): GeneratorSessionState => ({
   unlockUrl: null,
   demoPassword: null,
   githubExportUrl: null,
+  personalMode: false,
+  personalUsage: "personal",
+  personalPriceEur: null,
+  personalCommercialDescription: "",
+  personalDraftTitle: "",
 });
 
 interface GeneratorSessionContextValue extends GeneratorSessionState {
