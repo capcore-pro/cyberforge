@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ApiKeysSettingsPanel } from "@/components/settings/ApiKeysSettingsPanel";
 import { AgentsSettingsPanel } from "@/components/settings/AgentsSettingsPanel";
 import { OpenHandsSettingsPanel } from "@/components/settings/OpenHandsSettingsPanel";
+import { PlaywrightSettingsPanel } from "@/components/settings/PlaywrightSettingsPanel";
 import { ProfileSettingsPanel } from "@/components/settings/ProfileSettingsPanel";
 import { SystemSettingsPanel } from "@/components/settings/SystemSettingsPanel";
 
@@ -49,6 +50,7 @@ export function SettingsPage() {
         {tab === "agents" ? (
           <>
             <OpenHandsSettingsPanel />
+            <PlaywrightSettingsPanel />
             <AgentsSettingsPanel />
           </>
         ) : null}

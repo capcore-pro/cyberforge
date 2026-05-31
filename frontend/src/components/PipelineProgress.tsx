@@ -25,6 +25,7 @@ const FRIENDLY_LABELS: Record<string, string> = {
   visionui: "Mise en forme visuelle",
   bughunter: "Contrôle qualité",
   testpilot: "Tests finaux",
+  playwright: "Tests Playwright",
   export: "Publication en ligne",
   autofix: "Ajustements automatiques",
 };
@@ -63,7 +64,8 @@ export function applyPipelineStepEvent(
     (agent === "autofix" ||
       agent === "testpilot" ||
       agent === "export" ||
-      agent === "openhands")
+      agent === "openhands" ||
+      agent === "playwright")
   ) {
     const label =
       agent === "autofix"
@@ -72,7 +74,9 @@ export function applyPipelineStepEvent(
           ? "TestPilotAI"
           : agent === "openhands"
             ? "OpenHands"
-            : "ExportAI";
+            : agent === "playwright"
+              ? "Playwright"
+              : "ExportAI";
     next = [
       ...next,
       { id: agent, label, status: "pending" as const },

@@ -16,6 +16,10 @@ from langgraph.graph import END, StateGraph
 from agents.architect_agent import ArchitectAgent, ArchitectPlan
 from agents.builder_agent import BuilderAgent, BuilderProvider
 from agents.openhands_agent import OpenHandsAgent, openhands_eligible
+from agents.playwright_agent import (
+    PlaywrightAgent,
+    playwright_to_bug_report,
+)
 from agents.auto_fix_agent import AutoFixAgent
 from agents.bug_hunter_agent import BugHunterAgent, BugHuntReport
 from agents.coremind_agent import (
@@ -55,6 +59,7 @@ logger = logging.getLogger(__name__)
 
 MAX_AUTOFIX_LOOPS = 2
 MAX_TESTPILOT_AUTOFIX_LOOPS = 1
+MAX_PLAYWRIGHT_AUTOFIX_LOOPS = 1
 
 # Modes avec routage direct CoreMindAI — BuilderAI ne court-circuite plus le chemin nominal.
 DIRECT_COREMIND_MODES = frozenset({"client_demo", "real_app", "vitrine_next"})
@@ -70,6 +75,7 @@ AGENT_LABELS: dict[str, str] = {
     "bughunter": "BugHunterAI",
     "autofix": "AutoFixAI",
     "testpilot": "TestPilotAI",
+    "playwright": "Playwright",
     "export": "ExportAI",
     "finalize": "Finalisation",
 }
@@ -89,6 +95,7 @@ class PipelineState(TypedDict, total=False):
     # "client_demo" (défaut) → pipeline HTML premium ; "real_app" → React/Next.js
     generation_mode: str | None
     openhands_enabled: bool | None
+    playwright_enabled: bool | None
     architect_plan: ArchitectPlan | None
     analysis: CoreMindAnalysis | None
     builder_provider: str | None
@@ -103,6 +110,8 @@ class PipelineState(TypedDict, total=False):
     autofix_attempts: int
     testpilot_report: Any
     testpilot_refix_loops: int
+    playwright_report: Any
+    playwright_autofix_loops: int
     validation_status: str | None
     personal_project: bool | None
     pages_project_slug: str | None
@@ -921,9 +930,105 @@ async def testpilot_node(
 def _route_after_testpilot(state: PipelineState) -> str:
     report = state.get("testpilot_report")
     if report and getattr(report, "ok", False):
+        if _playwright_requested(state):
+            return "playwright"
         return "export"
     refix = state.get("testpilot_refix_loops") or 0
     if refix > MAX_TESTPILOT_AUTOFIX_LOOPS:
+        if _playwright_requested(state):
+            return "playwright"
+        return "export"
+    return "autofix"
+
+
+def _playwright_requested(state: PipelineState) -> bool:
+    if state.get("playwright_enabled") is False:
+        return False
+    return get_settings().playwright_enabled
+
+
+async def playwright_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    preview_html = state.get("preview_html") or ""
+    generation = state.get("generation")
+    if generation and not preview_html:
+        from agents.demo_quality import preview_html_from_generation
+
+        plan = state.get("architect_plan")
+        preview_html = preview_html_from_generation(
+            generation,
+            title=plan.project_type_label if plan else "Projet",
+            user_prompt=state.get("prompt", ""),
+        )
+
+    await _step(cb, "playwright", "start", "Tests E2E Chromium (Playwright)…")
+    settings = _settings_from_config(config)
+    agent = PlaywrightAgent(settings)
+    production_url = None
+    export_data = state.get("export_result")
+    if export_data is not None:
+        production_url = getattr(export_data, "production_url", None)
+
+    report = await agent.test_site(
+        html=str(preview_html),
+        base_url=production_url,
+        settings=settings,
+    )
+
+    refix_loops = state.get("playwright_autofix_loops") or 0
+    threshold = settings.playwright_pass_threshold
+
+    if report.ok or report.skipped:
+        await _step(
+            cb,
+            "playwright",
+            "done",
+            f"Tests Playwright OK — score {report.score}/100.",
+            ok=True,
+            playwright_score=report.score,
+            playwright_passed=report.passed,
+            playwright_failed=report.failed,
+        )
+        return {"playwright_report": report}
+
+    next_refix = refix_loops + 1
+    await _step(
+        cb,
+        "playwright",
+        "done",
+        f"Tests Playwright échoués — score {report.score}/{threshold}. "
+        + (
+            "renvoi vers AutoFixAI."
+            if next_refix <= MAX_PLAYWRIGHT_AUTOFIX_LOOPS
+            else "export avec réserves."
+        ),
+        ok=False,
+        playwright_score=report.score,
+        playwright_passed=report.passed,
+        playwright_failed=report.failed,
+    )
+    return {
+        "playwright_report": report,
+        "playwright_autofix_loops": next_refix,
+        "bug_report": playwright_to_bug_report(report),
+    }
+
+
+def _route_after_playwright(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
+    report = state.get("playwright_report")
+    settings = get_settings()
+    threshold = settings.playwright_pass_threshold
+    if report and (getattr(report, "ok", False) or getattr(report, "skipped", False)):
+        return "export"
+    if report and getattr(report, "score", 0) >= threshold:
+        return "export"
+    refix = state.get("playwright_autofix_loops") or 0
+    if refix > MAX_PLAYWRIGHT_AUTOFIX_LOOPS:
         return "export"
     return "autofix"
 
@@ -1105,6 +1210,10 @@ async def finalize_node(
         demo_password = getattr(export_data, "demo_password", None)
         unlock_url = getattr(export_data, "unlock_url", None)
 
+    pw_report = state.get("playwright_report")
+    pw_score = getattr(pw_report, "score", None) if pw_report else None
+    pw_dump = pw_report.model_dump() if pw_report is not None else None
+
     result = CoreMindRunResult(
         analysis=analysis,
         architect_plan=architect,
@@ -1118,6 +1227,8 @@ async def finalize_node(
         testpilot_passed=testpilot_passed,
         validation_status=validation_status,
         testpilot_summary=summary,
+        playwright_score=pw_score,
+        playwright_report=pw_dump,
         export_manifest=export_manifest,
         production_url=production_url,
         export_provider=export_provider,
@@ -1141,6 +1252,7 @@ def build_pipeline_graph() -> Any:
     graph.add_node("bughunter", bughunter_node)
     graph.add_node("autofix", autofix_node)
     graph.add_node("testpilot", testpilot_node)
+    graph.add_node("playwright", playwright_node)
     graph.add_node("export", export_node)
     graph.add_node("finalize", finalize_node)
 
@@ -1176,7 +1288,12 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         "testpilot",
         _route_after_testpilot,
-        {"export": "export", "autofix": "autofix"},
+        {"playwright": "playwright", "export": "export", "autofix": "autofix"},
+    )
+    graph.add_conditional_edges(
+        "playwright",
+        _route_after_playwright,
+        {"export": "export", "autofix": "autofix", "finalize": "finalize"},
     )
     graph.add_edge("export", "finalize")
     graph.add_edge("finalize", END)
@@ -1199,6 +1316,7 @@ async def run_generation_pipeline(
     project_type_hint: ProjectType | None = None,
     generation_mode: str | None = None,
     openhands_enabled: bool | None = None,
+    playwright_enabled: bool | None = None,
     project_id: str | None = None,
     inspiration_brief: str | None = None,
     personal_project: bool = False,
@@ -1222,12 +1340,14 @@ async def run_generation_pipeline(
         "project_type_hint": project_type_hint,
         "generation_mode": generation_mode or "client_demo",
         "openhands_enabled": openhands_enabled,
+        "playwright_enabled": playwright_enabled,
         "personal_project": personal_project,
         "pages_project_slug": (pages_project_slug or "").strip() or None,
         "project_title": (project_title or "").strip() or None,
         "fix_loops": 0,
         "autofix_attempts": 0,
         "testpilot_refix_loops": 0,
+        "playwright_autofix_loops": 0,
         "builder_fallback": True,
     }
     graph = get_compiled_pipeline()

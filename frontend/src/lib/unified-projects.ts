@@ -22,6 +22,7 @@ import { createExtension, updateExtension } from "@/lib/extensions-api";
 import { buildModificationPipelinePrompt } from "@/lib/project-modification";
 import { streamCoremindRun } from "@/lib/pipeline-stream";
 import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
+import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
 import { hardDeleteReservationSite, listReservationSites } from "@/lib/site-reservation-api";
 import { hardDeleteVitrine, listVitrines } from "@/lib/vitrines-api";
 
@@ -501,6 +502,7 @@ export async function modifyUnifiedProject(
     generation_mode: project.generationMode ?? "client_demo",
     inspiration_brief: inspirationBrief,
     openhands_enabled: isOpenHandsEnabled(),
+    playwright_enabled: isPlaywrightEnabled(),
   });
 
   if (!res.ok) {

@@ -127,6 +127,12 @@ export function normalizeRunResponse(
     raw.export_manifest && typeof raw.export_manifest === "object"
       ? (raw.export_manifest as Record<string, unknown>)
       : null;
+  const playwright_score =
+    typeof raw.playwright_score === "number" ? raw.playwright_score : null;
+  const playwright_report =
+    raw.playwright_report && typeof raw.playwright_report === "object"
+      ? (raw.playwright_report as CoreMindRunResponse["playwright_report"])
+      : null;
 
   return {
     ...raw,
@@ -136,6 +142,8 @@ export function normalizeRunResponse(
     validation_status,
     testpilot_passed,
     testpilot_summary,
+    playwright_score,
+    playwright_report,
     production_url,
     export_provider,
     github_export_url,

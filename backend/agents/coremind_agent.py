@@ -279,6 +279,14 @@ class CoreMindRunResult(BaseModel):
         default=None,
         description="Résumé de la validation TestPilotAI.",
     )
+    playwright_score: int | None = Field(
+        default=None,
+        description="Score tests Playwright (0-100).",
+    )
+    playwright_report: dict | None = Field(
+        default=None,
+        description="Rapport Playwright (passed, failed, score).",
+    )
     export_manifest: dict | None = Field(
         default=None,
         description="Manifeste de déploiement universel ExportAI.",

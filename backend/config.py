@@ -125,6 +125,17 @@ class Settings(BaseSettings):
         default=8192, alias="OPENHANDS_MAX_OUTPUT_TOKENS"
     )
 
+    playwright_enabled: bool = Field(default=True, alias="PLAYWRIGHT_ENABLED")
+    playwright_pass_threshold: int = Field(
+        default=70,
+        ge=0,
+        le=100,
+        alias="PLAYWRIGHT_PASS_THRESHOLD",
+    )
+    playwright_timeout_seconds: float = Field(
+        default=60.0, alias="PLAYWRIGHT_TIMEOUT_SECONDS"
+    )
+
     replicate_api_key: SecretStr | None = Field(default=None, alias="REPLICATE_API_KEY")
     replicate_html_model: str | None = Field(
         default=None, alias="REPLICATE_HTML_MODEL"

@@ -23,6 +23,9 @@ import {
   streamCoremindRun,
 } from "@/lib/pipeline-stream";
 import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
+import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
+import { savePlaywrightReport } from "@/lib/playwright-reports";
+import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
 import {
   createClientDemo,
   type CreateDemoResponse,
@@ -185,6 +188,7 @@ export function GeneratorPage({
     validationStatus,
     validationSummary,
     testpilotPassed,
+    playwrightReport,
     productionUrl,
     exportProvider,
     unlockUrl,
@@ -613,6 +617,7 @@ export function GeneratorPage({
       validationStatus: null,
       validationSummary: null,
       testpilotPassed: null,
+      playwrightReport: null,
       productionUrl: null,
       exportProvider: null,
       unlockUrl: null,
@@ -634,6 +639,16 @@ export function GeneratorPage({
             updatedAt: prev?.updatedAt ?? null,
           }));
         }
+      }
+      if (event.type === "step_done" && event.agent === "playwright") {
+        patch({
+          playwrightReport: {
+            passed: event.playwright_passed ?? [],
+            failed: event.playwright_failed ?? [],
+            score: event.playwright_score ?? 0,
+            ok: (event.playwright_score ?? 0) >= 70,
+          },
+        });
       }
       if (event.type === "step_done" && event.agent === "testpilot") {
         const status =
@@ -685,6 +700,7 @@ export function GeneratorPage({
             personalDraftTitle.trim() ||
             projectTitleFromPrompt(trimmed),
           openhands_enabled: isOpenHandsEnabled(),
+          playwright_enabled: isPlaywrightEnabled(),
         },
         { onStep },
       );
@@ -755,12 +771,19 @@ export function GeneratorPage({
         validationStatus: normalized.validation_status ?? null,
         validationSummary: normalized.testpilot_summary ?? null,
         testpilotPassed: normalized.testpilot_passed ?? null,
+        playwrightReport: normalized.playwright_report ?? null,
         productionUrl: normalized.production_url ?? null,
         exportProvider: normalized.export_provider ?? null,
         unlockUrl: normalized.unlock_url ?? null,
         demoPassword: normalized.demo_password ?? null,
         githubExportUrl: normalized.github_export_url ?? null,
       });
+
+      const pwReport = normalized.playwright_report;
+      const reportKey = persistedId ?? sessionProjectId;
+      if (pwReport && reportKey) {
+        savePlaywrightReport(reportKey, pwReport);
+      }
 
       if ((projectOwnerMode === "perso" || isPersonal) && persistedId) {
         const usage = personalUsage ?? inlinePersoUsage;
@@ -1413,6 +1436,10 @@ export function GeneratorPage({
               />
             ) : null}
 
+            {isRunning && playwrightReport ? (
+              <PlaywrightScoreBadge report={playwrightReport} showDetails />
+            ) : null}
+
             {(isRunning || result) &&
             (visionScreenshotUrl || livePreviewHtml || previewHtml) ? (
               <div>
@@ -1441,6 +1468,13 @@ export function GeneratorPage({
                     status={validationStatus ?? result.validation_status}
                     summary={validationSummary ?? result.testpilot_summary}
                     passed={testpilotPassed ?? result.testpilot_passed}
+                  />
+                ) : null}
+
+                {(playwrightReport ?? result.playwright_report) ? (
+                  <PlaywrightScoreBadge
+                    report={playwrightReport ?? result.playwright_report}
+                    showDetails
                   />
                 ) : null}
 

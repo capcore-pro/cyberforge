@@ -77,6 +77,8 @@ export interface CoreMindRequest {
   project_title?: string | null;
   /** OpenHands — projets complexes (≥ 7/10) real_app / application_web */
   openhands_enabled?: boolean | null;
+  /** Tests Playwright E2E après TestPilotAI */
+  playwright_enabled?: boolean | null;
 }
 
 /** Tarification ArchitectAI (SSE ou GET /projects/{id}/costs) */
@@ -208,6 +210,7 @@ export type PipelineAgentId =
   | "bughunter"
   | "autofix"
   | "testpilot"
+  | "playwright"
   | "export"
   | "finalize";
 
@@ -240,6 +243,9 @@ export interface PipelineStepEvent {
   unlock_url?: string | null;
   demo_token?: string | null;
   demo_password?: string | null;
+  playwright_score?: number | null;
+  playwright_passed?: string[] | null;
+  playwright_failed?: string[] | null;
   complexity_score?: number;
   complexity_label?: string;
   market_price_min?: number;
@@ -272,6 +278,19 @@ export interface CoreMindRunResponse {
   demo_token?: string | null;
   demo_password?: string | null;
   unlock_url?: string | null;
+  playwright_score?: number | null;
+  playwright_report?: PlaywrightReportSummary | null;
+}
+
+/** Rapport Playwright (passed / failed / score) */
+export interface PlaywrightReportSummary {
+  passed: string[];
+  failed: string[];
+  score: number;
+  ok?: boolean;
+  skipped?: boolean;
+  skip_reason?: string | null;
+  target_url?: string;
 }
 
 /** Projet enregistré dans Supabase */

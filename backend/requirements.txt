@@ -19,3 +19,4 @@ Pillow>=11.0.0
 # OpenHands Software Agent SDK (Python ≥ 3.12 — voir backend/Dockerfile)
 openhands-sdk>=1.22.0; python_version >= "3.12"
 openhands-tools>=1.22.0; python_version >= "3.12"
+playwright>=1.49.0,<2.0.0

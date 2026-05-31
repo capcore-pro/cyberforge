@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+RUN playwright install chromium --with-deps || playwright install chromium
 
 COPY backend/. .
 

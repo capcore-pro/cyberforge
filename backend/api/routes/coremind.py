@@ -81,6 +81,10 @@ class CoreMindRequest(BaseModel):
             "None = activé par défaut si clé Anthropic présente."
         ),
     )
+    playwright_enabled: bool | None = Field(
+        default=None,
+        description="Active les tests E2E Playwright après TestPilotAI. None = activé par défaut.",
+    )
 
 
 class CoreMindRunResponse(CoreMindRunResult):
@@ -168,6 +172,7 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
             project_type_hint=body.project_type,
             generation_mode=body.generation_mode,
             openhands_enabled=body.openhands_enabled,
+            playwright_enabled=body.playwright_enabled,
             project_id=body.project_id,
             inspiration_brief=body.inspiration_brief,
             personal_project=body.personal_project,

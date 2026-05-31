@@ -35,6 +35,8 @@ import {
   type CmsProjectSettings,
 } from "@/lib/cms-projects-api";
 import { copyTextToClipboard } from "@/lib/generation-export";
+import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
+import { getPlaywrightReport } from "@/lib/playwright-reports";
 
 interface ProjectDetailViewProps {
   project: UnifiedProject;
@@ -117,6 +119,10 @@ export function ProjectDetailView({
 
   const projectRefId =
     project.supabaseProjectId ?? project.managedId ?? undefined;
+
+  const playwrightReport = getPlaywrightReport(
+    project.supabaseProjectId ?? project.managedId ?? project.key,
+  );
 
   useEffect(() => {
     if (!showClientStripe || !project.managedId) {
@@ -357,6 +363,9 @@ export function ProjectDetailView({
             </span>
           ) : null}
         </div>
+        {playwrightReport ? (
+          <PlaywrightScoreBadge report={playwrightReport} showDetails />
+        ) : null}
       </header>
 
       <section className="overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
