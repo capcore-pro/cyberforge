@@ -15,6 +15,7 @@ from langgraph.graph import END, StateGraph
 
 from agents.architect_agent import ArchitectAgent, ArchitectPlan
 from agents.builder_agent import BuilderAgent, BuilderProvider
+from agents.openhands_agent import OpenHandsAgent, openhands_eligible
 from agents.auto_fix_agent import AutoFixAgent
 from agents.bug_hunter_agent import BugHunterAgent, BugHuntReport
 from agents.coremind_agent import (
@@ -62,6 +63,7 @@ PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 AGENT_LABELS: dict[str, str] = {
     "architect": "ArchitectAI",
+    "openhands": "OpenHands",
     "builder": "BuilderAI",
     "coremind": "CoreMindAI",
     "visionui": "VisionUI",
@@ -86,10 +88,12 @@ class PipelineState(TypedDict, total=False):
     project_type_hint: ProjectType | None
     # "client_demo" (défaut) → pipeline HTML premium ; "real_app" → React/Next.js
     generation_mode: str | None
+    openhands_enabled: bool | None
     architect_plan: ArchitectPlan | None
     analysis: CoreMindAnalysis | None
     builder_provider: str | None
     builder_fallback: bool
+    openhands_fallback: bool | None
     generation: Any
     preview_html: str | None
     vision_screenshot_url: str | None
@@ -214,14 +218,106 @@ async def architect_node(
 def _route_after_architect(state: PipelineState) -> str:
     """
     BuilderAI v2 — routage explicite par generation_mode.
-    Les modes nominaux passent directement par CoreMindAI (templates, React, Next.js).
+    OpenHands pour projets complexes (≥ 7/10) en real_app ou application_web.
+    Les autres modes nominaux passent par CoreMindAI (templates, React, Next.js).
     """
     if state.get("error"):
         return "finalize"
+    plan = state.get("architect_plan")
+    if plan and _openhands_requested(state):
+        return "openhands"
     mode = (state.get("generation_mode") or "client_demo").strip()
     if mode in DIRECT_COREMIND_MODES:
         return "coremind"
     return "builder"
+
+
+def _openhands_requested(state: PipelineState) -> bool:
+    plan = state.get("architect_plan")
+    if not plan:
+        return False
+    enabled = state.get("openhands_enabled")
+    if enabled is False:
+        return False
+    settings = get_settings()
+    if not settings.openhands_enabled:
+        return False
+    if not OpenHandsAgent(settings).is_configured():
+        return False
+    return openhands_eligible(
+        plan=plan,
+        generation_mode=state.get("generation_mode"),
+        enabled=True,
+        threshold=settings.openhands_complexity_threshold,
+    )
+
+
+async def openhands_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    plan = state.get("architect_plan")
+    analysis = state.get("analysis")
+    if not plan or not analysis:
+        return {"error": "État pipeline incomplet (architect_plan manquant pour OpenHands)."}
+
+    await _step(
+        cb,
+        "openhands",
+        "start",
+        f"Génération avancée OpenHands (complexité {plan.complexity_score}/10)…",
+    )
+    settings = _settings_from_config(config)
+    agent = OpenHandsAgent(settings)
+    result = await agent.build(
+        state["prompt"],
+        plan=plan,
+        analysis=analysis,
+        settings=settings,
+        project_id=state.get("project_id"),
+    )
+
+    if result.fallback_to_coremind:
+        await _step(
+            cb,
+            "openhands",
+            "done",
+            "OpenHands indisponible — reprise par CoreMindAI.",
+            provider=result.provider,
+            fallback=True,
+        )
+        return {
+            "builder_provider": result.provider,
+            "openhands_fallback": True,
+            "builder_fallback": True,
+        }
+
+    await _step(
+        cb,
+        "openhands",
+        "done",
+        f"Génération OpenHands réussie ({result.provider}).",
+        provider=result.provider,
+        fallback=False,
+    )
+    return {
+        "builder_provider": result.provider,
+        "openhands_fallback": False,
+        "builder_fallback": False,
+        "generation": result.generation,
+        "preview_html": result.preview_html,
+    }
+
+
+def _route_after_openhands(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
+    if state.get("builder_fallback", True):
+        return "coremind"
+    if state.get("generation"):
+        return "visionui"
+    return "coremind"
 
 
 async def builder_node(
@@ -1038,6 +1134,7 @@ def build_pipeline_graph() -> Any:
     """Compile le graphe LangGraph."""
     graph = StateGraph(PipelineState)
     graph.add_node("architect", architect_node)
+    graph.add_node("openhands", openhands_node)
     graph.add_node("builder", builder_node)
     graph.add_node("coremind", coremind_node)
     graph.add_node("visionui", visionui_node)
@@ -1051,7 +1148,17 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         "architect",
         _route_after_architect,
-        {"coremind": "coremind", "builder": "builder", "finalize": "finalize"},
+        {
+            "openhands": "openhands",
+            "coremind": "coremind",
+            "builder": "builder",
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        "openhands",
+        _route_after_openhands,
+        {"coremind": "coremind", "visionui": "visionui", "finalize": "finalize"},
     )
     graph.add_conditional_edges(
         "builder",
@@ -1091,6 +1198,7 @@ async def run_generation_pipeline(
     *,
     project_type_hint: ProjectType | None = None,
     generation_mode: str | None = None,
+    openhands_enabled: bool | None = None,
     project_id: str | None = None,
     inspiration_brief: str | None = None,
     personal_project: bool = False,
@@ -1113,6 +1221,7 @@ async def run_generation_pipeline(
         "project_id": project_id,
         "project_type_hint": project_type_hint,
         "generation_mode": generation_mode or "client_demo",
+        "openhands_enabled": openhands_enabled,
         "personal_project": personal_project,
         "pages_project_slug": (pages_project_slug or "").strip() or None,
         "project_title": (project_title or "").strip() or None,

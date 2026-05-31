@@ -74,6 +74,13 @@ class CoreMindRequest(BaseModel):
         max_length=200,
         description="Titre du projet pour l'export",
     )
+    openhands_enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Active OpenHands pour projets complexes (≥ 7/10) en real_app / application_web. "
+            "None = activé par défaut si clé Anthropic présente."
+        ),
+    )
 
 
 class CoreMindRunResponse(CoreMindRunResult):
@@ -160,6 +167,7 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
             body.prompt,
             project_type_hint=body.project_type,
             generation_mode=body.generation_mode,
+            openhands_enabled=body.openhands_enabled,
             project_id=body.project_id,
             inspiration_brief=body.inspiration_brief,
             personal_project=body.personal_project,

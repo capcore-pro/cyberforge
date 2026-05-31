@@ -22,6 +22,7 @@ import {
   pipelineStreamErrorMessage,
   streamCoremindRun,
 } from "@/lib/pipeline-stream";
+import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
 import {
   createClientDemo,
   type CreateDemoResponse,
@@ -683,6 +684,7 @@ export function GeneratorPage({
             projectName.trim() ||
             personalDraftTitle.trim() ||
             projectTitleFromPrompt(trimmed),
+          openhands_enabled: isOpenHandsEnabled(),
         },
         { onStep },
       );

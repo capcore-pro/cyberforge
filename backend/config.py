@@ -106,6 +106,25 @@ class Settings(BaseSettings):
         default=4096, alias="BUILDER_MAX_OUTPUT_TOKENS"
     )
 
+    openhands_enabled: bool = Field(default=True, alias="OPENHANDS_ENABLED")
+    openhands_use_sdk: bool = Field(
+        default=True,
+        alias="OPENHANDS_USE_SDK",
+        description="Utiliser le SDK OpenHands si Python ≥ 3.12 ; sinon repli Anthropic direct.",
+    )
+    openhands_complexity_threshold: int = Field(
+        default=7,
+        ge=1,
+        le=10,
+        alias="OPENHANDS_COMPLEXITY_THRESHOLD",
+    )
+    openhands_timeout_seconds: float = Field(
+        default=180.0, alias="OPENHANDS_TIMEOUT_SECONDS"
+    )
+    openhands_max_output_tokens: int = Field(
+        default=8192, alias="OPENHANDS_MAX_OUTPUT_TOKENS"
+    )
+
     replicate_api_key: SecretStr | None = Field(default=None, alias="REPLICATE_API_KEY")
     replicate_html_model: str | None = Field(
         default=None, alias="REPLICATE_HTML_MODEL"

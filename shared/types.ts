@@ -75,6 +75,8 @@ export interface CoreMindRequest {
   pages_project_slug?: string | null;
   /** Titre du projet pour l'export */
   project_title?: string | null;
+  /** OpenHands — projets complexes (≥ 7/10) real_app / application_web */
+  openhands_enabled?: boolean | null;
 }
 
 /** Tarification ArchitectAI (SSE ou GET /projects/{id}/costs) */
@@ -199,6 +201,7 @@ export interface DemoPipelineSummary {
 /** Identifiants des agents du pipeline LangGraph */
 export type PipelineAgentId =
   | "architect"
+  | "openhands"
   | "builder"
   | "coremind"
   | "visionui"

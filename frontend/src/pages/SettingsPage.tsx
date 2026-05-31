@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ApiKeysSettingsPanel } from "@/components/settings/ApiKeysSettingsPanel";
 import { AgentsSettingsPanel } from "@/components/settings/AgentsSettingsPanel";
+import { OpenHandsSettingsPanel } from "@/components/settings/OpenHandsSettingsPanel";
 import { ProfileSettingsPanel } from "@/components/settings/ProfileSettingsPanel";
 import { SystemSettingsPanel } from "@/components/settings/SystemSettingsPanel";
 
@@ -45,7 +46,12 @@ export function SettingsPage() {
       <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
         {tab === "profile" ? <ProfileSettingsPanel /> : null}
         {tab === "keys" ? <ApiKeysSettingsPanel /> : null}
-        {tab === "agents" ? <AgentsSettingsPanel /> : null}
+        {tab === "agents" ? (
+          <>
+            <OpenHandsSettingsPanel />
+            <AgentsSettingsPanel />
+          </>
+        ) : null}
         {tab === "system" ? <SystemSettingsPanel /> : null}
       </section>
     </div>

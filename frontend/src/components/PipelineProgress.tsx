@@ -19,6 +19,7 @@ const DEFAULT_STEPS: PipelineStepState[] = [
 
 const FRIENDLY_LABELS: Record<string, string> = {
   architect: "Plan du projet",
+  openhands: "Code avancé OpenHands",
   builder: "Structure des pages",
   coremind: "Rédaction du contenu",
   visionui: "Mise en forme visuelle",
@@ -59,14 +60,19 @@ export function applyPipelineStepEvent(
   const idx = next.findIndex((s) => s.id === agent);
   if (
     idx < 0 &&
-    (agent === "autofix" || agent === "testpilot" || agent === "export")
+    (agent === "autofix" ||
+      agent === "testpilot" ||
+      agent === "export" ||
+      agent === "openhands")
   ) {
     const label =
       agent === "autofix"
         ? "AutoFixAI"
         : agent === "testpilot"
           ? "TestPilotAI"
-          : "ExportAI";
+          : agent === "openhands"
+            ? "OpenHands"
+            : "ExportAI";
     next = [
       ...next,
       { id: agent, label, status: "pending" as const },

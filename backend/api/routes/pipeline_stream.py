@@ -45,6 +45,7 @@ async def run_coremind_flow_stream(body: CoreMindRequest) -> StreamingResponse:
                     body.prompt,
                     project_type_hint=body.project_type,
                     generation_mode=body.generation_mode,
+                    openhands_enabled=body.openhands_enabled,
                     project_id=body.project_id,
                     inspiration_brief=body.inspiration_brief,
                     personal_project=body.personal_project,
