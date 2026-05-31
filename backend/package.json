@@ -1,0 +1,8 @@
+{
+  "name": "cyberforge-backend-tools",
+  "private": true,
+  "description": "Outils Node.js pour le backend CyberForge (Lighthouse CI)",
+  "dependencies": {
+    "lighthouse": "^12.6.0"
+  }
+}

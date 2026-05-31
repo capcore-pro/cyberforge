@@ -24,8 +24,12 @@ import {
 } from "@/lib/pipeline-stream";
 import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
 import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
+import { isLighthouseEnabled } from "@/lib/lighthouse-preferences";
+import { isResearchEnabled } from "@/lib/research-preferences";
 import { savePlaywrightReport } from "@/lib/playwright-reports";
+import { saveLighthouseReport } from "@/lib/lighthouse-reports";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
+import { LighthouseScorePanel } from "@/components/LighthouseScorePanel";
 import {
   createClientDemo,
   type CreateDemoResponse,
@@ -189,6 +193,7 @@ export function GeneratorPage({
     validationSummary,
     testpilotPassed,
     playwrightReport,
+    lighthouseReport,
     productionUrl,
     exportProvider,
     unlockUrl,
@@ -618,6 +623,7 @@ export function GeneratorPage({
       validationSummary: null,
       testpilotPassed: null,
       playwrightReport: null,
+      lighthouseReport: null,
       productionUrl: null,
       exportProvider: null,
       unlockUrl: null,
@@ -647,6 +653,20 @@ export function GeneratorPage({
             failed: event.playwright_failed ?? [],
             score: event.playwright_score ?? 0,
             ok: (event.playwright_score ?? 0) >= 70,
+          },
+        });
+      }
+      if (event.type === "step_done" && event.agent === "lighthouse") {
+        const global = event.lighthouse_score_global ?? 0;
+        patch({
+          lighthouseReport: {
+            performance: event.lighthouse_performance ?? 0,
+            seo: event.lighthouse_seo ?? 0,
+            accessibility: event.lighthouse_accessibility ?? 0,
+            best_practices: event.lighthouse_best_practices ?? 0,
+            score_global: global,
+            ok: global >= 70,
+            recommendations: event.lighthouse_recommendations ?? [],
           },
         });
       }
@@ -701,6 +721,8 @@ export function GeneratorPage({
             projectTitleFromPrompt(trimmed),
           openhands_enabled: isOpenHandsEnabled(),
           playwright_enabled: isPlaywrightEnabled(),
+          lighthouse_enabled: isLighthouseEnabled(),
+          research_enabled: isResearchEnabled(),
         },
         { onStep },
       );
@@ -772,6 +794,7 @@ export function GeneratorPage({
         validationSummary: normalized.testpilot_summary ?? null,
         testpilotPassed: normalized.testpilot_passed ?? null,
         playwrightReport: normalized.playwright_report ?? null,
+        lighthouseReport: normalized.lighthouse_report ?? null,
         productionUrl: normalized.production_url ?? null,
         exportProvider: normalized.export_provider ?? null,
         unlockUrl: normalized.unlock_url ?? null,
@@ -783,6 +806,11 @@ export function GeneratorPage({
       const reportKey = persistedId ?? sessionProjectId;
       if (pwReport && reportKey) {
         savePlaywrightReport(reportKey, pwReport);
+      }
+
+      const lhReport = normalized.lighthouse_report;
+      if (lhReport && reportKey) {
+        saveLighthouseReport(reportKey, lhReport);
       }
 
       if ((projectOwnerMode === "perso" || isPersonal) && persistedId) {
@@ -1440,6 +1468,10 @@ export function GeneratorPage({
               <PlaywrightScoreBadge report={playwrightReport} showDetails />
             ) : null}
 
+            {isRunning && lighthouseReport ? (
+              <LighthouseScorePanel report={lighthouseReport} />
+            ) : null}
+
             {(isRunning || result) &&
             (visionScreenshotUrl || livePreviewHtml || previewHtml) ? (
               <div>
@@ -1475,6 +1507,12 @@ export function GeneratorPage({
                   <PlaywrightScoreBadge
                     report={playwrightReport ?? result.playwright_report}
                     showDetails
+                  />
+                ) : null}
+
+                {(lighthouseReport ?? result.lighthouse_report) ? (
+                  <LighthouseScorePanel
+                    report={lighthouseReport ?? result.lighthouse_report}
                   />
                 ) : null}
 

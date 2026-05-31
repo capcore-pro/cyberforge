@@ -23,6 +23,8 @@ import { buildModificationPipelinePrompt } from "@/lib/project-modification";
 import { streamCoremindRun } from "@/lib/pipeline-stream";
 import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
 import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
+import { isLighthouseEnabled } from "@/lib/lighthouse-preferences";
+import { isResearchEnabled } from "@/lib/research-preferences";
 import { hardDeleteReservationSite, listReservationSites } from "@/lib/site-reservation-api";
 import { hardDeleteVitrine, listVitrines } from "@/lib/vitrines-api";
 
@@ -503,6 +505,8 @@ export async function modifyUnifiedProject(
     inspiration_brief: inspirationBrief,
     openhands_enabled: isOpenHandsEnabled(),
     playwright_enabled: isPlaywrightEnabled(),
+    lighthouse_enabled: isLighthouseEnabled(),
+    research_enabled: isResearchEnabled(),
   });
 
   if (!res.ok) {

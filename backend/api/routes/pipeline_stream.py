@@ -47,6 +47,8 @@ async def run_coremind_flow_stream(body: CoreMindRequest) -> StreamingResponse:
                     generation_mode=body.generation_mode,
                     openhands_enabled=body.openhands_enabled,
                     playwright_enabled=body.playwright_enabled,
+                    lighthouse_enabled=body.lighthouse_enabled,
+                    research_enabled=body.research_enabled,
                     project_id=body.project_id,
                     inspiration_brief=body.inspiration_brief,
                     personal_project=body.personal_project,

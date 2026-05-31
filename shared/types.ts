@@ -79,6 +79,10 @@ export interface CoreMindRequest {
   openhands_enabled?: boolean | null;
   /** Tests Playwright E2E après TestPilotAI */
   playwright_enabled?: boolean | null;
+  /** Audit Lighthouse après Playwright */
+  lighthouse_enabled?: boolean | null;
+  /** ResearchAI Brave + Exa après ArchitectAI */
+  research_enabled?: boolean | null;
 }
 
 /** Tarification ArchitectAI (SSE ou GET /projects/{id}/costs) */
@@ -203,6 +207,7 @@ export interface DemoPipelineSummary {
 /** Identifiants des agents du pipeline LangGraph */
 export type PipelineAgentId =
   | "architect"
+  | "research"
   | "openhands"
   | "builder"
   | "coremind"
@@ -211,6 +216,7 @@ export type PipelineAgentId =
   | "autofix"
   | "testpilot"
   | "playwright"
+  | "lighthouse"
   | "export"
   | "finalize";
 
@@ -246,6 +252,12 @@ export interface PipelineStepEvent {
   playwright_score?: number | null;
   playwright_passed?: string[] | null;
   playwright_failed?: string[] | null;
+  lighthouse_score_global?: number | null;
+  lighthouse_performance?: number | null;
+  lighthouse_seo?: number | null;
+  lighthouse_accessibility?: number | null;
+  lighthouse_best_practices?: number | null;
+  lighthouse_recommendations?: string[] | null;
   complexity_score?: number;
   complexity_label?: string;
   market_price_min?: number;
@@ -280,6 +292,8 @@ export interface CoreMindRunResponse {
   unlock_url?: string | null;
   playwright_score?: number | null;
   playwright_report?: PlaywrightReportSummary | null;
+  lighthouse_score_global?: number | null;
+  lighthouse_report?: LighthouseReportSummary | null;
 }
 
 /** Rapport Playwright (passed / failed / score) */
@@ -291,6 +305,21 @@ export interface PlaywrightReportSummary {
   skipped?: boolean;
   skip_reason?: string | null;
   target_url?: string;
+}
+
+/** Rapport Lighthouse (4 scores + score global) */
+export interface LighthouseReportSummary {
+  performance: number;
+  seo: number;
+  accessibility: number;
+  best_practices: number;
+  score_global: number;
+  ok?: boolean;
+  skipped?: boolean;
+  skip_reason?: string | null;
+  recommendations?: string[];
+  target_url?: string;
+  full_report?: Record<string, unknown> | null;
 }
 
 /** Projet enregistré dans Supabase */

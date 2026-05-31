@@ -51,7 +51,9 @@ def test_route_after_playwright_low_score_to_autofix() -> None:
 def test_route_after_playwright_high_score_to_export() -> None:
     state: PipelineState = {
         "playwright_report": PlaywrightReport(score=85, passed=["page_load_200"]),
+        "lighthouse_enabled": False,
     }
     with patch("agents.pipeline_graph.get_settings") as mock_settings:
         mock_settings.return_value.playwright_pass_threshold = 70
+        mock_settings.return_value.lighthouse_enabled = False
         assert _route_after_playwright(state) == "export"

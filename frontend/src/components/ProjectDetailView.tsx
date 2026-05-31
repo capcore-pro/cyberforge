@@ -36,7 +36,9 @@ import {
 } from "@/lib/cms-projects-api";
 import { copyTextToClipboard } from "@/lib/generation-export";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
+import { LighthouseScorePanel } from "@/components/LighthouseScorePanel";
 import { getPlaywrightReport } from "@/lib/playwright-reports";
+import { getLighthouseReport } from "@/lib/lighthouse-reports";
 
 interface ProjectDetailViewProps {
   project: UnifiedProject;
@@ -120,9 +122,11 @@ export function ProjectDetailView({
   const projectRefId =
     project.supabaseProjectId ?? project.managedId ?? undefined;
 
-  const playwrightReport = getPlaywrightReport(
-    project.supabaseProjectId ?? project.managedId ?? project.key,
-  );
+  const projectReportKey =
+    project.supabaseProjectId ?? project.managedId ?? project.key;
+
+  const playwrightReport = getPlaywrightReport(projectReportKey);
+  const lighthouseReport = getLighthouseReport(projectReportKey);
 
   useEffect(() => {
     if (!showClientStripe || !project.managedId) {
@@ -366,6 +370,7 @@ export function ProjectDetailView({
         {playwrightReport ? (
           <PlaywrightScoreBadge report={playwrightReport} showDetails />
         ) : null}
+        {lighthouseReport ? <LighthouseScorePanel report={lighthouseReport} /> : null}
       </header>
 
       <section className="overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">

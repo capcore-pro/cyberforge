@@ -41,6 +41,10 @@ def test_api_key(provider: str, api_key: str) -> tuple[bool, str]:
             return _test_brevo(token)
         if key == "stripe":
             return _test_stripe(token)
+        if key == "brave_search":
+            return _test_brave_search(token)
+        if key == "exa":
+            return _test_exa(token)
 
         return False, f"Fournisseur inconnu : {provider}"
     except Exception as exc:
@@ -112,3 +116,29 @@ def _test_brevo(token: str) -> tuple[bool, str]:
 def _test_stripe(token: str) -> tuple[bool, str]:
     headers = {"Authorization": f"Bearer {secret_for_http_header(token)}"}
     return _http_ok("GET", "https://api.stripe.com/v1/balance", headers=headers)
+
+
+def _test_brave_search(token: str) -> tuple[bool, str]:
+    headers = {
+        "Accept": "application/json",
+        "X-Subscription-Token": secret_for_http_header(token),
+    }
+    return _http_ok(
+        "GET",
+        "https://api.search.brave.com/res/v1/web/search",
+        headers=headers,
+        params={"q": "test", "count": 1},
+    )
+
+
+def _test_exa(token: str) -> tuple[bool, str]:
+    headers = {
+        "Authorization": f"Bearer {secret_for_http_header(token)}",
+        "Content-Type": "application/json",
+    }
+    return _http_ok(
+        "POST",
+        "https://api.exa.ai/search",
+        headers=headers,
+        json={"query": "test", "numResults": 1, "type": "auto"},
+    )

@@ -20,6 +20,15 @@ from agents.playwright_agent import (
     PlaywrightAgent,
     playwright_to_bug_report,
 )
+from agents.lighthouse_agent import (
+    LighthouseAgent,
+    lighthouse_to_bug_report,
+)
+from agents.research_agent import (
+    ResearchAgent,
+    extract_research_context,
+    format_research_brief_for_prompt,
+)
 from agents.auto_fix_agent import AutoFixAgent
 from agents.bug_hunter_agent import BugHunterAgent, BugHuntReport
 from agents.coremind_agent import (
@@ -60,6 +69,7 @@ logger = logging.getLogger(__name__)
 MAX_AUTOFIX_LOOPS = 2
 MAX_TESTPILOT_AUTOFIX_LOOPS = 1
 MAX_PLAYWRIGHT_AUTOFIX_LOOPS = 1
+MAX_LIGHTHOUSE_AUTOFIX_LOOPS = 1
 
 # Modes avec routage direct CoreMindAI — BuilderAI ne court-circuite plus le chemin nominal.
 DIRECT_COREMIND_MODES = frozenset({"client_demo", "real_app", "vitrine_next"})
@@ -68,6 +78,7 @@ PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 AGENT_LABELS: dict[str, str] = {
     "architect": "ArchitectAI",
+    "research": "ResearchAI",
     "openhands": "OpenHands",
     "builder": "BuilderAI",
     "coremind": "CoreMindAI",
@@ -76,6 +87,7 @@ AGENT_LABELS: dict[str, str] = {
     "autofix": "AutoFixAI",
     "testpilot": "TestPilotAI",
     "playwright": "Playwright",
+    "lighthouse": "Lighthouse",
     "export": "ExportAI",
     "finalize": "Finalisation",
 }
@@ -96,6 +108,8 @@ class PipelineState(TypedDict, total=False):
     generation_mode: str | None
     openhands_enabled: bool | None
     playwright_enabled: bool | None
+    lighthouse_enabled: bool | None
+    research_enabled: bool | None
     architect_plan: ArchitectPlan | None
     analysis: CoreMindAnalysis | None
     builder_provider: str | None
@@ -112,6 +126,9 @@ class PipelineState(TypedDict, total=False):
     testpilot_refix_loops: int
     playwright_report: Any
     playwright_autofix_loops: int
+    lighthouse_report: Any
+    lighthouse_autofix_loops: int
+    research_brief: Any
     validation_status: str | None
     personal_project: bool | None
     pages_project_slug: str | None
@@ -224,12 +241,35 @@ async def architect_node(
     }
 
 
+def _generation_user_prompt(state: PipelineState) -> str:
+    """Prompt utilisateur enrichi par le brief ResearchAI si présent."""
+    base = (state.get("prompt") or "").strip()
+    block = format_research_brief_for_prompt(state.get("research_brief"))
+    if block:
+        return f"{block}{base}"
+    return base
+
+
 def _route_after_architect(state: PipelineState) -> str:
     """
     BuilderAI v2 — routage explicite par generation_mode.
     OpenHands pour projets complexes (≥ 7/10) en real_app ou application_web.
     Les autres modes nominaux passent par CoreMindAI (templates, React, Next.js).
     """
+    if state.get("error"):
+        return "finalize"
+    if _research_requested(state):
+        return "research"
+    return _route_after_research(state)
+
+
+def _research_requested(state: PipelineState) -> bool:
+    if state.get("research_enabled") is False:
+        return False
+    return get_settings().research_enabled
+
+
+def _route_after_research(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
     plan = state.get("architect_plan")
@@ -239,6 +279,58 @@ def _route_after_architect(state: PipelineState) -> str:
     if mode in DIRECT_COREMIND_MODES:
         return "coremind"
     return "builder"
+
+
+async def research_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    plan = state.get("architect_plan")
+    if not plan:
+        return {"error": "État pipeline incomplet (architect_plan manquant pour ResearchAI)."}
+
+    ctx = extract_research_context(state.get("prompt") or "", plan=plan)
+    await _step(
+        cb,
+        "research",
+        "start",
+        f"Recherche contenu — {ctx['secteur'] or 'secteur'} "
+        f"({ctx['nom_entreprise'] or 'projet'})…",
+    )
+    settings = _settings_from_config(config)
+    agent = ResearchAgent(settings)
+    brief = await agent.research(
+        secteur=ctx["secteur"],
+        nom_entreprise=ctx["nom_entreprise"],
+        ville=ctx["ville"],
+        type_projet=ctx["type_projet"],
+        prompt=state.get("prompt") or "",
+        settings=settings,
+    )
+
+    if brief.skipped or not brief.enriched:
+        await _step(
+            cb,
+            "research",
+            "done",
+            brief.skip_reason or "Recherche ignorée — génération sans brief externe.",
+            ok=True,
+            research_skipped=True,
+        )
+        return {"research_brief": brief}
+
+    await _step(
+        cb,
+        "research",
+        "done",
+        f"Brief enrichi — {len(brief.tendances)} tendance(s), "
+        f"{len(brief.concurrents)} concurrent(s), "
+        f"{len(brief.mots_cles)} mot(s)-clé(s).",
+        ok=True,
+        research_skipped=False,
+    )
+    return {"research_brief": brief}
 
 
 def _openhands_requested(state: PipelineState) -> bool:
@@ -280,7 +372,7 @@ async def openhands_node(
     settings = _settings_from_config(config)
     agent = OpenHandsAgent(settings)
     result = await agent.build(
-        state["prompt"],
+        _generation_user_prompt(state),
         plan=plan,
         analysis=analysis,
         settings=settings,
@@ -343,7 +435,7 @@ async def builder_node(
     settings = _settings_from_config(config)
     agent = BuilderAgent(settings)
     result = await agent.build(
-        state["prompt"],
+        _generation_user_prompt(state),
         plan=plan,
         analysis=analysis,
         settings=settings,
@@ -534,7 +626,7 @@ async def coremind_node(
         return {}
 
     settings = _settings_from_config(config)
-    prompt = state["prompt"].strip()
+    prompt = _generation_user_prompt(state)
     type_label = plan.project_type_label
     generation_mode = state.get("generation_mode") or "client_demo"
 
@@ -932,11 +1024,15 @@ def _route_after_testpilot(state: PipelineState) -> str:
     if report and getattr(report, "ok", False):
         if _playwright_requested(state):
             return "playwright"
+        if _lighthouse_requested(state):
+            return "lighthouse"
         return "export"
     refix = state.get("testpilot_refix_loops") or 0
     if refix > MAX_TESTPILOT_AUTOFIX_LOOPS:
         if _playwright_requested(state):
             return "playwright"
+        if _lighthouse_requested(state):
+            return "lighthouse"
         return "export"
     return "autofix"
 
@@ -945,6 +1041,12 @@ def _playwright_requested(state: PipelineState) -> bool:
     if state.get("playwright_enabled") is False:
         return False
     return get_settings().playwright_enabled
+
+
+def _lighthouse_requested(state: PipelineState) -> bool:
+    if state.get("lighthouse_enabled") is False:
+        return False
+    return get_settings().lighthouse_enabled
 
 
 async def playwright_node(
@@ -1024,11 +1126,100 @@ def _route_after_playwright(state: PipelineState) -> str:
     settings = get_settings()
     threshold = settings.playwright_pass_threshold
     if report and (getattr(report, "ok", False) or getattr(report, "skipped", False)):
-        return "export"
+        return "lighthouse" if _lighthouse_requested(state) else "export"
     if report and getattr(report, "score", 0) >= threshold:
-        return "export"
+        return "lighthouse" if _lighthouse_requested(state) else "export"
     refix = state.get("playwright_autofix_loops") or 0
     if refix > MAX_PLAYWRIGHT_AUTOFIX_LOOPS:
+        return "lighthouse" if _lighthouse_requested(state) else "export"
+    return "autofix"
+
+
+async def lighthouse_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    preview_html = state.get("preview_html") or ""
+    generation = state.get("generation")
+    if generation and not preview_html:
+        plan = state.get("architect_plan")
+        preview_html = preview_html_from_generation(
+            generation,
+            title=plan.project_type_label if plan else "Projet",
+            user_prompt=state.get("prompt", ""),
+        )
+
+    await _step(cb, "lighthouse", "start", "Audit Lighthouse (Performance, SEO, A11y)…")
+    settings = _settings_from_config(config)
+    agent = LighthouseAgent(settings)
+    production_url = None
+    export_data = state.get("export_result")
+    if export_data is not None:
+        production_url = getattr(export_data, "production_url", None)
+
+    report = await agent.audit_site(
+        html=str(preview_html),
+        base_url=production_url,
+        settings=settings,
+    )
+
+    refix_loops = state.get("lighthouse_autofix_loops") or 0
+    threshold = settings.lighthouse_pass_threshold
+
+    if report.ok or report.skipped:
+        await _step(
+            cb,
+            "lighthouse",
+            "done",
+            f"Lighthouse OK — score global {report.score_global}/100.",
+            ok=True,
+            lighthouse_score_global=report.score_global,
+            lighthouse_performance=report.performance,
+            lighthouse_seo=report.seo,
+            lighthouse_accessibility=report.accessibility,
+            lighthouse_best_practices=report.best_practices,
+        )
+        return {"lighthouse_report": report}
+
+    next_refix = refix_loops + 1
+    await _step(
+        cb,
+        "lighthouse",
+        "done",
+        f"Lighthouse — score {report.score_global}/{threshold}. "
+        + (
+            "Recommandations envoyées à AutoFixAI."
+            if next_refix <= MAX_LIGHTHOUSE_AUTOFIX_LOOPS
+            else "export avec réserves."
+        ),
+        ok=False,
+        lighthouse_score_global=report.score_global,
+        lighthouse_performance=report.performance,
+        lighthouse_seo=report.seo,
+        lighthouse_accessibility=report.accessibility,
+        lighthouse_best_practices=report.best_practices,
+        lighthouse_recommendations=report.recommendations,
+    )
+    return {
+        "lighthouse_report": report,
+        "lighthouse_autofix_loops": next_refix,
+        "bug_report": lighthouse_to_bug_report(report),
+    }
+
+
+def _route_after_lighthouse(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
+    report = state.get("lighthouse_report")
+    settings = get_settings()
+    threshold = settings.lighthouse_pass_threshold
+    if report and (getattr(report, "ok", False) or getattr(report, "skipped", False)):
+        return "export"
+    if report and getattr(report, "score_global", 0) >= threshold:
+        return "export"
+    refix = state.get("lighthouse_autofix_loops") or 0
+    if refix > MAX_LIGHTHOUSE_AUTOFIX_LOOPS:
         return "export"
     return "autofix"
 
@@ -1214,6 +1405,10 @@ async def finalize_node(
     pw_score = getattr(pw_report, "score", None) if pw_report else None
     pw_dump = pw_report.model_dump() if pw_report is not None else None
 
+    lh_report = state.get("lighthouse_report")
+    lh_score = getattr(lh_report, "score_global", None) if lh_report else None
+    lh_dump = lh_report.model_dump() if lh_report is not None else None
+
     result = CoreMindRunResult(
         analysis=analysis,
         architect_plan=architect,
@@ -1229,6 +1424,8 @@ async def finalize_node(
         testpilot_summary=summary,
         playwright_score=pw_score,
         playwright_report=pw_dump,
+        lighthouse_score_global=lh_score,
+        lighthouse_report=lh_dump,
         export_manifest=export_manifest,
         production_url=production_url,
         export_provider=export_provider,
@@ -1245,6 +1442,7 @@ def build_pipeline_graph() -> Any:
     """Compile le graphe LangGraph."""
     graph = StateGraph(PipelineState)
     graph.add_node("architect", architect_node)
+    graph.add_node("research", research_node)
     graph.add_node("openhands", openhands_node)
     graph.add_node("builder", builder_node)
     graph.add_node("coremind", coremind_node)
@@ -1253,6 +1451,7 @@ def build_pipeline_graph() -> Any:
     graph.add_node("autofix", autofix_node)
     graph.add_node("testpilot", testpilot_node)
     graph.add_node("playwright", playwright_node)
+    graph.add_node("lighthouse", lighthouse_node)
     graph.add_node("export", export_node)
     graph.add_node("finalize", finalize_node)
 
@@ -1260,6 +1459,17 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         "architect",
         _route_after_architect,
+        {
+            "research": "research",
+            "openhands": "openhands",
+            "coremind": "coremind",
+            "builder": "builder",
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        "research",
+        _route_after_research,
         {
             "openhands": "openhands",
             "coremind": "coremind",
@@ -1288,11 +1498,26 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         "testpilot",
         _route_after_testpilot,
-        {"playwright": "playwright", "export": "export", "autofix": "autofix"},
+        {
+            "playwright": "playwright",
+            "lighthouse": "lighthouse",
+            "export": "export",
+            "autofix": "autofix",
+        },
     )
     graph.add_conditional_edges(
         "playwright",
         _route_after_playwright,
+        {
+            "lighthouse": "lighthouse",
+            "export": "export",
+            "autofix": "autofix",
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        "lighthouse",
+        _route_after_lighthouse,
         {"export": "export", "autofix": "autofix", "finalize": "finalize"},
     )
     graph.add_edge("export", "finalize")
@@ -1317,6 +1542,8 @@ async def run_generation_pipeline(
     generation_mode: str | None = None,
     openhands_enabled: bool | None = None,
     playwright_enabled: bool | None = None,
+    lighthouse_enabled: bool | None = None,
+    research_enabled: bool | None = None,
     project_id: str | None = None,
     inspiration_brief: str | None = None,
     personal_project: bool = False,
@@ -1341,6 +1568,8 @@ async def run_generation_pipeline(
         "generation_mode": generation_mode or "client_demo",
         "openhands_enabled": openhands_enabled,
         "playwright_enabled": playwright_enabled,
+        "lighthouse_enabled": lighthouse_enabled,
+        "research_enabled": research_enabled,
         "personal_project": personal_project,
         "pages_project_slug": (pages_project_slug or "").strip() or None,
         "project_title": (project_title or "").strip() or None,
@@ -1348,6 +1577,7 @@ async def run_generation_pipeline(
         "autofix_attempts": 0,
         "testpilot_refix_loops": 0,
         "playwright_autofix_loops": 0,
+        "lighthouse_autofix_loops": 0,
         "builder_fallback": True,
     }
     graph = get_compiled_pipeline()

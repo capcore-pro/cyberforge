@@ -287,6 +287,14 @@ class CoreMindRunResult(BaseModel):
         default=None,
         description="Rapport Playwright (passed, failed, score).",
     )
+    lighthouse_score_global: int | None = Field(
+        default=None,
+        description="Score Lighthouse global (0-100).",
+    )
+    lighthouse_report: dict | None = Field(
+        default=None,
+        description="Rapport Lighthouse (performance, seo, accessibility, best_practices).",
+    )
     export_manifest: dict | None = Field(
         default=None,
         description="Manifeste de déploiement universel ExportAI.",

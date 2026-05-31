@@ -29,6 +29,8 @@ _PROVIDER_ENV: dict[str, tuple[str, str]] = {
     "github": ("GITHUB_TOKEN", "github_token"),
     "brevo": ("BREVO_API_KEY", "brevo_api_key"),
     "stripe": ("STRIPE_SECRET_KEY", "stripe_secret_key"),
+    "brave_search": ("BRAVE_SEARCH_API_KEY", "brave_search_api_key"),
+    "exa": ("EXA_API_KEY", "exa_api_key"),
 }
 
 
@@ -80,6 +82,8 @@ class SaveSecretsRequest(BaseModel):
     github_token: str | None = None
     brevo_api_key: str | None = None
     stripe_secret_key: str | None = None
+    brave_search_api_key: str | None = None
+    exa_api_key: str | None = None
 
 
 class TestSecretRequest(BaseModel):
@@ -186,6 +190,8 @@ async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
                 "GITHUB_TOKEN": body.github_token,
                 "BREVO_API_KEY": body.brevo_api_key,
                 "STRIPE_SECRET_KEY": body.stripe_secret_key,
+                "BRAVE_SEARCH_API_KEY": body.brave_search_api_key,
+                "EXA_API_KEY": body.exa_api_key,
             },
         )
     except VaultInvalidPasswordError as exc:

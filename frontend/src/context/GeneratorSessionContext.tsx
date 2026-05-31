@@ -13,6 +13,7 @@ import type {
   ValidationStatus,
   VisionPreviewSource,
   PlaywrightReportSummary,
+  LighthouseReportSummary,
 } from "@shared/types";
 import type { PersonalUsage } from "@/lib/personal-projects-api";
 import {
@@ -50,6 +51,7 @@ export interface GeneratorSessionState {
   validationSummary: string | null;
   testpilotPassed: boolean | null;
   playwrightReport: PlaywrightReportSummary | null;
+  lighthouseReport: LighthouseReportSummary | null;
   productionUrl: string | null;
   exportProvider: string | null;
   unlockUrl: string | null;
@@ -87,6 +89,7 @@ const initialSession = (): GeneratorSessionState => ({
   validationSummary: null,
   testpilotPassed: null,
   playwrightReport: null,
+  lighthouseReport: null,
   productionUrl: null,
   exportProvider: null,
   unlockUrl: null,

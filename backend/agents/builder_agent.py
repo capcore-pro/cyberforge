@@ -167,6 +167,8 @@ class BuilderAgent(BaseAgent):
             f"Template : {plan.template_label}.\n"
             f"Complexité CoreMind : {analysis.complexity.value}.\n\n"
             f"{PERSONALIZED_CONTENT_DIRECTIVE}\n\n"
+            f"Si un brief ResearchAI (Brave / Exa) est présent en tête du prompt, "
+            f"utilise-le pour du contenu réel et localisé — pas de données fictives.\n\n"
             f"{CMS_BUILDER_HINT}"
             f"{toolbox_block}"
             f"{prompt.strip()}"

@@ -133,6 +133,14 @@ export function normalizeRunResponse(
     raw.playwright_report && typeof raw.playwright_report === "object"
       ? (raw.playwright_report as CoreMindRunResponse["playwright_report"])
       : null;
+  const lighthouse_score_global =
+    typeof raw.lighthouse_score_global === "number"
+      ? raw.lighthouse_score_global
+      : null;
+  const lighthouse_report =
+    raw.lighthouse_report && typeof raw.lighthouse_report === "object"
+      ? (raw.lighthouse_report as CoreMindRunResponse["lighthouse_report"])
+      : null;
 
   return {
     ...raw,
@@ -144,6 +152,8 @@ export function normalizeRunResponse(
     testpilot_summary,
     playwright_score,
     playwright_report,
+    lighthouse_score_global,
+    lighthouse_report,
     production_url,
     export_provider,
     github_export_url,

@@ -136,6 +136,26 @@ class Settings(BaseSettings):
         default=60.0, alias="PLAYWRIGHT_TIMEOUT_SECONDS"
     )
 
+    lighthouse_enabled: bool = Field(default=True, alias="LIGHTHOUSE_ENABLED")
+    lighthouse_pass_threshold: int = Field(
+        default=70,
+        ge=0,
+        le=100,
+        alias="LIGHTHOUSE_PASS_THRESHOLD",
+    )
+    lighthouse_timeout_seconds: float = Field(
+        default=120.0, alias="LIGHTHOUSE_TIMEOUT_SECONDS"
+    )
+
+    research_enabled: bool = Field(default=True, alias="RESEARCH_ENABLED")
+    brave_search_api_key: SecretStr | None = Field(
+        default=None, alias="BRAVE_SEARCH_API_KEY"
+    )
+    exa_api_key: SecretStr | None = Field(default=None, alias="EXA_API_KEY")
+    research_timeout_seconds: float = Field(
+        default=30.0, alias="RESEARCH_TIMEOUT_SECONDS"
+    )
+
     replicate_api_key: SecretStr | None = Field(default=None, alias="REPLICATE_API_KEY")
     replicate_html_model: str | None = Field(
         default=None, alias="REPLICATE_HTML_MODEL"

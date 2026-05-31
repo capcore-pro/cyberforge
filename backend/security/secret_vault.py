@@ -133,6 +133,8 @@ class SecretVault:
                 "github": _has("GITHUB_TOKEN"),
                 "brevo": _has("BREVO_API_KEY"),
                 "stripe": _has("STRIPE_SECRET_KEY"),
+                "brave_search": _has("BRAVE_SEARCH_API_KEY"),
+                "exa": _has("EXA_API_KEY"),
             }
             return VaultStatus(
                 has_vault=self.has_vault(),
