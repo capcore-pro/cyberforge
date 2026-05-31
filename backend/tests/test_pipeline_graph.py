@@ -1,10 +1,12 @@
-"""Tests du routage LangGraph (BuilderAI, BugHunter → AutoFix, mode real_app)."""
+"""Tests du routage LangGraph (BuilderAI v2, BugHunter → AutoFix, mode real_app)."""
 
 from agents.bug_hunter_agent import BugHuntReport, BugIssue
 from agents.pipeline_graph import (
+    DIRECT_COREMIND_MODES,
     MAX_AUTOFIX_LOOPS,
     MAX_TESTPILOT_AUTOFIX_LOOPS,
     _inject_package_json,
+    _route_after_architect,
     _route_after_builder,
     _route_after_bughunter,
     _route_after_testpilot,
@@ -15,6 +17,31 @@ from tools.codegen_service import CodeGenerateResult, GeneratedFile
 
 def test_route_builder_fallback_to_coremind() -> None:
     assert _route_after_builder({"builder_fallback": True}) == "coremind"
+
+
+def test_route_architect_client_demo_to_coremind() -> None:
+    assert (
+        _route_after_architect({"generation_mode": "client_demo"})
+        == "coremind"
+    )
+
+
+def test_route_architect_real_app_to_coremind() -> None:
+    assert _route_after_architect({"generation_mode": "real_app"}) == "coremind"
+
+
+def test_route_architect_vitrine_next_to_coremind() -> None:
+    assert _route_after_architect({"generation_mode": "vitrine_next"}) == "coremind"
+
+
+def test_direct_coremind_modes_cover_standard_modes() -> None:
+    assert DIRECT_COREMIND_MODES == frozenset(
+        {"client_demo", "real_app", "vitrine_next"}
+    )
+
+
+def test_route_architect_unknown_mode_to_builder() -> None:
+    assert _route_after_architect({"generation_mode": "legacy_builder"}) == "builder"
 
 
 def test_route_builder_success_skips_coremind() -> None:

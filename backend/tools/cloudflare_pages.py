@@ -126,6 +126,17 @@ def public_demo_url_for_token(token: str) -> str:
     return f"{base}/d/{slug}"
 
 
+def public_pages_url_for_project(project_name: str) -> str:
+    """URL production d'un projet Cloudflare Pages dédié."""
+    slug = re.sub(r"[^a-z0-9-]", "-", project_name.strip().lower()).strip("-") or "site"
+    return f"https://{slug}.pages.dev"
+
+
+def build_manifest_for_files(upload_files: dict[str, bytes]) -> dict[str, str]:
+    """Manifest Direct Upload pour un ensemble de fichiers statiques."""
+    return {_manifest_path(path): _file_digest(path, body) for path, body in upload_files.items()}
+
+
 def _root_stub_digest() -> str:
     return _file_digest(ROOT_STUB_ASSET_PATH, _ROOT_STUB_HTML)
 
@@ -853,14 +864,16 @@ async def _deploy_with_manifest(
     project_name: str,
     manifest: dict[str, str],
     upload_files: dict[str, bytes],
+    demo_gated: bool = True,
+    include_redirects: bool = True,
 ) -> CloudflareDeployResult:
     """Direct Upload : ZIP en mémoire → batch upload assets → déploiement multipart."""
     files = dict(upload_files)
-    if REDIRECTS_ASSET_PATH not in files:
+    if include_redirects and REDIRECTS_ASSET_PATH not in files:
         files[REDIRECTS_ASSET_PATH] = _REDIRECTS_BODY
 
     zip_bytes = build_deploy_zip(files)
-    if not zip_contains_marker(zip_bytes, "cf-password-toggle"):
+    if demo_gated and not zip_contains_marker(zip_bytes, "cf-password-toggle"):
         raise CloudflarePagesError(
             "ZIP de déploiement sans cf-password-toggle — déploiement annulé."
         )
@@ -1132,6 +1145,42 @@ async def remove_demo_from_cyberforge_demos(
     )
 
 
+async def deploy_dedicated_pages_site(
+    *,
+    account_id: str,
+    api_token: str,
+    project_name: str,
+    upload_files: dict[str, bytes],
+) -> CloudflareDeployResult:
+    """
+    Déploie un site statique sur un projet Cloudflare Pages dédié (URL *.pages.dev).
+    Pas de gate mot de passe ni manifest cyberforge-demos.
+    """
+    if "index.html" not in upload_files:
+        raise CloudflarePagesError(
+            "index.html requis pour un déploiement Pages dédié."
+        )
+    manifest = build_manifest_for_files(upload_files)
+    _validate_manifest_covers_uploads(manifest, upload_files)
+    result = await _deploy_with_manifest(
+        account_id=account_id,
+        api_token=api_token,
+        project_name=project_name,
+        manifest=manifest,
+        upload_files=upload_files,
+        demo_gated=False,
+        include_redirects=False,
+    )
+    canonical = public_pages_url_for_project(project_name).rstrip("/")
+    return CloudflareDeployResult(
+        project_name=result.project_name,
+        deployment_id=result.deployment_id,
+        url=canonical,
+        asset_path="index.html",
+        content_hash=manifest.get("/index.html"),
+    )
+
+
 async def deploy_standalone_html(
     *,
     account_id: str,
@@ -1154,4 +1203,6 @@ async def deploy_standalone_html(
         project_name=project_name,
         manifest=manifest,
         upload_files={path: body},
+        demo_gated=False,
+        include_redirects=False,
     )

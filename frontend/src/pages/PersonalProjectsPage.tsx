@@ -54,6 +54,22 @@ function resolveLinkedProject(
   pp: PersonalProject,
   unified: UnifiedProject[],
 ): UnifiedProject | null {
+  if (pp.production_url?.trim()) {
+    const slug = pp.pages_project_slug?.trim() || pp.title.toLowerCase().replace(/\s+/g, "-");
+    return {
+      key: `perso-pages:${pp.id}`,
+      name: pp.title,
+      type: "vitrine",
+      status: "online",
+      url: pp.production_url.trim(),
+      createdAt: pp.created_at,
+      prompt: pp.commercial_description?.trim() || "",
+      source: "supabase",
+      supabaseProjectId: pp.supabase_project_id ?? undefined,
+      projectType: "site_web",
+      generationMode: "real_app",
+    };
+  }
   if (pp.project_key) {
     const found = unified.find((u) => u.key === pp.project_key);
     if (found) return found;

@@ -51,6 +51,8 @@ class PersonalProjectCreate(BaseModel):
     managed_id: str | None = None
     demo_id: str | None = None
     app_type: str | None = None
+    production_url: str | None = None
+    pages_project_slug: str | None = None
 
 
 class PersonalProjectUpdate(BaseModel):
@@ -65,6 +67,8 @@ class PersonalProjectUpdate(BaseModel):
     sale_link: str | None = None
     sales_count: int | None = Field(default=None, ge=0)
     revenue_eur: float | None = Field(default=None, ge=0)
+    production_url: str | None = None
+    pages_project_slug: str | None = None
 
 
 class ConvertToClientBody(BaseModel):
@@ -113,6 +117,8 @@ async def create_personal_project(body: PersonalProjectCreate) -> dict[str, Any]
             managed_id=body.managed_id,
             demo_id=body.demo_id,
             app_type=body.app_type,
+            production_url=body.production_url,
+            pages_project_slug=body.pages_project_slug,
             sale_link=_sale_link_for(body.usage_type, body.app_type, body.price_eur),
         )
     except ValueError as exc:

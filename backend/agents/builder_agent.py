@@ -27,8 +27,9 @@ from tools.builder_generators import (
     DeepSeekBuilderClient,
     V0Client,
 )
-from tools.codegen_service import CodeGenerateResult
+from tools.codegen_service import CodeGenComplexity, CodeGenService, CodeGenerateResult
 from tools.toolbox_branding import apply_toolbox_to_generation, build_toolbox_builder_context
+from prompts import PERSONALIZED_CONTENT_DIRECTIVE, SIMPLIFIED_VITRINE_DIRECTIVE
 from tools.cms_panel_inject import CMS_BUILDER_HINT
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,7 @@ class BuilderAgent(BaseAgent):
             f"Type : {plan.project_type_label}.\n"
             f"Template : {plan.template_label}.\n"
             f"Complexité CoreMind : {analysis.complexity.value}.\n\n"
+            f"{PERSONALIZED_CONTENT_DIRECTIVE}\n\n"
             f"{CMS_BUILDER_HINT}"
             f"{toolbox_block}"
             f"{prompt.strip()}"
@@ -204,3 +206,91 @@ class BuilderAgent(BaseAgent):
             generation=generation,
             preview_html=preview_html,
         )
+
+    async def build_simplified_vitrine_retry(
+        self,
+        prompt: str,
+        *,
+        plan: ArchitectPlan,
+        analysis: CoreMindAnalysis,
+        settings: Settings | None = None,
+        project_id: str | None = None,
+    ) -> tuple[CodeGenerateResult, str]:
+        """
+        Regénère une vitrine HTML simplifiée — jamais le template TaskFlow de secours.
+        """
+        resolved = settings or self._settings
+        simplified = f"{SIMPLIFIED_VITRINE_DIRECTIVE.strip()}\n\n{prompt.strip()}"
+        enriched = (
+            f"Type : {plan.project_type_label}.\n"
+            f"Template vitrine landing (HTML premium).\n\n"
+            f"{build_toolbox_builder_context(plan)}"
+            f"{simplified}"
+        )
+
+        builder_result = await self.build(
+            simplified,
+            plan=plan,
+            analysis=analysis,
+            settings=resolved,
+            project_id=project_id,
+        )
+        if not builder_result.fallback_to_coremind and builder_result.generation is not None:
+            html = (builder_result.preview_html or builder_result.generation.code or "").strip()
+            logger.info(
+                "[BuilderAI] reprise vitrine simplifiée via %s | bytes=%s",
+                builder_result.decision.provider.value,
+                len(html.encode("utf-8")),
+            )
+            return builder_result.generation, html
+
+        tier = CodeGenComplexity(analysis.complexity.value)
+        codegen = CodeGenService(resolved)
+        if codegen.is_configured():
+            try:
+                generation = await codegen.generate_code(
+                    enriched,
+                    tier,
+                    demo_html=True,
+                    project_id=project_id,
+                )
+                generation = apply_toolbox_to_generation(
+                    generation, plan, project_id=project_id
+                )
+                preview_html = preview_html_from_generation(
+                    generation,
+                    title=plan.project_type_label,
+                    user_prompt=enriched,
+                )
+                logger.info(
+                    "[BuilderAI] reprise vitrine simplifiée via CodeGen | bytes=%s",
+                    len(preview_html.encode("utf-8")),
+                )
+                return generation, preview_html
+            except Exception:
+                logger.exception("[BuilderAI] CodeGen vitrine simplifiée échoué")
+
+        from dataclasses import replace
+
+        from tools.demo_template_service import (
+            TEMPLATE_LANDING,
+            build_html_from_seed,
+            heuristic_demo_seed,
+            seed_to_code_result,
+        )
+
+        seed = heuristic_demo_seed(
+            prompt.strip(),
+            project_type_label=plan.project_type_label,
+        )
+        seed = replace(seed, template=TEMPLATE_LANDING)
+        html = build_html_from_seed(seed)
+        generation = seed_to_code_result(
+            seed,
+            summary="Template landing premium (reprise BuilderAI simplifiée).",
+        )
+        logger.info(
+            "[BuilderAI] reprise vitrine — template landing local | bytes=%s",
+            len(html.encode("utf-8")),
+        )
+        return generation, html

@@ -20,7 +20,11 @@ from tools.deploy_manifest import (
     select_export_provider,
     slugify_project_name,
 )
-from tools.export_cloudflare import CloudflareExportError, deploy_html_demo
+from tools.export_cloudflare import (
+    CloudflareExportError,
+    deploy_dedicated_pages,
+    deploy_html_demo,
+)
 from tools.export_github import (
     DEFAULT_VITRINES_REPO,
     push_source_to_github,
@@ -109,11 +113,21 @@ class ExportAgent(BaseAgent):
         preview_html: str = "",
         settings: Settings | None = None,
         project_id: str | None = None,
+        generation_mode: str | None = None,
+        personal_project: bool = False,
+        pages_project_slug: str | None = None,
+        project_title: str | None = None,
     ) -> ExportResult:
         resolved = settings or self._settings
         project_name = slugify_project_name(
-            plan.project_type_label or analysis.project_type_label or "projet"
+            pages_project_slug
+            or project_title
+            or plan.project_type_label
+            or analysis.project_type_label
+            or "projet"
         )
+        mode = (generation_mode or "client_demo").strip()
+        use_dedicated_pages = personal_project and mode == "real_app"
         # Phase 4 vitrines Next.js : on publie le scaffold via GitHub (puis Vercel).
         # (Le CLI Vercel n'est pas requis : l'utilisateur connecte Vercel au repo/branche.)
         provider = (
@@ -138,7 +152,31 @@ class ExportAgent(BaseAgent):
 
         html = files.get("index.html") or preview_html or generation.code or ""
 
-        title = plan.project_type_label or "Démo CyberForge"
+        title = (
+            (project_title or "").strip()
+            or plan.project_type_label
+            or "Démo CyberForge"
+        )
+
+        async def _deploy_dedicated() -> None:
+            nonlocal production_url, provider, message
+            deploy_files = dict(files)
+            html_candidate = (html or preview_html or "").strip()
+            if html_candidate and is_usable_preview_html(html_candidate):
+                deploy_files["index.html"] = html_candidate
+            if "index.html" not in deploy_files:
+                raise CloudflareExportError(
+                    "index.html requis pour un déploiement Pages dédié."
+                )
+            production_url = await deploy_dedicated_pages(
+                project_slug=project_name,
+                files=deploy_files,
+                title=title,
+            )
+            provider = "cloudflare"
+            env["PAGES_PROJECT"] = project_name
+            env["PAGES_URL"] = production_url
+            message = f"Site publié sur Cloudflare Pages — {production_url}"
 
         async def _deploy_cloudflare() -> None:
             nonlocal production_url, demo_token, demo_password, unlock_url, provider, message
@@ -154,7 +192,9 @@ class ExportAgent(BaseAgent):
             message = f"Démo publiée sur Cloudflare — {production_url}"
 
         try:
-            if provider == "github":
+            if use_dedicated_pages and resolved.cloudflare_configured:
+                await _deploy_dedicated()
+            elif provider == "github":
                 # publication via GitHub ci-dessous (push_source_to_github)
                 message = "Sources prêtes pour Vercel (publication GitHub)…"
             elif provider == "railway" and plain_secret_str(resolved.railway_api_key):
@@ -261,11 +301,28 @@ class ExportAgent(BaseAgent):
 
         if project_id and github_url:
             maybe_track_cost(project_id, "github", {"requests": 1})
+        if project_id and provider == "cloudflare" and production_url:
+            maybe_track_cost(project_id, "cloudflare", {"requests": 1})
         if project_id and provider == "railway" and production_url:
             maybe_track_cost(project_id, "railway", {"requests": 1})
 
+        if personal_project and use_dedicated_pages and production_url:
+            try:
+                import personal_projects_db as pp_db
+
+                pp_row = pp_db.find_personal_project_by_title(title)
+                if pp_row:
+                    pp_db.update_personal_project(
+                        str(pp_row["id"]),
+                        production_url=production_url,
+                        pages_project_slug=project_name,
+                    )
+            except Exception as exc:
+                logger.warning("Mise à jour projet perso ignorée : %s", exc)
+
         display_name = (
-            plan.project_type_label
+            (project_title or "").strip()
+            or plan.project_type_label
             or analysis.project_type_label
             or project_name
         )

@@ -47,6 +47,9 @@ async def run_coremind_flow_stream(body: CoreMindRequest) -> StreamingResponse:
                     generation_mode=body.generation_mode,
                     project_id=body.project_id,
                     inspiration_brief=body.inspiration_brief,
+                    personal_project=body.personal_project,
+                    pages_project_slug=body.pages_project_slug,
+                    project_title=body.project_title,
                     on_event=on_event,
                 )
                 persistence: PersistenceResult | None = None
@@ -61,6 +64,19 @@ async def run_coremind_flow_stream(body: CoreMindRequest) -> StreamingResponse:
                         )
                     except SupabaseStoreError as exc:
                         logger.warning("Sauvegarde Supabase ignorée : %s", exc)
+
+                if persistence is not None:
+                    from tools.export_demo_persistence import (
+                        persist_pipeline_cloudflare_demo,
+                    )
+
+                    try:
+                        await persist_pipeline_cloudflare_demo(
+                            run_result=result,
+                            generation_id=persistence.generation_id,
+                        )
+                    except Exception as exc:
+                        logger.warning("Persistance démo ExportAI ignorée : %s", exc)
 
                 payload = CoreMindRunResponse(
                     **result.model_dump(),

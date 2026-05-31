@@ -674,6 +674,15 @@ export function GeneratorPage({
           generation_mode: synced.generationMode,
           project_id: sessionProjectId,
           inspiration_brief: inspirationBrief?.trim() || null,
+          personal_project: isPersonalFlow,
+          pages_project_slug:
+            projectName.trim() ||
+            personalDraftTitle.trim() ||
+            null,
+          project_title:
+            projectName.trim() ||
+            personalDraftTitle.trim() ||
+            projectTitleFromPrompt(trimmed),
         },
         { onStep },
       );
@@ -772,6 +781,15 @@ export function GeneratorPage({
           commercial_description: commercial,
           project_key: `supabase:${persistedId}`,
           supabase_project_id: persistedId,
+          ...(normalized.production_url
+            ? {
+                production_url: normalized.production_url,
+                pages_project_slug:
+                  projectName.trim() ||
+                  personalDraftTitle.trim() ||
+                  null,
+              }
+            : {}),
         });
       }
     } catch (err) {
@@ -1317,7 +1335,9 @@ export function GeneratorPage({
             >
               <span className="block text-sm font-medium text-cf-text">Vraie app</span>
               <span className="mt-1 block text-xs text-cf-muted">
-                Application déployée (Railway / Vercel)
+                {isPersonalFlow
+                  ? "Projet Cloudflare Pages dédié (*.pages.dev)"
+                  : "Application déployée (Railway / Vercel)"}
               </span>
             </button>
           </div>

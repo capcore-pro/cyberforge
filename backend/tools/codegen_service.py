@@ -17,52 +17,17 @@ from pydantic import BaseModel, Field
 
 from config import Settings, get_settings
 from cost_tracker import maybe_track_cost, usage_from_anthropic_payload, usage_from_openai_payload
+from prompts import (
+    CODEGEN_DEMO_HTML_PROMPT,
+    CODEGEN_SYSTEM_PROMPT,
+    DEMO_SEED_SYSTEM_PROMPT,
+    MAX_USER_PROMPT_CHARS,
+)
 from security.llm_secrets import (
     LLM_KEYS_UNAVAILABLE_MSG,
     get_effective_llm_key,
     get_effective_llm_key_for_http,
 )
-
-CODEGEN_SYSTEM_PROMPT = """Tu es CoreMindAI (CyberForge). Génère vite un prototype React + TypeScript + Tailwind.
-Règles strictes :
-- UN seul fichier : src/App.tsx (composant autonome, ≤ 120 lignes, pas de dépendances externes).
-- Pas de texte hors JSON, pas de markdown.
-- JSON compact uniquement :
-{"summary":"1 phrase FR","code":"…contenu App.tsx…","files":[{"path":"src/App.tsx","content":"…"}],"stack":["react","typescript","tailwind"]}
-Le champ code = contenu de files[0]. Reste minimal et fonctionnel."""
-
-CODEGEN_DEMO_HTML_PROMPT = """**GÉNÈRE UNIQUEMENT DU HTML/CSS/JS VANILLA PUR. INTERDIT : React, JSX, Tailwind classes, className, useState, import, export, const =>, template literals JSX. OBLIGATOIRE : style CSS inline ou balise style, JS vanilla avec getElementById/addEventListener.**
-
-Tu es CoreMindAI (CyberForge). Génère un livrable DÉMO client en HTML/CSS/JS vanilla autonome.
-Règles strictes :
-- UN seul fichier : index.html (document complet <!DOCTYPE html>, ≤ 200 lignes).
-- PAS de React, JSX, TypeScript, import/export, npm, CDN externes.
-- CSS dans <style> dans <head>, interactions simples en <script> vanilla (querySelector, addEventListener).
-- UI soignée, responsive (mobile-first), thème sombre cyber (violet/cyan), textes en français.
-- Pas de texte hors JSON, pas de markdown.
-- JSON compact uniquement :
-{"summary":"1 phrase FR","code":"…HTML complet…","files":[{"path":"index.html","content":"<!DOCTYPE html>…"}],"stack":["html","css","javascript"]}
-Le champ code = contenu de files[0]."""
-
-DEMO_SEED_SYSTEM_PROMPT = """Tu personnalises les données d'une démo SaaS client. NE GÉNÈRE AUCUN HTML, CSS, JS, React ni JSX.
-NE mentionne jamais CyberForge, CapCore ni un nom d'éditeur — uniquement la marque / le métier du client.
-Choisis le template le plus adapté au prompt et fournis uniquement des données seed en JSON compact :
-{"template":"taskflow","title":"titre page FR","subtitle":"sous-titre FR","brand_name":"nom produit","brand_tag":"tagline courte","user_name":"Prénom Nom","user_role":"rôle métier précis","tasks":[{"text":"tâche FR","completed":false}]}
-Templates disponibles (champ template) :
-- "taskflow" : gestion de tâches / projets SaaS (tâches collaboratives)
-- "landing" : page vitrine (hero, features, CTA — tâches de mise en ligne)
-- "crm" : contacts, pipeline (statuts Prospect/Client/Perdu — tâches commerciales)
-- "dashboard" : KPIs, graphiques, analytics (tâches de reporting)
-- "facturation" : factures (Payée/En attente/En retard — tâches comptables)
-- "reservation" : créneaux restaurant (optionnel si réservation explicite)
-Règles :
-- Utilise le « Type de projet » et la « Demande client » pour le secteur (marketing : noms de campagnes, leads, ROI, CTR, clics ; restaurant : carte, plats, réservations, couverts, chef ; immobilier : mandats, visites, biens).
-- Respecte le template indiqué (« Template premium : … » ou « Template imposé ») s'il est présent.
-- 3 à 6 tasks ultra-spécifiques au métier (jamais de tâches génériques « reporting Q2 » sans contexte).
-- brand_name = nom réel de l'entreprise demandée ; subtitle et user_role alignés sur le métier.
-- Pas de markdown, pas de texte hors JSON."""
-
-MAX_USER_PROMPT_CHARS = 2500
 
 
 class CodeGenComplexity(str, Enum):

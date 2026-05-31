@@ -69,6 +69,12 @@ export interface CoreMindRequest {
   project_id?: string | null;
   /** Brief Firecrawl (clone-inspiration) transmis à ArchitectAI */
   inspiration_brief?: string | null;
+  /** Projet perso — déploiement Cloudflare Pages dédié en mode vraie app */
+  personal_project?: boolean;
+  /** Slug projet Pages (ex. capcore-pro-site) */
+  pages_project_slug?: string | null;
+  /** Titre du projet pour l'export */
+  project_title?: string | null;
 }
 
 /** Tarification ArchitectAI (SSE ou GET /projects/{id}/costs) */

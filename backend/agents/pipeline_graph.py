@@ -39,6 +39,7 @@ from tools.demo_template_service import (
     TEMPLATE_LABELS,
     align_seed_template,
 )
+from prompts import PERSONALIZED_CONTENT_DIRECTIVE
 from tools.pricing import estimate_cost_usd
 from tools.demo_template_service import TEMPLATE_MODEL, TEMPLATE_PROVIDER
 from tools.toolbox_branding import (
@@ -53,6 +54,9 @@ logger = logging.getLogger(__name__)
 
 MAX_AUTOFIX_LOOPS = 2
 MAX_TESTPILOT_AUTOFIX_LOOPS = 1
+
+# Modes avec routage direct CoreMindAI — BuilderAI ne court-circuite plus le chemin nominal.
+DIRECT_COREMIND_MODES = frozenset({"client_demo", "real_app", "vitrine_next"})
 
 PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -96,6 +100,9 @@ class PipelineState(TypedDict, total=False):
     testpilot_report: Any
     testpilot_refix_loops: int
     validation_status: str | None
+    personal_project: bool | None
+    pages_project_slug: str | None
+    project_title: str | None
     export_result: Any
     result: CoreMindRunResult | None
     error: str | None
@@ -202,6 +209,19 @@ async def architect_node(
         "architect_plan": plan,
         "analysis": coremind_analysis,
     }
+
+
+def _route_after_architect(state: PipelineState) -> str:
+    """
+    BuilderAI v2 — routage explicite par generation_mode.
+    Les modes nominaux passent directement par CoreMindAI (templates, React, Next.js).
+    """
+    if state.get("error"):
+        return "finalize"
+    mode = (state.get("generation_mode") or "client_demo").strip()
+    if mode in DIRECT_COREMIND_MODES:
+        return "coremind"
+    return "builder"
 
 
 async def builder_node(
@@ -425,6 +445,7 @@ async def coremind_node(
             f"Type de projet : {type_label}.\n"
             f"Contexte : site vitrine multi-pages (accueil, services, contact).\n"
             f"Texte UI en français.\n\n"
+            f"{PERSONALIZED_CONTENT_DIRECTIVE}\n\n"
             f"{build_toolbox_builder_context(plan)}"
             f"{prompt}"
         )
@@ -473,6 +494,7 @@ async def coremind_node(
             f"Type de projet : {type_label}.\n"
             f"Contexte : application React/TypeScript déployable sur Railway ou Vercel.\n"
             f"Texte UI en français.\n\n"
+            f"{PERSONALIZED_CONTENT_DIRECTIVE}\n\n"
             f"{build_toolbox_builder_context(plan)}"
             f"{prompt}"
         )
@@ -507,6 +529,7 @@ async def coremind_node(
     enriched = (
         f"Type de projet cible : {type_label}.\n"
         f"Template premium : {plan.template_label} ({plan.template}).\n\n"
+        f"{PERSONALIZED_CONTENT_DIRECTIVE}\n\n"
         f"{build_toolbox_builder_context(plan)}"
         f"{prompt}"
     )
@@ -696,6 +719,9 @@ async def autofix_node(
         title=plan.project_type_label,
         initial_report=report,
         project_id=state.get("project_id"),
+        plan=plan,
+        analysis=analysis,
+        generation_mode=state.get("generation_mode"),
     )
     preview_html = preview_html_from_generation(
         generation,
@@ -823,7 +849,15 @@ async def export_node(
         return {}
 
     generation_mode = state.get("generation_mode") or "client_demo"
-    if generation_mode in ("real_app", "vitrine_next"):
+    personal = bool(state.get("personal_project"))
+    if personal and generation_mode == "real_app":
+        await _step(
+            cb,
+            "export",
+            "start",
+            "Déploiement Cloudflare Pages dédié (URL *.pages.dev)…",
+        )
+    elif generation_mode in ("real_app", "vitrine_next"):
         label = (
             "Déploiement site vitrine Next.js (Vercel)…"
             if generation_mode == "vitrine_next"
@@ -850,6 +884,10 @@ async def export_node(
         preview_html=str(preview_html),
         settings=settings,
         project_id=state.get("project_id"),
+        generation_mode=generation_mode,
+        personal_project=personal,
+        pages_project_slug=state.get("pages_project_slug"),
+        project_title=state.get("project_title"),
     )
 
     await _step(
@@ -1010,7 +1048,11 @@ def build_pipeline_graph() -> Any:
     graph.add_node("finalize", finalize_node)
 
     graph.set_entry_point("architect")
-    graph.add_edge("architect", "builder")
+    graph.add_conditional_edges(
+        "architect",
+        _route_after_architect,
+        {"coremind": "coremind", "builder": "builder", "finalize": "finalize"},
+    )
     graph.add_conditional_edges(
         "builder",
         _route_after_builder,
@@ -1051,6 +1093,9 @@ async def run_generation_pipeline(
     generation_mode: str | None = None,
     project_id: str | None = None,
     inspiration_brief: str | None = None,
+    personal_project: bool = False,
+    pages_project_slug: str | None = None,
+    project_title: str | None = None,
     settings: Settings | None = None,
     on_event: PipelineEventCallback | None = None,
 ) -> CoreMindRunResult:
@@ -1068,6 +1113,9 @@ async def run_generation_pipeline(
         "project_id": project_id,
         "project_type_hint": project_type_hint,
         "generation_mode": generation_mode or "client_demo",
+        "personal_project": personal_project,
+        "pages_project_slug": (pages_project_slug or "").strip() or None,
+        "project_title": (project_title or "").strip() or None,
         "fix_loops": 0,
         "autofix_attempts": 0,
         "testpilot_refix_loops": 0,

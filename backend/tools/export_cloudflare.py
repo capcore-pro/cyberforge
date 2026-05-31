@@ -1,5 +1,5 @@
 """
-Export Cloudflare Pages — déploiement démo client (projet cyberforge-demos).
+Export Cloudflare Pages — démos client (cyberforge-demos) et sites dédiés (*.pages.dev).
 """
 
 from __future__ import annotations
@@ -11,12 +11,15 @@ from db.demos_store import DemosStore, get_demos_store
 from security.cloudflare_env import get_cloudflare_credentials
 from tools.cloudflare_pages import (
     CloudflarePagesError,
+    deploy_dedicated_pages_site,
     deploy_demo_to_cyberforge_demos,
     public_demo_url_for_token,
+    public_pages_url_for_project,
 )
 from tools.demo_urls import unlock_demo_url
 from tools.generation_sources import is_usable_preview_html
 from tools.standalone_demo_html import wrap_with_password_gate
+from tools.theme_enforce import enforce_capcore_theme
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +28,69 @@ class CloudflareExportError(Exception):
     """Échec export Cloudflare."""
 
 
+def _files_to_bytes(files: dict[str, str]) -> dict[str, bytes]:
+    out: dict[str, bytes] = {}
+    for path, content in files.items():
+        clean_path = path.strip().lstrip("/").replace("\\", "/")
+        if not clean_path:
+            continue
+        out[clean_path] = content.encode("utf-8")
+    return out
+
+
+async def deploy_dedicated_pages(
+    *,
+    project_slug: str,
+    files: dict[str, str],
+    title: str = "",
+) -> str:
+    """
+    Déploie sur un projet Cloudflare Pages dédié (ex. capcore-pro-site.pages.dev).
+    Retourne l'URL de production permanente.
+    """
+    credentials = get_cloudflare_credentials()
+    if credentials is None:
+        raise CloudflareExportError("Cloudflare non configuré (CLOUDFLARE_*).")
+
+    slug = project_slug.strip().lower()
+    if not slug:
+        raise CloudflareExportError("Slug projet Pages invalide.")
+
+    upload_files = _files_to_bytes(files)
+    if "index.html" not in upload_files:
+        raise CloudflareExportError("index.html requis pour Cloudflare Pages dédié.")
+
+    if "capcore" in slug or "capcore" in title.lower():
+        html = upload_files["index.html"].decode("utf-8")
+        upload_files["index.html"] = enforce_capcore_theme(html).encode("utf-8")
+
+    try:
+        deploy = await deploy_dedicated_pages_site(
+            account_id=credentials.account_id,
+            api_token=credentials.api_token,
+            project_name=slug,
+            upload_files=upload_files,
+        )
+    except CloudflarePagesError as exc:
+        raise CloudflareExportError(str(exc)) from exc
+
+    url = (deploy.url or public_pages_url_for_project(slug)).rstrip("/")
+    logger.info(
+        "[Export Cloudflare] site dédié | project=%s | url=%s | files=%s",
+        slug,
+        url,
+        sorted(upload_files.keys()),
+    )
+    return url
+
+
 async def deploy_html_demo(
     *,
     html: str,
     title: str,
 ) -> tuple[str, str, str, str]:
     """
-    Déploie le HTML sur Cloudflare Pages.
+    Déploie le HTML sur Cloudflare Pages (cyberforge-demos, démo temporaire).
     Retourne (production_url, demo_token, demo_password, unlock_url).
     """
     credentials = get_cloudflare_credentials()

@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from config import Settings, get_settings, plain_secret_str
 from cost_tracker import maybe_track_cost, usage_from_openai_payload
 from security.llm_secrets import get_effective_llm_key, get_effective_llm_key_for_http
+from prompts import BUILDER_DEEPSEEK_SYSTEM, BUILDER_V0_SYSTEM
 from tools.codegen_service import (
     CodeGenerateResult,
     GeneratedFile,
@@ -27,16 +28,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_V0_API_BASE = "https://api.v0.dev/v1"
 DEFAULT_V0_MODEL = "v0-1.5-md"
-
-BUILDER_DEEPSEEK_SYSTEM = """Tu es BuilderAI (CyberForge), moteur DeepSeek pour code backend et logique complexe.
-Génère un prototype TypeScript/Python ou API selon le brief.
-Réponds UNIQUEMENT en JSON compact :
-{"summary":"1 phrase FR","code":"…code principal…","files":[{"path":"src/main.ts","content":"…"}],"stack":["typescript","fastapi"]}
-Le champ code = contenu du fichier principal."""
-
-BUILDER_V0_SYSTEM = """Tu es v0 intégré à CyberForge. Génère des composants React + Tailwind modernes.
-Réponds avec du JSX/TSX dans un bloc de code ou JSON :
-{"summary":"1 phrase FR","code":"…tsx…","files":[{"path":"src/App.tsx","content":"…"}],"stack":["react","typescript","tailwind"]}"""
 
 
 class BuildOutcome(BaseModel):

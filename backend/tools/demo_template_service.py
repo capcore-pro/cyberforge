@@ -747,9 +747,12 @@ def enrich_demo_seed(seed: DemoSeedData) -> DemoSeedData:
     )
 
 
-def build_html_from_seed(seed: DemoSeedData) -> str:
+def build_html_from_seed(seed: DemoSeedData, *, force_template: str | None = None) -> str:
     """Assemble le HTML premium selon le template choisi."""
+    forced = normalize_template_id(force_template) if force_template else None
     seed = enrich_demo_seed(seed)
+    if forced:
+        seed = replace(seed, template=forced)
     prompt = seed.context_prompt or seed.title
     hints = build_prompt_seed_hints(prompt, project_type_label=seed.project_type_label)
     vertical = hints.vertical

@@ -23,8 +23,8 @@ def test_preview_matches_crm_template() -> None:
         title="Application web",
         user_prompt="CRM contacts pipeline commercial",
     )
+    assert preview == doc.html
     assert "cf-premium-crm" in preview
-    assert "saas-shell" not in preview
     assert gen.demo_seed["brand_name"] in preview or doc.seed.brand_name in preview
 
 

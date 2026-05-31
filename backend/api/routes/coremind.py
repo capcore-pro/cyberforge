@@ -60,6 +60,20 @@ class CoreMindRequest(BaseModel):
         max_length=24_000,
         description="Brief enrichi (Firecrawl clone-inspiration) pour ArchitectAI",
     )
+    personal_project: bool = Field(
+        default=False,
+        description="Projet perso — déploiement Pages dédié si vraie app",
+    )
+    pages_project_slug: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Slug Cloudflare Pages dédié (ex. capcore-pro-site)",
+    )
+    project_title: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Titre du projet pour l'export",
+    )
 
 
 class CoreMindRunResponse(CoreMindRunResult):
@@ -148,6 +162,9 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
             generation_mode=body.generation_mode,
             project_id=body.project_id,
             inspiration_brief=body.inspiration_brief,
+            personal_project=body.personal_project,
+            pages_project_slug=body.pages_project_slug,
+            project_title=body.project_title,
         )
         if result.demo_pipeline is not None:
             logger.info(
@@ -171,5 +188,16 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
             )
         except SupabaseStoreError as exc:
             logger.warning("Sauvegarde Supabase ignorée : %s", exc)
+
+    if persistence is not None:
+        from tools.export_demo_persistence import persist_pipeline_cloudflare_demo
+
+        try:
+            await persist_pipeline_cloudflare_demo(
+                run_result=result,
+                generation_id=persistence.generation_id,
+            )
+        except Exception as exc:
+            logger.warning("Persistance démo ExportAI ignorée : %s", exc)
 
     return CoreMindRunResponse(**result.model_dump(), persistence=persistence)

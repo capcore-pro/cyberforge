@@ -28,6 +28,8 @@ _UPDATABLE = frozenset(
         "sales_count",
         "revenue_eur",
         "published_on_capcore",
+        "production_url",
+        "pages_project_slug",
     }
 )
 
@@ -63,8 +65,23 @@ def init_personal_projects_db() -> None:
                 """
             )
             conn.commit()
+            _migrate_personal_projects_columns(conn)
+            conn.commit()
         finally:
             conn.close()
+
+
+def _migrate_personal_projects_columns(conn: sqlite3.Connection) -> None:
+    """Ajoute les colonnes de déploiement Pages si absentes (bases existantes)."""
+    cols = {
+        row[1] for row in conn.execute("PRAGMA table_info(personal_projects)").fetchall()
+    }
+    if "production_url" not in cols:
+        conn.execute("ALTER TABLE personal_projects ADD COLUMN production_url TEXT")
+    if "pages_project_slug" not in cols:
+        conn.execute(
+            "ALTER TABLE personal_projects ADD COLUMN pages_project_slug TEXT"
+        )
 
 
 def _from_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -125,6 +142,8 @@ def create_personal_project(
     demo_id: str | None = None,
     app_type: str | None = None,
     sale_link: str | None = None,
+    production_url: str | None = None,
+    pages_project_slug: str | None = None,
     project_id: str | None = None,
 ) -> dict[str, Any]:
     clean_title = title.strip()
@@ -146,8 +165,9 @@ def create_personal_project(
                     id, title, usage_type, price_eur, commercial_description,
                     project_key, supabase_project_id, managed_id, demo_id,
                     app_type, sale_link, sales_count, revenue_eur,
-                    published_on_capcore, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)
+                    published_on_capcore, production_url, pages_project_slug,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)
                 """,
                 (
                     pid,
@@ -161,6 +181,8 @@ def create_personal_project(
                     (demo_id or "").strip() or None,
                     (app_type or "").strip() or None,
                     (sale_link or "").strip() or None,
+                    (production_url or "").strip() or None,
+                    (pages_project_slug or "").strip() or None,
                     now,
                     now,
                 ),
@@ -203,6 +225,8 @@ def update_personal_project(project_id: str, **fields: Any) -> dict[str, Any] | 
             updates[key] = max(0, int(value))
         elif key in ("revenue_eur", "price_eur"):
             updates[key] = float(value) if value is not None else None
+        elif key in ("production_url", "pages_project_slug", "project_key", "sale_link", "app_type"):
+            updates[key] = (str(value).strip() or None) if value is not None else None
         else:
             updates[key] = value
 
@@ -230,6 +254,16 @@ def update_personal_project(project_id: str, **fields: Any) -> dict[str, Any] | 
             return _from_row(row)
         finally:
             conn.close()
+
+
+def find_personal_project_by_title(title: str) -> dict[str, Any] | None:
+    needle = title.strip().lower()
+    if not needle:
+        return None
+    for row in list_personal_projects(limit=500):
+        if (row.get("title") or "").strip().lower() == needle:
+            return row
+    return None
 
 
 def delete_personal_project(project_id: str) -> bool:

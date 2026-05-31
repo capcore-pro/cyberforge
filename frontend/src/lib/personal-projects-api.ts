@@ -20,6 +20,8 @@ export interface PersonalProject {
   sales_count: number;
   revenue_eur: number;
   published_on_capcore: boolean;
+  production_url: string | null;
+  pages_project_slug: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -59,6 +61,8 @@ export async function createPersonalProject(body: {
   managed_id?: string | null;
   demo_id?: string | null;
   app_type?: string | null;
+  production_url?: string | null;
+  pages_project_slug?: string | null;
 }) {
   return apiRequest<PersonalProject>({
     method: "POST",

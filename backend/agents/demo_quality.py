@@ -1,6 +1,6 @@
 """
 Compat — délègue au pipeline unique (tools.demo_pipeline).
-Aperçu local : conserve le template choisi par ArchitectAI / détection prompt.
+Source de vérité unique : le HTML déployé = celui de la génération si valide.
 """
 
 from __future__ import annotations
@@ -16,6 +16,20 @@ from tools.demo_template_service import (
     seed_from_dict,
     seed_to_code_result,
 )
+from tools.generation_sources import is_usable_preview_html
+
+_HTML_PATHS = frozenset({INDEX_HTML_PATH, "index.html"})
+
+
+def _extract_html_from_generation(generation: CodeGenerateResult) -> str | None:
+    """Extrait index.html depuis files ou code."""
+    for f in generation.files:
+        if f.path in _HTML_PATHS:
+            content = (f.content or "").strip()
+            if content:
+                return content
+    code = (generation.code or "").strip()
+    return code or None
 
 
 def preview_html_from_generation(
@@ -25,10 +39,16 @@ def preview_html_from_generation(
     user_prompt: str | None = None,
 ) -> str:
     """
-    Aperçu local Générateur — template premium aligné sur la seed du projet
-    (CRM, dashboard, landing, facturation ou TaskFlow).
+    Retourne le HTML livrable — sans re-rendu template si le LLM/pipeline
+    a déjà produit un document HTML valide.
     """
+    raw = _extract_html_from_generation(generation)
+    if raw and is_usable_preview_html(raw):
+        return raw
+
     prompt = (user_prompt or generation.summary or title).strip()
+
+    # Chemin template premium : seed explicite (client_demo nominal)
     if generation.demo_seed:
         seed = align_seed_template(
             seed_from_dict(
@@ -39,9 +59,16 @@ def preview_html_from_generation(
             prompt,
             project_type_label=title,
         )
-    else:
-        seed = heuristic_demo_seed(prompt, project_type_label=title)
+        template = normalize_template_id(seed.template)
+        html = build_html_from_seed(seed)
+        if is_valid_demo_html(html, template):
+            return html
 
+    # Dernier recours : HTML brut même partiel, ou heuristique seed
+    if raw:
+        return raw
+
+    seed = heuristic_demo_seed(prompt, project_type_label=title)
     template = normalize_template_id(seed.template)
     html = build_html_from_seed(seed)
     if not is_valid_demo_html(html, template):
