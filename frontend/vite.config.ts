@@ -2,11 +2,11 @@ import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
 import path from "node:path";
-import fs from "node:fs";
 import { electronCspPlugin } from "./vite-csp-plugin";
 
-// .env à la racine du monorepo (voir docs/ARCHITECTURE.md)
+// Monorepo : backend/.env (réel) + .env racine optionnel
 const monorepoRoot = path.resolve(__dirname, "..");
+const backendDir = path.join(monorepoRoot, "backend");
 const DEV_PORT = 5173;
 const DEFAULT_BACKEND_TARGET = "http://127.0.0.1:8002";
 
@@ -15,64 +15,61 @@ function normalizeBackendTarget(raw: string): string {
   return raw.trim().replace(/\/+$/, "").replace(/\/api$/i, "");
 }
 
-function parseEnvValue(raw: string): string {
-  let value = raw.trim();
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    value = value.slice(1, -1);
-  }
-  return value;
-}
-
-/** Charge VITE_* et BACKEND_* depuis backend/.env (non couvert par envDir seul). */
-function loadBackendEnv(): void {
-  const envPath = path.join(monorepoRoot, "backend", ".env");
-  if (!fs.existsSync(envPath)) return;
-  const text = fs.readFileSync(envPath, "utf8");
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const allowed =
-      key.startsWith("VITE_") ||
-      key === "BACKEND_URL" ||
-      key === "BACKEND_HOST" ||
-      key === "BACKEND_PORT";
-    if (!allowed) continue;
-    if (process.env[key] !== undefined) continue;
-    process.env[key] = parseEnvValue(trimmed.slice(eq + 1));
-  }
-}
-
-function resolveBackendProxyTarget(): string {
-  const fromVite = process.env.VITE_API_BASE_URL?.trim();
-  if (fromVite) return normalizeBackendTarget(fromVite);
-
-  const backendUrl = process.env.BACKEND_URL?.trim();
-  if (backendUrl) return normalizeBackendTarget(backendUrl);
-
-  const host = process.env.BACKEND_HOST?.trim() || "127.0.0.1";
-  const port = process.env.BACKEND_PORT?.trim() || "8002";
-  return `http://${host}:${port}`;
-}
-
-/** Proxy /api → FastAPI (dev + preview). */
-function createApiProxy(target: string): Record<string, ProxyOptions> {
+/** Fusionne backend/.env puis .env racine (racine prioritaire). */
+function loadMergedEnv(mode: string): Record<string, string> {
   return {
-    "/api": {
-      target,
-      changeOrigin: true,
-      secure: false,
-      ws: true,
-    },
+    ...loadEnv(mode, backendDir, ""),
+    ...loadEnv(mode, monorepoRoot, ""),
   };
 }
 
-loadBackendEnv();
+function resolveBackendProxyTarget(env: Record<string, string>): string {
+  const fromVite = env.VITE_API_BASE_URL?.trim();
+  if (fromVite) return normalizeBackendTarget(fromVite);
+
+  const backendUrl = env.BACKEND_URL?.trim();
+  if (backendUrl) return normalizeBackendTarget(backendUrl);
+
+  const host = env.BACKEND_HOST?.trim() || "127.0.0.1";
+  const port = env.BACKEND_PORT?.trim() || "8002";
+  return `http://${host}:${port}`;
+}
+
+/** Évite une boucle proxy si VITE_API_BASE_URL pointe vers le serveur Vite. */
+function sanitizeProxyTarget(raw: string): string {
+  const normalized = normalizeBackendTarget(raw) || DEFAULT_BACKEND_TARGET;
+  try {
+    const url = new URL(normalized);
+    if (url.port === String(DEV_PORT) || url.hostname === "localhost" && url.port === String(DEV_PORT)) {
+      console.warn(
+        `[vite] VITE_API_BASE_URL pointe vers :${DEV_PORT} — proxy forcé vers ${DEFAULT_BACKEND_TARGET}`,
+      );
+      return DEFAULT_BACKEND_TARGET;
+    }
+  } catch {
+    return DEFAULT_BACKEND_TARGET;
+  }
+  return normalized;
+}
+
+/** Proxy dev/preview → FastAPI (routes /api/* et /cms/panel.js). */
+function createDevProxy(target: string): Record<string, ProxyOptions> {
+  const resolved = sanitizeProxyTarget(target);
+  console.info(`[vite] Proxy API → ${resolved}`);
+
+  const common: ProxyOptions = {
+    target: resolved,
+    changeOrigin: true,
+    secure: false,
+    ws: true,
+  };
+
+  return {
+    "/api": common,
+    // Panneau CMS injecté dans les HTML générés (hors préfixe /api)
+    "/cms": common,
+  };
+}
 
 const resolveAlias = {
   "@": path.resolve(__dirname, "src"),
@@ -81,23 +78,47 @@ const resolveAlias = {
 
 // Configuration Vite : React côté renderer, Electron pour le processus principal
 export default defineConfig(({ mode }) => {
-  loadEnv(mode, monorepoRoot, "VITE_");
-  const backendTarget = resolveBackendProxyTarget() || DEFAULT_BACKEND_TARGET;
-  const apiProxy = createApiProxy(backendTarget);
+  const env = loadMergedEnv(mode);
+  const backendTarget = resolveBackendProxyTarget(env);
+  const apiProxy = createDevProxy(backendTarget);
 
   return {
-    envDir: monorepoRoot,
+    // Charge VITE_* depuis backend/.env (fichier réel du projet)
+    envDir: backendDir,
     plugins: [
       electronCspPlugin(),
       react(),
       electron({
         main: {
           entry: "electron/main.ts",
-          vite: { resolve: { alias: resolveAlias } },
+          vite: {
+            resolve: { alias: resolveAlias },
+            build: {
+              rollupOptions: {
+                external: ["electron"],
+              },
+            },
+          },
         },
         preload: {
           input: path.join(__dirname, "electron/preload.ts"),
-          vite: { resolve: { alias: resolveAlias } },
+          vite: {
+            resolve: { alias: resolveAlias },
+            build: {
+              rollupOptions: {
+                external: ["electron"],
+                output: {
+                  format: "cjs",
+                  entryFileNames: "preload.cjs",
+                  inlineDynamicImports: true,
+                },
+              },
+              minify: false,
+            },
+          },
+        },
+        onstart({ startup }) {
+          startup();
         },
       }),
     ],

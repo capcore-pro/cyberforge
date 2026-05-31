@@ -7,6 +7,10 @@ import type { ApiResponsePayload } from "@shared/ipc";
 
 /** URL de base du backend FastAPI, sans slash final ni suffixe /api. */
 export function getBackendBaseUrl(): string {
+  // Dev navigateur : chemins relatifs /api → proxy Vite (voir vite.config.ts)
+  if (import.meta.env.DEV) {
+    return "";
+  }
   const raw =
     import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
   return normalizeBackendBaseUrl(raw);

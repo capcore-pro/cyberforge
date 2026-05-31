@@ -23,7 +23,7 @@ function createWindow(): void {
       // Sécurité : pas de Node.js dans le renderer, pont IPC via preload
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, "preload.mjs"),
+      preload: path.join(__dirname, "preload.cjs"),
     },
   });
 

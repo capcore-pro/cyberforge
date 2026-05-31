@@ -8,8 +8,8 @@ interface LayoutProps {
  * Mise en page principale : zone plein écran et pied de page système.
  */
 export function Layout({ children }: LayoutProps) {
-  const version = window.cyberforge?.getVersion() ?? "—";
-  const platform = window.cyberforge?.getPlatform() ?? "—";
+  const version = window.cyberforge?.getVersion?.() ?? "—";
+  const platform = window.cyberforge?.getPlatform?.() ?? "—";
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-cf-main">
