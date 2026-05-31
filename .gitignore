@@ -184,6 +184,9 @@ backend/documents/
 backend/media/
 /media/
 
+# PDFs juridiques générés dynamiquement (Legal Generator)
+documents/
+
 # Builds desktop Electron (générateur)
 backend/temp_builds/*
 !backend/temp_builds/.gitkeep
