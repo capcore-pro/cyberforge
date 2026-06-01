@@ -8,6 +8,8 @@ import html as html_lib
 import re
 from pathlib import Path
 
+from tools.demo_preview_gate import strip_internal_preview_chrome
+
 _LAST_VITRINE_DUMP = Path(__file__).resolve().parent.parent / "temp" / "_last_vitrine_preview.html"
 
 _REACT_MARKERS = re.compile(
@@ -71,8 +73,10 @@ def extract_unlocked_demo_html(html: str) -> str:
     if len(inner) > 400 and "```" not in inner[:200]:
         title_m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.I)
         title = (title_m.group(1) if title_m else "Site vitrine").strip()
-        return normalize_vitrine_html_document(inner, page_title=title, client_name="")
-    return html
+        return strip_internal_preview_chrome(
+            normalize_vitrine_html_document(inner, page_title=title, client_name="")
+        )
+    return strip_internal_preview_chrome(html)
 
 
 def strip_react_and_framework_refs(html: str) -> str:

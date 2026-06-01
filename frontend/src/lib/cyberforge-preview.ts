@@ -19,21 +19,44 @@ export function withCyberforgeInternalPreview(url: string): string {
   }
 }
 
-/** Déverrouille l'écran mot de passe pour iframe srcDoc (pas d'URL). */
-export function prepareInternalPreviewSrcDoc(html: string): string {
-  const body = html.trim();
-  if (!body || !body.toLowerCase().includes("cf-login-screen")) {
-    return body;
-  }
-  const unlock = `<script>(function(){var l=document.getElementById("cf-login-screen");var d=document.getElementById("cf-demo-content");if(l&&d){l.style.display="none";d.classList.add("cf-unlocked");d.removeAttribute("aria-hidden");}var b=document.getElementById("cf-lock-btn");if(b){b.remove();}})();</script>`;
-  let doc = body;
-  if (/<head\b/i.test(doc)) {
-    doc = doc.replace(/<head([^>]*)>/i, `<head$1>${unlock}`);
-  } else {
-    doc = unlock + doc;
-  }
-  return doc.replace(
-    /<button\b[^>]*\bid\s*=\s*["']cf-lock-btn["'][^>]*>[\s\S]*?<\/button>/gi,
+const INTERNAL_PREVIEW_HIDE_LOCK =
+  '<style id="cf-internal-preview-chrome">#cf-lock-btn,.cf-lock-btn{display:none!important;visibility:hidden!important;pointer-events:none!important;height:0!important;overflow:hidden!important}</style>';
+
+function stripLockButtonChrome(html: string): string {
+  let doc = html.replace(
+    /<button\b[^>]*\bid\s*=\s*["']?cf-lock-btn["']?[^>]*>[\s\S]*?<\/button>/gi,
     "",
   );
+  doc = doc.replace(
+    /<button\b[^>]*\bclass\s*=\s*["'][^"']*\bcf-lock-btn\b[^"']*["'][^>]*>[\s\S]*?<\/button>/gi,
+    "",
+  );
+  if (!doc.includes('id="cf-internal-preview-chrome"')) {
+    if (/<head\b/i.test(doc)) {
+      doc = doc.replace(/<head([^>]*)>/i, `<head$1>${INTERNAL_PREVIEW_HIDE_LOCK}`);
+    } else if (/<body\b/i.test(doc)) {
+      doc = doc.replace(/<body([^>]*)>/i, `<body$1>${INTERNAL_PREVIEW_HIDE_LOCK}`);
+    } else {
+      doc = INTERNAL_PREVIEW_HIDE_LOCK + doc;
+    }
+  }
+  return doc;
+}
+
+/** Aperçu in-app (iframe srcDoc) — sans écran mot de passe ni bouton Verrouiller. */
+export function prepareInternalPreviewSrcDoc(html: string): string {
+  const body = html.trim();
+  if (!body) {
+    return body;
+  }
+  const unlock = `<script>(function(){var l=document.getElementById("cf-login-screen");var d=document.getElementById("cf-demo-content");if(l&&d){l.style.display="none";d.classList.add("cf-unlocked");d.removeAttribute("aria-hidden");}var b=document.getElementById("cf-lock-btn");if(b){b.remove();}document.querySelectorAll(".cf-lock-btn").forEach(function(n){n.remove();});})();</script>`;
+  let doc = body;
+  if (body.toLowerCase().includes("cf-login-screen")) {
+    if (/<head\b/i.test(doc)) {
+      doc = doc.replace(/<head([^>]*)>/i, `<head$1>${unlock}`);
+    } else {
+      doc = unlock + doc;
+    }
+  }
+  return stripLockButtonChrome(doc);
 }

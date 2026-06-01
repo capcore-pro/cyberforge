@@ -12,15 +12,29 @@ CYBERFORGE_INTERNAL_PREVIEW_QUERY = "preview"
 CYBERFORGE_INTERNAL_PREVIEW_VALUE = "cyberforge_internal"
 
 
+_INTERNAL_PREVIEW_HIDE_LOCK_CSS = (
+    '<style id="cf-internal-preview-chrome">'
+    "#cf-lock-btn,.cf-lock-btn{display:none!important;visibility:hidden!important;"
+    "pointer-events:none!important;height:0!important;overflow:hidden!important}"
+    "</style>"
+)
+
+
 def strip_internal_preview_chrome(html: str) -> str:
     """Retire le bouton Verrouiller (réservé aux liens client livrés)."""
     if not html:
         return html
     out = re.sub(
-        r'<button\b[^>]*\bid\s*=\s*["\']cf-lock-btn["\'][^>]*>[\s\S]*?</button>',
+        r'<button\b[^>]*\bid\s*=\s*["\']?cf-lock-btn["\']?[^>]*>[\s\S]*?</button>',
         "",
         html,
-        count=1,
+        flags=re.I,
+    )
+    out = re.sub(
+        r'<button\b[^>]*\bclass\s*=\s*["\'][^"\']*\bcf-lock-btn\b[^"\']*["\'][^>]*>'
+        r"[\s\S]*?</button>",
+        "",
+        out,
         flags=re.I,
     )
     out = re.sub(
@@ -29,6 +43,32 @@ def strip_internal_preview_chrome(html: str) -> str:
         out,
         flags=re.I,
     )
+    out = re.sub(
+        r"\.cf-lock-btn\s*\{[^}]*\}",
+        "",
+        out,
+        count=1,
+        flags=re.I,
+    )
+    if 'id="cf-internal-preview-chrome"' not in out:
+        if re.search(r"</head>", out, re.I):
+            out = re.sub(
+                r"(</head>)",
+                _INTERNAL_PREVIEW_HIDE_LOCK_CSS + r"\1",
+                out,
+                count=1,
+                flags=re.I,
+            )
+        elif re.search(r"<body[^>]*>", out, re.I):
+            out = re.sub(
+                r"(<body[^>]*>)",
+                r"\1" + _INTERNAL_PREVIEW_HIDE_LOCK_CSS,
+                out,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            out = _INTERNAL_PREVIEW_HIDE_LOCK_CSS + out
     return out
 
 

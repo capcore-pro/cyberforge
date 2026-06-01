@@ -4,7 +4,6 @@ Catalogue templates sectoriels — project_type + pricing_category + secteur.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -42,8 +41,26 @@ _VITRINE_SECTOR_FILES: dict[str, str] = {
 }
 
 _ECOMMERCE_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("boulanger", "pâtiss", "patiss", "épicerie", "alimentaire", "bio", "primeur"), "ecommerce_alimentaire.html"),
-    (("mode", "vêtement", "vetement", "boutique", "prêt", "pret", "fashion"), "ecommerce_mode.html"),
+    (
+        (
+            "boulanger",
+            "pâtiss",
+            "patiss",
+            "pâtisserie",
+            "patisserie",
+            "épicerie",
+            "alimentaire",
+            "bio",
+            "primeur",
+            "gourmand",
+            "chocolat",
+        ),
+        "ecommerce_alimentaire.html",
+    ),
+    (
+        ("mode", "vêtement", "vetement", "prêt-à-porter", "pret", "fashion", "lingerie"),
+        "ecommerce_mode.html",
+    ),
 )
 
 _RESERVATION_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
@@ -53,13 +70,22 @@ _RESERVATION_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
 
 _APP_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("crm", "client", "prospect", "pipeline", "commercial"), "app_crm.html"),
-    (("dashboard", "analytics", "kpi", "statistique", "saas", "tableau de bord"), "app_dashboard.html"),
+    (("dashboard", "analytics", "kpi", "statistique", "tableau de bord"), "app_dashboard.html"),
 )
 
 _DESKTOP_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("artisan", "btp", "plomb", "électric", "electric", "chantier"), "desktop_artisan.html"),
     (("gestion", "stock", "facture", "devis", "erp", "compta"), "desktop_gestion.html"),
 )
+
+# Famille de templates imposée par pricing_category (priorité absolue).
+_CATEGORY_TO_FAMILY: dict[str, str] = {
+    "ecommerce": "ecommerce",
+    "site_reservation": "reservation",
+    "application_web": "app",
+    "application_desktop": "desktop",
+    "vitrine_next": "vitrine",
+}
 
 
 def _blob(sector: str, user_prompt: str) -> str:
@@ -75,6 +101,45 @@ def _match_hints(
         if any(kw in blob for kw in keywords):
             return filename
     return default
+
+
+def _project_type_value(plan: Any) -> str:
+    pt = getattr(plan, "project_type", None)
+    return (pt.value if hasattr(pt, "value") else str(pt or "")).strip().lower()
+
+
+def _resolve_template_family(category: str, pt_value: str) -> str:
+    """
+    Choisit la famille de templates (ecommerce, app, vitrine, …).
+    pricing_category prime ; le secteur n'influence pas la famille, seulement le fichier dans la famille.
+    """
+    cat = (category or "").strip().lower()
+
+    if cat == "ecommerce":
+        return "ecommerce"
+    if cat == "site_reservation":
+        return "reservation"
+    if cat == "application_desktop":
+        return "desktop"
+    if cat == "vitrine_next":
+        return "vitrine"
+
+    # Générateur CyberForge « E-commerce » (project_type saas_dashboard).
+    if pt_value == "saas_dashboard":
+        return "ecommerce"
+
+    if cat == "application_web" or pt_value in (
+        "application_web",
+        "api_backend",
+        "application_mobile",
+    ):
+        return "app"
+
+    if pt_value == "application_desktop":
+        return "desktop"
+    if pt_value in ("site_web", "landing_page"):
+        return "vitrine"
+    return "vitrine"
 
 
 def resolve_vitrine_template_file(sector: str, user_prompt: str = "") -> str:
@@ -94,24 +159,20 @@ def resolve_sector_template_from_plan(
 ) -> tuple[str, str]:
     """
     Retourne (template_id, filename) selon pricing_category / project_type / secteur.
+    Le secteur affine le choix à l'intérieur de la famille uniquement.
     """
     blob = _blob(sector, user_prompt)
     category = (getattr(plan, "pricing_category", None) or "").strip().lower()
-    pt = getattr(plan, "project_type", None)
-    pt_value = pt.value if hasattr(pt, "value") else str(pt or "")
+    pt_value = _project_type_value(plan)
+    family = _resolve_template_family(category, pt_value)
 
-    if category == "ecommerce" or "ecommerce" in blob or "boutique" in blob:
+    if family == "ecommerce":
         filename = _match_hints(blob, _ECOMMERCE_HINTS, "ecommerce_default.html")
-    elif category == "site_reservation" or any(
-        x in blob for x in ("réservation", "reservation", "rdv", "rendez-vous", "planity", "doctolib")
-    ):
+    elif family == "reservation":
         filename = _match_hints(blob, _RESERVATION_HINTS, "reservation_default.html")
-    elif category == "application_desktop" or pt_value == "application_desktop":
+    elif family == "desktop":
         filename = _match_hints(blob, _DESKTOP_HINTS, "desktop_default.html")
-    elif category in ("application_web", "saas_dashboard") or pt_value in (
-        "application_web",
-        "saas_dashboard",
-    ):
+    elif family == "app":
         filename = _match_hints(blob, _APP_HINTS, "app_default.html")
     else:
         filename = resolve_vitrine_template_file(sector, user_prompt)

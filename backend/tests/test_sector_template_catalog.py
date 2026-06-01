@@ -59,3 +59,42 @@ def test_desktop_gestion_template() -> None:
 def test_vitrine_fallback() -> None:
     fname = resolve_vitrine_template_file("boulangerie", "boulangerie artisanale")
     assert fname == "vitrine_alimentaire.html"
+
+
+def test_ecommerce_patisserie_rouen_not_app_dashboard() -> None:
+    """E-commerce + prompt pâtisserie → ecommerce_alimentaire, jamais app_*."""
+    plan = _plan("ecommerce", ProjectType.SAAS_DASHBOARD)
+    tid, fname = resolve_sector_template_from_plan(
+        plan, "commerce", "boutique pâtisserie Rouen"
+    )
+    assert tid == "ecommerce_alimentaire"
+    assert fname.startswith("ecommerce_")
+    assert not tid.startswith("app_")
+
+
+def test_saas_dashboard_pt_maps_ecommerce_even_with_application_web_category() -> None:
+    """Carte E-commerce UI : saas_dashboard ne doit pas retomber sur app_dashboard."""
+    plan = _plan("application_web", ProjectType.SAAS_DASHBOARD)
+    tid, _ = resolve_sector_template_from_plan(
+        plan, "commerce", "catalogue produits en ligne"
+    )
+    assert tid.startswith("ecommerce_")
+    assert tid != "app_dashboard"
+
+
+def test_ecommerce_category_overrides_application_web_pt() -> None:
+    plan = _plan("ecommerce", ProjectType.APPLICATION_WEB)
+    tid, _ = resolve_sector_template_from_plan(
+        plan, "commerce", "tableau de bord ventes"
+    )
+    assert tid.startswith("ecommerce_")
+    assert tid != "app_dashboard"
+
+
+def test_application_web_stays_app_family_despite_boutique_in_prompt() -> None:
+    plan = _plan("application_web", ProjectType.APPLICATION_WEB)
+    tid, _ = resolve_sector_template_from_plan(
+        plan, "commerce", "boutique pâtisserie Rouen"
+    )
+    assert tid.startswith("app_")
+    assert not tid.startswith("ecommerce_")
