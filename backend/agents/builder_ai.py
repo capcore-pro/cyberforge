@@ -206,6 +206,7 @@ def assemble_template_html(
     user_prompt: str = "",
     template_id: str = "vitrine_default",
     skip_content_fill: bool = False,
+    strict_validate: bool = True,
 ) -> AgentResult[VitrineAssemblyResult]:
     """
     Flux template-first BuilderAI v2 :
@@ -256,7 +257,7 @@ def assemble_template_html(
 
         final_html, report = optimize_html(
             strip_markdown_code_fences(filled_html),
-            strict=True,
+            strict=strict_validate,
         )
         generation = code_result_from_html(
             final_html,

@@ -927,10 +927,33 @@ async def builder_node(
     }
 
 
+def _block_coremind_builder_fallback(state: PipelineState) -> bool:
+    """E-commerce / template sectoriel : ne jamais envoyer vers CoreMind dashboard."""
+    plan = state.get("architect_plan")
+    if not plan:
+        return False
+    from agents.builder_agent import must_force_sector_template_assembly
+
+    return must_force_sector_template_assembly(
+        plan,
+        sector_template_html=_sector_template_html_from_state(state),
+        sector_template=state.get("sector_template"),
+    )
+
+
 def _route_after_builder(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
     if state.get("builder_fallback", True):
+        if _block_coremind_builder_fallback(state):
+            logger.error(
+                "[BuilderAI] fallback CoreMind BLOQUÉ — template sectoriel requis "
+                "(category=%s)",
+                getattr(state.get("architect_plan"), "pricing_category", "?"),
+            )
+            if state.get("generation"):
+                return "visionui"
+            return "finalize"
         return "coremind"
     if state.get("generation"):
         return "visionui"
@@ -1996,6 +2019,29 @@ async def finalize_node(
 
     from agents.demo_quality import code_result_from_html, preview_html_from_generation
     from tools.demo_preview_gate import prepare_internal_app_preview_html
+    from tools.html_markdown import strip_markdown_code_fences
+
+    if generation:
+        from tools.codegen_service import CodeGenerateResult, GeneratedFile
+
+        files_out: list[GeneratedFile] = []
+        for f in getattr(generation, "files", None) or []:
+            path = str(getattr(f, "path", "") or "")
+            content = str(getattr(f, "content", "") or "")
+            if path.lower().endswith((".html", ".htm")):
+                content = strip_markdown_code_fences(content)
+            files_out.append(GeneratedFile(path=path, content=content))
+        generation = CodeGenerateResult(
+            summary=generation.summary,
+            code=strip_markdown_code_fences(str(getattr(generation, "code", None) or "")),
+            files=files_out or list(getattr(generation, "files", None) or []),
+            stack=list(generation.stack),
+            model=generation.model,
+            provider=generation.provider,
+            demo_seed=generation.demo_seed,
+        )
+
+    preview_html = strip_markdown_code_fences(str(preview_html or "")) or None
 
     if not (preview_html or "").strip() and generation:
         preview_html = preview_html_from_generation(

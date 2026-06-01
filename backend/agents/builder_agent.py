@@ -54,6 +54,46 @@ from core.agent_contract import require_ok
 
 logger = logging.getLogger(__name__)
 
+# Catégories template-first : si sector_template_html est dans le state → assemblage obligatoire.
+_FORCED_ASSEMBLY_PRICING_CATEGORIES = frozenset(
+    {
+        "ecommerce",
+        "site_reservation",
+        "application_web",
+        "application_desktop",
+    }
+)
+
+
+def must_force_sector_template_assembly(
+    plan: ArchitectPlan,
+    *,
+    sector_template_html: str | None,
+    sector_template: dict[str, Any] | None,
+) -> bool:
+    """
+    True si le pipeline a déjà un template sectoriel et qu'on ne doit jamais
+    retomber sur CoreMind / v0 (ecommerce, réservation, app, desktop).
+    """
+    category = (getattr(plan, "pricing_category", None) or "").strip().lower()
+    pt = plan.project_type.value if hasattr(plan.project_type, "value") else str(
+        plan.project_type
+    )
+    category_ok = category in _FORCED_ASSEMBLY_PRICING_CATEGORIES or pt == "saas_dashboard"
+    if not category_ok:
+        return False
+
+    html = (sector_template_html or "").strip()
+    if len(html) >= 200:
+        return True
+    if isinstance(sector_template, dict):
+        for key in ("html", "html_raw"):
+            chunk = sector_template.get(key)
+            if isinstance(chunk, str) and len(chunk.strip()) >= 200:
+                return True
+    return False
+
+
 _UI_KEYWORDS = re.compile(
     r"\b(react|next\.?js|nextjs|jsx|tsx|tailwind|shadcn|ui|interface|"
     r"composant|component|landing|dashboard|design)\b",
@@ -186,14 +226,39 @@ class BuilderAgent(BaseAgent):
         """
         del settings  # réservé extensions
 
+        force_assembly = must_force_sector_template_assembly(
+            plan,
+            sector_template_html=sector_template_html,
+            sector_template=sector_template,
+        )
         uses_assembly = uses_template_assembly(plan, generation_mode=generation_mode)
         logger.info(
-            "[BuilderAI] build | project_type=%s | pricing_category=%s | generation_mode=%s | uses_template_assembly=%s",
+            "[BuilderAI] build | project_type=%s | pricing_category=%s | generation_mode=%s | "
+            "uses_template_assembly=%s | force_sector_assembly=%s | sector_html_chars=%d",
             plan.project_type.value,
             getattr(plan, "pricing_category", ""),
             generation_mode,
             uses_assembly,
+            force_assembly,
+            len((sector_template_html or "").strip()),
         )
+        if force_assembly:
+            logger.info(
+                "[BuilderAI] FORCE assemble_template_html — pas de CoreMind/v0 "
+                "(sector_template_html présent, category=%s)",
+                getattr(plan, "pricing_category", ""),
+            )
+            return await self._build_template_assembly(
+                prompt,
+                plan=plan,
+                research_brief=research_brief,
+                generation_mode=generation_mode,
+                design_system=design_system,
+                sector_template_html=sector_template_html,
+                sector_template=sector_template,
+                forbid_coremind_fallback=True,
+            )
+
         if uses_assembly:
             return await self._build_template_assembly(
                 prompt,
@@ -203,6 +268,7 @@ class BuilderAgent(BaseAgent):
                 design_system=design_system,
                 sector_template_html=sector_template_html,
                 sector_template=sector_template,
+                forbid_coremind_fallback=False,
             )
 
         return await self._build_llm(
@@ -225,6 +291,7 @@ class BuilderAgent(BaseAgent):
         design_system: Any | None,
         sector_template_html: str | None,
         sector_template: dict[str, Any] | None,
+        forbid_coremind_fallback: bool = False,
     ) -> BuilderRunResult:
         mode = (generation_mode or "client_demo").strip().lower()
         html, client_name, sector, city, template_id, already_filled = resolve_assembly_inputs(
@@ -252,13 +319,26 @@ class BuilderAgent(BaseAgent):
 
         if not html:
             logger.error("[BuilderAI] assemblage — template HTML absent")
-            return BuilderRunResult(
-                decision=BuilderDecision(
-                    provider=BuilderProvider.ASSEMBLY,
-                    rationale="Template sectoriel manquant.",
-                ),
-                fallback_to_coremind=True,
-            )
+            if forbid_coremind_fallback:
+                from tools.sector_template_catalog import load_sector_template_html_for_plan
+
+                sector_key = sector or plan.secteur or "commerce"
+                template_id, _fname, html = load_sector_template_html_for_plan(
+                    plan, sector_key, prompt
+                )
+                already_filled = False
+                logger.warning(
+                    "[BuilderAI] rechargement catalogue %s (forbid CoreMind)",
+                    template_id,
+                )
+            if not html:
+                return BuilderRunResult(
+                    decision=BuilderDecision(
+                        provider=BuilderProvider.ASSEMBLY,
+                        rationale="Template sectoriel manquant.",
+                    ),
+                    fallback_to_coremind=not forbid_coremind_fallback,
+                )
 
         assembly = assemble_template_html(
             template_html=html,
@@ -270,12 +350,34 @@ class BuilderAgent(BaseAgent):
             user_prompt=prompt,
             template_id=template_id,
             skip_content_fill=already_filled,
+            strict_validate=True,
         )
 
         if not assembly.ok:
             err = assembly.error
+            logger.warning(
+                "[BuilderAI] assemble_template_html échec (strict) | code=%s | %s — retry loose=%s",
+                err.code if err else "?",
+                err.message if err else assembly,
+                forbid_coremind_fallback,
+            )
+            assembly = assemble_template_html(
+                template_html=html,
+                client_name=client_name,
+                sector=sector,
+                city=city,
+                research_content=research_brief,
+                design_system=design_system,
+                user_prompt=prompt,
+                template_id=template_id,
+                skip_content_fill=already_filled,
+                strict_validate=False,
+            )
+
+        if not assembly.ok:
+            err = assembly.error
             logger.error(
-                "[BuilderAI] assemblage échec | mode=%s | code=%s | %s",
+                "[BuilderAI] assemble_template_html échec | mode=%s | code=%s | %s",
                 mode,
                 err.code if err else "?",
                 err.message if err else assembly,
@@ -285,7 +387,7 @@ class BuilderAgent(BaseAgent):
                     provider=BuilderProvider.ASSEMBLY,
                     rationale="Assemblage template impossible.",
                 ),
-                fallback_to_coremind=True,
+                fallback_to_coremind=not forbid_coremind_fallback,
             )
 
         data = require_ok(assembly)
