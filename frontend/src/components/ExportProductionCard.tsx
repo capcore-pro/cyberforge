@@ -1,5 +1,6 @@
 import { PasswordRevealField } from "@/components/PasswordRevealField";
 import { buildClientDemoGmailComposeUrl } from "@/lib/gmail-compose-url";
+import { withCyberforgeInternalPreview } from "@/lib/cyberforge-preview";
 
 interface ExportProductionCardProps {
   productionUrl: string | null | undefined;
@@ -23,8 +24,8 @@ export function ExportProductionCard({
     return null;
   }
 
-  const openUrl = productionUrl.trim();
-  const clientUrl = unlockUrl?.trim() || openUrl;
+  const openUrl = withCyberforgeInternalPreview(productionUrl.trim());
+  const clientUrl = unlockUrl?.trim() || productionUrl.trim();
 
   const gmailComposeUrl = buildClientDemoGmailComposeUrl({
     url: clientUrl,

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{HERO_TITLE}} — {{SECTOR}} · {{CITY}}</title>
+  <link rel="stylesheet" href="{{GOOGLE_FONTS_URL}}" />
+  <style>
+    :root { --primary: {{PRIMARY_COLOR}}; --secondary: {{SECONDARY_COLOR}}; --font-h: '{{FONT_HEADING}}', serif; --font-b: '{{FONT_BODY}}', sans-serif; --shadow: 0 4px 24px rgba(0,0,0,0.1); --radius: 10px; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:var(--font-b);background:var(--secondary);color:#1a202c;line-height:1.6}
+    h1,h2,h3{font-family:var(--font-h);font-weight:700}
+    .wrap{width:min(1140px,92vw);margin:0 auto}
+    .nav{position:fixed;inset:0 0 auto 0;z-index:100;background:#fff;box-shadow:0 2px 16px rgba(0,0,0,.06)}
+    .nav-inner{display:flex;align-items:center;justify-content:space-between;padding:.9rem 0}
+    .logo{font-family:var(--font-h);font-size:1.3rem;color:var(--primary);font-weight:700}
+    .nav a{margin-left:1.25rem;color:#4a5568;font-weight:500;font-size:.95rem}
+    .nav a:hover{color:var(--primary)}
+    .hero{margin-top:4rem;padding:5rem 0;background:linear-gradient(120deg,var(--primary),#2d3748);color:#fff;text-align:center}
+    .hero h1{font-size:clamp(2rem,4.5vw,3.2rem);margin-bottom:1rem}
+    .hero p{font-size:1.15rem;max-width:560px;margin:0 auto 2rem;opacity:.95}
+    .btn{display:inline-block;padding:.9rem 2rem;background:#fff;color:var(--primary);border-radius:8px;font-weight:700;transition:transform .2s,box-shadow .2s;border:none;cursor:pointer;font-size:1rem}
+    .btn:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.2)}
+    section{padding:4.5rem 0}
+    .title{text-align:center;font-size:clamp(1.6rem,3vw,2.2rem);margin-bottom:2.5rem;color:var(--primary)}
+    .grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.5rem}
+    .svc{background:#fff;border-radius:var(--radius);padding:1.75rem;box-shadow:var(--shadow);transition:transform .25s;border-top:4px solid var(--primary)}
+    .svc:hover{transform:translateY(-5px)}
+    .svc .ico{font-size:2.2rem;margin-bottom:.75rem}
+    .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+    .gallery img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:var(--radius);transition:transform .3s}
+    .gallery img:hover{transform:scale(1.03)}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;text-align:center}
+    .stat{background:#fff;padding:2rem;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .stat strong{display:block;font-size:2.5rem;color:var(--primary);font-family:var(--font-h)}
+    .devis{max-width:520px;margin:0 auto;background:#fff;padding:2rem;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .devis label{display:block;font-weight:600;margin:.5rem 0 .25rem;font-size:.9rem}
+    .devis input,.devis select,.devis textarea{width:100%;padding:.7rem;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:.75rem;font:inherit}
+    footer{background:var(--primary);color:#fff;text-align:center;padding:2.5rem 0;margin-top:2rem}
+    .reveal{opacity:0;transform:translateY(24px);transition:opacity .65s,transform .65s}
+    .reveal.visible{opacity:1;transform:none}
+    @media(max-width:768px){.gallery{grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:1fr}.nav a{display:none}}
+  </style>
+</head>
+<body>
+  <header class="nav"><div class="wrap nav-inner"><a href="#" class="logo">{{CLIENT_NAME}}</a>
+    <nav><a href="#services">Services</a><a href="#realisations">Réalisations</a><a href="#devis">Devis</a></nav></div></header>
+  <section class="hero reveal"><div class="wrap"><h1>{{HERO_TITLE}}</h1><p>{{HERO_SUBTITLE}}</p><a href="#devis" class="btn">Devis gratuit</a></div></section>
+  <section id="services" class="reveal"><div class="wrap"><h2 class="title">Nos services</h2>
+    <div class="grid-4">
+      <article class="svc"><div class="ico">🔧</div><h3>{{SERVICE_1}}</h3><p>Intervention rapide à {{CITY}} — devis transparent.</p></article>
+      <article class="svc"><div class="ico">⚡</div><h3>{{SERVICE_2}}</h3><p>Travail soigné, normes respectées, garantie décennale.</p></article>
+      <article class="svc"><div class="ico">🏠</div><h3>{{SERVICE_3}}</h3><p>Particuliers et professionnels — {{SECTOR}}.</p></article>
+      <article class="svc"><div class="ico">✅</div><h3>Dépannage</h3><p>Urgence 7j/7 — {{PHONE}}</p></article>
+    </div></div></section>
+  <section id="realisations" class="reveal" style="background:#fff"><div class="wrap"><h2 class="title">Réalisations</h2>
+    <div class="gallery">
+      <img src="https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=600&q=80" alt="Projet 1" loading="lazy"/>
+      <img src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=600&q=80" alt="Projet 2" loading="lazy"/>
+      <img src="https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=600&q=80" alt="Projet 3" loading="lazy"/>
+      <img src="https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?w=600&q=80" alt="Projet 4" loading="lazy"/>
+      <img src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=600&q=80" alt="Projet 5" loading="lazy"/>
+      <img src="https://images.unsplash.com/photo-1590486803833-1c5dc8ddd4c8?w=600&q=80" alt="Projet 6" loading="lazy"/>
+    </div></div></section>
+  <section class="reveal"><div class="wrap"><h2 class="title">Pourquoi nous choisir</h2>
+    <div class="stats">
+      <div class="stat reveal"><strong>15+</strong><span>ans d'expérience</span></div>
+      <div class="stat reveal"><strong>500+</strong><span>clients satisfaits</span></div>
+      <div class="stat reveal"><strong>48h</strong><span>délai devis moyen</span></div>
+    </div></div></section>
+  <section id="devis" class="reveal"><div class="wrap"><h2 class="title">Demande de devis</h2>
+    <form class="devis" action="#" onsubmit="return false;">
+      <label>Nom</label><input type="text" name="name" required />
+      <label>Téléphone</label><input type="tel" name="phone" required placeholder="{{PHONE}}" />
+      <label>Type de travaux</label><select name="type"><option>{{SERVICE_1}}</option><option>{{SERVICE_2}}</option><option>{{SERVICE_3}}</option><option>Autre</option></select>
+      <label>Message</label><textarea name="message" rows="4" required></textarea>
+      <button type="submit" class="btn" style="width:100%;background:var(--primary);color:#fff">{{CTA_TEXT}}</button>
+    </form></div></section>
+  <footer><div class="wrap"><p><strong>{{CLIENT_NAME}}</strong> · {{ADDRESS}} · {{CITY}}</p><p style="margin-top:.5rem">{{EMAIL}} · {{PHONE}}</p></div></footer>
+  <script>document.querySelectorAll('.reveal').forEach(el=>new IntersectionObserver((e,o)=>e.forEach(x=>{if(x.isIntersecting){x.target.classList.add('visible');o.unobserve(x.target)}}),{threshold:.1}).observe(el));</script>
+</body>
+</html>

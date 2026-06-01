@@ -248,6 +248,10 @@ class CoreMindRunResult(BaseModel):
         default=None,
         description="Plan ArchitectAI (type, template, complexité, tarification)",
     )
+    design_system: dict[str, Any] | None = Field(
+        default=None,
+        description="Loi visuelle DesignSystemAI (JSON contractuel)",
+    )
     generation: CodeGenerateResult
     metrics: GenerationMetrics
     planned_models: list[str] = Field(

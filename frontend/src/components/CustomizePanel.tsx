@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
 import {
   CUSTOMIZATION_TITLE_MAX,
   cloneCustomization,
@@ -372,7 +373,7 @@ export function CustomizePanel({
               title="Aperçu personnalisation"
               className="min-h-0 flex-1 bg-[#0b0f1a]"
               sandbox="allow-scripts allow-same-origin allow-forms"
-              srcDoc={previewHtml}
+              srcDoc={prepareInternalPreviewSrcDoc(previewHtml)}
             />
           ) : (
             <div className="flex flex-1 items-center justify-center p-4 text-center text-xs text-cyber-muted">

@@ -1,4 +1,5 @@
 import type { VisionPreviewSource } from "@shared/types";
+import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
 
 interface VisionUIPreviewProps {
   screenshotUrl: string | null;
@@ -18,8 +19,9 @@ export function VisionUIPreview({
   message,
   compact = false,
 }: VisionUIPreviewProps) {
+  const previewDoc = html ? prepareInternalPreviewSrcDoc(html) : "";
   const showIframe =
-    previewSource === "local" && Boolean(html && html.trim().length > 0);
+    previewSource === "local" && Boolean(previewDoc.trim().length > 0);
   const showImage =
     Boolean(screenshotUrl) &&
     !showIframe &&
@@ -61,7 +63,7 @@ export function VisionUIPreview({
         <div className="overflow-hidden rounded-md border border-cyber-border bg-white">
           <iframe
             title="Aperçu HTML VisionUI"
-            srcDoc={html}
+            srcDoc={previewDoc}
             sandbox="allow-scripts allow-same-origin"
             className="h-[min(70vh,520px)] w-full bg-white"
           />

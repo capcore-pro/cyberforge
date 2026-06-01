@@ -5,6 +5,11 @@ from __future__ import annotations
 from agents.architect_agent import ArchitectPlan, ToolboxPalette
 from agents.coremind_agent import ProjectType
 from agents.stitch_ai import (
+    STITCH_SUBPROCESS_TIMEOUT_SECONDS,
+    _sanitize_ascii_text,
+    _sanitize_runner_payload,
+    _stitch_degraded_result,
+    _stitch_subprocess_timeout,
     build_screen_prompts,
     format_stitch_mockups_for_prompt,
     resolve_stitch_project_type,
@@ -52,6 +57,33 @@ def test_build_screen_prompts_count() -> None:
     )
     assert len(screens) == 3
     assert "Boutique Demo" in screens[0]["prompt"]
+
+
+def test_sanitize_ascii_replaces_arrow() -> None:
+    assert _sanitize_ascii_text("Etape 1 → Etape 2") == "Etape 1 -> Etape 2"
+
+
+def test_sanitize_runner_payload_nested() -> None:
+    payload = _sanitize_runner_payload(
+        {
+            "screens": [{"name": "Accueil", "prompt": "Hero → CTA — français"}],
+            "client_name": "Café René",
+        }
+    )
+    assert payload["screens"][0]["prompt"] == "Hero -> CTA - francais"
+    assert payload["client_name"] == "Cafe Rene"
+
+
+def test_subprocess_timeout_capped_at_30() -> None:
+    assert _stitch_subprocess_timeout(180.0) == STITCH_SUBPROCESS_TIMEOUT_SECONDS
+    assert _stitch_subprocess_timeout(10.0) == 10.0
+
+
+def test_degraded_result_shape() -> None:
+    result = _stitch_degraded_result("timeout")
+    assert result.success is False
+    assert result.mockups == []
+    assert result.error == "timeout"
 
 
 def test_format_stitch_mockups() -> None:

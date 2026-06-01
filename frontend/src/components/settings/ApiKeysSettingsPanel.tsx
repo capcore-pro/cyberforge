@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { PasswordInput } from "@/components/PasswordInput";
 import { apiErrorMessage } from "@/lib/api-errors";
+import { notifySecretsSaved, SECRETS_SAVED_EVENT } from "@/lib/secrets-events";
 import {
   fetchSecretsStatus,
+  resetSecrets,
   saveSecrets,
   testSecretKey,
   unlockSecrets,
@@ -74,6 +77,24 @@ const API_KEYS: ApiKeyDef[] = [
     label: "Stripe",
     payloadKey: "stripe_secret_key",
     placeholder: "sk_live_…",
+  },
+  {
+    id: "brave_search",
+    label: "Brave Search",
+    payloadKey: "brave_search_api_key",
+    placeholder: "BSA…",
+  },
+  {
+    id: "exa",
+    label: "Exa AI",
+    payloadKey: "exa_api_key",
+    placeholder: "exa-…",
+  },
+  {
+    id: "stitch",
+    label: "StitchAI (Google Stitch)",
+    payloadKey: "stitch_api_key",
+    placeholder: "Clé Google Stitch",
   },
 ];
 
@@ -185,6 +206,9 @@ export function ApiKeysSettingsPanel() {
     stripe_secret_key: "",
     openai_api_key: "",
     google_generative_ai_api_key: "",
+    brave_search_api_key: "",
+    exa_api_key: "",
+    stitch_api_key: "",
   });
 
   const [testResults, setTestResults] = useState<
@@ -201,6 +225,12 @@ export function ApiKeysSettingsPanel() {
 
   useEffect(() => {
     void refreshStatus();
+  }, [refreshStatus]);
+
+  useEffect(() => {
+    const onSecretsSaved = () => void refreshStatus();
+    window.addEventListener(SECRETS_SAVED_EVENT, onSecretsSaved);
+    return () => window.removeEventListener(SECRETS_SAVED_EVENT, onSecretsSaved);
   }, [refreshStatus]);
 
   async function handleUnlock() {
@@ -273,6 +303,41 @@ export function ApiKeysSettingsPanel() {
       for (const def of API_KEYS) cleared[def.payloadKey] = "";
       return cleared;
     });
+    notifySecretsSaved();
+    await refreshStatus();
+  }
+
+  async function handleResetVault() {
+    const vaultPath =
+      status?.vault_path ?? "%LOCALAPPDATA%\\CyberForge\\secrets.v1.json";
+    const ok = window.confirm(
+      `Réinitialiser le coffre des clés API ?\n\n` +
+        `Le fichier chiffré sera supprimé :\n${vaultPath}\n\n` +
+        `Toutes les clés stockées uniquement dans le coffre seront perdues. ` +
+        `Vous pourrez définir un nouveau mot de passe à la prochaine sauvegarde.`,
+    );
+    if (!ok) return;
+
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    const res = await resetSecrets();
+    setBusy(false);
+    if (!res.ok) {
+      setError(apiErrorMessage(res, "Réinitialisation impossible."));
+      return;
+    }
+    if (res.data) setStatus(res.data);
+    setVaultPassword("");
+    setUnlocked(false);
+    setValues((prev) => {
+      const cleared = { ...prev };
+      for (const def of API_KEYS) cleared[def.payloadKey] = "";
+      return cleared;
+    });
+    setTestResults({});
+    setSuccess("Coffre réinitialisé. Enregistrez vos clés avec un nouveau mot de passe.");
+    notifySecretsSaved();
     await refreshStatus();
   }
 
@@ -288,13 +353,12 @@ export function ApiKeysSettingsPanel() {
         <label className="block">
           <span className="cf-section-label mb-2 block">Mot de passe du coffre</span>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               value={vaultPassword}
               onChange={(e) => setVaultPassword(e.target.value)}
               placeholder="Mot de passe pour chiffrer / déverrouiller"
-              className="min-w-0 flex-1 rounded-control border border-cf-border-input bg-cf-card px-3 py-2 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none"
+              containerClassName="flex-1"
             />
             <button
               type="button"
@@ -310,8 +374,37 @@ export function ApiKeysSettingsPanel() {
           <p className="mt-2 text-[11px] text-cf-muted">
             Coffre {status.has_vault ? "actif" : "non créé"} —{" "}
             {status.locked ? "verrouillé" : "déverrouillé"}
+            {status.vault_path ? (
+              <>
+                {" "}
+                —{" "}
+                <span className="font-mono text-[10px] opacity-80">
+                  {status.vault_path}
+                </span>
+              </>
+            ) : null}
           </p>
         ) : null}
+        <div className="mt-4 border-t border-cf-border-input/60 pt-4">
+          <button
+            type="button"
+            disabled={busy || !status?.has_vault}
+            onClick={() => void handleResetVault()}
+            className="rounded-control border border-red-500/50 px-4 py-2 text-sm text-red-300 transition hover:border-red-400 hover:bg-red-950/30 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Réinitialiser le coffre
+          </button>
+          {!status?.has_vault ? (
+            <p className="mt-2 text-[11px] text-cf-muted">
+              Aucun coffre sur disque — rien à réinitialiser.
+            </p>
+          ) : (
+            <p className="mt-2 text-[11px] text-cf-muted">
+              Supprime le fichier chiffré et permet de choisir un nouveau mot de passe
+              à la prochaine sauvegarde.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="space-y-3">

@@ -135,6 +135,7 @@ class SecretVault:
                 "stripe": _has("STRIPE_SECRET_KEY"),
                 "brave_search": _has("BRAVE_SEARCH_API_KEY"),
                 "exa": _has("EXA_API_KEY"),
+                "stitch": _has("STITCH_API_KEY"),
             }
             return VaultStatus(
                 has_vault=self.has_vault(),
@@ -145,6 +146,13 @@ class SecretVault:
     def lock(self) -> None:
         with self._lock:
             self._secrets = None
+
+    def reset(self) -> None:
+        """Supprime le fichier coffre sur disque et vide les secrets en mémoire."""
+        with self._lock:
+            self._secrets = None
+            if self._path.exists():
+                self._path.unlink()
 
     def peek(self, key: str) -> str | None:
         """Lit une clé si le coffre est déverrouillé ; None si verrouillé ou absent."""

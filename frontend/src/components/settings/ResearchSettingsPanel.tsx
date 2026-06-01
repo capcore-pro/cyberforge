@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { PasswordInput } from "@/components/PasswordInput";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   fetchSecretsStatus,
@@ -6,10 +7,12 @@ import {
   testSecretKey,
   type SecretsStatusResponse,
 } from "@/lib/secrets-api";
+import { useAgentsStatus } from "@/context/AgentsStatusContext";
 import {
   isResearchEnabled,
   setResearchEnabled,
 } from "@/lib/research-preferences";
+import { notifySecretsSaved } from "@/lib/secrets-events";
 
 const VAULT_MASK = "••••••••••••";
 
@@ -127,19 +130,26 @@ function KeyField({
 
 /** Section Recherche — toggle + clés Brave Search et Exa AI. */
 export function ResearchSettingsPanel() {
+  const { refresh: refreshAgentsStatus } = useAgentsStatus();
   const [enabled, setEnabled] = useState(isResearchEnabled);
   const [status, setStatus] = useState<SecretsStatusResponse | null>(null);
   const [braveKey, setBraveKey] = useState("");
   const [exaKey, setExaKey] = useState("");
+  const [stitchKey, setStitchKey] = useState("");
   const [vaultPassword, setVaultPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [testing, setTesting] = useState<"brave_search" | "exa" | null>(null);
+  const [testing, setTesting] = useState<"brave_search" | "exa" | "stitch" | null>(
+    null,
+  );
   const [testBrave, setTestBrave] = useState<{ valid: boolean; message: string } | null>(
     null,
   );
   const [testExa, setTestExa] = useState<{ valid: boolean; message: string } | null>(null);
+  const [testStitch, setTestStitch] = useState<{ valid: boolean; message: string } | null>(
+    null,
+  );
 
   const refresh = useCallback(async () => {
     const res = await fetchSecretsStatus();
@@ -157,7 +167,7 @@ export function ResearchSettingsPanel() {
     setEnabled(next);
   }, []);
 
-  const runTest = async (provider: "brave_search" | "exa", key: string) => {
+  const runTest = async (provider: "brave_search" | "exa" | "stitch", key: string) => {
     setTesting(provider);
     const res = await testSecretKey(provider, key.trim() || undefined);
     setTesting(null);
@@ -166,7 +176,8 @@ export function ResearchSettingsPanel() {
       message: res.data?.message ?? apiErrorMessage(res, "Échec du test"),
     };
     if (provider === "brave_search") setTestBrave(payload);
-    else setTestExa(payload);
+    else if (provider === "exa") setTestExa(payload);
+    else setTestStitch(payload);
   };
 
   const saveKeys = async () => {
@@ -180,6 +191,7 @@ export function ResearchSettingsPanel() {
     const res = await saveSecrets(vaultPassword, {
       brave_search_api_key: braveKey.trim() || null,
       exa_api_key: exaKey.trim() || null,
+      stitch_api_key: stitchKey.trim() || null,
     });
     setBusy(false);
     if (!res.ok) {
@@ -189,8 +201,10 @@ export function ResearchSettingsPanel() {
     setSuccess("Clés recherche enregistrées.");
     setBraveKey("");
     setExaKey("");
+    setStitchKey("");
     setVaultPassword("");
-    await refresh();
+    notifySecretsSaved();
+    await Promise.all([refresh(), refreshAgentsStatus()]);
   };
 
   return (
@@ -232,16 +246,28 @@ export function ResearchSettingsPanel() {
           testMessage={testExa?.message ?? null}
           testValid={testExa?.valid ?? null}
         />
+        <KeyField
+          label="StitchAI (Google Stitch)"
+          configured={Boolean(configured?.stitch)}
+          value={stitchKey}
+          placeholder="Clé Google Stitch"
+          onChange={setStitchKey}
+          onTest={() => void runTest("stitch", stitchKey)}
+          testing={testing === "stitch"}
+          testMessage={testStitch?.message ?? null}
+          testValid={testStitch?.valid ?? null}
+        />
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1">
             <span className="mb-1 block text-[11px] text-cf-muted">
               Mot de passe coffre (enregistrement)
             </span>
-            <input
-              type="password"
+            <PasswordInput
               value={vaultPassword}
               onChange={(e) => setVaultPassword(e.target.value)}
-              className="w-full rounded-control border border-cf-border-input bg-cf-card px-3 py-2 text-xs text-cf-text"
+              placeholder="Mot de passe du coffre"
+              className="text-xs"
+              containerClassName="w-full"
             />
           </label>
           <button

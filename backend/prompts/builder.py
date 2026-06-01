@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from prompts.shared import with_personalization
+from prompts.vitrine_html import BUILDER_VITRINE_HTML_DIRECTIVE, VITRINE_HTML_QUALITY_RULES
 
 BUILDER_V0_SYSTEM = with_personalization(
     """Tu es v0 intégré à CyberForge. Génère des composants React + Tailwind modernes.
@@ -18,10 +19,12 @@ Réponds UNIQUEMENT en JSON compact :
 Le champ code = contenu du fichier principal."""
 )
 
-SIMPLIFIED_VITRINE_DIRECTIVE = """
+SIMPLIFIED_VITRINE_DIRECTIVE = f"""
 REPRISE SIMPLIFIÉE — site vitrine (qualité insuffisante sur la tentative précédente) :
 - Un seul fichier index.html autonome : <!DOCTYPE html>, <style> avec au moins 20 règles CSS, contenu UI lisible.
 - HTML / CSS / JS vanilla UNIQUEMENT — pas de React, JSX, TypeScript, import/export, markdown, code visible.
 - Structure : header avec navigation, hero, section services ou avantages, section contact.
 - Texte UI en français. Couleurs : fond #0D0D0D, accents #C9A84C — aucune teinte bleue (#2563eb, blue, indigo).
+
+{VITRINE_HTML_QUALITY_RULES}
 """.strip()

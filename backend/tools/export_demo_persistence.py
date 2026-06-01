@@ -22,6 +22,7 @@ from tools.cloudflare_pages import (
 from tools.demo_password_vault import encrypt_demo_password
 from tools.demo_runtime import ensure_demo_runtime_config, extract_demo_title_from_html
 from tools.demo_urls import unlock_demo_url
+from tools.demo_preview_gate import strip_password_gate
 from tools.standalone_demo_html import wrap_with_password_gate
 from tools.theme_enforce import enforce_capcore_theme
 
@@ -78,7 +79,8 @@ async def persist_pipeline_cloudflare_demo(
     if "capcore" in title.lower() or "capcore" in preview[:4000].lower():
         preview = enforce_capcore_theme(preview)
     demo_password = password or generate_demo_password()
-    gated = wrap_with_password_gate(preview, demo_password, title=title)
+    preview_clean = strip_password_gate(preview)
+    gated = wrap_with_password_gate(preview_clean, demo_password, title=title)
     settings = get_settings()
     gated = ensure_demo_runtime_config(
         gated,
@@ -92,7 +94,7 @@ async def persist_pipeline_cloudflare_demo(
     url = public_demo_url_for_token(token).rstrip("/")
 
     payload = DemoPayload(
-        preview_html=gated,
+        preview_html=preview_clean,
         cloudflare_url=url,
         cloudflare_path=cf_path,
         cloudflare_hash=cf_hash,

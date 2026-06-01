@@ -303,7 +303,7 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="h-44 animate-pulse rounded-card border border-cf-border-input bg-cf-card"
+              className="min-h-[300px] animate-pulse rounded-card border border-cf-border-input bg-cf-card"
             />
           ))}
         </div>

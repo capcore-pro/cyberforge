@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ApiKeysSettingsPanel } from "@/components/settings/ApiKeysSettingsPanel";
+import { AgentsPipelineStatusPanel } from "@/components/settings/AgentsPipelineStatusPanel";
 import { AgentsSettingsPanel } from "@/components/settings/AgentsSettingsPanel";
 import { OpenHandsSettingsPanel } from "@/components/settings/OpenHandsSettingsPanel";
 import { PlaywrightSettingsPanel } from "@/components/settings/PlaywrightSettingsPanel";
@@ -52,6 +53,7 @@ export function SettingsPage() {
         {tab === "keys" ? <ApiKeysSettingsPanel /> : null}
         {tab === "agents" ? (
           <>
+            <AgentsPipelineStatusPanel />
             <OpenHandsSettingsPanel />
             <ResearchSettingsPanel />
             <StitchSettingsPanel />

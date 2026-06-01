@@ -1,3 +1,5 @@
+import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
+
 interface GeneratorPreviewModalProps {
   html: string;
   onClose: () => void;
@@ -8,6 +10,7 @@ export function GeneratorPreviewModal({
   html,
   onClose,
 }: GeneratorPreviewModalProps) {
+  const previewDoc = prepareInternalPreviewSrcDoc(html);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
@@ -37,7 +40,7 @@ export function GeneratorPreviewModal({
           title="Prévisualisation CyberForge"
           className="min-h-0 flex-1 bg-[#0a0a0f]"
           sandbox="allow-scripts allow-same-origin allow-forms"
-          srcDoc={html}
+          srcDoc={previewDoc}
         />
       </div>
     </div>

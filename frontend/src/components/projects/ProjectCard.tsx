@@ -48,11 +48,11 @@ export const ProjectCard = memo(function ProjectCard({
   deleteBusy,
 }: ProjectCardProps) {
   return (
-    <article className="group relative overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
+    <article className="group relative flex min-h-[300px] overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
       <button
         type="button"
         onClick={() => onOpenDetail(project.key)}
-        className="flex h-full w-full flex-col p-4 text-left transition hover:bg-cf-secondary/20"
+        className="flex min-h-[300px] w-full flex-col p-4 text-left transition hover:bg-cf-secondary/20"
       >
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 text-sm font-medium text-cf-text">{project.name}</h3>
@@ -82,61 +82,65 @@ export const ProjectCard = memo(function ProjectCard({
         </p>
       </button>
 
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-4 opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenDetail(project.key);
-          }}
-          className="w-full max-w-[200px] rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
-        >
-          Fiche projet
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditDetail(project.key);
-          }}
-          className="w-full max-w-[200px] rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold"
-        >
-          Modifier
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewProject(project);
-          }}
-          disabled={!project.url}
-          className="w-full max-w-[200px] rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Voir
-        </button>
-        {project.status === "demo" ? (
+      <div className="pointer-events-none absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/80 to-black/30 p-3 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <div className="flex max-h-full flex-col gap-1.5 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditDetail(project.key);
+              }}
+              className="rounded-control border border-cf-border-input bg-cf-secondary px-2 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold"
+            >
+              Modifier
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewProject(project);
+              }}
+              disabled={!project.url}
+              className="rounded-control border border-cf-border-input bg-cf-secondary px-2 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Voir
+            </button>
+          </div>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onConvertProject(project);
+              onOpenDetail(project.key);
             }}
-            className="w-full max-w-[200px] rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
+            className="w-full rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
           >
-            Convertir en app réelle
+            Fiche projet
           </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDeleteProject(project);
-          }}
-          disabled={deleteBusy}
-          className="w-full max-w-[200px] rounded-control border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
-        >
-          Supprimer
-        </button>
+          {project.status === "demo" ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConvertProject(project);
+              }}
+              className="w-full rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
+            >
+              Convertir en app réelle
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteProject(project);
+            }}
+            disabled={deleteBusy}
+            className="w-full rounded-control border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
+          >
+            Supprimer
+          </button>
+        </div>
       </div>
     </article>
   );

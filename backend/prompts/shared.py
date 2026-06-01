@@ -6,10 +6,11 @@ PROMPTS_VERSION = "2.0.0"
 
 PERSONALIZED_CONTENT_DIRECTIVE = """
 CONTENU PERSONNALISÉ OBLIGATOIRE :
-- Utilise UNIQUEMENT le contenu du prompt utilisateur.
+- Utilise UNIQUEMENT le contenu du prompt utilisateur et le brief ResearchAI.
+- Le nom du client, son secteur et sa ville doivent apparaître textuellement dans le livrable (pas de synonymes inventés).
 - Aucun contenu fictif (Jean Dupont, Marie Martin, chiffres inventés, lorem ipsum).
-- Aucun template SaaS générique non demandé.
-- Le site doit correspondre exactement à la description fournie (noms, métier, services, textes).
+- Aucun template SaaS générique non demandé (TaskFlow, dashboard générique, etc.).
+- Interdit tout texte qui pourrait s'appliquer à n'importe quelle entreprise.
 """.strip()
 
 

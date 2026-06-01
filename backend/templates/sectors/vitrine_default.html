@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{HERO_TITLE}} — {{SECTOR}} · {{CITY}}</title>
+  <link rel="stylesheet" href="{{GOOGLE_FONTS_URL}}" />
+  <style>
+    :root{--primary:{{PRIMARY_COLOR}};--secondary:{{SECONDARY_COLOR}};--font-h:'{{FONT_HEADING}}',sans-serif;--font-b:'{{FONT_BODY}}',sans-serif;--shadow:0 4px 24px rgba(0,0,0,.08);--r:12px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:var(--font-b);background:var(--secondary);color:#1a1a2e;line-height:1.65}
+    h1,h2,h3{font-family:var(--font-h);color:var(--primary);font-weight:700}
+    .wrap{width:min(1120px,92vw);margin:0 auto}
+    .nav{position:sticky;top:0;z-index:50;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.06)}
+    .nav-inner{display:flex;align-items:center;justify-content:space-between;padding:1rem 0}
+    .logo{font-size:1.25rem;font-weight:700;color:var(--primary)}
+    .nav-links{display:flex;gap:1.5rem}
+    .nav-links a{color:#4a5568;font-weight:500;transition:color .2s}
+    .nav-links a:hover{color:var(--primary)}
+    .hero{padding:5rem 0 4rem;text-align:center;background:linear-gradient(135deg,var(--primary),#2d3748);color:#fff}
+    .hero h1{font-size:clamp(2rem,4vw,3rem);margin-bottom:1rem}
+    .hero p{opacity:.92;max-width:560px;margin:0 auto 1.75rem;font-size:1.1rem}
+    .btn{display:inline-block;padding:.85rem 1.75rem;background:#fff;color:var(--primary);border-radius:var(--r);font-weight:600;transition:transform .2s,box-shadow .2s}
+    .btn:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+    section{padding:4rem 0}
+    .stitle{text-align:center;font-size:clamp(1.5rem,3vw,2rem);margin-bottom:2rem}
+    .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.5rem}
+    .box{background:#fff;padding:2rem;border-radius:var(--r);box-shadow:var(--shadow);transition:transform .25s}
+    .box:hover{transform:translateY(-5px)}
+    .about{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;align-items:center}
+    .about img{border-radius:var(--r);box-shadow:var(--shadow);width:100%;aspect-ratio:16/10;object-fit:cover}
+    .contact{display:grid;grid-template-columns:1fr 1fr;gap:2rem}
+    .contact form{display:flex;flex-direction:column;gap:.75rem}
+    .contact input,.contact textarea{padding:.8rem 1rem;border:1px solid #e2e8f0;border-radius:8px;font:inherit}
+    .contact button{padding:.9rem;background:var(--primary);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer}
+    .contact button:hover{filter:brightness(1.08)}
+    footer{text-align:center;padding:2rem;background:var(--primary);color:#fff;margin-top:2rem}
+    .reveal{opacity:0;transform:translateY(22px);transition:opacity .6s,transform .6s}
+    .reveal.visible{opacity:1;transform:none}
+    @media(max-width:768px){.about,.contact{grid-template-columns:1fr}.nav-links{gap:.75rem;font-size:.9rem}}
+  </style>
+</head>
+<body>
+  <header class="nav"><div class="wrap nav-inner"><a href="#" class="logo">{{CLIENT_NAME}}</a>
+    <nav class="nav-links"><a href="#services">Services</a><a href="#about">À propos</a><a href="#contact">Contact</a></nav></div></header>
+  <section class="hero reveal"><div class="wrap"><h1>{{HERO_TITLE}}</h1><p>{{HERO_SUBTITLE}}</p><a href="#contact" class="btn">{{CTA_TEXT}}</a></div></section>
+  <section id="services" class="reveal"><div class="wrap"><h2 class="stitle">Nos services</h2>
+    <div class="grid3">
+      <article class="box"><h3>{{SERVICE_1}}</h3><p>Solution professionnelle adaptée à vos besoins à {{CITY}}.</p></article>
+      <article class="box"><h3>{{SERVICE_2}}</h3><p>Accompagnement personnalisé par l'équipe {{CLIENT_NAME}}.</p></article>
+      <article class="box"><h3>{{SERVICE_3}}</h3><p>Expertise {{SECTOR}} — qualité et réactivité.</p></article>
+    </div></div></section>
+  <section id="about" class="reveal" style="background:#fff"><div class="wrap about">
+    <div><h2 class="stitle" style="text-align:left">À propos</h2>
+      <p style="margin-bottom:1rem"><strong>{{CLIENT_NAME}}</strong> est votre partenaire de confiance en {{SECTOR}} à {{CITY}}.</p>
+      <p>{{HERO_SUBTITLE}}</p></div>
+    <img src="https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80" alt="{{CLIENT_NAME}}" loading="lazy"/></div></section>
+  <section id="contact" class="reveal"><div class="wrap"><h2 class="stitle">Contact</h2>
+    <div class="contact">
+      <form action="#" onsubmit="return false;"><input type="text" placeholder="Nom" required /><input type="email" placeholder="Email" required /><textarea rows="4" placeholder="Message"></textarea><button type="submit">{{CTA_TEXT}}</button></form>
+      <div><p><strong>{{CLIENT_NAME}}</strong></p><p>{{ADDRESS}}</p><p>{{CITY}}</p><p style="margin-top:1rem">📞 {{PHONE}}<br>✉️ {{EMAIL}}</p></div>
+    </div></div></section>
+  <footer><div class="wrap"><p>© {{CLIENT_NAME}} — {{SECTOR}} · {{CITY}}</p></div></footer>
+  <script>document.querySelectorAll('.reveal').forEach(el=>new IntersectionObserver((e,o)=>e.forEach(x=>{if(x.isIntersecting){x.target.classList.add('visible');o.unobserve(x.target)}}),{threshold:.1}).observe(el));</script>
+</body>
+</html>

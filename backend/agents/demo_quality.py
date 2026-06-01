@@ -16,6 +16,7 @@ from tools.demo_template_service import (
     seed_from_dict,
     seed_to_code_result,
 )
+from tools.demo_preview_gate import prepare_internal_app_preview_html
 from tools.generation_sources import is_usable_preview_html
 
 _HTML_PATHS = frozenset({INDEX_HTML_PATH, "index.html"})
@@ -44,7 +45,7 @@ def preview_html_from_generation(
     """
     raw = _extract_html_from_generation(generation)
     if raw and is_usable_preview_html(raw):
-        return raw
+        return prepare_internal_app_preview_html(raw)
 
     prompt = (user_prompt or generation.summary or title).strip()
 
@@ -62,11 +63,11 @@ def preview_html_from_generation(
         template = normalize_template_id(seed.template)
         html = build_html_from_seed(seed)
         if is_valid_demo_html(html, template):
-            return html
+            return prepare_internal_app_preview_html(html)
 
     # Dernier recours : HTML brut même partiel, ou heuristique seed
     if raw:
-        return raw
+        return prepare_internal_app_preview_html(raw)
 
     seed = heuristic_demo_seed(prompt, project_type_label=title)
     template = normalize_template_id(seed.template)
@@ -75,7 +76,7 @@ def preview_html_from_generation(
         raise ValueError(
             f"Aperçu invalide pour le template « {template} » (marqueur manquant)."
         )
-    return html
+    return prepare_internal_app_preview_html(html)
 
 
 def preview_html_from_seed_dict(

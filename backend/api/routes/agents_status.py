@@ -2,8 +2,14 @@
 Statut des agents IA — pipeline LangGraph (13 agents).
 """
 
+from __future__ import annotations
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+
+from api.routes.secrets import _merge_configured_flags
+from config import get_settings
+from security.secret_vault import get_secret_vault
 
 router = APIRouter(tags=["agents"])
 
@@ -57,25 +63,60 @@ class AgentsStatusResponse(BaseModel):
     agents: list[AgentStatusItem]
 
 
+def _configured_flags() -> dict[str, bool]:
+    vault = get_secret_vault().status()
+    settings = get_settings()
+    return _merge_configured_flags(vault.configured, settings)
+
+
+def _agent_is_active(agent_id: str, configured: dict[str, bool]) -> bool:
+    """Actif = présent dans le pipeline et prérequis (clés API) satisfaits."""
+    if agent_id not in PIPELINE_AGENT_IDS:
+        return False
+    if agent_id == "research":
+        return bool(configured.get("brave_search") or configured.get("exa"))
+    if agent_id == "stitch":
+        return bool(configured.get("stitch"))
+    if agent_id == "openhands":
+        return bool(configured.get("anthropic"))
+    if agent_id == "builder":
+        return bool(configured.get("v0") or configured.get("deepseek"))
+    if agent_id == "visionui":
+        return bool(configured.get("replicate"))
+    if agent_id == "coremind":
+        return bool(
+            configured.get("anthropic")
+            or configured.get("deepseek")
+            or configured.get("openai")
+            or configured.get("gemini")
+        )
+    return True
+
+
 @router.get("/agents/status", response_model=AgentsStatusResponse)
 async def get_agents_status() -> AgentsStatusResponse:
-    """Les agents du pipeline LangGraph sont opérationnels (ACTIF)."""
+    """Statut des agents du pipeline (actif si clés et modules requis sont OK)."""
     pipeline_set = set(PIPELINE_AGENT_IDS)
+    configured = _configured_flags()
     agents: list[AgentStatusItem] = []
+    active_count = 0
     for agent_id, name, description in _AGENT_CATALOG:
         in_pipeline = agent_id in pipeline_set
+        is_active = in_pipeline and _agent_is_active(agent_id, configured)
+        if is_active:
+            active_count += 1
         agents.append(
             AgentStatusItem(
                 id=agent_id,
                 name=name,
                 description=description,
-                status="active" if in_pipeline else "standby",
+                status="active" if is_active else "standby",
                 in_pipeline=in_pipeline,
             )
         )
     return AgentsStatusResponse(
         total_agents=TOTAL_AGENTS,
-        active_count=len(PIPELINE_AGENT_IDS),
+        active_count=active_count,
         pipeline_agent_ids=list(PIPELINE_AGENT_IDS),
         agents=agents,
     )

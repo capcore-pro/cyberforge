@@ -134,6 +134,8 @@ class PlaywrightAgent(BaseAgent):
         html: str | None = None,
         base_url: str | None = None,
         settings: Settings | None = None,
+        vitrine_mode: bool = False,
+        prefer_local_preview: bool = False,
     ) -> PlaywrightReport:
         resolved = settings or self._settings
         threshold = resolved.playwright_pass_threshold
@@ -160,9 +162,12 @@ class PlaywrightAgent(BaseAgent):
         target = (base_url or "").strip()
         preview_html = (html or "").strip()
 
+        if prefer_local_preview or vitrine_mode:
+            target = ""
+
         try:
             if not target:
-                if len(preview_html) < 200:
+                if len(preview_html) < 80:
                     return PlaywrightReport(
                         score=100,
                         ok=True,
@@ -170,11 +175,25 @@ class PlaywrightAgent(BaseAgent):
                         skip_reason="Aucun HTML preview pour les tests Playwright",
                         passed=["playwright_skipped_no_html"],
                     )
+                from tools.vitrine_html_normalize import extract_unlocked_demo_html
+
+                preview_html = extract_unlocked_demo_html(preview_html)
                 server, target = _start_preview_server(preview_html)
+                logger.info(
+                    "[Playwright] serveur local | url=%s | html_bytes=%d | vitrine=%s",
+                    target,
+                    len(preview_html.encode("utf-8")),
+                    vitrine_mode,
+                )
 
             timeout_ms = int(resolved.playwright_timeout_seconds * 1000)
+            runner = (
+                _run_vitrine_playwright_checks
+                if vitrine_mode
+                else _run_playwright_checks
+            )
             report = await asyncio.wait_for(
-                _run_playwright_checks(
+                runner(
                     target,
                     timeout_ms=timeout_ms,
                     pass_threshold=threshold,
@@ -199,6 +218,67 @@ class PlaywrightAgent(BaseAgent):
             )
         finally:
             _stop_preview_server(server)
+
+
+async def _run_vitrine_playwright_checks(
+    base_url: str,
+    *,
+    timeout_ms: int,
+    pass_threshold: int = PASS_THRESHOLD,
+) -> PlaywrightReport:
+    """Tests minimaux pour vitrine HTML statique (serveur local)."""
+    assert async_playwright is not None
+    passed: list[str] = []
+    failed: list[str] = []
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            response = await page.goto(
+                base_url, wait_until="domcontentloaded", timeout=timeout_ms
+            )
+            status = response.status if response else 0
+            if status == 200:
+                passed.append("page_load_200")
+            else:
+                failed.append(f"page_load: status HTTP {status}")
+
+            h1_count = await page.locator("h1").count()
+            h1_visible = await page.locator("h1").first.is_visible() if h1_count else False
+            if h1_count > 0 and h1_visible:
+                passed.append("vitrine_h1_visible")
+            else:
+                failed.append("vitrine_h1: titre principal absent ou masqué")
+
+            if await page.locator("#contact, #cf-contact-form, form").count() > 0:
+                passed.append("vitrine_contact")
+            else:
+                failed.append("vitrine_contact: section ou formulaire contact manquant")
+
+            title_ok = await page.title()
+            if title_ok and len(title_ok.strip()) >= 3:
+                passed.append("vitrine_title")
+            else:
+                failed.append("vitrine_title: balise title vide")
+
+            body_h = await page.evaluate("() => document.body?.scrollHeight || 0")
+            if body_h > 80:
+                passed.append("vitrine_body_content")
+            else:
+                failed.append("vitrine_body: contenu trop court")
+        finally:
+            await browser.close()
+
+    total = 5
+    score = min(100, round(len(passed) / total * 100))
+    return PlaywrightReport(
+        passed=passed,
+        failed=failed,
+        score=score,
+        ok=score >= pass_threshold,
+        target_url=base_url,
+    )
 
 
 async def _run_playwright_checks(

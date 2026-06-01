@@ -31,6 +31,7 @@ _PROVIDER_ENV: dict[str, tuple[str, str]] = {
     "stripe": ("STRIPE_SECRET_KEY", "stripe_secret_key"),
     "brave_search": ("BRAVE_SEARCH_API_KEY", "brave_search_api_key"),
     "exa": ("EXA_API_KEY", "exa_api_key"),
+    "stitch": ("STITCH_API_KEY", "stitch_api_key"),
 }
 
 
@@ -84,6 +85,7 @@ class SaveSecretsRequest(BaseModel):
     stripe_secret_key: str | None = None
     brave_search_api_key: str | None = None
     exa_api_key: str | None = None
+    stitch_api_key: str | None = None
 
 
 class TestSecretRequest(BaseModel):
@@ -140,6 +142,24 @@ async def secrets_lock() -> dict[str, object]:
     return {"ok": True, "locked": True}
 
 
+@router.post("/secrets/reset")
+async def secrets_reset() -> dict[str, object]:
+    """Supprime le fichier coffre chiffré et remet l'état à zéro."""
+    vault = get_secret_vault()
+    vault.reset()
+    status = vault.status()
+    settings = get_settings()
+    configured = _merge_configured_flags(status.configured, settings)
+    return {
+        "ok": True,
+        "has_vault": status.has_vault,
+        "locked": status.locked,
+        "configured": configured,
+        "effective": llm_provider_flags(settings),
+        "vault_path": str(vault.path),
+    }
+
+
 @router.post("/secrets/change-password")
 async def secrets_change_password(body: ChangeMasterPasswordRequest) -> dict[str, object]:
     vault = get_secret_vault()
@@ -192,6 +212,7 @@ async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
                 "STRIPE_SECRET_KEY": body.stripe_secret_key,
                 "BRAVE_SEARCH_API_KEY": body.brave_search_api_key,
                 "EXA_API_KEY": body.exa_api_key,
+                "STITCH_API_KEY": body.stitch_api_key,
             },
         )
     except VaultInvalidPasswordError as exc:

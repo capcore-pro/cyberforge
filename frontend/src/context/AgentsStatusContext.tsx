@@ -10,6 +10,7 @@ import {
 import { API_PREFIX } from "@shared/constants";
 import type { AgentsStatusResponse } from "@shared/types";
 import { apiRequest } from "@/lib/api-client";
+import { SECRETS_SAVED_EVENT } from "@/lib/secrets-events";
 import { useBackendHealth } from "@/context/BackendHealthContext";
 
 export type AgentDisplayStatus = "active" | "standby";
@@ -111,20 +112,37 @@ const AGENT_CATALOG: { id: string; name: string; description: string }[] = [
   },
 ];
 
-/** 13 agents — aligné sur GET /api/agents/status */
+const KEYLESS_PIPELINE_AGENTS = new Set([
+  "architect",
+  "bughunter",
+  "autofix",
+  "testpilot",
+  "playwright",
+  "lighthouse",
+  "export",
+]);
+
+/** 13 agents — aligné sur GET /api/agents/status (repli hors ligne) */
 function defaultAgentsStatus(): AgentsStatusResponse {
   const pipelineSet = new Set<string>(PIPELINE_AGENT_IDS);
-  return {
-    total_agents: AGENT_CATALOG.length,
-    active_count: PIPELINE_AGENT_IDS.length,
-    pipeline_agent_ids: [...PIPELINE_AGENT_IDS],
-    agents: AGENT_CATALOG.map(({ id, name, description }) => ({
+  let active_count = 0;
+  const agents = AGENT_CATALOG.map(({ id, name, description }) => {
+    const in_pipeline = pipelineSet.has(id);
+    const is_active = in_pipeline && KEYLESS_PIPELINE_AGENTS.has(id);
+    if (is_active) active_count += 1;
+    return {
       id,
       name,
       description,
-      status: pipelineSet.has(id) ? "active" : "standby",
-      in_pipeline: pipelineSet.has(id),
-    })),
+      status: (is_active ? "active" : "standby") as "active" | "standby",
+      in_pipeline,
+    };
+  });
+  return {
+    total_agents: AGENT_CATALOG.length,
+    active_count,
+    pipeline_agent_ids: [...PIPELINE_AGENT_IDS],
+    agents,
   };
 }
 
@@ -165,6 +183,12 @@ export function AgentsStatusProvider({ children }: { children: ReactNode }) {
     void refresh();
     const id = window.setInterval(() => void refresh(), POLL_MS);
     return () => window.clearInterval(id);
+  }, [refresh]);
+
+  useEffect(() => {
+    const onSecretsSaved = () => void refresh();
+    window.addEventListener(SECRETS_SAVED_EVENT, onSecretsSaved);
+    return () => window.removeEventListener(SECRETS_SAVED_EVENT, onSecretsSaved);
   }, [refresh]);
 
   const getAgentStatus = useCallback(

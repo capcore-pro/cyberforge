@@ -10,7 +10,10 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import subprocess
+import time
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 _RUNNER_PATH = _BACKEND_ROOT / "scripts" / "stitch_runner.mjs"
+_STITCH_SDK_PACKAGE = _BACKEND_ROOT / "node_modules" / "@google" / "stitch-sdk" / "package.json"
+# Plafond strict subprocess + budget total StitchAI (évite coupure SSE).
+STITCH_SUBPROCESS_TIMEOUT_SECONDS = 30.0
+STITCH_PIPELINE_BUDGET_SECONDS = 30.0
 
 _SCREEN_SPECS: dict[str, list[tuple[str, str]]] = {
     "vitrine_next": [
@@ -182,6 +189,7 @@ def build_screen_prompts(
     palette: dict[str, str],
     sections: list[str],
     research_content: dict[str, Any],
+    design_system_block: str = "",
 ) -> list[dict[str, str]]:
     specs = _SCREEN_SPECS.get(project_type) or _SCREEN_SPECS["vitrine_next"]
     research_block = _research_summary(research_content)
@@ -204,13 +212,18 @@ def build_screen_prompts(
     if isinstance(keywords, list) and keywords:
         kw_line = f"Mots-clés SEO à intégrer visuellement : {', '.join(keywords[:12])}. "
 
+    law = design_system_block.strip()
+    if law and not law.endswith("\n"):
+        law += "\n"
+
     screens: list[dict[str, str]] = []
     for name, base_prompt in specs:
         prompt = (
-            f"{client_line}{sector_line}{palette_line}{sections_line}{kw_line}"
+            f"{law}{client_line}{sector_line}{palette_line}{sections_line}{kw_line}"
             f"{base_prompt} "
             f"Design professionnel, moderne, accessible, en français. "
-            f"UI haute fidélité prête pour implémentation React/HTML."
+            f"UI haute fidélité prête pour implémentation React/HTML. "
+            f"Respecter strictement la loi visuelle DesignSystemAI ci-dessus."
         )
         if research_block:
             prompt += f"\n\nContexte marché:\n{research_block}"
@@ -237,6 +250,105 @@ def format_stitch_mockups_for_prompt(result: StitchResult | None) -> str:
     return "\n".join(lines).strip() + "\n\n"
 
 
+_ASCII_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    ("\u2192", "->"),
+    ("\u2190", "<-"),
+    ("\u2194", "<->"),
+    ("\u2014", "-"),
+    ("\u2013", "-"),
+    ("\u2026", "..."),
+    ("\u00ab", '"'),
+    ("\u00bb", '"'),
+    ("\u2018", "'"),
+    ("\u2019", "'"),
+    ("\u201c", '"'),
+    ("\u201d", '"'),
+)
+
+
+def _sanitize_ascii_text(text: str) -> str:
+    """Retire les caractères non-ASCII (évite charmap cp1252 sur Windows)."""
+    if not text:
+        return text
+    cleaned = text
+    for src, dst in _ASCII_REPLACEMENTS:
+        cleaned = cleaned.replace(src, dst)
+    normalized = unicodedata.normalize("NFKD", cleaned)
+    return normalized.encode("ascii", "ignore").decode("ascii")
+
+
+def _sanitize_runner_payload(value: Any) -> Any:
+    if isinstance(value, str):
+        return _sanitize_ascii_text(value)
+    if isinstance(value, dict):
+        return {str(k): _sanitize_runner_payload(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_runner_payload(item) for item in value]
+    return value
+
+
+def _stitch_subprocess_timeout(configured: float | None = None) -> float:
+    """Timeout effectif du subprocess Node (max 30 s)."""
+    if configured is None or configured <= 0:
+        return STITCH_SUBPROCESS_TIMEOUT_SECONDS
+    return min(float(configured), STITCH_SUBPROCESS_TIMEOUT_SECONDS)
+
+
+def _stitch_verbose() -> bool:
+    return os.environ.get("STITCH_VERBOSE", "").strip().lower() in ("1", "true", "yes")
+
+
+def _try_install_stitch_sdk() -> bool:
+    """Installe @google/stitch-sdk dans backend/ si absent (silencieux)."""
+    if _STITCH_SDK_PACKAGE.is_file():
+        return True
+    npm = shutil.which("npm")
+    if npm is None:
+        return False
+    try:
+        subprocess.run(
+            [npm, "install", "@google/stitch-sdk", "--no-audit", "--no-fund"],
+            cwd=str(_BACKEND_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        logger.debug("[StitchAI] npm install @google/stitch-sdk échoué", exc_info=True)
+    return _STITCH_SDK_PACKAGE.is_file()
+
+
+def _stitch_node_deps_ready() -> tuple[bool, str]:
+    """Vérifie Node.js, le runner et @google/stitch-sdk (npm install dans backend/)."""
+    if shutil.which("node") is None:
+        return False, "Node.js introuvable dans le PATH"
+    if not _RUNNER_PATH.is_file():
+        return False, f"Runner introuvable : {_RUNNER_PATH}"
+    if not _STITCH_SDK_PACKAGE.is_file():
+        if _try_install_stitch_sdk():
+            return True, ""
+        return (
+            False,
+            "@google/stitch-sdk absent — exécutez « npm install » dans le dossier backend/",
+        )
+    return True, ""
+
+
+def _stitch_degraded_result(error: str) -> StitchResult:
+    """Mode dégradé : le pipeline continue sans maquettes."""
+    return StitchResult(success=False, mockups=[], error=error)
+
+
+def _stitch_subprocess_env(api_key: str) -> dict[str, str]:
+    return {
+        **os.environ,
+        "STITCH_API_KEY": api_key,
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+    }
+
+
 def _resolve_stitch_api_key(settings: Settings) -> str:
     try:
         from security.secret_vault import get_secret_vault
@@ -249,26 +361,113 @@ def _resolve_stitch_api_key(settings: Settings) -> str:
     return plain_secret_str(settings.stitch_api_key)
 
 
-def _run_stitch_runner(payload: dict[str, Any], *, timeout: float) -> dict[str, Any]:
-    env = {**os.environ, "STITCH_API_KEY": str(payload.get("_api_key") or "")}
-    payload_clean = {k: v for k, v in payload.items() if k != "_api_key"}
-    proc = subprocess.run(
-        ["node", str(_RUNNER_PATH)],
-        input=json.dumps(payload_clean, ensure_ascii=False),
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        cwd=str(_BACKEND_ROOT),
-        env=env,
+def _stitch_console(message: str) -> None:
+    """Logs détaillés uniquement si STITCH_VERBOSE=1."""
+    if _stitch_verbose():
+        logger.info("%s", message)
+        print(message, flush=True)
+
+
+def _log_stitch_runner_payload(payload_clean: dict[str, Any], *, timeout: float) -> None:
+    if not _stitch_verbose():
+        return
+    payload_json = json.dumps(payload_clean, ensure_ascii=True, indent=2)
+    _stitch_console(
+        f"[StitchAI] subprocess Node.js — préparation | runner={_RUNNER_PATH} | "
+        f"cwd={_BACKEND_ROOT} | timeout={timeout:.1f}s"
     )
+    _stitch_console(f"[StitchAI] payload JSON envoyé au runner:\n{payload_json}")
+
+
+def _log_stitch_subprocess_result(
+    proc: subprocess.CompletedProcess[str],
+    *,
+    stdout: str,
+    stderr: str,
+) -> None:
+    if not _stitch_verbose():
+        logger.debug(
+            "[StitchAI] subprocess terminé | returncode=%s | stdout_len=%d | stderr_len=%d",
+            proc.returncode,
+            len(stdout),
+            len(stderr),
+        )
+        return
+    _stitch_console(
+        f"[StitchAI] subprocess terminé | returncode={proc.returncode} | "
+        f"stdout_len={len(stdout)} | stderr_len={len(stderr)}"
+    )
+    _stitch_console(f"[StitchAI] stdout (contenu exact):\n{stdout if stdout else '(vide)'}")
+    _stitch_console(f"[StitchAI] stderr (contenu exact):\n{stderr if stderr else '(vide)'}")
+
+
+def _run_stitch_runner(payload: dict[str, Any], *, timeout: float) -> dict[str, Any]:
+    api_key = str(payload.get("_api_key") or "")
+    payload_clean = _sanitize_runner_payload(
+        {k: v for k, v in payload.items() if k != "_api_key"}
+    )
+    input_json = json.dumps(payload_clean, ensure_ascii=True)
+    _log_stitch_runner_payload(payload_clean, timeout=timeout)
+    if _stitch_verbose():
+        _stitch_console(
+            f"[StitchAI] commande: node {_RUNNER_PATH.name} | stdin_json_len={len(input_json)} | "
+            f"api_key_configured={bool(api_key)}"
+        )
+
+    try:
+        proc = subprocess.run(
+            ["node", str(_RUNNER_PATH)],
+            input=input_json,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            cwd=str(_BACKEND_ROOT),
+            env=_stitch_subprocess_env(api_key),
+        )
+    except subprocess.TimeoutExpired:
+        logger.debug("[StitchAI] subprocess timeout après %.1fs", timeout)
+        raise
+
     stdout = (proc.stdout or "").strip()
     stderr = (proc.stderr or "").strip()
+    _log_stitch_subprocess_result(proc, stdout=stdout, stderr=stderr)
+
     if not stdout:
+        logger.error(
+            "[StitchAI] échec: stdout vide (returncode=%s) — voir stderr ci-dessus",
+            proc.returncode,
+        )
         raise RuntimeError(stderr or f"Stitch runner exit {proc.returncode}")
     try:
-        return json.loads(stdout)
+        parsed = json.loads(stdout)
+        logger.info(
+            "[StitchAI] réponse JSON parsée | success=%s | keys=%s",
+            parsed.get("success"),
+            list(parsed.keys()) if isinstance(parsed, dict) else type(parsed).__name__,
+        )
+        return parsed
     except json.JSONDecodeError as exc:
+        logger.error(
+            "[StitchAI] JSON stdout invalide: %s | extrait=%r",
+            exc,
+            stdout[:500],
+        )
         raise RuntimeError(f"Réponse Stitch invalide: {stdout[:300]}") from exc
+
+
+async def _invoke_stitch_runner(
+    payload: dict[str, Any],
+    *,
+    timeout: float,
+) -> dict[str, Any]:
+    """Subprocess Node avec timeout strict ; relève TimeoutError si dépassé."""
+    effective = _stitch_subprocess_timeout(timeout)
+    return await asyncio.wait_for(
+        asyncio.to_thread(_run_stitch_runner, payload, timeout=effective),
+        timeout=effective + 5.0,
+    )
 
 
 class StitchAgent(BaseAgent):
@@ -302,6 +501,7 @@ class StitchAgent(BaseAgent):
         generation_mode: str | None = None,
         research_brief: ResearchBrief | Any | None = None,
         user_prompt: str = "",
+        design_system: dict[str, Any] | None = None,
         sections: list[str] | None = None,
         settings: Settings | None = None,
         on_progress: Any | None = None,
@@ -322,11 +522,13 @@ class StitchAgent(BaseAgent):
                 skip_reason="STITCH_API_KEY non configurée",
             )
 
-        if not _RUNNER_PATH.is_file():
+        deps_ok, deps_reason = _stitch_node_deps_ready()
+        if not deps_ok:
+            logger.debug("[StitchAI] prérequis manquants: %s", deps_reason)
             return StitchResult(
                 success=True,
                 skipped=True,
-                skip_reason="stitch_runner.mjs introuvable",
+                skip_reason=deps_reason,
             )
 
         ctx = extract_research_context(
@@ -349,7 +551,15 @@ class StitchAgent(BaseAgent):
             or "Client"
         )
         section_list = list(sections) if sections else list(_DEFAULT_SECTIONS)
-        palette = _palette_dict(architect_plan)
+        from agents.design_system_ai import (
+            design_system_to_stitch_palette,
+            format_design_system_for_prompt,
+        )
+
+        palette = design_system_to_stitch_palette(design_system)
+        if not palette:
+            palette = _palette_dict(architect_plan)
+        design_block = format_design_system_for_prompt(design_system)
 
         screen_payloads = build_screen_prompts(
             project_type=project_type,
@@ -358,14 +568,31 @@ class StitchAgent(BaseAgent):
             palette=palette,
             sections=section_list,
             research_content=research_content,
+            design_system_block=design_block,
+        )
+        configured_timeout = resolved.stitch_timeout_seconds
+        subprocess_cap = _stitch_subprocess_timeout(configured_timeout)
+        logger.info(
+            "[StitchAI] generate_mockups | project_type=%s | client=%s | screens=%d | "
+            "subprocess_timeout=%.1fs | pipeline_budget=%.1fs",
+            project_type,
+            client_name,
+            len(screen_payloads),
+            subprocess_cap,
+            STITCH_PIPELINE_BUDGET_SECONDS,
         )
 
         mockups: list[StitchMockup] = []
         project_id: str | None = None
-        timeout = resolved.stitch_timeout_seconds
+        deadline = time.monotonic() + STITCH_PIPELINE_BUDGET_SECONDS
 
         try:
             for index, screen_spec in enumerate(screen_payloads):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    logger.debug("[StitchAI] budget pipeline épuisé — mode dégradé")
+                    return _stitch_degraded_result("timeout")
+
                 if on_progress:
                     maybe = on_progress(
                         f"Maquette {index + 1}/{len(screen_payloads)} : "
@@ -381,21 +608,55 @@ class StitchAgent(BaseAgent):
                     "client_name": client_name,
                     "screens": [screen_spec],
                 }
-                raw = await asyncio.to_thread(
-                    _run_stitch_runner,
-                    runner_in,
-                    timeout=timeout,
+                run_timeout = min(remaining, subprocess_cap)
+                logger.info(
+                    "[StitchAI] écran %d/%d | name=%s | project_id=%s | timeout=%.1fs",
+                    index + 1,
+                    len(screen_payloads),
+                    screen_spec.get("name"),
+                    project_id or "(nouveau)",
+                    run_timeout,
+                )
+                try:
+                    raw = await _invoke_stitch_runner(
+                        runner_in,
+                        timeout=run_timeout,
+                    )
+                except (asyncio.TimeoutError, subprocess.TimeoutExpired):
+                    logger.debug(
+                        "[StitchAI] timeout subprocess (%.0fs) — mode dégradé",
+                        run_timeout,
+                    )
+                    return _stitch_degraded_result("timeout")
+                except FileNotFoundError:
+                    return StitchResult(
+                        success=True,
+                        skipped=True,
+                        skip_reason="Node.js non installé",
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "[StitchAI] subprocess échoué (écran %s): %s",
+                        screen_spec.get("name"),
+                        exc,
+                    )
+                    return _stitch_degraded_result("timeout")
+
+                logger.info(
+                    "[StitchAI] écran %s — runner terminé | success=%s",
+                    screen_spec.get("name"),
+                    raw.get("success"),
                 )
                 if not raw.get("success"):
-                    err = raw.get("error") or "échec Stitch"
-                    if not mockups:
-                        return StitchResult(
-                            success=False,
-                            error=str(err),
-                            mockups=[],
-                        )
-                    logger.warning("Stitch écran %s ignoré: %s", screen_spec["name"], err)
-                    continue
+                    err = str(raw.get("error") or "échec Stitch").lower()
+                    logger.warning(
+                        "[StitchAI] écran %s refusé: %s",
+                        screen_spec.get("name"),
+                        raw.get("error"),
+                    )
+                    if "timeout" in err or "timed out" in err:
+                        return _stitch_degraded_result("timeout")
+                    return _stitch_degraded_result(str(raw.get("error") or "échec Stitch"))
 
                 project_id = raw.get("project_id") or project_id
                 for item in raw.get("mockups") or []:
@@ -411,24 +672,16 @@ class StitchAgent(BaseAgent):
                     )
 
             if not mockups:
-                return StitchResult(
-                    success=False,
-                    error="Aucune maquette Stitch générée",
-                    project_id=project_id,
-                )
+                return _stitch_degraded_result("Aucune maquette Stitch générée")
 
             return StitchResult(
                 success=True,
                 project_id=project_id,
                 mockups=mockups,
             )
-        except subprocess.TimeoutExpired:
-            return StitchResult(
-                success=False,
-                error="timeout Stitch",
-                project_id=project_id,
-                mockups=mockups,
-            )
+        except (asyncio.TimeoutError, subprocess.TimeoutExpired):
+            logger.debug("[StitchAI] timeout pipeline — mode dégradé")
+            return _stitch_degraded_result("timeout")
         except FileNotFoundError:
             return StitchResult(
                 success=True,
@@ -436,15 +689,5 @@ class StitchAgent(BaseAgent):
                 skip_reason="Node.js non installé",
             )
         except Exception as exc:
-            logger.exception("StitchAgent")
-            if mockups:
-                return StitchResult(
-                    success=True,
-                    project_id=project_id,
-                    mockups=mockups,
-                    error=str(exc)[:200],
-                )
-            return StitchResult(
-                success=False,
-                error=str(exc)[:400],
-            )
+            logger.debug("[StitchAI] exception pipeline — mode dégradé: %s", exc)
+            return _stitch_degraded_result("timeout")

@@ -16,14 +16,14 @@ from langgraph.graph import END, StateGraph
 from agents.architect_agent import ArchitectAgent, ArchitectPlan
 from agents.builder_agent import BuilderAgent, BuilderProvider
 from agents.openhands_agent import OpenHandsAgent, openhands_eligible
-from agents.playwright_agent import (
-    PlaywrightAgent,
-    playwright_to_bug_report,
+from agents.playwright_agent import PlaywrightAgent
+from agents.lighthouse_agent import LighthouseAgent
+from agents.design_system_ai import (
+    build_design_system,
+    format_design_system_for_prompt,
 )
-from agents.lighthouse_agent import (
-    LighthouseAgent,
-    lighthouse_to_bug_report,
-)
+from agents.content_ai import fill_template_content
+from agents.template_ai import load_sector_template_raw
 from agents.research_agent import (
     ResearchAgent,
     extract_research_context,
@@ -31,6 +31,7 @@ from agents.research_agent import (
 )
 from agents.stitch_ai import (
     StitchAgent,
+    StitchResult,
     format_stitch_mockups_for_prompt,
 )
 from agents.auto_fix_agent import AutoFixAgent
@@ -75,13 +76,42 @@ MAX_TESTPILOT_AUTOFIX_LOOPS = 1
 MAX_PLAYWRIGHT_AUTOFIX_LOOPS = 1
 MAX_LIGHTHOUSE_AUTOFIX_LOOPS = 1
 
-# Modes avec routage direct CoreMindAI — BuilderAI ne court-circuite plus le chemin nominal.
-DIRECT_COREMIND_MODES = frozenset({"client_demo", "real_app", "vitrine_next"})
+# Modes avec routage direct CoreMindAI (saute BuilderAI).
+# Vitrines : client_demo + vitrine_next passent par BuilderAI v2 (assemblage template).
+DIRECT_COREMIND_MODES = frozenset({"real_app"})
+
+# Ordre LangGraph nominal pour vitrine HTML (client_demo, vitrine_next).
+# Étapes optionnelles : research (settings.research_enabled), stitch (stitch_enabled).
+# Identifiants de nœuds LangGraph (≠ clés du state TypedDict)
+NODE_DESIGN_SYSTEM = "design_system_ai"
+
+VITRINE_PIPELINE_ORDER: tuple[str, ...] = (
+    "architect",
+    "research",
+    NODE_DESIGN_SYSTEM,
+    "template_ai",
+    "stitch",
+    "content_ai",
+    "builder",
+    "visionui",
+    "bughunter",
+    "autofix",
+    "testpilot",
+    "playwright",
+    "lighthouse",
+    "export",
+    "finalize",
+)
+
+VITRINE_OPTIONAL_STEPS: frozenset[str] = frozenset({"research", "stitch"})
 
 PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 AGENT_LABELS: dict[str, str] = {
     "architect": "ArchitectAI",
+    NODE_DESIGN_SYSTEM: "DesignSystemAI",
+    "template_ai": "TemplateAI",
+    "content_ai": "ContentAI",
     "research": "ResearchAI",
     "stitch": "StitchAI",
     "openhands": "OpenHands",
@@ -117,6 +147,8 @@ class PipelineState(TypedDict, total=False):
     research_enabled: bool | None
     stitch_enabled: bool | None
     architect_plan: ArchitectPlan | None
+    design_system: Any
+    sector_template: Any
     analysis: CoreMindAnalysis | None
     builder_provider: str | None
     builder_fallback: bool
@@ -143,6 +175,12 @@ class PipelineState(TypedDict, total=False):
     export_result: Any
     result: CoreMindRunResult | None
     error: str | None
+
+
+def is_vitrine_generation_mode(state: PipelineState) -> bool:
+    """True pour les modes vitrine HTML assemblée (pas real_app)."""
+    mode = (state.get("generation_mode") or "client_demo").strip().lower()
+    return mode in ("client_demo", "vitrine_next")
 
 
 async def _emit(
@@ -250,27 +288,259 @@ async def architect_node(
 
 def _generation_user_prompt(state: PipelineState) -> str:
     """Prompt enrichi : ResearchAI + maquettes StitchAI + prompt utilisateur."""
+    from tools.client_content_profile import (
+        build_client_content_profile,
+        format_literal_client_directive,
+    )
+
     base = (state.get("prompt") or "").strip()
+    design_block = format_design_system_for_prompt(state.get("design_system"))
     research_block = format_research_brief_for_prompt(state.get("research_brief"))
     stitch_block = format_stitch_mockups_for_prompt(state.get("stitch_result"))
-    prefix = f"{research_block}{stitch_block}"
+    literal_block = format_literal_client_directive(
+        build_client_content_profile(
+            user_prompt=base,
+            research_brief=state.get("research_brief"),
+            plan=state.get("architect_plan"),
+        ),
+        user_prompt=base,
+    )
+    prefix = f"{design_block}{research_block}{stitch_block}{literal_block}"
     if prefix:
         return f"{prefix}{base}"
     return base
 
 
+async def design_system_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """DesignSystemAI — loi visuelle après Research, avant Template / Content."""
+    cb = _callback_from_config(config)
+    await _step(cb, NODE_DESIGN_SYSTEM, "start", "Génération du design system…")
+    plan = state.get("architect_plan")
+    if not plan:
+        return {
+            "error": "Plan architecte manquant pour DesignSystemAI.",
+        }
+
+    from tools.client_content_profile import build_client_content_profile
+
+    base_prompt = (state.get("prompt") or "").strip()
+    profile = build_client_content_profile(
+        user_prompt=base_prompt,
+        research_brief=state.get("research_brief"),
+        plan=plan,
+    )
+    sector = (
+        (profile.sector or "").strip()
+        or (plan.secteur or "").strip()
+        or detect_sector_from_prompt_for_design(base_prompt, plan)
+    )
+    client_name = profile.company_name or profile.display_name
+
+    result = build_design_system(
+        sector=sector,
+        client_name=client_name,
+        palette_preference=plan.palette,
+        project_type=plan.project_type,
+        user_prompt=base_prompt,
+    )
+    if not result.ok or result.data is None:
+        err = result.error
+        msg = err.message if err else "Design system incomplet."
+        await _step(cb, NODE_DESIGN_SYSTEM, "error", msg)
+        return {"error": f"DesignSystemAI : {msg}"}
+
+    doc = result.data
+    meta = result.meta or {}
+    await _step(
+        cb,
+        NODE_DESIGN_SYSTEM,
+        "done",
+        f"Palette {doc.colors.primary} · {doc.fonts.heading} / {doc.fonts.body}",
+        sector=meta.get("sector") or sector,
+        palette_source=meta.get("palette_source"),
+    )
+    return {"design_system": doc.to_contract_dict()}
+
+
+async def template_ai_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """TemplateAI — charge le HTML sectoriel de base (loi visuelle déjà fixée)."""
+    cb = _callback_from_config(config)
+    plan = state.get("architect_plan")
+    if not plan:
+        return {"error": "Plan architecte manquant pour TemplateAI."}
+
+    await _step(cb, "template_ai", "start", "Chargement du template sectoriel…")
+
+    from tools.client_content_profile import build_client_content_profile
+
+    base_prompt = (state.get("prompt") or "").strip()
+    profile = build_client_content_profile(
+        user_prompt=base_prompt,
+        research_brief=state.get("research_brief"),
+        plan=plan,
+    )
+    sector = (
+        (profile.sector or "").strip()
+        or (plan.secteur or "").strip()
+        or detect_sector_from_prompt_for_design(base_prompt, plan)
+    )
+
+    result = load_sector_template_raw(
+        sector=sector,
+        user_prompt=base_prompt,
+        plan=plan,
+    )
+    if not result.ok or result.data is None:
+        err = result.error
+        msg = err.message if err else "Template sectoriel indisponible."
+        await _step(cb, "template_ai", "error", msg)
+        return {"error": f"TemplateAI : {msg}"}
+
+    data = result.data
+    await _step(
+        cb,
+        "template_ai",
+        "done",
+        f"Template {data.template_id} — {data.sector}",
+        template_id=data.template_id,
+        template_file=data.template_file,
+    )
+    return {
+        "sector_template": {
+            "template_id": data.template_id,
+            "template_file": data.template_file,
+            "sector": data.sector,
+            "visual_family": data.visual_family,
+            "html_raw": data.html,
+            "html": data.html,
+        },
+    }
+
+
+async def content_ai_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """ContentAI — contenu client réel dans le template sectoriel."""
+    cb = _callback_from_config(config)
+    plan = state.get("architect_plan")
+    sector_tpl = state.get("sector_template")
+    if not plan or not isinstance(sector_tpl, dict):
+        return {"error": "Template sectoriel manquant pour ContentAI."}
+
+    template_html = sector_tpl.get("html_raw") or sector_tpl.get("html") or ""
+    template_id = str(sector_tpl.get("template_id") or "vitrine_default")
+
+    await _step(cb, "content_ai", "start", "Rédaction du contenu client…")
+
+    from tools.client_content_profile import build_client_content_profile
+
+    base_prompt = (state.get("prompt") or "").strip()
+    profile = build_client_content_profile(
+        user_prompt=base_prompt,
+        research_brief=state.get("research_brief"),
+        plan=plan,
+    )
+    research = state.get("research_brief")
+    sector = str(sector_tpl.get("sector") or profile.sector or "")
+    client_name = profile.company_name or profile.display_name
+    city = profile.city or ""
+    if isinstance(research, dict) and research.get("ville"):
+        city = str(research.get("ville") or city)
+    if isinstance(research, dict) and research.get("nom_entreprise"):
+        client_name = str(research.get("nom_entreprise") or client_name)
+
+    result = fill_template_content(
+        template_html=template_html,
+        client_name=client_name,
+        sector=sector,
+        city=city,
+        research_content=research,
+        design_system=state.get("design_system"),
+        user_prompt=base_prompt,
+        template_id=template_id,
+    )
+    if not result.ok or result.data is None:
+        err = result.error
+        msg = err.message if err else "Contenu client incomplet."
+        await _step(cb, "content_ai", "error", msg)
+        return {"error": f"ContentAI : {msg}"}
+
+    data = result.data
+    await _step(
+        cb,
+        "content_ai",
+        "done",
+        f"Contenu {data.client_name} — {template_id}",
+        client_name=data.client_name,
+    )
+    return {
+        "sector_template": {
+            **sector_tpl,
+            "html": data.html,
+            "content_filled": True,
+            "keywords_used": data.keywords_used,
+        },
+    }
+
+
+def _sector_template_html_from_state(state: PipelineState) -> str | None:
+    raw = state.get("sector_template")
+    if isinstance(raw, dict):
+        html = raw.get("html")
+        if isinstance(html, str) and html.strip():
+            return html
+    return None
+
+
+def detect_sector_from_prompt_for_design(prompt: str, plan: ArchitectPlan) -> str:
+    from tools.toolbox_sectors import detect_sector_from_prompt
+
+    return detect_sector_from_prompt(
+        prompt,
+        project_type=plan.project_type,
+        pricing_category=getattr(plan, "pricing_category", None),
+    )
+
+
 def _route_after_architect(state: PipelineState) -> str:
-    """
-    BuilderAI v2 — routage explicite par generation_mode.
-    OpenHands pour projets complexes (≥ 7/10) en real_app ou application_web.
-    Les autres modes nominaux passent par CoreMindAI (templates, React, Next.js).
-    """
+    """ResearchAI (si activé) juste après Architect — avant loi visuelle."""
     if state.get("error"):
         return "finalize"
     if _research_requested(state):
         return "research"
+    return NODE_DESIGN_SYSTEM
+
+
+def _route_after_research(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
+    return NODE_DESIGN_SYSTEM
+
+
+def _route_after_design_system(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
+    return "template_ai"
+
+
+def _route_after_template_ai(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
     if _stitch_requested(state):
         return "stitch"
+    return "content_ai"
+
+
+def _route_after_content_ai(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
     return _route_post_stitch(state)
 
 
@@ -278,14 +548,6 @@ def _research_requested(state: PipelineState) -> bool:
     if state.get("research_enabled") is False:
         return False
     return get_settings().research_enabled
-
-
-def _route_after_research(state: PipelineState) -> str:
-    if state.get("error"):
-        return "finalize"
-    if _stitch_requested(state):
-        return "stitch"
-    return _route_post_stitch(state)
 
 
 def _stitch_requested(state: PipelineState) -> bool:
@@ -328,14 +590,23 @@ async def stitch_node(
     async def on_progress(message: str) -> None:
         await _step(cb, "stitch", "start", message)
 
-    result = await agent.generate_mockups(
-        architect_plan=plan,
-        generation_mode=state.get("generation_mode"),
-        research_brief=state.get("research_brief"),
-        user_prompt=state.get("prompt") or "",
-        settings=settings,
-        on_progress=on_progress,
-    )
+    try:
+        result = await agent.generate_mockups(
+            architect_plan=plan,
+            generation_mode=state.get("generation_mode"),
+            research_brief=state.get("research_brief"),
+            user_prompt=state.get("prompt") or "",
+            design_system=state.get("design_system"),
+            settings=settings,
+            on_progress=on_progress,
+        )
+    except Exception as exc:
+        logger.exception("StitchAI — erreur non bloquante, suite du pipeline")
+        result = StitchResult(
+            success=False,
+            mockups=[],
+            error=f"timeout ({exc!s})"[:120],
+        )
 
     if result.skipped:
         await _step(
@@ -349,12 +620,15 @@ async def stitch_node(
         return {"stitch_result": result}
 
     if not result.success or not result.mockups:
+        msg = result.error or "Maquettes Stitch non générées — suite sans référence visuelle."
+        if (result.error or "").strip().lower() == "timeout":
+            msg = "StitchAI ignoré (délai 30 s) — suite sans maquette."
         await _step(
             cb,
             "stitch",
             "done",
-            result.error or "Maquettes Stitch non générées — suite sans référence visuelle.",
-            ok=False,
+            msg,
+            ok=True,
             stitch_skipped=True,
         )
         return {"stitch_result": result}
@@ -373,7 +647,9 @@ async def stitch_node(
 
 
 def _route_after_stitch(state: PipelineState) -> str:
-    return _route_post_stitch(state)
+    if state.get("error"):
+        return "finalize"
+    return "content_ai"
 
 
 async def research_node(
@@ -526,21 +802,45 @@ async def builder_node(
     if not plan or not analysis:
         return {"error": "État pipeline incomplet (architect_plan manquant pour BuilderAI)."}
 
-    await _step(cb, "builder", "start", "Routage v0 ou DeepSeek (ordres CoreMindAI)…")
+    await _step(cb, "builder", "start", "Assemblage template ou génération v0/DeepSeek…")
     settings = _settings_from_config(config)
     agent = BuilderAgent(settings)
+    user_prompt = _generation_user_prompt(state)
+    from tools.client_content_profile import (
+        build_client_content_profile,
+        log_client_content_context,
+    )
+
+    client_profile = build_client_content_profile(
+        user_prompt=state.get("prompt") or "",
+        research_brief=state.get("research_brief"),
+        plan=plan,
+    )
+    log_client_content_context(client_profile, prefix="BuilderAI")
+    logger.info(
+        "[BuilderAI] pipeline | research_in_prompt=%s | prompt_chars=%d | brief_type=%s",
+        "## Brief recherche" in user_prompt,
+        len(user_prompt),
+        type(state.get("research_brief")).__name__,
+    )
     result = await agent.build(
-        _generation_user_prompt(state),
+        user_prompt,
         plan=plan,
         analysis=analysis,
         settings=settings,
         project_id=state.get("project_id"),
+        design_system=state.get("design_system"),
+        sector_template_html=_sector_template_html_from_state(state),
+        sector_template=state.get("sector_template"),
+        research_brief=state.get("research_brief"),
+        generation_mode=state.get("generation_mode"),
     )
-    provider_label = (
-        "v0"
-        if result.decision.provider == BuilderProvider.V0
-        else "DeepSeek"
-    )
+    if result.decision.provider == BuilderProvider.ASSEMBLY:
+        provider_label = "Assemblage template"
+    elif result.decision.provider == BuilderProvider.V0:
+        provider_label = "v0"
+    else:
+        provider_label = "DeepSeek"
 
     if result.fallback_to_coremind:
         await _step(
@@ -938,6 +1238,17 @@ async def bughunter_node(
     state: PipelineState,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    from agents.bug_hunter_agent import (
+        client_literal_issues_only,
+        repair_generation_client_literals,
+    )
+    from agents.vitrine_policy import is_vitrine_html_project
+    from tools.client_content_profile import (
+        CLIENT_LITERAL_ISSUE_CODES,
+        build_client_content_profile,
+        log_client_content_context,
+    )
+
     cb = _callback_from_config(config)
     generation = state.get("generation")
     plan = state.get("architect_plan")
@@ -947,48 +1258,214 @@ async def bughunter_node(
     await _step(cb, "bughunter", "start", "Vérification du HTML généré…")
     settings = _settings_from_config(config)
     hunter = BugHunterAgent(settings)
+    user_prompt = state.get("prompt") or ""
+    research_brief = state.get("research_brief")
+    client_profile = build_client_content_profile(
+        user_prompt=user_prompt,
+        research_brief=research_brief,
+        plan=plan,
+    )
+    log_client_content_context(client_profile, prefix="BugHunterAI")
+
     report = hunter.analyze_generation(
         generation,
         title=plan.project_type_label,
+        research_brief=research_brief,
+        architect_plan=plan,
+        user_prompt=user_prompt,
     )
+
+    patched_generation = generation
+    literal_repaired = False
+    if (
+        client_profile.company_name
+        and is_vitrine_html_project(plan, generation_mode=state.get("generation_mode"))
+        and not report.ok
+        and CLIENT_LITERAL_ISSUE_CODES.intersection(report.issue_codes)
+    ):
+        patched_generation, report = repair_generation_client_literals(
+            generation,
+            client_profile,
+            title=plan.project_type_label,
+            research_brief=research_brief,
+            architect_plan=plan,
+            user_prompt=user_prompt,
+            settings=settings,
+        )
+        literal_repaired = True
+
+    preview_html = preview_html_from_generation(
+        patched_generation,
+        title=plan.project_type_label,
+        user_prompt=user_prompt,
+    )
+
     msg = (
         "Aucun problème détecté."
         if report.ok
         else f"{len(report.issues)} problème(s) : {', '.join(report.issue_codes[:6])}"
     )
+    if literal_repaired and report.ok:
+        msg = "Identité client injectée — HTML validé."
+    elif literal_repaired:
+        msg = (
+            "Identité client injectée — "
+            + (
+                "alertes restantes non liées au client."
+                if not client_literal_issues_only(report.issue_codes)
+                else "vérification partielle."
+            )
+        )
+
+    from agents.bug_hunter_agent import has_vitrine_blocking_issues
+    from agents.vitrine_policy import is_vitrine_html_project
+
+    vitrine_project = is_vitrine_html_project(
+        plan, generation_mode=state.get("generation_mode")
+    )
+    blocking = has_vitrine_blocking_issues(report) if vitrine_project else not report.ok
     await _step(
         cb,
         "bughunter",
         "done",
         msg,
-        ok=report.ok,
+        ok=report.ok or not blocking,
         issue_count=len(report.issues),
     )
-    return {"bug_report": report}
+    out: dict[str, Any] = {"bug_report": report}
+    if literal_repaired:
+        out["generation"] = patched_generation
+        out["preview_html"] = preview_html
+    return out
 
 
 def _route_after_bughunter(state: PipelineState) -> str:
+    from agents.bug_hunter_agent import has_vitrine_blocking_issues
+    from agents.vitrine_policy import is_vitrine_html_project
+
     report = state.get("bug_report")
     if report and report.ok:
+        return "testpilot"
+    plan = state.get("architect_plan")
+    vitrine = bool(
+        plan
+        and is_vitrine_html_project(plan, generation_mode=state.get("generation_mode"))
+    )
+    if vitrine and report and not has_vitrine_blocking_issues(report):
         return "testpilot"
     loops = state.get("fix_loops") or 0
     if loops >= MAX_AUTOFIX_LOOPS:
         return "testpilot"
-    return "autofix"
+    if report and not vitrine:
+        return "autofix"
+    if vitrine and report and has_vitrine_blocking_issues(report):
+        return "autofix"
+    return "testpilot"
 
 
 async def autofix_node(
     state: PipelineState,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    from agents.bug_hunter_agent import (
+        client_literal_issues_only,
+        repair_generation_client_literals,
+    )
+    from agents.vitrine_policy import is_vitrine_html_project
+    from tools.client_content_profile import (
+        CLIENT_LITERAL_ISSUE_CODES,
+        build_client_content_profile,
+    )
+
     cb = _callback_from_config(config)
     report = state.get("bug_report")
     analysis = state.get("analysis")
     plan = state.get("architect_plan")
-    if not report or not analysis or not plan:
+    generation = state.get("generation")
+    if not report or not analysis or not plan or not generation:
         return {"error": "État pipeline incomplet (autofix)."}
 
     loop_num = (state.get("fix_loops") or 0) + 1
+    user_prompt = state.get("prompt") or ""
+
+    if loop_num > MAX_AUTOFIX_LOOPS:
+        profile = build_client_content_profile(
+            user_prompt=user_prompt,
+            research_brief=state.get("research_brief"),
+            plan=plan,
+        )
+        if profile.company_name and is_vitrine_html_project(
+            plan, generation_mode=state.get("generation_mode")
+        ):
+            generation, report = repair_generation_client_literals(
+                generation,
+                profile,
+                title=plan.project_type_label,
+                research_brief=state.get("research_brief"),
+                architect_plan=plan,
+                user_prompt=user_prompt,
+                settings=_settings_from_config(config),
+            )
+        preview_html = preview_html_from_generation(
+            generation,
+            title=plan.project_type_label,
+            user_prompt=user_prompt,
+        )
+        await _step(
+            cb,
+            "autofix",
+            "done",
+            f"Limite {MAX_AUTOFIX_LOOPS} boucles AutoFix — livraison avec avertissements.",
+            ok=True,
+            loop=loop_num,
+        )
+        return {
+            "generation": generation,
+            "preview_html": preview_html,
+            "bug_report": report,
+            "fix_loops": loop_num,
+        }
+
+    if CLIENT_LITERAL_ISSUE_CODES.intersection(report.issue_codes):
+        profile = build_client_content_profile(
+            user_prompt=user_prompt,
+            research_brief=state.get("research_brief"),
+            plan=plan,
+        )
+        if profile.company_name and is_vitrine_html_project(
+            plan, generation_mode=state.get("generation_mode")
+        ):
+            settings = _settings_from_config(config)
+            generation, report = repair_generation_client_literals(
+                generation,
+                profile,
+                title=plan.project_type_label,
+                research_brief=state.get("research_brief"),
+                architect_plan=plan,
+                user_prompt=user_prompt,
+                settings=settings,
+            )
+            preview_html = preview_html_from_generation(
+                generation,
+                title=plan.project_type_label,
+                user_prompt=user_prompt,
+            )
+            await _step(
+                cb,
+                "autofix",
+                "done",
+                "Identité client injectée (sans régénération LLM)."
+                if report.ok
+                else "Post-traitement client appliqué.",
+                ok=report.ok or client_literal_issues_only(report.issue_codes),
+                loop=loop_num,
+            )
+            return {
+                "generation": generation,
+                "preview_html": preview_html,
+                "bug_report": report,
+                "fix_loops": loop_num,
+            }
     await _step(
         cb,
         "autofix",
@@ -1123,7 +1600,8 @@ def _route_after_testpilot(state: PipelineState) -> str:
             return "lighthouse"
         return "export"
     refix = state.get("testpilot_refix_loops") or 0
-    if refix > MAX_TESTPILOT_AUTOFIX_LOOPS:
+    fix_loops = state.get("fix_loops") or 0
+    if refix > MAX_TESTPILOT_AUTOFIX_LOOPS or fix_loops >= MAX_AUTOFIX_LOOPS:
         if _playwright_requested(state):
             return "playwright"
         if _lighthouse_requested(state):
@@ -1164,15 +1642,42 @@ async def playwright_node(
     await _step(cb, "playwright", "start", "Tests E2E Chromium (Playwright)…")
     settings = _settings_from_config(config)
     agent = PlaywrightAgent(settings)
-    production_url = None
-    export_data = state.get("export_result")
-    if export_data is not None:
-        production_url = getattr(export_data, "production_url", None)
+    from agents.vitrine_policy import is_vitrine_html_project
+    from tools.vitrine_html_enhance import enhance_builder_vitrine_html
 
+    plan = state.get("architect_plan")
+    user_prompt = state.get("prompt") or ""
+    vitrine = bool(
+        plan
+        and is_vitrine_html_project(plan, generation_mode=state.get("generation_mode"))
+    )
+
+    test_html = str(preview_html)
+    if vitrine and test_html.strip():
+        test_html = enhance_builder_vitrine_html(
+            test_html,
+            plan=plan,
+            research_brief=state.get("research_brief"),
+            user_prompt=user_prompt,
+        )
+        if generation:
+            from agents.demo_quality import code_result_from_html
+
+            generation = code_result_from_html(
+                test_html,
+                summary=getattr(generation, "summary", "") or "Vitrine HTML",
+                model=getattr(generation, "model", "pipeline"),
+                provider=getattr(generation, "provider", "cyberforge"),
+            )
+            preview_html = test_html
+
+    # Ne jamais tester une URL Railway/Vercel avant export — HTML local uniquement.
     report = await agent.test_site(
-        html=str(preview_html),
-        base_url=production_url,
+        html=test_html,
+        base_url=None,
         settings=settings,
+        vitrine_mode=vitrine,
+        prefer_local_preview=True,
     )
 
     refix_loops = state.get("playwright_autofix_loops") or 0
@@ -1189,45 +1694,36 @@ async def playwright_node(
             playwright_passed=report.passed,
             playwright_failed=report.failed,
         )
-        return {"playwright_report": report}
+        out: dict[str, Any] = {"playwright_report": report}
+        if vitrine and test_html:
+            out["generation"] = generation
+            out["preview_html"] = preview_html
+        return out
 
-    next_refix = refix_loops + 1
     await _step(
         cb,
         "playwright",
         "done",
-        f"Tests Playwright échoués — score {report.score}/{threshold}. "
-        + (
-            "renvoi vers AutoFixAI."
-            if next_refix <= MAX_PLAYWRIGHT_AUTOFIX_LOOPS
-            else "export avec réserves."
-        ),
-        ok=False,
+        f"Avertissement Playwright — score {report.score}/{threshold} (non bloquant).",
+        ok=True,
         playwright_score=report.score,
         playwright_passed=report.passed,
         playwright_failed=report.failed,
     )
-    return {
+    fail_out: dict[str, Any] = {
         "playwright_report": report,
-        "playwright_autofix_loops": next_refix,
-        "bug_report": playwright_to_bug_report(report),
     }
+    if vitrine and test_html:
+        fail_out["generation"] = generation
+        fail_out["preview_html"] = preview_html
+    return fail_out
 
 
 def _route_after_playwright(state: PipelineState) -> str:
+    """Playwright — avertissement non bloquant (pas de boucle AutoFix)."""
     if state.get("error"):
         return "finalize"
-    report = state.get("playwright_report")
-    settings = get_settings()
-    threshold = settings.playwright_pass_threshold
-    if report and (getattr(report, "ok", False) or getattr(report, "skipped", False)):
-        return "lighthouse" if _lighthouse_requested(state) else "export"
-    if report and getattr(report, "score", 0) >= threshold:
-        return "lighthouse" if _lighthouse_requested(state) else "export"
-    refix = state.get("playwright_autofix_loops") or 0
-    if refix > MAX_PLAYWRIGHT_AUTOFIX_LOOPS:
-        return "lighthouse" if _lighthouse_requested(state) else "export"
-    return "autofix"
+    return "lighthouse" if _lighthouse_requested(state) else "export"
 
 
 async def lighthouse_node(
@@ -1277,18 +1773,12 @@ async def lighthouse_node(
         )
         return {"lighthouse_report": report}
 
-    next_refix = refix_loops + 1
     await _step(
         cb,
         "lighthouse",
         "done",
-        f"Lighthouse — score {report.score_global}/{threshold}. "
-        + (
-            "Recommandations envoyées à AutoFixAI."
-            if next_refix <= MAX_LIGHTHOUSE_AUTOFIX_LOOPS
-            else "export avec réserves."
-        ),
-        ok=False,
+        f"Avertissement Lighthouse — score {report.score_global}/{threshold} (non bloquant).",
+        ok=True,
         lighthouse_score_global=report.score_global,
         lighthouse_performance=report.performance,
         lighthouse_seo=report.seo,
@@ -1298,25 +1788,14 @@ async def lighthouse_node(
     )
     return {
         "lighthouse_report": report,
-        "lighthouse_autofix_loops": next_refix,
-        "bug_report": lighthouse_to_bug_report(report),
     }
 
 
 def _route_after_lighthouse(state: PipelineState) -> str:
+    """Lighthouse — avertissement non bloquant (pas de boucle AutoFix)."""
     if state.get("error"):
         return "finalize"
-    report = state.get("lighthouse_report")
-    settings = get_settings()
-    threshold = settings.lighthouse_pass_threshold
-    if report and (getattr(report, "ok", False) or getattr(report, "skipped", False)):
-        return "export"
-    if report and getattr(report, "score_global", 0) >= threshold:
-        return "export"
-    refix = state.get("lighthouse_autofix_loops") or 0
-    if refix > MAX_LIGHTHOUSE_AUTOFIX_LOOPS:
-        return "export"
-    return "autofix"
+    return "export"
 
 
 async def export_node(
@@ -1407,6 +1886,11 @@ async def finalize_node(
     preview_html = state.get("preview_html")
     if not analysis or not generation or not architect:
         return {"error": "Pipeline terminé sans résultat exploitable."}
+
+    from tools.demo_preview_gate import strip_password_gate
+
+    if preview_html:
+        preview_html = strip_password_gate(str(preview_html))
 
     await _step(cb, "finalize", "start", "Assemblage de la réponse…")
     settings = _settings_from_config(config)
@@ -1507,6 +1991,7 @@ async def finalize_node(
     result = CoreMindRunResult(
         analysis=analysis,
         architect_plan=architect,
+        design_system=state.get("design_system"),
         generation=generation,
         metrics=metrics,
         planned_models=planned,
@@ -1534,9 +2019,20 @@ async def finalize_node(
 
 
 def build_pipeline_graph() -> Any:
-    """Compile le graphe LangGraph."""
+    """
+    Compile le graphe LangGraph.
+
+    Vitrine (client_demo / vitrine_next) :
+      Architect → [Research] → DesignSystem → Template → [Stitch] → Content
+      → Builder → VisionUI → BugHunter → … → Export → Finalisation
+
+    real_app : même préambule visuel optionnel, puis Builder (LLM) ou CoreMind si échec.
+    """
     graph = StateGraph(PipelineState)
     graph.add_node("architect", architect_node)
+    graph.add_node(NODE_DESIGN_SYSTEM, design_system_node)
+    graph.add_node("template_ai", template_ai_node)
+    graph.add_node("content_ai", content_ai_node)
     graph.add_node("research", research_node)
     graph.add_node("stitch", stitch_node)
     graph.add_node("openhands", openhands_node)
@@ -1557,16 +2053,38 @@ def build_pipeline_graph() -> Any:
         _route_after_architect,
         {
             "research": "research",
-            "stitch": "stitch",
-            "openhands": "openhands",
-            "coremind": "coremind",
-            "builder": "builder",
+            NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,
             "finalize": "finalize",
         },
     )
     graph.add_conditional_edges(
         "research",
         _route_after_research,
+        {
+            NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        NODE_DESIGN_SYSTEM,
+        _route_after_design_system,
+        {
+            "template_ai": "template_ai",
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        "template_ai",
+        _route_after_template_ai,
+        {
+            "stitch": "stitch",
+            "content_ai": "content_ai",
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        "content_ai",
+        _route_after_content_ai,
         {
             "stitch": "stitch",
             "openhands": "openhands",
@@ -1579,9 +2097,7 @@ def build_pipeline_graph() -> Any:
         "stitch",
         _route_after_stitch,
         {
-            "openhands": "openhands",
-            "coremind": "coremind",
-            "builder": "builder",
+            "content_ai": "content_ai",
             "finalize": "finalize",
         },
     )

@@ -47,7 +47,7 @@ export function StitchSettingsPanel() {
             visuelle pour BuilderAI.
           </p>
           <p className="mt-2 text-[11px] text-cf-label">
-            Clé API : STITCH_API_KEY dans Paramètres → Recherche / coffre ou .env
+            Clé API : section « Clés API Recherche » ci-dessus ou onglet Clés API
           </p>
         </div>
         <StitchToggle enabled={enabled} onChange={refresh} />

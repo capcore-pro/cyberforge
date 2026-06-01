@@ -19,6 +19,7 @@ export interface InfraFlags {
   stripe: boolean;
   brave_search: boolean;
   exa: boolean;
+  stitch: boolean;
 }
 
 export type VaultConfiguredFlags = ProviderFlags & InfraFlags;
@@ -46,6 +47,7 @@ export interface VaultKeysPayload {
   stripe_secret_key?: string | null;
   brave_search_api_key?: string | null;
   exa_api_key?: string | null;
+  stitch_api_key?: string | null;
 }
 
 /** @deprecated Utiliser VaultKeysPayload */
@@ -70,6 +72,13 @@ export async function lockSecrets() {
   return apiRequest<{ ok: boolean; locked: boolean }>({
     method: "POST",
     path: `${API_PREFIX}/secrets/lock`,
+  });
+}
+
+export async function resetSecrets() {
+  return apiRequest<SecretsStatusResponse & { ok: boolean }>({
+    method: "POST",
+    path: `${API_PREFIX}/secrets/reset`,
   });
 }
 

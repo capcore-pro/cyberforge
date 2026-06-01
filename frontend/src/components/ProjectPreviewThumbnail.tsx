@@ -1,3 +1,5 @@
+import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
+
 interface ProjectPreviewThumbnailProps {
   html: string | null;
   title: string;
@@ -44,7 +46,7 @@ export function ProjectPreviewThumbnail({
           transformOrigin: "top left",
         }}
         sandbox="allow-scripts"
-        srcDoc={html}
+        srcDoc={prepareInternalPreviewSrcDoc(html)}
       />
     </div>
   );

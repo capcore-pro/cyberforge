@@ -73,16 +73,42 @@ class ResearchBrief(BaseModel):
         )
 
 
+def research_brief_has_context(brief: ResearchBrief) -> bool:
+    """True si le brief apporte au moins le contexte client (même sans listes API)."""
+    return bool(
+        brief.enriched
+        or (brief.secteur or "").strip()
+        or (brief.nom_entreprise or "").strip()
+        or (brief.ville or "").strip()
+        or brief.mots_cles
+    )
+
+
 def format_research_brief_for_prompt(brief: ResearchBrief | None) -> str:
     """Formate le brief pour injection dans les prompts BuilderAI / CoreMindAI."""
-    if brief is None or brief.skipped or not brief.enriched:
+    if brief is None or brief.skipped:
+        return ""
+    if not research_brief_has_context(brief):
         return ""
     lines = [
         "## Brief recherche contenu (Brave Search + Exa AI)",
         "Utilise ces éléments réels pour rédiger du contenu personnalisé — "
         "pas de noms, adresses ou statistiques fictifs.",
+        "Le nom d'entreprise, le secteur, la ville et les mots-clés ci-dessous doivent "
+        "apparaître textuellement dans <title>, <h1>, meta description, sections et CTA.",
         "",
     ]
+    if brief.nom_entreprise or brief.secteur or brief.ville or brief.mots_cles:
+        lines.append("### Identité client (copier verbatim dans le HTML)")
+        if brief.nom_entreprise:
+            lines.append(f"- Nom : {brief.nom_entreprise}")
+        if brief.secteur:
+            lines.append(f"- Secteur : {brief.secteur}")
+        if brief.ville:
+            lines.append(f"- Ville : {brief.ville}")
+        if brief.mots_cles:
+            lines.append(f"- Mots-clés : {', '.join(brief.mots_cles[:12])}")
+        lines.append("")
     if brief.secteur or brief.nom_entreprise or brief.ville:
         ctx = " · ".join(
             p
@@ -167,13 +193,15 @@ def _guess_secteur(prompt: str) -> str:
 
 
 def _extract_company_name(prompt: str) -> str:
+    from tools.client_content_profile import sanitize_brand_name
+
     for match in _COMPANY_RE.finditer(prompt):
         name = match.group(1).strip()
         if len(name) >= 2:
-            return name[:80]
+            return sanitize_brand_name(name[:80], user_prompt=prompt)
     title = clean_project_title(prompt, max_len=60)
     if title and title != "Projet sans titre":
-        return title
+        return sanitize_brand_name(title, user_prompt=prompt)
     return ""
 
 

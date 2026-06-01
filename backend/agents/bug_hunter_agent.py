@@ -9,12 +9,54 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agents.architect_agent import ArchitectPlan
 from agents.base_agent import BaseAgent
 from agents.demo_quality import preview_html_from_generation
+from agents.research_agent import ResearchBrief
+from tools.client_content_profile import (
+    CLIENT_LITERAL_ISSUE_CODES,
+    ClientContentProfile,
+    build_client_content_profile,
+    repair_client_literals_in_html,
+    validate_client_literals,
+)
+from tools.vitrine_html_enhance import enhance_builder_vitrine_html
 from tools.codegen_service import CodeGenerateResult
 from tools.generation_sources import is_usable_preview_html
+from tools.vitrine_html_enhance import find_forbidden_placeholder_issues, is_vitrine_html_plan
 
 _REACT_SOURCE_EXT = re.compile(r"\.(tsx|jsx)$", re.I)
+
+# Vitrine HTML — seules validations bloquantes (AutoFix max 2, puis livraison avec alertes).
+VITRINE_BLOCKING_ISSUE_CODES: frozenset[str] = frozenset(
+    {
+        "unresolved_placeholder",
+        "missing_title",
+        "generic_title",
+        "missing_h1",
+        "missing_contact",
+        "visible_source",  # livrable React/TSX au lieu d'index.html
+    }
+)
+
+_GENERIC_PAGE_TITLES: frozenset[str] = frozenset(
+    {
+        "site web",
+        "my app",
+        "démo cyberforge",
+        "demo cyberforge",
+        "site vitrine",
+        "untitled",
+        "welcome",
+        "homepage",
+        "your site",
+        "votre site",
+        "new site",
+        "document",
+        "page title",
+        "home",
+    }
+)
 
 
 class BugIssue(BaseModel):
@@ -55,6 +97,13 @@ _JS_BROKEN_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"<script[^>]*>[\s\S]*?<<<<<<<", "conflit git dans un script"),
 )
 
+_FORBIDDEN_VISIBLE_RE = re.compile(
+    r"lorem\s+ipsum|\blorem\b|"
+    r"votre\s+texte\s+ici|your\s+text\s+here|"
+    r"example\s+corp|entreprise\s+xyz",
+    re.IGNORECASE,
+)
+
 
 def _strip_scripts_and_styles(html: str) -> str:
     """Corps approximatif hors scripts/styles pour détecter du code source affiché."""
@@ -92,7 +141,182 @@ def _empty_shell_ids(html: str) -> list[str]:
     return empty
 
 
-def analyze_demo_html(html: str) -> BugHuntReport:
+def client_literal_issues_only(issue_codes: list[str]) -> bool:
+    if not issue_codes:
+        return False
+    return set(issue_codes).issubset(CLIENT_LITERAL_ISSUE_CODES)
+
+
+def vitrine_blocking_issues_only(issue_codes: list[str]) -> bool:
+    """True si aucun code hors liste bloquante vitrine (alertes Playwright/Lighthouse exclues)."""
+    if not issue_codes:
+        return True
+    return set(issue_codes).issubset(VITRINE_BLOCKING_ISSUE_CODES)
+
+
+def has_vitrine_blocking_issues(report: BugHuntReport) -> bool:
+    return bool(
+        VITRINE_BLOCKING_ISSUE_CODES.intersection(report.issue_codes)
+    )
+
+
+def _strip_scripts_styles(html: str) -> str:
+    text = re.sub(r"<script[\s\S]*?</script>", "", html, flags=re.I)
+    text = re.sub(r"<style[\s\S]*?</style>", "", text, flags=re.I)
+    return text
+
+
+def _extract_page_title(html: str) -> str:
+    match = re.search(r"<title[^>]*>([^<]*)</title>", html, re.I)
+    return (match.group(1) if match else "").strip()
+
+
+def _is_generic_page_title(title: str) -> bool:
+    normalized = re.sub(r"\s+", " ", title.strip().lower())
+    if not normalized:
+        return True
+    if normalized in _GENERIC_PAGE_TITLES:
+        return True
+    if len(normalized) < 4:
+        return True
+    return False
+
+
+def _has_contact_section_or_form(html: str) -> bool:
+    low = html.lower()
+    if 'id="contact"' in low or "id='contact'" in low:
+        return True
+    if "cf-contact-form" in low:
+        return True
+    if re.search(r"<form\b", html, re.I) and re.search(
+        r'type\s*=\s*["\']email["\']|name\s*=\s*["\']email["\']',
+        html,
+        re.I,
+    ):
+        return True
+    if re.search(
+        r'<section[^>]+(?:id|class)\s*=\s*["\'][^"\']*contact',
+        html,
+        re.I,
+    ):
+        return True
+    return False
+
+
+def repair_generation_client_literals(
+    generation: CodeGenerateResult,
+    profile: ClientContentProfile,
+    *,
+    title: str,
+    research_brief: ResearchBrief | Any | None = None,
+    architect_plan: ArchitectPlan | None = None,
+    user_prompt: str = "",
+    settings: Any = None,
+) -> tuple[CodeGenerateResult, BugHuntReport]:
+    """Injecte l'identité client dans le HTML existant puis revalide."""
+    from agents.demo_quality import code_result_from_html
+
+    if settings is None:
+        from config import get_settings
+
+        settings = get_settings()
+    hunter = BugHunterAgent(settings)
+    html = preview_html_from_generation(
+        generation,
+        title=title,
+        user_prompt=user_prompt,
+    )
+    if architect_plan and is_vitrine_html_plan(architect_plan):
+        html = enhance_builder_vitrine_html(
+            html,
+            plan=architect_plan,
+            research_brief=research_brief,
+            user_prompt=user_prompt,
+        )
+    fixed = repair_client_literals_in_html(html, profile, user_prompt=user_prompt)
+    patched = code_result_from_html(
+        fixed,
+        summary=generation.summary,
+        model=generation.model,
+        provider=generation.provider,
+    )
+    report = hunter.analyze_generation(
+        patched,
+        title=title,
+        research_brief=research_brief,
+        architect_plan=architect_plan,
+        user_prompt=user_prompt,
+    )
+    return patched, report
+
+
+def analyze_vitrine_html(
+    html: str,
+    *,
+    client_profile: ClientContentProfile | None = None,
+) -> BugHuntReport:
+    """
+    Validation vitrine — 4 règles bloquantes uniquement :
+    placeholders {{ }}, titre non générique, <h1>, contact/formulaire.
+    """
+    _ = client_profile  # réservé — réparation identité en amont (AutoFix)
+    issues: list[BugIssue] = []
+    stripped = html.strip()
+    size = len(stripped.encode("utf-8"))
+
+    visible = _strip_scripts_styles(stripped)
+    if "{{" in visible:
+        issues.append(
+            BugIssue(
+                code="unresolved_placeholder",
+                message="Placeholder {{…}} non remplacé dans le HTML.",
+            )
+        )
+
+    title = _extract_page_title(stripped)
+    if not title:
+        issues.append(
+            BugIssue(
+                code="missing_title",
+                message="Balise <title> manquante ou vide.",
+            )
+        )
+    elif _is_generic_page_title(title):
+        issues.append(
+            BugIssue(
+                code="generic_title",
+                message=f"Titre générique interdit : « {title[:80]} ».",
+            )
+        )
+
+    if not re.search(r"<h1\b", stripped, re.I):
+        issues.append(
+            BugIssue(
+                code="missing_h1",
+                message="Balise <h1> manquante.",
+            )
+        )
+
+    if not _has_contact_section_or_form(stripped):
+        issues.append(
+            BugIssue(
+                code="missing_contact",
+                message="Section contact ou formulaire manquant.",
+            )
+        )
+
+    return BugHuntReport(
+        ok=len(issues) == 0,
+        html_bytes=size,
+        issues=issues,
+    )
+
+
+def analyze_demo_html(
+    html: str,
+    *,
+    client_profile: ClientContentProfile | None = None,
+) -> BugHuntReport:
     """Analyse le HTML et retourne un rapport (sans appel LLM)."""
     issues: list[BugIssue] = []
     stripped = html.strip()
@@ -180,6 +404,12 @@ def analyze_demo_html(html: str) -> BugHuntReport:
             )
         )
 
+    for code, message in find_forbidden_placeholder_issues(
+        stripped,
+        client_profile=client_profile,
+    ):
+        issues.append(BugIssue(code=code, message=message))
+
     return BugHuntReport(
         ok=len(issues) == 0,
         html_bytes=size,
@@ -198,8 +428,13 @@ class BugHunterAgent(BaseAgent):
     def name(self) -> str:
         return "BugHunterAI"
 
-    def analyze_html(self, html: str) -> BugHuntReport:
-        return analyze_demo_html(html)
+    def analyze_html(
+        self,
+        html: str,
+        *,
+        client_profile: ClientContentProfile | None = None,
+    ) -> BugHuntReport:
+        return analyze_demo_html(html, client_profile=client_profile)
 
     def _generation_file_issues(
         self,
@@ -238,10 +473,25 @@ class BugHunterAgent(BaseAgent):
         generation: CodeGenerateResult,
         *,
         title: str = "Démo CyberForge",
+        research_brief: ResearchBrief | None = None,
+        architect_plan: ArchitectPlan | None = None,
+        user_prompt: str = "",
     ) -> BugHuntReport:
         file_issues = self._generation_file_issues(generation)
         html = preview_html_from_generation(generation, title=title)
-        html_report = self.analyze_html(html)
+        profile: ClientContentProfile | None = None
+        if architect_plan and is_vitrine_html_plan(architect_plan):
+            profile = build_client_content_profile(
+                user_prompt=user_prompt,
+                research_brief=research_brief,
+                plan=architect_plan,
+            )
+            if not profile.company_name:
+                profile = None
+        if architect_plan and is_vitrine_html_plan(architect_plan):
+            html_report = analyze_vitrine_html(html, client_profile=profile)
+        else:
+            html_report = self.analyze_html(html, client_profile=profile)
         if not file_issues:
             return html_report
         merged = list(html_report.issues) + file_issues

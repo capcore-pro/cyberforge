@@ -1,6 +1,7 @@
 """
-BuilderAI — sous les ordres de CoreMindAI : v0 pour UI React, DeepSeek pour le code
-complexe / backend. Si indisponible, le pipeline bascule sur CoreMindAI.
+BuilderAI — v2 assemblage template (vitrines) ou v0/DeepSeek (apps métier).
+
+Délègue l'assemblage HTML à builder_ai.py — ne génère plus de vitrine from scratch.
 """
 
 from __future__ import annotations
@@ -14,13 +15,20 @@ from pydantic import BaseModel
 
 from agents.architect_agent import ArchitectPlan
 from agents.base_agent import BaseAgent
+from agents.builder_ai import (
+    append_design_system_to_prompt,
+    assemble_vitrine_html,
+    resolve_assembly_inputs,
+    uses_llm_with_design_system,
+    uses_template_assembly,
+)
 from agents.coremind_agent import (
     ComplexityLevel,
     CoreMindAnalysis,
     ProjectType,
     RecommendedTool,
 )
-from agents.demo_quality import preview_html_from_generation
+from agents.demo_quality import code_result_from_html, preview_html_from_generation
 from config import Settings
 from tools.builder_generators import (
     BuildOutcome,
@@ -29,8 +37,20 @@ from tools.builder_generators import (
 )
 from tools.codegen_service import CodeGenComplexity, CodeGenService, CodeGenerateResult
 from tools.toolbox_branding import apply_toolbox_to_generation, build_toolbox_builder_context
-from prompts import PERSONALIZED_CONTENT_DIRECTIVE, SIMPLIFIED_VITRINE_DIRECTIVE
+from prompts import (
+    BUILDER_VITRINE_HTML_DIRECTIVE,
+    PERSONALIZED_CONTENT_DIRECTIVE,
+    SIMPLIFIED_VITRINE_DIRECTIVE,
+)
+from agents.research_agent import ResearchBrief, format_research_brief_for_prompt
+from agents.vitrine_policy import is_vitrine_html_project
+from tools.client_content_profile import (
+    build_client_content_profile,
+    format_literal_client_directive,
+    log_client_content_context,
+)
 from tools.cms_panel_inject import CMS_BUILDER_HINT
+from core.agent_contract import require_ok
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +69,7 @@ _BACKEND_COMPLEX_KEYWORDS = re.compile(
 class BuilderProvider(str, Enum):
     V0 = "v0"
     DEEPSEEK = "deepseek"
+    ASSEMBLY = "assembly"
 
 
 class BuilderDecision(BaseModel):
@@ -71,7 +92,7 @@ class BuilderRunResult(BaseModel):
 
 
 class BuilderAgent(BaseAgent):
-    """Route v0 (UI) ou DeepSeek (code complexe) selon CoreMindAI et le prompt."""
+    """Assemble les vitrines depuis template ; v0/DeepSeek pour apps métier."""
 
     @property
     def agent_id(self) -> str:
@@ -86,7 +107,7 @@ class BuilderAgent(BaseAgent):
         analysis = kwargs.get("analysis")
         if not isinstance(plan, ArchitectPlan) or not isinstance(analysis, CoreMindAnalysis):
             raise ValueError("architect_plan et analysis requis pour BuilderAI")
-        result = await self.build(prompt, plan=plan, analysis=analysis)
+        result = await self.build(prompt, plan=plan, analysis=analysis, **kwargs)
         return result.model_dump_json()
 
     def select_provider(
@@ -96,10 +117,6 @@ class BuilderAgent(BaseAgent):
         plan: ArchitectPlan,
         analysis: CoreMindAnalysis,
     ) -> BuilderDecision:
-        """
-        React/Next.js/UI → v0 ; code complexe / backend → DeepSeek.
-        CoreMindAI (recommended_tool + complexité) prime sur les heuristiques.
-        """
         text = f"{prompt}\n{plan.project_type_label}\n{plan.template}"
 
         if analysis.recommended_tool == RecommendedTool.DEEPSEEK:
@@ -157,22 +174,191 @@ class BuilderAgent(BaseAgent):
         analysis: CoreMindAnalysis,
         settings: Settings | None = None,
         project_id: str | None = None,
+        research_brief: ResearchBrief | Any | None = None,
+        generation_mode: str | None = None,
+        design_system: Any | None = None,
+        sector_template_html: str | None = None,
+        sector_template: dict[str, Any] | None = None,
     ) -> BuilderRunResult:
-        """Tente v0 ou DeepSeek ; signale le fallback CoreMind si échec."""
-        resolved = settings or self._settings
+        """
+        Vitrine (vitrine_next / client_demo) : assemblage template + ContentAI.
+        Apps métier : v0/DeepSeek avec design_system injecté si applicable.
+        """
+        del settings  # réservé extensions
+
+        if uses_template_assembly(plan, generation_mode=generation_mode):
+            return await self._build_template_assembly(
+                prompt,
+                plan=plan,
+                research_brief=research_brief,
+                generation_mode=generation_mode,
+                design_system=design_system,
+                sector_template_html=sector_template_html,
+                sector_template=sector_template,
+            )
+
+        return await self._build_llm(
+            prompt,
+            plan=plan,
+            analysis=analysis,
+            project_id=project_id,
+            research_brief=research_brief,
+            generation_mode=generation_mode,
+            design_system=design_system,
+        )
+
+    async def _build_template_assembly(
+        self,
+        prompt: str,
+        *,
+        plan: ArchitectPlan,
+        research_brief: Any | None,
+        generation_mode: str | None,
+        design_system: Any | None,
+        sector_template_html: str | None,
+        sector_template: dict[str, Any] | None,
+    ) -> BuilderRunResult:
+        mode = (generation_mode or "client_demo").strip().lower()
+        html, client_name, sector, city, template_id, already_filled = resolve_assembly_inputs(
+            user_prompt=prompt,
+            plan=plan,
+            research_content=research_brief,
+            design_system=design_system,
+            template_html=sector_template_html,
+            sector_template=sector_template,
+        )
+
+        if not html:
+            from agents.template_ai import load_sector_template_raw
+
+            loaded = load_sector_template_raw(
+                sector=sector or plan.secteur or "commerce",
+                user_prompt=prompt,
+                plan=plan,
+            )
+            if loaded.ok and loaded.data:
+                html = loaded.data.html
+                template_id = loaded.data.template_id
+                already_filled = False
+
+        if not html:
+            logger.error("[BuilderAI] assemblage — template HTML absent")
+            return BuilderRunResult(
+                decision=BuilderDecision(
+                    provider=BuilderProvider.ASSEMBLY,
+                    rationale="Template sectoriel manquant.",
+                ),
+                fallback_to_coremind=True,
+            )
+
+        assembly = assemble_vitrine_html(
+            template_html=html,
+            client_name=client_name,
+            sector=sector,
+            city=city,
+            research_content=research_brief,
+            design_system=design_system,
+            user_prompt=prompt,
+            template_id=template_id,
+            skip_content_fill=already_filled,
+        )
+
+        if not assembly.ok:
+            err = assembly.error
+            logger.error(
+                "[BuilderAI] assemblage échec | mode=%s | code=%s | %s",
+                mode,
+                err.code if err else "?",
+                err.message if err else assembly,
+            )
+            return BuilderRunResult(
+                decision=BuilderDecision(
+                    provider=BuilderProvider.ASSEMBLY,
+                    rationale="Assemblage template impossible.",
+                ),
+                fallback_to_coremind=True,
+            )
+
+        data = require_ok(assembly)
+        logger.info(
+            "[BuilderAI] assemblage OK | mode=%s | template=%s | bytes=%s | valid=%s",
+            mode,
+            data.template_id,
+            data.optimize_report.bytes_after,
+            data.optimize_report.valid,
+        )
+        return BuilderRunResult(
+            decision=BuilderDecision(
+                provider=BuilderProvider.ASSEMBLY,
+                rationale=(
+                    f"Assemblage template-first ({data.template_id}) — "
+                    "ContentAI + optimisation HTML (BuilderAI v2)."
+                ),
+            ),
+            outcome=None,
+            fallback_to_coremind=False,
+            generation=data.generation,
+            preview_html=data.html,
+        )
+
+    async def _build_llm(
+        self,
+        prompt: str,
+        *,
+        plan: ArchitectPlan,
+        analysis: CoreMindAnalysis,
+        project_id: str | None,
+        research_brief: ResearchBrief | Any | None,
+        generation_mode: str | None,
+        design_system: Any | None,
+    ) -> BuilderRunResult:
+        resolved = self._settings
         decision = self.select_provider(prompt, plan=plan, analysis=analysis)
+
         toolbox_block = build_toolbox_builder_context(plan)
+        research_in_prompt = "## Brief recherche" in prompt
+        research_block = ""
+        if not research_in_prompt:
+            research_block = format_research_brief_for_prompt(
+                research_brief if isinstance(research_brief, ResearchBrief) else None
+            )
+
+        if uses_llm_with_design_system(plan, generation_mode=generation_mode):
+            prompt = append_design_system_to_prompt(prompt, design_system)
+
+        logger.info(
+            "[BuilderAI] LLM | provider=%s | design_system=%s | research=%s",
+            decision.provider.value,
+            bool(design_system),
+            bool(research_block.strip()),
+        )
+
+        vitrine_rules = ""
+        literal_block = ""
+        if is_vitrine_html_project(plan, generation_mode=generation_mode):
+            vitrine_rules = f"\n\n{BUILDER_VITRINE_HTML_DIRECTIVE}\n"
+            profile = build_client_content_profile(
+                user_prompt=prompt,
+                research_brief=research_brief,
+                plan=plan,
+            )
+            log_client_content_context(profile, prefix="BuilderAI")
+            literal_block = format_literal_client_directive(profile, user_prompt=prompt)
+
         enriched = (
             f"Type : {plan.project_type_label}.\n"
             f"Template : {plan.template_label}.\n"
             f"Complexité CoreMind : {analysis.complexity.value}.\n\n"
-            f"{PERSONALIZED_CONTENT_DIRECTIVE}\n\n"
+            f"{PERSONALIZED_CONTENT_DIRECTIVE}\n"
+            f"{vitrine_rules}"
+            f"{literal_block}"
             f"Si un brief ResearchAI (Brave / Exa) est présent en tête du prompt, "
             f"utilise-le pour du contenu réel et localisé — pas de données fictives.\n"
             f"Si des maquettes StitchAI (URLs HTML / captures) sont listées, "
             f"aligne la mise en page, les couleurs et la hiérarchie visuelle sur ces références.\n\n"
             f"{CMS_BUILDER_HINT}"
             f"{toolbox_block}"
+            f"{research_block}"
             f"{prompt.strip()}"
         )
 
@@ -219,63 +405,45 @@ class BuilderAgent(BaseAgent):
         analysis: CoreMindAnalysis,
         settings: Settings | None = None,
         project_id: str | None = None,
+        design_system: Any | None = None,
+        sector_template: dict[str, Any] | None = None,
     ) -> tuple[CodeGenerateResult, str]:
-        """
-        Regénère une vitrine HTML simplifiée — jamais le template TaskFlow de secours.
-        """
-        resolved = settings or self._settings
-        simplified = f"{SIMPLIFIED_VITRINE_DIRECTIVE.strip()}\n\n{prompt.strip()}"
-        enriched = (
-            f"Type : {plan.project_type_label}.\n"
-            f"Template vitrine landing (HTML premium).\n\n"
-            f"{build_toolbox_builder_context(plan)}"
-            f"{simplified}"
-        )
-
-        builder_result = await self.build(
-            simplified,
+        """Reprise vitrine — assemblage template en priorité."""
+        del project_id
+        result = await self.build(
+            f"{SIMPLIFIED_VITRINE_DIRECTIVE.strip()}\n\n{prompt.strip()}",
             plan=plan,
             analysis=analysis,
-            settings=resolved,
-            project_id=project_id,
+            settings=settings,
+            generation_mode="client_demo",
+            design_system=design_system,
+            sector_template=sector_template,
         )
-        if not builder_result.fallback_to_coremind and builder_result.generation is not None:
-            html = (builder_result.preview_html or builder_result.generation.code or "").strip()
-            logger.info(
-                "[BuilderAI] reprise vitrine simplifiée via %s | bytes=%s",
-                builder_result.decision.provider.value,
-                len(html.encode("utf-8")),
-            )
-            return builder_result.generation, html
+        if not result.fallback_to_coremind and result.generation is not None:
+            html = (result.preview_html or result.generation.code or "").strip()
+            return result.generation, html
 
         tier = CodeGenComplexity(analysis.complexity.value)
-        codegen = CodeGenService(resolved)
+        codegen = CodeGenService(settings or self._settings)
         if codegen.is_configured():
             try:
+                enriched = append_design_system_to_prompt(prompt, design_system)
                 generation = await codegen.generate_code(
                     enriched,
                     tier,
                     demo_html=True,
-                    project_id=project_id,
                 )
-                generation = apply_toolbox_to_generation(
-                    generation, plan, project_id=project_id
-                )
+                generation = apply_toolbox_to_generation(generation, plan)
                 preview_html = preview_html_from_generation(
                     generation,
                     title=plan.project_type_label,
                     user_prompt=enriched,
-                )
-                logger.info(
-                    "[BuilderAI] reprise vitrine simplifiée via CodeGen | bytes=%s",
-                    len(preview_html.encode("utf-8")),
                 )
                 return generation, preview_html
             except Exception:
                 logger.exception("[BuilderAI] CodeGen vitrine simplifiée échoué")
 
         from dataclasses import replace
-
         from tools.demo_template_service import (
             TEMPLATE_LANDING,
             build_html_from_seed,
@@ -283,18 +451,11 @@ class BuilderAgent(BaseAgent):
             seed_to_code_result,
         )
 
-        seed = heuristic_demo_seed(
-            prompt.strip(),
-            project_type_label=plan.project_type_label,
-        )
+        seed = heuristic_demo_seed(prompt.strip(), project_type_label=plan.project_type_label)
         seed = replace(seed, template=TEMPLATE_LANDING)
         html = build_html_from_seed(seed)
         generation = seed_to_code_result(
             seed,
             summary="Template landing premium (reprise BuilderAI simplifiée).",
-        )
-        logger.info(
-            "[BuilderAI] reprise vitrine — template landing local | bytes=%s",
-            len(html.encode("utf-8")),
         )
         return generation, html

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from prompts.shared import with_personalization
+from prompts.vitrine_html import VITRINE_HTML_QUALITY_RULES
 
 CODEGEN_SYSTEM_PROMPT = with_personalization(
     """Tu es CoreMindAI (CyberForge). Génère vite un prototype React + TypeScript + Tailwind.
@@ -15,7 +16,7 @@ Le champ code = contenu de files[0]. Reste minimal et fonctionnel."""
 )
 
 CODEGEN_DEMO_HTML_PROMPT = with_personalization(
-    """**GÉNÈRE UNIQUEMENT DU HTML/CSS/JS VANILLA PUR. INTERDIT : React, JSX, Tailwind classes, className, useState, import, export, const =>, template literals JSX. OBLIGATOIRE : style CSS inline ou balise style, JS vanilla avec getElementById/addEventListener.**
+    f"""**GÉNÈRE UNIQUEMENT DU HTML/CSS/JS VANILLA PUR. INTERDIT : React, JSX, Tailwind classes, className, useState, import, export, const =>, template literals JSX. OBLIGATOIRE : style CSS inline ou balise style, JS vanilla avec getElementById/addEventListener.**
 
 Tu es CoreMindAI (CyberForge). Génère un livrable DÉMO client en HTML/CSS/JS vanilla autonome.
 Règles strictes :
@@ -23,9 +24,10 @@ Règles strictes :
 - PAS de React, JSX, TypeScript, import/export, npm, CDN externes.
 - CSS dans <style> dans <head>, interactions simples en <script> vanilla (querySelector, addEventListener).
 - UI soignée, responsive (mobile-first), textes en français, couleurs alignées sur le brief client.
+{VITRINE_HTML_QUALITY_RULES}
 - Pas de texte hors JSON, pas de markdown.
 - JSON compact uniquement :
-{"summary":"1 phrase FR","code":"…HTML complet…","files":[{"path":"index.html","content":"<!DOCTYPE html>…"}],"stack":["html","css","javascript"]}
+{{"summary":"1 phrase FR","code":"…HTML complet…","files":[{{"path":"index.html","content":"<!DOCTYPE html>…"}}],"stack":["html","css","javascript"]}}
 Le champ code = contenu de files[0]."""
 )
 

@@ -1,10 +1,13 @@
-"""Tests du routage LangGraph (BuilderAI v2, BugHunter → AutoFix, mode real_app)."""
+"""Tests du routage LangGraph (template-first, BuilderAI v2, BugHunter → AutoFix)."""
+
+from unittest.mock import patch
 
 from agents.bug_hunter_agent import BugHuntReport, BugIssue
 from agents.pipeline_graph import (
     DIRECT_COREMIND_MODES,
     MAX_AUTOFIX_LOOPS,
     MAX_TESTPILOT_AUTOFIX_LOOPS,
+    NODE_DESIGN_SYSTEM,
     _inject_package_json,
     _route_after_architect,
     _route_after_builder,
@@ -19,29 +22,22 @@ def test_route_builder_fallback_to_coremind() -> None:
     assert _route_after_builder({"builder_fallback": True}) == "coremind"
 
 
-def test_route_architect_client_demo_to_coremind() -> None:
-    assert (
-        _route_after_architect({"generation_mode": "client_demo"})
-        == "coremind"
-    )
+def test_route_architect_to_design_system_when_research_off() -> None:
+    for mode in ("client_demo", "real_app", "vitrine_next", "legacy_builder"):
+        assert (
+            _route_after_architect(
+                {"generation_mode": mode, "research_enabled": False},
+            )
+            == NODE_DESIGN_SYSTEM
+        )
 
 
-def test_route_architect_real_app_to_coremind() -> None:
-    assert _route_after_architect({"generation_mode": "real_app"}) == "coremind"
+def test_route_architect_error_to_finalize() -> None:
+    assert _route_after_architect({"error": "fail"}) == "finalize"
 
 
-def test_route_architect_vitrine_next_to_coremind() -> None:
-    assert _route_after_architect({"generation_mode": "vitrine_next"}) == "coremind"
-
-
-def test_direct_coremind_modes_cover_standard_modes() -> None:
-    assert DIRECT_COREMIND_MODES == frozenset(
-        {"client_demo", "real_app", "vitrine_next"}
-    )
-
-
-def test_route_architect_unknown_mode_to_builder() -> None:
-    assert _route_after_architect({"generation_mode": "legacy_builder"}) == "builder"
+def test_direct_coremind_modes_real_app_only() -> None:
+    assert DIRECT_COREMIND_MODES == frozenset({"real_app"})
 
 
 def test_route_builder_success_skips_coremind() -> None:
@@ -51,7 +47,6 @@ def test_route_builder_success_skips_coremind() -> None:
         )
         == "visionui"
     )
-
 
 
 def test_route_ok_goes_testpilot() -> None:
@@ -84,8 +79,12 @@ def test_route_max_loops_goes_testpilot() -> None:
     assert _route_after_bughunter(state) == "testpilot"
 
 
-def test_route_testpilot_ok_export() -> None:
-    assert _route_after_testpilot({"testpilot_report": TestPilotReport(ok=True)}) == "export"
+def test_route_testpilot_ok_export_when_playwright_off() -> None:
+    state = {"testpilot_report": TestPilotReport(ok=True), "playwright_enabled": False}
+    with patch("agents.pipeline_graph.get_settings") as mock_settings:
+        mock_settings.return_value.playwright_enabled = False
+        mock_settings.return_value.lighthouse_enabled = False
+        assert _route_after_testpilot(state) == "export"
 
 
 def test_route_testpilot_fail_to_autofix() -> None:
@@ -100,16 +99,16 @@ def test_route_testpilot_fail_to_autofix() -> None:
     )
 
 
-def test_route_testpilot_max_refix_export() -> None:
-    assert (
-        _route_after_testpilot(
-            {
-                "testpilot_report": TestPilotReport(ok=False),
-                "testpilot_refix_loops": MAX_TESTPILOT_AUTOFIX_LOOPS + 1,
-            }
-        )
-        == "export"
-    )
+def test_route_testpilot_max_refix_export_when_playwright_off() -> None:
+    state = {
+        "testpilot_report": TestPilotReport(ok=False),
+        "testpilot_refix_loops": MAX_TESTPILOT_AUTOFIX_LOOPS + 1,
+        "playwright_enabled": False,
+    }
+    with patch("agents.pipeline_graph.get_settings") as mock_settings:
+        mock_settings.return_value.playwright_enabled = False
+        mock_settings.return_value.lighthouse_enabled = False
+        assert _route_after_testpilot(state) == "export"
 
 
 def _make_generation(files: list[GeneratedFile] | None = None) -> CodeGenerateResult:

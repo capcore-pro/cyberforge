@@ -583,6 +583,20 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
     if (err) err.classList.remove("cf-visible");
   }}
 
+  function isCyberforgeInternalPreview() {{
+    try {{
+      var q = (window.location && window.location.search) || "";
+      return q.indexOf("preview=cyberforge_internal") >= 0;
+    }} catch (e) {{
+      return false;
+    }}
+  }}
+
+  if (isCyberforgeInternalPreview()) {{
+    unlock();
+    return;
+  }}
+
   if (lockBtn) lockBtn.addEventListener("click", lock);
 
   if (form) {{
