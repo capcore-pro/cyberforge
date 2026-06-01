@@ -36,7 +36,10 @@ def test_enhance_app_injects_cf_ui_script() -> None:
 
 def test_app_templates_have_interactive_markup() -> None:
     sectors = Path(__file__).resolve().parents[1] / "templates" / "sectors"
-    for name in ("app_dashboard.html", "app_crm.html", "app_default.html"):
+    dash = (sectors / "app_dashboard.html").read_text(encoding="utf-8")
+    assert "window.openModal = function" in dash
+    assert "window.confirmDelete = function" in dash
+    for name in ("app_crm.html", "app_default.html"):
         html = (sectors / name).read_text(encoding="utf-8")
         assert "cf-edit-row" in html
         assert "cf-del-row" in html
@@ -58,6 +61,9 @@ def test_app_dashboard_garage_sidebar_sections() -> None:
         "equipe",
         "parametres",
     ):
-        assert f'data-cf-section="{section}"' in html
+        assert f'id="{section}"' in html
+        assert f"showSection('{section}')" in html
+    assert "window.openModal = function" in html
+    assert "window.confirmDelete = function" in html
     assert 'id="tableBody"' in html
     assert 'id="modalOverlay"' in html

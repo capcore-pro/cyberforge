@@ -2082,36 +2082,45 @@ async def finalize_node(
     if isinstance(sector_tpl, dict):
         sector_html = sector_tpl.get("html") or sector_tpl.get("html_raw")
 
-    preview_html, assembled_html = resolve_pipeline_preview_html(
-        assembled_html=state.get("assembled_html"),
-        preview_html=preview_html,
-        sector_template_html=sector_html,
-        generation=generation,
-        title=architect.project_type_label,
-        user_prompt=state.get("prompt") or "",
+    state_assembled_raw = strip_markdown_code_fences(
+        str(state.get("assembled_html") or "")
     )
-    preview_html, assembled_html = force_finalize_preview_from_assembled(
-        state_assembled_html=state.get("assembled_html"),
-        preview_html=preview_html,
-        assembled_html=assembled_html,
-        sector_template_html=sector_html,
-        generation=generation,
-        title=architect.project_type_label,
-        user_prompt=state.get("prompt") or "",
-    )
-    finalize_type = (
-        (getattr(architect, "pricing_category", None) or "").strip()
-        or (
-            architect.project_type.value
-            if hasattr(architect.project_type, "value")
-            else str(architect.project_type or "")
+    asm_present = bool(state_assembled_raw.strip())
+    asm_bytes = len(state_assembled_raw.encode("utf-8")) if asm_present else 0
+
+    if asm_present:
+        from tools.demo_preview_gate import prepare_internal_app_preview_html
+
+        preview_html = (
+            prepare_internal_app_preview_html(state_assembled_raw)
+            or state_assembled_raw
         )
-    )
-    preview_bytes = len((preview_html or "").encode("utf-8"))
+        assembled_html = preview_html
+    else:
+        preview_html, assembled_html = resolve_pipeline_preview_html(
+            assembled_html=state.get("assembled_html"),
+            preview_html=preview_html,
+            sector_template_html=sector_html,
+            generation=generation,
+            title=architect.project_type_label,
+            user_prompt=state.get("prompt") or "",
+        )
+        preview_html, assembled_html = force_finalize_preview_from_assembled(
+            state_assembled_html=state.get("assembled_html"),
+            preview_html=preview_html,
+            assembled_html=assembled_html,
+            sector_template_html=sector_html,
+            generation=generation,
+            title=architect.project_type_label,
+            user_prompt=state.get("prompt") or "",
+        )
+
+    preview_saved = bool((preview_html or "").strip())
     logger.info(
-        "[finalize] preview_html saved | bytes=%d | type=%s",
-        preview_bytes,
-        finalize_type or "unknown",
+        "[finalize] assembled_html present=%s bytes=%d | preview_html saved=%s",
+        asm_present,
+        asm_bytes,
+        preview_saved,
     )
     if preview_html and generation:
         generation = code_result_from_html(

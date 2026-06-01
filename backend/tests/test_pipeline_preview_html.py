@@ -23,6 +23,19 @@ def test_resolve_pipeline_preview_prefers_assembled() -> None:
     assert "Garage" in preview
 
 
+def test_force_finalize_state_assembled_no_exception() -> None:
+    html = "<!DOCTYPE html><html><body>" + ("a" * 200) + "</body></html>"
+    preview, assembled = force_finalize_preview_from_assembled(
+        state_assembled_html=html,
+        preview_html=None,
+        assembled_html=None,
+        sector_template_html=None,
+        generation=None,
+    )
+    assert preview == assembled
+    assert len(preview or "") >= 200
+
+
 def test_force_finalize_prefers_state_assembled() -> None:
     html = (
         "<!DOCTYPE html><html><head><title>Garage</title></head>"

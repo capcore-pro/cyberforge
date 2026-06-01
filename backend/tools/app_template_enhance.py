@@ -241,6 +241,8 @@ def enhance_app_template_html(html: str) -> str:
     """Ajoute styles sections + script interactions (idempotent)."""
     if not html or "product-card" in html:
         return html
+    if "function showSection(" in html and "function openModal(" in html:
+        return html
     out = html
     if 'id="cf-app-sections"' not in out:
         if re.search(r"</head>", out, re.I):

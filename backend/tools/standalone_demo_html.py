@@ -315,6 +315,12 @@ _DEMO_LINK_NAVIGATION_SCRIPT = """
       if (a.getAttribute("data-cf-section")) {
         return;
       }
+      if (a.getAttribute("onclick")) {
+        return;
+      }
+      if (a.closest && a.closest(".sidebar-nav")) {
+        return;
+      }
       if (href.charAt(0) === "#") {
         ev.preventDefault();
         ev.stopPropagation();

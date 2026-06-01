@@ -522,43 +522,54 @@ class SupabaseStore:
         files = [{"path": f.path, "content": f.content} for f in gen.files]
         norm_files, norm_code = normalize_generation_sources(files, gen.code)
         project_title = _title_from_prompt(prompt)
-        from tools.export_html_resolve import resolve_pipeline_preview_html
+        from tools.export_html_resolve import force_finalize_preview_from_assembled
+        from tools.html_markdown import strip_markdown_code_fences
 
         sector_tpl = getattr(run_result, "sector_template", None)
         sector_html = None
         if isinstance(sector_tpl, dict):
             sector_html = sector_tpl.get("html") or sector_tpl.get("html_raw")
 
-        preview_html, _assembled = resolve_pipeline_preview_html(
-            assembled_html=getattr(run_result, "assembled_html", None),
-            preview_html=run_result.preview_html,
-            sector_template_html=sector_html,
-            generation=gen,
-            title=PROJECT_TYPE_LABELS.get(project_type, project_type.value),
-            user_prompt=prompt,
+        assembled_raw = strip_markdown_code_fences(
+            str(getattr(run_result, "assembled_html", None) or "")
         )
-        if not preview_html:
-            from tools.demo_pipeline import build_client_demo_document
-
-            document = await build_client_demo_document(
-                prompt,
-                project_type_label=PROJECT_TYPE_LABELS.get(
-                    project_type, project_type.value
-                ),
-                project_id=project_id,
-            )
-            preview_html, _assembled = resolve_pipeline_preview_html(
-                assembled_html=document.html,
-                preview_html=document.html,
-                title=PROJECT_TYPE_LABELS.get(
-                    project_type, project_type.value
-                ),
-                user_prompt=prompt,
-            )
-        if preview_html:
+        if assembled_raw.strip():
             from tools.demo_preview_gate import prepare_internal_app_preview_html
 
-            preview_html = prepare_internal_app_preview_html(str(preview_html))
+            preview_html = (
+                prepare_internal_app_preview_html(assembled_raw) or assembled_raw
+            )
+        else:
+            preview_html, _assembled = force_finalize_preview_from_assembled(
+                state_assembled_html=None,
+                preview_html=run_result.preview_html,
+                assembled_html=getattr(run_result, "assembled_html", None),
+                sector_template_html=sector_html,
+                generation=gen,
+                title=PROJECT_TYPE_LABELS.get(project_type, project_type.value),
+                user_prompt=prompt,
+            )
+            if not preview_html:
+                from tools.demo_pipeline import build_client_demo_document
+
+                document = await build_client_demo_document(
+                    prompt,
+                    project_type_label=PROJECT_TYPE_LABELS.get(
+                        project_type, project_type.value
+                    ),
+                    project_id=project_id,
+                )
+                preview_html, _assembled = force_finalize_preview_from_assembled(
+                    state_assembled_html=document.html,
+                    preview_html=document.html,
+                    assembled_html=document.html,
+                    sector_template_html=None,
+                    generation=None,
+                    title=PROJECT_TYPE_LABELS.get(
+                        project_type, project_type.value
+                    ),
+                    user_prompt=prompt,
+                )
 
         payload = {
             "project_id": project_id,
