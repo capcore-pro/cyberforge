@@ -67,6 +67,7 @@ import { createPersonalProject, USAGE_LABELS, type PersonalUsage } from "@/lib/p
 import { PersoBadge } from "@/components/PersoBadge";
 import { architectPlanFromPipelineEvent } from "@/lib/pricing-sse";
 import {
+  buildGeneratorPipelinePrompt,
   GENERATOR_KINDS,
   getGeneratorKind,
   inferDeployModeFromSession,
@@ -599,7 +600,7 @@ export function GeneratorPage({
 
   async function handleGenerate(event?: React.SyntheticEvent) {
     event?.preventDefault();
-    const trimmed = prompt.trim();
+    const trimmed = buildGeneratorPipelinePrompt(selectedKind, prompt.trim());
     if (trimmed.length < 3) {
       patch({ error: "Décrivez votre projet en au moins 3 caractères." });
       return;

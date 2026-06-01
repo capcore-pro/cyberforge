@@ -59,15 +59,16 @@
     @media (max-width: 900px) { .booking-layout { grid-template-columns: 1fr; } .nav-links a:not(.btn-rdv) { display: none; } }
   </style>
 </head>
-<body>
+<body id="top">
   <nav class="nav">
     <div class="wrap nav-inner">
-      <a href="#" class="logo">{{CLIENT_NAME}}</a>
+      <a href="#top" class="logo">{{CLIENT_NAME}}</a>
       <div class="nav-links">
-        <a href="#services">Services</a>
-        <a href="#rdv">Rendez-vous</a>
-        <a href="#equipe">Équipe</a>
-        <a href="#contact" class="btn-rdv">Prendre RDV</a>
+        <a href="#services">{{NAV_SERVICES}}</a>
+        <a href="#tarifs">{{NAV_TARIFS}}</a>
+        <a href="#rdv">{{NAV_RESERVATION}}</a>
+        <a href="#contact">{{NAV_CONTACT}}</a>
+        <a href="#rdv" class="btn-rdv">{{NAV_RESERVATION}}</a>
       </div>
     </div>
   </nav>
@@ -80,8 +81,10 @@
   </header>
 
   <section id="services">
+    <span id="tarifs" style="display:block;position:relative;top:-4rem"></span>
     <div class="wrap">
-      <h2 class="section-title">Nos prestations</h2>
+      <h2 class="section-title">{{NAV_SERVICES}} &amp; {{NAV_TARIFS}}</h2>
+      <p style="text-align:center;color:#64748b;margin:-1rem 0 1.5rem">{{SERVICE_CAT_1}} · {{SERVICE_CAT_2}} · {{SERVICE_CAT_3}}</p>
       <div class="services" id="serviceList">
         <article class="service-card" data-service="{{SERVICE_1}}" data-duration="{{SERVICE_1_DURATION}}" data-price="{{SERVICE_1_PRICE}}">
           <h3>{{SERVICE_1}}</h3>

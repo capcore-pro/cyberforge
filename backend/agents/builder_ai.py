@@ -348,10 +348,24 @@ def resolve_assembly_inputs(
         current_id = str(sector_template.get("template_id") or "")
         wrong_family = (
             family == "ecommerce"
-            and (current_id.startswith("app_") or current_id.startswith("vitrine_"))
+            and (
+                current_id.startswith("app_")
+                or current_id.startswith("vitrine_")
+                or current_id.startswith("reservation_")
+            )
+        ) or (
+            family == "reservation"
+            and (
+                current_id.startswith("ecommerce_")
+                or current_id.startswith("app_")
+                or current_id.startswith("vitrine_")
+            )
         ) or (
             family == "app"
-            and current_id.startswith("ecommerce_")
+            and (
+                current_id.startswith("ecommerce_")
+                or current_id.startswith("reservation_")
+            )
         )
         if current_id and current_id != expected_id:
             logger.warning(
@@ -387,6 +401,17 @@ def resolve_assembly_inputs(
     if family == "ecommerce" and not template_id.startswith("ecommerce_"):
         logger.warning(
             "[BuilderAI] force ecommerce | template_id=%s → %s",
+            template_id,
+            expected_id,
+        )
+        template_id, _, html = load_sector_template_html_for_plan(
+            plan, sector_key, user_prompt
+        )
+        already_filled = False
+
+    if family == "reservation" and not template_id.startswith("reservation_"):
+        logger.warning(
+            "[BuilderAI] force reservation | template_id=%s → %s",
             template_id,
             expected_id,
         )

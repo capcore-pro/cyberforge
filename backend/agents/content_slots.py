@@ -77,21 +77,43 @@ _ECOMMERCE_PRODUCTS: dict[str, list[tuple[str, str]]] = {
 
 _RESERVATION_SERVICES: dict[str, list[tuple[str, str, str]]] = {
     "reservation_sante": [
-        ("Consultation générale", "30 min", "55 €"),
-        ("Bilan de santé", "45 min", "80 €"),
-        ("Suivi personnalisé", "20 min", "40 €"),
+        ("Consultation générale", "30 min", "55"),
+        ("Bilan de santé", "45 min", "80"),
+        ("Suivi personnalisé", "20 min", "40"),
     ],
     "reservation_beaute": [
-        ("Coupe & brushing", "45 min", "48 €"),
-        ("Soin visage", "60 min", "72 €"),
-        ("Manucure", "40 min", "35 €"),
+        ("Coupe femme", "45 min", "45"),
+        ("Coloration", "1 h 30", "80"),
+        ("Balayage", "2 h", "95"),
     ],
     "reservation_default": [
-        ("Rendez-vous standard", "30 min", "45 €"),
-        ("Consultation approfondie", "60 min", "75 €"),
-        ("Suivi express", "15 min", "25 €"),
+        ("Rendez-vous standard", "30 min", "45"),
+        ("Consultation approfondie", "60 min", "75"),
+        ("Suivi express", "15 min", "25"),
     ],
 }
+
+# Libellés de navigation / rayons (jamais mots-clés ResearchAI type « saas »).
+_RESERVATION_SERVICE_NAV: dict[str, tuple[str, str, str]] = {
+    "reservation_beaute": ("Coupes", "Colorations", "Soins"),
+    "reservation_sante": ("Consultations", "Bilans", "Suivi"),
+    "reservation_default": ("Services", "Formules", "Express"),
+}
+
+_BLOCKED_RESERVATION_SERVICE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "pack",
+        "essentiel",
+        "premium",
+        "produit",
+        "standard",
+        "saas",
+        "solution",
+        "dashboard",
+        "ecommerce",
+        "boutique",
+    }
+)
 
 _APP_STATS: dict[str, list[tuple[str, str]]] = {
     "app_dashboard": [
@@ -344,6 +366,35 @@ def build_ecommerce_slots(
     )
 
 
+def _is_usable_reservation_service_name(name: str) -> bool:
+    token = (name or "").strip().lower()
+    if len(token) < 3 or len(token) > 48:
+        return False
+    return not any(blocked in token for blocked in _BLOCKED_RESERVATION_SERVICE_KEYWORDS)
+
+
+def _resolve_reservation_services(
+    template_id: str,
+    research: dict[str, Any],
+) -> tuple[tuple[str, str, str], tuple[str, str, str], tuple[str, str, str]]:
+    """Prestations catalogue — fixes pour beauté ; jamais « Pack Essentiel » / mots-clés tech."""
+    defaults = _RESERVATION_SERVICES.get(
+        template_id, _RESERVATION_SERVICES["reservation_default"]
+    )
+    if template_id in ("reservation_beaute", "reservation_sante"):
+        return defaults[0], defaults[1], defaults[2]
+
+    kws = _research_keywords(research)
+    names = [k.capitalize() for k in kws if _is_usable_reservation_service_name(k)]
+    if len(names) >= 3:
+        return (
+            (names[0], defaults[0][1], defaults[0][2]),
+            (names[1], defaults[1][1], defaults[1][2]),
+            (names[2], defaults[2][1], defaults[2][2]),
+        )
+    return defaults[0], defaults[1], defaults[2]
+
+
 def build_reservation_slots(
     template_id: str,
     brand: str,
@@ -353,11 +404,12 @@ def build_reservation_slots(
     user_prompt: str = "",
     research: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    services = _RESERVATION_SERVICES.get(
-        template_id, _RESERVATION_SERVICES["reservation_default"]
-    )
+    svc1, svc2, svc3 = _resolve_reservation_services(template_id, research)
     contact = build_default_contact_slots(
         brand, city, user_prompt=user_prompt, research=research
+    )
+    nav = _RESERVATION_SERVICE_NAV.get(
+        template_id, _RESERVATION_SERVICE_NAV["reservation_default"]
     )
     return {
         "CLIENT_NAME": html_lib.escape(brand),
@@ -369,15 +421,22 @@ def build_reservation_slots(
             "GOOGLE_FONTS_URL",
             "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap",
         ),
-        "SERVICE_1": html_lib.escape(services[0][0]),
-        "SERVICE_1_DURATION": html_lib.escape(services[0][1]),
-        "SERVICE_1_PRICE": html_lib.escape(services[0][2]),
-        "SERVICE_2": html_lib.escape(services[1][0]),
-        "SERVICE_2_DURATION": html_lib.escape(services[1][1]),
-        "SERVICE_2_PRICE": html_lib.escape(services[1][2]),
-        "SERVICE_3": html_lib.escape(services[2][0]),
-        "SERVICE_3_DURATION": html_lib.escape(services[2][1]),
-        "SERVICE_3_PRICE": html_lib.escape(services[2][2]),
+        "SERVICE_1": html_lib.escape(svc1[0]),
+        "SERVICE_1_DURATION": html_lib.escape(svc1[1]),
+        "SERVICE_1_PRICE": html_lib.escape(svc1[2]),
+        "SERVICE_2": html_lib.escape(svc2[0]),
+        "SERVICE_2_DURATION": html_lib.escape(svc2[1]),
+        "SERVICE_2_PRICE": html_lib.escape(svc2[2]),
+        "SERVICE_3": html_lib.escape(svc3[0]),
+        "SERVICE_3_DURATION": html_lib.escape(svc3[1]),
+        "SERVICE_3_PRICE": html_lib.escape(svc3[2]),
+        "NAV_SERVICES": html_lib.escape("Services"),
+        "NAV_TARIFS": html_lib.escape("Tarifs"),
+        "NAV_RESERVATION": html_lib.escape("Réservation"),
+        "NAV_CONTACT": html_lib.escape("Contact"),
+        "SERVICE_CAT_1": html_lib.escape(nav[0]),
+        "SERVICE_CAT_2": html_lib.escape(nav[1]),
+        "SERVICE_CAT_3": html_lib.escape(nav[2]),
         **contact,
     }
 

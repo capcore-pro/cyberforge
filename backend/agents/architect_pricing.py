@@ -120,7 +120,32 @@ _RESERVATION_STRONG_HINTS = (
     "chambre",
 )
 
-_RESERVATION_PRIMARY_WORDS = ("réservation", "reservation", "booking")
+# Métiers « prise de RDV » sans mot « réservation » explicite (ex. salon de coiffure).
+_RESERVATION_BUSINESS_HINTS = (
+    "coiffure",
+    "coiffeur",
+    "salon",
+    "barbier",
+    "barber",
+    "esthétique",
+    "esthetique",
+    "manucure",
+    "onglerie",
+    "spa",
+    "institut",
+    "ostéopathe",
+    "osteopathe",
+    "ostéopathie",
+    "kinésithérapeute",
+    "kinesitherapeute",
+    "dentiste",
+    "cabinet médical",
+    "cabinet medical",
+    "médecin",
+    "medecin",
+)
+
+_RESERVATION_PRIMARY_WORDS = ("réservation", "reservation", "booking", "rendez-vous", "rendez vous", "rdv")
 
 _SERVICE_CATALOG_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bnous\s+proposons\b", re.I),
@@ -159,9 +184,18 @@ def _prompt_triggers_site_reservation(text: str) -> bool:
     """True si le prompt décrit un projet de réservation (pas une simple mention en liste de services)."""
     if any(h in text for h in _RESERVATION_STRONG_HINTS):
         return True
+    if any(h in text for h in _RESERVATION_BUSINESS_HINTS):
+        return True
     if _is_service_catalog_context(text):
         return False
     return any(word in text for word in _RESERVATION_PRIMARY_WORDS)
+
+
+def _prompt_triggers_ecommerce(text: str) -> bool:
+    """E-commerce explicite — jamais si le contexte est un site de réservation."""
+    if _prompt_triggers_site_reservation(text):
+        return False
+    return any(h in text for h in _ECOMMERCE_HINTS)
 
 
 def _count_matches(patterns: tuple[re.Pattern[str], ...], text: str) -> int:
@@ -246,10 +280,10 @@ def resolve_pricing_category(
 
     if mode == "vitrine_next":
         return "vitrine_next"
-    if any(h in text for h in _ECOMMERCE_HINTS):
-        return "ecommerce"
     if _prompt_triggers_site_reservation(text):
         return "site_reservation"
+    if _prompt_triggers_ecommerce(text):
+        return "ecommerce"
 
     if project_type == ProjectType.EXTENSION_NAVIGATEUR:
         return "extension_navigateur"

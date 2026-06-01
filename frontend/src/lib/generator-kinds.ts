@@ -144,6 +144,26 @@ export function inferDeployModeFromSession(
   return generationMode === "client_demo" ? "demo" : "real";
 }
 
+/**
+ * Préfixe TYPE: pour imposer la pricing_category côté ArchitectAI (démo template-first).
+ */
+export function buildGeneratorPipelinePrompt(
+  kind: GeneratorKindId,
+  prompt: string,
+): string {
+  const body = prompt.trim();
+  if (!body) {
+    return body;
+  }
+  if (kind === "reservation") {
+    return `TYPE: site_reservation\n${body}`;
+  }
+  if (kind === "ecommerce") {
+    return `TYPE: ecommerce\n${body}`;
+  }
+  return body;
+}
+
 export function syncSessionFromKind(
   kind: GeneratorKindId,
   deployMode: DeployMode,

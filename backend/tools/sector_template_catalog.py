@@ -118,10 +118,11 @@ def _resolve_template_family(category: str, pt_value: str) -> str:
     """
     cat = (category or "").strip().lower()
 
-    if cat == "ecommerce":
-        return "ecommerce"
+    # pricing_category prime — jamais ecommerce/app si site_reservation imposé.
     if cat == "site_reservation":
         return "reservation"
+    if cat == "ecommerce":
+        return "ecommerce"
     if cat == "application_desktop":
         return "desktop"
     if cat == "vitrine_next":
@@ -163,6 +164,10 @@ def resolve_template_family_from_plan(plan: Any) -> str:
 
 def is_ecommerce_plan(plan: Any) -> bool:
     return resolve_template_family_from_plan(plan) == "ecommerce"
+
+
+def is_reservation_plan(plan: Any) -> bool:
+    return resolve_template_family_from_plan(plan) == "reservation"
 
 
 def resolve_sector_template_from_plan(

@@ -67,15 +67,16 @@
     @media (max-width: 900px) { .booking-layout, .team { grid-template-columns: 1fr; } }
   </style>
 </head>
-<body>
+<body id="top">
   <nav class="nav">
     <div class="wrap nav-inner">
-      <a href="#" class="logo">{{CLIENT_NAME}}</a>
+      <a href="#top" class="logo">{{CLIENT_NAME}}</a>
       <div class="nav-links">
-        <a href="#services">Soins</a>
-        <a href="#rdv">Réserver</a>
-        <a href="#equipe">Équipe</a>
-        <button type="button" class="btn-rdv" onclick="document.getElementById('rdv').scrollIntoView({behavior:'smooth'})">RDV</button>
+        <a href="#services">{{NAV_SERVICES}}</a>
+        <a href="#tarifs">{{NAV_TARIFS}}</a>
+        <a href="#rdv">{{NAV_RESERVATION}}</a>
+        <a href="#contact">{{NAV_CONTACT}}</a>
+        <button type="button" class="btn-rdv" onclick="document.getElementById('rdv').scrollIntoView({behavior:'smooth'})">{{NAV_RESERVATION}}</button>
       </div>
     </div>
   </nav>
@@ -88,8 +89,10 @@
   </header>
 
   <section id="services">
+    <span id="tarifs" style="display:block;position:relative;top:-5rem"></span>
     <div class="wrap">
-      <h2 class="section-title">Nos soins</h2>
+      <h2 class="section-title">Nos {{NAV_SERVICES}} &amp; {{NAV_TARIFS}}</h2>
+      <p style="text-align:center;color:#7c5a6a;margin:-1.5rem 0 2rem">{{SERVICE_CAT_1}} · {{SERVICE_CAT_2}} · {{SERVICE_CAT_3}}</p>
       <div class="services">
         <article class="service-card" data-service="{{SERVICE_1}}" data-duration="{{SERVICE_1_DURATION}}" data-price="{{SERVICE_1_PRICE}}">
           <h3>{{SERVICE_1}}</h3>

@@ -35,13 +35,20 @@
     @media (max-width: 768px) { .booking-layout, .team { grid-template-columns: 1fr; } }
   </style>
 </head>
-<body>
+<body id="top">
   <nav class="nav"><div class="wrap nav-inner">
-    <strong>{{CLIENT_NAME}}</strong>
-    <div><a href="#services">Services</a> · <a href="#rdv">RDV</a> · <button class="btn-rdv" onclick="location.hash='rdv'">Réserver</button></div>
+    <a href="#top" class="logo" style="font-weight:700;color:inherit">{{CLIENT_NAME}}</a>
+    <div class="nav-links" style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:center">
+      <a href="#services">{{NAV_SERVICES}}</a>
+      <a href="#tarifs">{{NAV_TARIFS}}</a>
+      <a href="#rdv">{{NAV_RESERVATION}}</a>
+      <a href="#contact">{{NAV_CONTACT}}</a>
+      <button type="button" class="btn-rdv" onclick="document.getElementById('rdv').scrollIntoView({behavior:'smooth'})">{{NAV_RESERVATION}}</button>
+    </div>
   </div></nav>
   <header class="hero"><div class="wrap"><h1>{{CLIENT_NAME}}</h1><p>Réservez votre créneau en ligne</p></div></header>
-  <section id="services"><div class="wrap"><h2 style="text-align:center;margin-bottom:1.5rem">Services</h2>
+  <section id="services"><span id="tarifs" style="display:block;position:relative;top:-4rem"></span><div class="wrap"><h2 style="text-align:center;margin-bottom:0.5rem">{{NAV_SERVICES}} &amp; {{NAV_TARIFS}}</h2>
+    <p style="text-align:center;color:#64748b;margin-bottom:1.5rem">{{SERVICE_CAT_1}} · {{SERVICE_CAT_2}} · {{SERVICE_CAT_3}}</p>
     <div class="services">
       <div class="service-card" data-service="{{SERVICE_1}}" data-duration="{{SERVICE_1_DURATION}}" data-price="{{SERVICE_1_PRICE}}"><h3>{{SERVICE_1}}</h3><p>{{SERVICE_1_DURATION}} — {{SERVICE_1_PRICE}} €</p></div>
       <div class="service-card" data-service="{{SERVICE_2}}" data-duration="{{SERVICE_2_DURATION}}" data-price="{{SERVICE_2_PRICE}}"><h3>{{SERVICE_2}}</h3><p>{{SERVICE_2_DURATION}} — {{SERVICE_2_PRICE}} €</p></div>

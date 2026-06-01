@@ -44,6 +44,31 @@ def test_reservation_coiffure_template() -> None:
     assert tid == "reservation_beaute"
 
 
+def test_salon_coiffure_prompt_resolves_site_reservation_not_ecommerce() -> None:
+    from agents.architect_pricing import resolve_pricing_category
+    from agents.coremind_agent import ProjectType
+
+    category = resolve_pricing_category(
+        ProjectType.SITE_WEB,
+        "salon de coiffure à Rouen avec prise de rendez-vous",
+    )
+    assert category == "site_reservation"
+    plan = _plan("site_reservation", ProjectType.SITE_WEB)
+    tid, fname = resolve_sector_template_from_plan(
+        plan, "coiffure", "salon de coiffure Rouen"
+    )
+    assert tid == "reservation_beaute"
+    assert fname.startswith("reservation_")
+    assert not tid.startswith("ecommerce_")
+
+
+def test_site_reservation_category_never_maps_ecommerce_family() -> None:
+    from tools.sector_template_catalog import resolve_template_family_from_plan
+
+    plan = _plan("site_reservation", ProjectType.SAAS_DASHBOARD)
+    assert resolve_template_family_from_plan(plan) == "reservation"
+
+
 def test_app_crm_template() -> None:
     plan = _plan("application_web", ProjectType.APPLICATION_WEB)
     tid, _ = resolve_sector_template_from_plan(plan, "commerce", "crm pipeline clients")
