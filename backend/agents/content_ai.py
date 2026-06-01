@@ -294,7 +294,9 @@ def build_content_slots(
             research=research,
         )
     if tid.startswith("app_"):
-        slots = build_app_slots(tid, brand, ds, sector_label)
+        slots = build_app_slots(
+            tid, brand, ds, sector_label, user_prompt=user_prompt
+        )
         return ensure_contact_slots(
             slots,
             brand,
@@ -503,6 +505,10 @@ def fill_template_content(
             from tools.ecommerce_product_images import ensure_ecommerce_product_thumbnails
 
             html = ensure_ecommerce_product_thumbnails(html, template_id)
+        if (template_id or "").startswith("app_"):
+            from tools.app_template_enhance import enhance_app_template_html
+
+            html = enhance_app_template_html(html)
         from tools.standalone_demo_html import inject_demo_link_navigation_script
 
         html = inject_demo_link_navigation_script(html)

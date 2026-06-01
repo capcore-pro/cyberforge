@@ -312,6 +312,9 @@ _DEMO_LINK_NAVIGATION_SCRIPT = """
       if (!href) {
         return;
       }
+      if (a.getAttribute("data-cf-section")) {
+        return;
+      }
       if (href.charAt(0) === "#") {
         ev.preventDefault();
         ev.stopPropagation();

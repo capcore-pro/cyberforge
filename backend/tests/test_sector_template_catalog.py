@@ -71,8 +71,26 @@ def test_site_reservation_category_never_maps_ecommerce_family() -> None:
 
 def test_app_crm_template() -> None:
     plan = _plan("application_web", ProjectType.APPLICATION_WEB)
-    tid, _ = resolve_sector_template_from_plan(plan, "commerce", "crm pipeline clients")
+    tid, _ = resolve_sector_template_from_plan(plan, "commerce", "crm pipeline prospects")
     assert tid == "app_crm"
+
+
+def test_app_garage_uses_dashboard_not_crm() -> None:
+    plan = _plan("application_web", ProjectType.APPLICATION_WEB)
+    tid, fname = resolve_sector_template_from_plan(
+        plan, "automobile", "garage automobile réparation véhicules atelier Rouen"
+    )
+    assert tid == "app_dashboard"
+    assert fname == "app_dashboard.html"
+
+
+def test_app_generic_defaults_to_app_default() -> None:
+    plan = _plan("application_web", ProjectType.APPLICATION_WEB)
+    tid, fname = resolve_sector_template_from_plan(
+        plan, "services", "outil interne de suivi des dossiers"
+    )
+    assert tid == "app_default"
+    assert fname == "app_default.html"
 
 
 def test_desktop_gestion_template() -> None:

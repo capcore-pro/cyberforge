@@ -122,6 +122,12 @@ _APP_STATS: dict[str, list[tuple[str, str]]] = {
         ("Taux conversion", "3,8 %"),
         ("Tickets ouverts", "12"),
     ],
+    "app_dashboard_garage": [
+        ("Réparations en cours", "12"),
+        ("Véhicules au parc", "28"),
+        ("Factures du mois", "156"),
+        ("Mécaniciens actifs", "6"),
+    ],
     "app_crm": [
         ("Prospects actifs", "86"),
         ("Deals en cours", "14"),
@@ -441,23 +447,53 @@ def build_reservation_slots(
     }
 
 
+_APP_GARAGE_KEYWORDS: tuple[str, ...] = (
+    "garage",
+    "réparation",
+    "reparation",
+    "véhicule",
+    "vehicule",
+    "atelier",
+    "mécanique",
+    "mecanique",
+    "automobile",
+    "voiture",
+    "carrosserie",
+)
+
+
+def _is_garage_app_context(blob: str) -> bool:
+    low = (blob or "").lower()
+    return any(k in low for k in _APP_GARAGE_KEYWORDS)
+
+
 def build_app_slots(
     template_id: str,
     brand: str,
     ds: dict[str, str],
     sector_label: str,
+    *,
+    user_prompt: str = "",
 ) -> dict[str, str]:
-    stats = _APP_STATS.get(template_id, _APP_STATS["app_default"])
+    blob = f"{user_prompt} {sector_label} {brand}".lower()
+    garage = template_id == "app_dashboard" and _is_garage_app_context(blob)
+    stats_key = "app_dashboard_garage" if garage else template_id
+    stats = _APP_STATS.get(stats_key, _APP_STATS.get(template_id, _APP_STATS["app_default"]))
+    if len(stats) < 4:
+        stats = list(stats) + list(_APP_STATS["app_default"][: 4 - len(stats)])
     app_name = f"{brand} {sector_label}".strip()[:48]
-    table_titles = {
-        "app_crm": "Pipeline commercial",
-        "app_dashboard": "Activité récente",
-    }
-    cols = {
-        "app_crm": ("Prospect", "Étape", "Montant"),
-        "app_dashboard": ("Référence", "Statut", "Montant"),
-    }
-    col_set = cols.get(template_id, ("Élément", "Statut", "Valeur"))
+    if garage:
+        table_title = "Interventions récentes"
+        col_set = ("Véhicule", "Statut", "Montant TTC")
+    elif template_id == "app_crm":
+        table_title = "Pipeline commercial"
+        col_set = ("Prospect", "Étape", "Montant")
+    elif template_id == "app_dashboard":
+        table_title = "Activité récente"
+        col_set = ("Référence", "Statut", "Montant")
+    else:
+        table_title = "Données"
+        col_set = ("Élément", "Statut", "Valeur")
     return {
         "APP_NAME": html_lib.escape(app_name),
         "CLIENT_NAME": html_lib.escape(brand),
@@ -473,7 +509,11 @@ def build_app_slots(
         "STAT_1_VALUE": html_lib.escape(stats[0][1]),
         "STAT_2_LABEL": html_lib.escape(stats[1][0]),
         "STAT_2_VALUE": html_lib.escape(stats[1][1]),
-        "TABLE_TITLE": html_lib.escape(table_titles.get(template_id, "Données")),
+        "STAT_3_LABEL": html_lib.escape(stats[2][0]),
+        "STAT_3_VALUE": html_lib.escape(stats[2][1]),
+        "STAT_4_LABEL": html_lib.escape(stats[3][0]),
+        "STAT_4_VALUE": html_lib.escape(stats[3][1]),
+        "TABLE_TITLE": html_lib.escape(table_title),
         "COL_1": html_lib.escape(col_set[0]),
         "COL_2": html_lib.escape(col_set[1]),
         "COL_3": html_lib.escape(col_set[2]),

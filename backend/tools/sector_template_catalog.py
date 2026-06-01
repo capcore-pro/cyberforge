@@ -72,7 +72,23 @@ _RESERVATION_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 _APP_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("crm", "client", "prospect", "pipeline", "commercial"), "app_crm.html"),
+    (
+        (
+            "garage",
+            "réparation",
+            "reparation",
+            "véhicule",
+            "vehicule",
+            "atelier",
+            "mécanique",
+            "mecanique",
+            "automobile",
+            "voiture",
+            "carrosserie",
+        ),
+        "app_dashboard.html",
+    ),
+    (("crm", "commercial", "prospect", "vente", "pipeline"), "app_crm.html"),
     (("dashboard", "analytics", "kpi", "statistique", "tableau de bord"), "app_dashboard.html"),
 )
 
