@@ -97,11 +97,16 @@ def list_sector_templates() -> dict[str, str]:
 def resolve_sector_template_file(
     sector: str,
     user_prompt: str = "",
+    plan: Any | None = None,
 ) -> tuple[str, str]:
     """
-    Retourne (template_id, filename) selon le secteur détecté.
-    template_id = nom sans extension.
+    Retourne (template_id, filename) selon project_type, catégorie tarifaire et secteur.
     """
+    if plan is not None:
+        from tools.sector_template_catalog import resolve_sector_template_from_plan
+
+        return resolve_sector_template_from_plan(plan, sector, user_prompt)
+
     sector_key = normalize_sector_key(sector or "")
     blob = f"{sector_key} {user_prompt}".lower()
     filename: str | None = None
@@ -262,14 +267,16 @@ def load_sector_template_raw(
     )
     family = resolve_visual_family(sector_key, user_prompt)
     try:
-        template_id, filename = resolve_sector_template_file(sector_key, user_prompt)
+        template_id, filename = resolve_sector_template_file(
+            sector_key, user_prompt, plan=plan
+        )
         raw_html = load_sector_template_html(filename)
         placeholders = sorted(set(_PLACEHOLDER_RE.findall(raw_html)))
         result = SectorTemplateResult(
             template_id=template_id,
             template_file=filename,
             sector=sector_key,
-            visual_family=family,
+            visual_family=family or resolve_visual_family(sector_key, user_prompt),
             html=raw_html,
             placeholders_filled=[],
             missing_placeholders=placeholders,
@@ -306,7 +313,9 @@ def render_sector_template(
     family = resolve_visual_family(sector_key, user_prompt)
 
     try:
-        template_id, filename = resolve_sector_template_file(sector_key, user_prompt)
+        template_id, filename = resolve_sector_template_file(
+            sector_key, user_prompt, plan=plan
+        )
         raw_html = load_sector_template_html(filename)
         slots = build_template_slots(
             sector=sector_key,

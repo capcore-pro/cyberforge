@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{APP_NAME}} — Dashboard</title>
+  <link rel="stylesheet" href="{{GOOGLE_FONTS_URL}}" />
+  <style>
+    :root {
+      --primary: {{PRIMARY_COLOR}};
+      --secondary: {{SECONDARY_COLOR}};
+      --bg: #0b0f19;
+      --surface: #111827;
+      --surface2: #1f2937;
+      --border: #374151;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --font-h: '{{FONT_HEADING}}', system-ui, sans-serif;
+      --font-b: '{{FONT_BODY}}', system-ui, sans-serif;
+      --sidebar-w: 260px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font-b); background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+    h1, h2, h3 { font-family: var(--font-h); }
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border);
+      position: fixed; top: 0; left: 0; height: 100vh; z-index: 200; transition: transform .3s;
+      display: flex; flex-direction: column;
+    }
+    .sidebar-brand { padding: 1.25rem; font-weight: 700; font-size: 1.1rem; color: var(--primary); border-bottom: 1px solid var(--border); }
+    .sidebar-nav { flex: 1; padding: 1rem 0; }
+    .sidebar-nav a {
+      display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1.25rem;
+      color: var(--muted); transition: background .2s, color .2s;
+    }
+    .sidebar-nav a:hover, .sidebar-nav a.active { background: rgba(99,102,241,0.12); color: var(--text); }
+    .main { flex: 1; margin-left: var(--sidebar-w); display: flex; flex-direction: column; min-width: 0; }
+    .header {
+      height: 64px; background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; padding: 0 1.5rem; gap: 1rem;
+    }
+    .menu-toggle { display: none; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.75rem; border-radius: 8px; cursor: pointer; font: inherit; }
+    .notif-btn { position: relative; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font: inherit; }
+    .notif-badge { position: absolute; top: -4px; right: -4px; background: #ef4444; color: #fff; font-size: 0.65rem; width: 1.1rem; height: 1.1rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .content { padding: 1.5rem; flex: 1; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
+    .stat-card .label { color: var(--muted); font-size: 0.85rem; margin-bottom: 0.35rem; }
+    .stat-card .value { font-size: 1.75rem; font-weight: 700; color: var(--primary); }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.75rem; }
+    .btn { padding: 0.5rem 1rem; border-radius: 8px; border: none; cursor: pointer; font: inherit; font-weight: 500; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.85rem 1.25rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 0.8rem; font-weight: 600; cursor: pointer; user-select: none; }
+    th:hover { color: var(--text); }
+    th .sort-icon { opacity: 0.5; margin-left: 0.25rem; }
+    th.sorted-asc .sort-icon::after { content: '↑'; opacity: 1; }
+    th.sorted-desc .sort-icon::after { content: '↓'; opacity: 1; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .actions button { background: none; border: none; color: var(--primary); cursor: pointer; margin-right: 0.5rem; font: inherit; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 300; display: none; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: min(440px, 100%); padding: 1.5rem; }
+    .modal h2 { margin-bottom: 1rem; }
+    .modal label { display: block; color: var(--muted); font-size: 0.85rem; margin-bottom: 0.3rem; }
+    .modal input { width: 100%; padding: 0.65rem; margin-bottom: 1rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font: inherit; }
+    .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 199; }
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay.open { display: block; }
+      .main { margin-left: 0; }
+      .menu-toggle { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">{{APP_NAME}}</div>
+      <nav class="sidebar-nav">
+        <a href="#" class="active">📊 Dashboard</a>
+        <a href="#">📁 Projets</a>
+        <a href="#">👥 Équipe</a>
+        <a href="#">⚙️ Paramètres</a>
+      </nav>
+      <div style="padding:1rem 1.25rem;color:var(--muted);font-size:0.8rem;border-top:1px solid var(--border)">{{CLIENT_NAME}}</div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <div class="main">
+      <header class="header">
+        <button type="button" class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+        <h1 style="font-size:1.1rem;font-weight:600">Tableau de bord</h1>
+        <button type="button" class="notif-btn" id="notifBtn">🔔 Notifications <span class="notif-badge">3</span></button>
+      </header>
+      <main class="content">
+        <div class="stats">
+          <div class="stat-card"><div class="label">{{STAT_1_LABEL}}</div><div class="value">{{STAT_1_VALUE}}</div></div>
+          <div class="stat-card"><div class="label">{{STAT_2_LABEL}}</div><div class="value">{{STAT_2_VALUE}}</div></div>
+          <div class="stat-card"><div class="label">Taux conversion</div><div class="value">4,2%</div></div>
+          <div class="stat-card"><div class="label">Sessions actives</div><div class="value">128</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h2>{{TABLE_TITLE}}</h2>
+            <button type="button" class="btn btn-primary" id="btnAdd">+ Ajouter</button>
+          </div>
+          <table id="dataTable">
+            <thead>
+              <tr>
+                <th data-col="0">{{COL_1}} <span class="sort-icon"></span></th>
+                <th data-col="1">{{COL_2}} <span class="sort-icon"></span></th>
+                <th data-col="2">{{COL_3}} <span class="sort-icon"></span></th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr data-id="1"><td>Alpha Corp</td><td>Actif</td><td>12 400 €</td><td class="actions"><button type="button" class="edit-row">Modifier</button><button type="button" class="del-row">Suppr.</button></td></tr>
+              <tr data-id="2"><td>Beta SARL</td><td>En attente</td><td>8 200 €</td><td class="actions"><button type="button" class="edit-row">Modifier</button><button type="button" class="del-row">Suppr.</button></td></tr>
+              <tr data-id="3"><td>Gamma SAS</td><td>Actif</td><td>24 100 €</td><td class="actions"><button type="button" class="edit-row">Modifier</button><button type="button" class="del-row">Suppr.</button></td></tr>
+              <tr data-id="4"><td>Delta Ltd</td><td>Inactif</td><td>1 500 €</td><td class="actions"><button type="button" class="edit-row">Modifier</button><button type="button" class="del-row">Suppr.</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" role="dialog" aria-labelledby="modalTitle">
+      <h2 id="modalTitle">Ajouter une entrée</h2>
+      <form id="modalForm">
+        <input type="hidden" id="editId" />
+        <label for="fCol1">{{COL_1}}</label>
+        <input type="text" id="fCol1" required />
+        <label for="fCol2">{{COL_2}}</label>
+        <input type="text" id="fCol2" required />
+        <label for="fCol3">{{COL_3}}</label>
+        <input type="text" id="fCol3" required />
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="modalCancel">Annuler</button>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var sidebar = document.getElementById('sidebar');
+      var overlay = document.getElementById('sidebarOverlay');
+      document.getElementById('menuToggle').addEventListener('click', function () {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('open');
+      });
+      overlay.addEventListener('click', function () {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('open');
+      });
+
+      document.getElementById('notifBtn').addEventListener('click', function () {
+        alert('3 nouvelles notifications (démo)');
+      });
+
+      var modal = document.getElementById('modalOverlay');
+      var form = document.getElementById('modalForm');
+      var editId = document.getElementById('editId');
+      var tbody = document.getElementById('tableBody');
+      var nextId = 5;
+
+      function openModal(title, row) {
+        document.getElementById('modalTitle').textContent = title;
+        if (row) {
+          var cells = row.querySelectorAll('td');
+          editId.value = row.dataset.id;
+          document.getElementById('fCol1').value = cells[0].textContent;
+          document.getElementById('fCol2').value = cells[1].textContent;
+          document.getElementById('fCol3').value = cells[2].textContent;
+        } else {
+          editId.value = '';
+          form.reset();
+        }
+        modal.classList.add('open');
+      }
+      function closeModal() { modal.classList.remove('open'); }
+
+      document.getElementById('btnAdd').addEventListener('click', function () { openModal('Ajouter une entrée'); });
+      document.getElementById('modalCancel').addEventListener('click', closeModal);
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var v1 = document.getElementById('fCol1').value;
+        var v2 = document.getElementById('fCol2').value;
+        var v3 = document.getElementById('fCol3').value;
+        var id = editId.value;
+        if (id) {
+          var row = tbody.querySelector('tr[data-id="' + id + '"]');
+          if (row) {
+            row.children[0].textContent = v1;
+            row.children[1].textContent = v2;
+            row.children[2].textContent = v3;
+          }
+        } else {
+          var tr = document.createElement('tr');
+          tr.dataset.id = String(nextId++);
+          tr.innerHTML = '<td>' + v1 + '</td><td>' + v2 + '</td><td>' + v3 + '</td><td class="actions"><button type="button" class="edit-row">Modifier</button><button type="button" class="del-row">Suppr.</button></td>';
+          tbody.appendChild(tr);
+          bindRowActions(tr);
+        }
+        closeModal();
+      });
+
+      function bindRowActions(tr) {
+        tr.querySelector('.edit-row').addEventListener('click', function () { openModal('Modifier', tr); });
+        tr.querySelector('.del-row').addEventListener('click', function () {
+          if (confirm('Supprimer cette ligne ?')) tr.remove();
+        });
+      }
+      tbody.querySelectorAll('tr').forEach(bindRowActions);
+
+      var sortCol = -1, sortDir = 1;
+      document.querySelectorAll('#dataTable th[data-col]').forEach(function (th) {
+        th.addEventListener('click', function () {
+          var col = parseInt(th.dataset.col, 10);
+          sortDir = sortCol === col ? -sortDir : 1;
+          sortCol = col;
+          document.querySelectorAll('#dataTable th').forEach(function (h) {
+            h.classList.remove('sorted-asc', 'sorted-desc');
+          });
+          th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted-desc');
+          var rows = Array.from(tbody.querySelectorAll('tr'));
+          rows.sort(function (a, b) {
+            var av = a.children[col].textContent.trim();
+            var bv = b.children[col].textContent.trim();
+            var an = parseFloat(av.replace(/[^\d.,]/g, '').replace(',', '.'));
+            var bn = parseFloat(bv.replace(/[^\d.,]/g, '').replace(',', '.'));
+            if (!isNaN(an) && !isNaN(bn)) return sortDir * (an - bn);
+            return sortDir * av.localeCompare(bv, 'fr');
+          });
+          rows.forEach(function (r) { tbody.appendChild(r); });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

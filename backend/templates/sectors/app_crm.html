@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{APP_NAME}} — CRM</title>
+  <link rel="stylesheet" href="{{GOOGLE_FONTS_URL}}" />
+  <style>
+    :root {
+      --primary: {{PRIMARY_COLOR}};
+      --secondary: {{SECONDARY_COLOR}};
+      --bg: #0f1419;
+      --surface: #15202b;
+      --surface2: #1c2733;
+      --accent: #10b981;
+      --border: #2f3b47;
+      --text: #e7e9ea;
+      --muted: #8b98a5;
+      --font-h: '{{FONT_HEADING}}', system-ui, sans-serif;
+      --font-b: '{{FONT_BODY}}', system-ui, sans-serif;
+      --sidebar-w: 240px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font-b); background: var(--bg); color: var(--text); }
+    .app { display: flex; min-height: 100vh; }
+    .sidebar { width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); position: fixed; height: 100vh; z-index: 200; transition: transform .3s; }
+    .sidebar-brand { padding: 1.25rem; font-weight: 700; color: var(--accent); }
+    .sidebar-nav a { display: block; padding: 0.7rem 1.25rem; color: var(--muted); border-left: 3px solid transparent; }
+    .sidebar-nav a:hover, .sidebar-nav a.active { color: var(--text); background: var(--surface2); border-left-color: var(--accent); }
+    .main { margin-left: var(--sidebar-w); flex: 1; min-width: 0; }
+    .header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 1.5rem; border-bottom: 1px solid var(--border); background: var(--surface); }
+    .menu-toggle { display: none; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 0.45rem 0.7rem; border-radius: 6px; cursor: pointer; }
+    .notif-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 0.45rem 1rem; border-radius: 6px; cursor: pointer; position: relative; }
+    .notif-badge { position: absolute; top: -6px; right: -6px; background: var(--primary); font-size: 0.65rem; padding: 2px 5px; border-radius: 10px; }
+    .content { padding: 1.5rem; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.15rem; border-top: 3px solid var(--accent); }
+    .stat-card .label { color: var(--muted); font-size: 0.8rem; }
+    .stat-card .value { font-size: 1.6rem; font-weight: 700; margin-top: 0.25rem; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+    .panel-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .btn-primary { background: var(--accent); color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font: inherit; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.75rem 1.25rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; cursor: pointer; }
+    th.sorted-asc::after { content: ' ▲'; color: var(--accent); }
+    th.sorted-desc::after { content: ' ▼'; color: var(--accent); }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: rgba(16,185,129,0.2); color: var(--accent); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 300; display: none; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; width: min(420px, 95vw); }
+    .modal input { width: 100%; padding: 0.6rem; margin-bottom: 0.85rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font: inherit; }
+    .modal label { font-size: 0.8rem; color: var(--muted); display: block; margin-bottom: 0.25rem; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 199; }
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay.open { display: block; }
+      .main { margin-left: 0; }
+      .menu-toggle { display: block; }
+      .stats { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">{{APP_NAME}}</div>
+      <nav class="sidebar-nav">
+        <a href="#" class="active">Contacts</a>
+        <a href="#">Pipeline</a>
+        <a href="#">Deals</a>
+        <a href="#">Rapports</a>
+      </nav>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <div class="main">
+      <header class="header">
+        <button class="menu-toggle" id="menuToggle">☰</button>
+        <span>CRM — {{CLIENT_NAME}}</span>
+        <button class="notif-btn" id="notifBtn">Alertes <span class="notif-badge">5</span></button>
+      </header>
+      <main class="content">
+        <div class="stats">
+          <div class="stat-card"><div class="label">{{STAT_1_LABEL}}</div><div class="value">{{STAT_1_VALUE}}</div></div>
+          <div class="stat-card"><div class="label">{{STAT_2_LABEL}}</div><div class="value">{{STAT_2_VALUE}}</div></div>
+          <div class="stat-card"><div class="label">Leads qualifiés</div><div class="value">47</div></div>
+          <div class="stat-card"><div class="label">Taux closing</div><div class="value">28%</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h2>{{TABLE_TITLE}}</h2>
+            <button class="btn-primary" id="btnAdd">Nouveau contact</button>
+          </div>
+          <table id="dataTable">
+            <thead>
+              <tr>
+                <th data-col="0">{{COL_1}}</th>
+                <th data-col="1">{{COL_2}}</th>
+                <th data-col="2">{{COL_3}}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr data-id="1"><td>Jean Dupont</td><td><span class="badge">Prospect</span></td><td>15 000 €</td><td><button class="edit-row" style="background:none;border:none;color:var(--accent);cursor:pointer">✎</button></td></tr>
+              <tr data-id="2"><td>Marie Martin</td><td><span class="badge">Client</span></td><td>42 500 €</td><td><button class="edit-row" style="background:none;border:none;color:var(--accent);cursor:pointer">✎</button></td></tr>
+              <tr data-id="3"><td>Société ABC</td><td><span class="badge">Négociation</span></td><td>88 000 €</td><td><button class="edit-row" style="background:none;border:none;color:var(--accent);cursor:pointer">✎</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h2 id="modalTitle" style="margin-bottom:1rem">Contact</h2>
+      <form id="modalForm">
+        <input type="hidden" id="editId" />
+        <label>{{COL_1}}</label><input id="fCol1" required />
+        <label>{{COL_2}}</label><input id="fCol2" required />
+        <label>{{COL_3}}</label><input id="fCol3" required />
+        <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.5rem">
+          <button type="button" id="modalCancel" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:0.5rem 1rem;border-radius:6px;cursor:pointer">Annuler</button>
+          <button type="submit" class="btn-primary">Sauvegarder</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebarOverlay');
+      document.getElementById('menuToggle').onclick=function(){sb.classList.toggle('open');ov.classList.toggle('open');};
+      ov.onclick=function(){sb.classList.remove('open');ov.classList.remove('open');};
+      document.getElementById('notifBtn').onclick=function(){alert('5 alertes CRM (démo)')};
+      var modal=document.getElementById('modalOverlay'),tbody=document.getElementById('tableBody'),nextId=4,sortCol=-1,sortDir=1;
+      function openM(t,r){document.getElementById('modalTitle').textContent=t;
+        if(r){var c=r.children;document.getElementById('editId').value=r.dataset.id;
+          document.getElementById('fCol1').value=c[0].textContent;document.getElementById('fCol2').value=c[1].textContent;document.getElementById('fCol3').value=c[2].textContent;}
+        else{document.getElementById('editId').value='';document.getElementById('modalForm').reset();}
+        modal.classList.add('open');}
+      document.getElementById('btnAdd').onclick=function(){openM('Nouveau contact')};
+      document.getElementById('modalCancel').onclick=function(){modal.classList.remove('open')};
+      modal.onclick=function(e){if(e.target===modal)modal.classList.remove('open')};
+      document.getElementById('modalForm').onsubmit=function(e){e.preventDefault();
+        var v1=document.getElementById('fCol1').value,v2=document.getElementById('fCol2').value,v3=document.getElementById('fCol3').value,id=document.getElementById('editId').value;
+        if(id){var row=tbody.querySelector('[data-id="'+id+'"]');if(row){row.children[0].textContent=v1;row.children[1].innerHTML='<span class="badge">'+v2+'</span>';row.children[2].textContent=v3;}}
+        else{var tr=document.createElement('tr');tr.dataset.id=String(nextId++);
+          tr.innerHTML='<td>'+v1+'</td><td><span class="badge">'+v2+'</span></td><td>'+v3+'</td><td><button class="edit-row" style="background:none;border:none;color:var(--accent);cursor:pointer">✎</button></td>';
+          tbody.appendChild(tr);tr.querySelector('.edit-row').onclick=function(){openM('Modifier',tr)};}
+        modal.classList.remove('open');};
+      tbody.querySelectorAll('.edit-row').forEach(function(b){b.onclick=function(){openM('Modifier',b.closest('tr'))};});
+      document.querySelectorAll('#dataTable th[data-col]').forEach(function(th){
+        th.onclick=function(){var col=+th.dataset.col;sortDir=sortCol===col?-sortDir:1;sortCol=col;
+          document.querySelectorAll('#dataTable th').forEach(function(h){h.classList.remove('sorted-asc','sorted-desc')});
+          th.classList.add(sortDir===1?'sorted-asc':'sorted-desc');
+          Array.from(tbody.querySelectorAll('tr')).sort(function(a,b){
+            var av=a.children[col].textContent.trim(),bv=b.children[col].textContent.trim();
+            return sortDir*av.localeCompare(bv,'fr');}).forEach(function(r){tbody.appendChild(r);});};
+      });
+    })();
+  </script>
+</body>
+</html>

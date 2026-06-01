@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{APP_NAME}}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 12px;
+      background: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      color: #222;
+    }
+    :root { --primary: {{PRIMARY_COLOR}}; }
+    .title-bar {
+      height: 32px; background: #ececec; border-bottom: 1px solid #a0a0a0;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .title-bar span { padding-left: 10px; }
+    .win-controls { display: flex; }
+    .win-controls button {
+      width: 46px; height: 32px; border: none; background: transparent; cursor: pointer; font-size: 10px;
+    }
+    .win-controls button:hover { background: #ddd; }
+    .win-controls button:last-child:hover { background: #e81123; color: #fff; }
+    .menu-bar { height: 24px; background: #fafafa; border-bottom: 1px solid #ccc; display: flex; padding-left: 4px; }
+    .menu-bar > span { padding: 4px 12px; cursor: default; }
+    .menu-bar > span:hover { background: #deecf9; }
+    .shell { flex: 1; display: flex; min-height: 0; }
+    .sidebar {
+      width: 180px; background: #ebebeb; border-right: 1px solid #a0a0a0; padding: 8px 0;
+    }
+    .sidebar button {
+      display: block; width: calc(100% - 12px); margin: 2px 6px; padding: 8px 10px;
+      text-align: left; border: 1px solid transparent; background: transparent;
+      font: inherit; cursor: pointer;
+    }
+    .sidebar button.active { background: #fff; border-color: #999; }
+    .sidebar button:hover:not(.active) { background: #ddd; }
+    .content { flex: 1; display: flex; flex-direction: column; background: #fff; }
+    .tool-row { padding: 8px; background: #f5f5f5; border-bottom: 1px solid #ddd; }
+    .tool-row button {
+      margin-right: 6px; padding: 4px 12px; border: 1px solid #999;
+      background: linear-gradient(#fff, #e8e8e8); cursor: pointer; font: inherit;
+    }
+    .form-area { flex: 1; padding: 16px; overflow: auto; }
+    label { display: block; margin-bottom: 3px; }
+    input, select, textarea {
+      margin-bottom: 12px; padding: 5px 8px; border: 1px solid #999; font: inherit; width: 100%; max-width: 400px;
+    }
+    input:focus, select:focus, textarea:focus { outline: 1px solid var(--primary); }
+    .status { height: 22px; background: #ececec; border-top: 1px solid #a0a0a0; padding: 0 8px; display: flex; align-items: center; font-size: 11px; }
+    .view { display: none; }
+    .view.active { display: block; }
+  </style>
+</head>
+<body>
+  <div class="title-bar">
+    <span>{{APP_NAME}} — {{CLIENT_NAME}}</span>
+    <div class="win-controls">
+      <button type="button" id="wMin" title="Minimiser">&#9472;</button>
+      <button type="button" id="wMax" title="Maximiser">&#9633;</button>
+      <button type="button" id="wClose" title="Fermer">&#10005;</button>
+    </div>
+  </div>
+
+  <div class="menu-bar">
+    <span>Fichier</span><span>Édition</span><span>Affichage</span><span>Aide</span>
+  </div>
+
+  <div class="shell">
+    <aside class="sidebar">
+      <button type="button" class="mod active" data-v="v1">{{MODULE_1}}</button>
+      <button type="button" class="mod" data-v="v2">{{MODULE_2}}</button>
+      <button type="button" class="mod" data-v="v3">{{MODULE_3}}</button>
+    </aside>
+    <div class="content">
+      <div class="tool-row">
+        <button type="button" id="tSave">Enregistrer</button>
+        <button type="button" id="tCancel">Annuler</button>
+      </div>
+      <div class="form-area">
+        <div id="v1" class="view active">
+          <h3 style="margin-bottom:12px;font-weight:600">{{MODULE_1}}</h3>
+          <label>Nom</label><input type="text" />
+          <label>Description</label><textarea rows="4"></textarea>
+          <label>Statut</label><select><option>Actif</option><option>Inactif</option></select>
+        </div>
+        <div id="v2" class="view">
+          <h3 style="margin-bottom:12px;font-weight:600">{{MODULE_2}}</h3>
+          <label>Identifiant</label><input type="text" />
+          <label>Valeur</label><input type="number" />
+          <label>Date</label><input type="date" />
+        </div>
+        <div id="v3" class="view">
+          <h3 style="margin-bottom:12px;font-weight:600">{{MODULE_3}}</h3>
+          <label>Paramètre</label><input type="text" />
+          <label>Option</label><select><option>A</option><option>B</option></select>
+          <label>Commentaire</label><textarea rows="3"></textarea>
+        </div>
+      </div>
+      <div class="status"><span id="statusMsg">Prêt</span> — <span id="statusMod">{{MODULE_1}}</span></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var names = { v1: '{{MODULE_1}}', v2: '{{MODULE_2}}', v3: '{{MODULE_3}}' };
+      document.getElementById('wMin').onclick = function () { document.getElementById('statusMsg').textContent = 'Minimisé'; };
+      document.getElementById('wMax').onclick = function () { document.getElementById('statusMsg').textContent = 'Maximisé'; };
+      document.getElementById('wClose').onclick = function () {
+        if (confirm('Fermer l\'application ?')) document.getElementById('statusMsg').textContent = 'Fermeture';
+      };
+      document.querySelectorAll('.mod').forEach(function (btn) {
+        btn.onclick = function () {
+          document.querySelectorAll('.mod').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active'); });
+          document.getElementById(btn.dataset.v).classList.add('active');
+          document.getElementById('statusMod').textContent = names[btn.dataset.v];
+          document.getElementById('statusMsg').textContent = 'Module : ' + names[btn.dataset.v];
+        };
+      });
+      document.getElementById('tSave').onclick = function () {
+        document.getElementById('statusMsg').textContent = 'Enregistré ' + new Date().toLocaleTimeString('fr-FR');
+      };
+      document.getElementById('tCancel').onclick = function () {
+        document.querySelectorAll('.form-area input, .form-area textarea').forEach(function (el) {
+          if (el.type !== 'date') el.value = '';
+        });
+        document.getElementById('statusMsg').textContent = 'Annulé';
+      };
+      document.querySelectorAll('.menu-bar > span').forEach(function (s) {
+        s.onclick = function () { document.getElementById('statusMsg').textContent = 'Menu : ' + s.textContent; };
+      });
+    })();
+  </script>
+</body>
+</html>

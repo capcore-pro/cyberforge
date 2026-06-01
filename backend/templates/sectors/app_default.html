@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{APP_NAME}}</title>
+  <link rel="stylesheet" href="{{GOOGLE_FONTS_URL}}" />
+  <style>
+    :root {
+      --primary: {{PRIMARY_COLOR}};
+      --secondary: {{SECONDARY_COLOR}};
+      --font-h: '{{FONT_HEADING}}', sans-serif;
+      --font-b: '{{FONT_BODY}}', sans-serif;
+      --bg: #18181b;
+      --surface: #27272a;
+      --border: #3f3f46;
+      --text: #fafafa;
+      --muted: #a1a1aa;
+      --sw: 220px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font-b); background: var(--bg); color: var(--text); }
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar { width: var(--sw); background: var(--surface); border-right: 1px solid var(--border); position: fixed; height: 100%; z-index: 100; transition: transform .3s; }
+    .sidebar h2 { padding: 1rem; font-family: var(--font-h); font-size: 1rem; color: var(--primary); border-bottom: 1px solid var(--border); }
+    .sidebar a { display: block; padding: 0.65rem 1rem; color: var(--muted); }
+    .sidebar a.active { color: var(--text); background: rgba(255,255,255,0.05); }
+    .main { margin-left: var(--sw); flex: 1; }
+    .topbar { height: 56px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 1.25rem; background: var(--surface); }
+    .burger { display: none; border: 1px solid var(--border); background: transparent; color: var(--text); padding: 0.4rem 0.6rem; cursor: pointer; border-radius: 6px; }
+    main { padding: 1.25rem; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+    .stat { background: var(--surface); padding: 1rem; border-radius: 8px; border: 1px solid var(--border); }
+    .stat small { color: var(--muted); }
+    .stat strong { display: block; font-size: 1.5rem; margin-top: 0.25rem; color: var(--primary); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .card-h { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.65rem 1rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    th { color: var(--muted); cursor: pointer; }
+    .btn { padding: 0.45rem 0.9rem; border-radius: 6px; border: none; cursor: pointer; font: inherit; background: var(--primary); color: #fff; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 200; }
+    .modal-bg.show { display: flex; }
+    .modal { background: var(--surface); padding: 1.25rem; border-radius: 8px; width: min(400px, 92vw); border: 1px solid var(--border); }
+    .modal input { width: 100%; padding: 0.5rem; margin: 0.35rem 0 0.75rem; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 4px; }
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 99; }
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .overlay.show { display: block; }
+      .main { margin-left: 0; }
+      .burger { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <h2>{{APP_NAME}}</h2>
+      <a href="#" class="active">Accueil</a>
+      <a href="#">Données</a>
+      <a href="#">Réglages</a>
+      <p style="padding:1rem;font-size:0.75rem;color:var(--muted)">{{CLIENT_NAME}}</p>
+    </aside>
+    <div class="overlay" id="overlay"></div>
+    <div class="main">
+      <div class="topbar">
+        <button class="burger" id="burger">☰</button>
+        <span>Application</span>
+        <button class="btn" style="background:var(--surface);border:1px solid var(--border);color:var(--text)" id="notifs">🔔</button>
+      </div>
+      <main>
+        <div class="stats">
+          <div class="stat"><small>{{STAT_1_LABEL}}</small><strong>{{STAT_1_VALUE}}</strong></div>
+          <div class="stat"><small>{{STAT_2_LABEL}}</small><strong>{{STAT_2_VALUE}}</strong></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><strong>{{TABLE_TITLE}}</strong><button class="btn" id="addBtn">Ajouter</button></div>
+          <table id="tbl">
+            <thead><tr>
+              <th data-c="0">{{COL_1}}</th><th data-c="1">{{COL_2}}</th><th data-c="2">{{COL_3}}</th><th></th>
+            </tr></thead>
+            <tbody id="tbody">
+              <tr data-id="1"><td>Item A</td><td>OK</td><td>100</td><td><button class="edit" style="background:none;border:none;color:var(--primary);cursor:pointer">Edit</button></td></tr>
+              <tr data-id="2"><td>Item B</td><td>Pending</td><td>250</td><td><button class="edit" style="background:none;border:none;color:var(--primary);cursor:pointer">Edit</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="modal-bg" id="modalBg">
+    <div class="modal">
+      <h3 id="mTitle" style="margin-bottom:0.75rem">Entrée</h3>
+      <form id="mForm">
+        <input type="hidden" id="eid" />
+        <label>{{COL_1}}</label><input id="c1" required />
+        <label>{{COL_2}}</label><input id="c2" required />
+        <label>{{COL_3}}</label><input id="c3" required />
+        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:flex-end">
+          <button type="button" id="cancel" style="background:transparent;border:1px solid var(--border);color:var(--text);padding:0.45rem 0.9rem;border-radius:6px;cursor:pointer">Annuler</button>
+          <button type="submit" class="btn">OK</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var sb=document.getElementById('sidebar'),ov=document.getElementById('overlay');
+      document.getElementById('burger').onclick=function(){sb.classList.toggle('open');ov.classList.toggle('show');};
+      ov.onclick=function(){sb.classList.remove('open');ov.classList.remove('show');};
+      document.getElementById('notifs').onclick=function(){alert('Notifications (démo)')};
+      var bg=document.getElementById('modalBg'),tb=document.getElementById('tbody'),nid=3,sc=-1,sd=1;
+      function openM(t,r){document.getElementById('mTitle').textContent=t;
+        if(r){document.getElementById('eid').value=r.dataset.id;
+          document.getElementById('c1').value=r.cells[0].textContent;
+          document.getElementById('c2').value=r.cells[1].textContent;
+          document.getElementById('c3').value=r.cells[2].textContent;}
+        else{document.getElementById('eid').value='';document.getElementById('mForm').reset();}
+        bg.classList.add('show');}
+      document.getElementById('addBtn').onclick=function(){openM('Ajouter')};
+      document.getElementById('cancel').onclick=function(){bg.classList.remove('show')};
+      bg.onclick=function(e){if(e.target===bg)bg.classList.remove('show')};
+      document.getElementById('mForm').onsubmit=function(e){e.preventDefault();
+        var a=document.getElementById('c1').value,b=document.getElementById('c2').value,c=document.getElementById('c3').value,id=document.getElementById('eid').value;
+        if(id){var row=tb.querySelector('[data-id="'+id+'"]');row.cells[0].textContent=a;row.cells[1].textContent=b;row.cells[2].textContent=c;}
+        else{var tr=document.createElement('tr');tr.dataset.id=String(nid++);
+          tr.innerHTML='<td>'+a+'</td><td>'+b+'</td><td>'+c+'</td><td><button class="edit" style="background:none;border:none;color:var(--primary);cursor:pointer">Edit</button></td>';
+          tb.appendChild(tr);tr.querySelector('.edit').onclick=function(){openM('Edit',tr)};}
+        bg.classList.remove('show');};
+      tb.querySelectorAll('.edit').forEach(function(b){b.onclick=function(){openM('Edit',b.closest('tr'))};});
+      document.querySelectorAll('#tbl th[data-c]').forEach(function(th){
+        th.onclick=function(){var col=+th.dataset.c;sd=sc===col?-sd:1;sc=col;
+          Array.from(tb.querySelectorAll('tr')).sort(function(x,y){
+            return sd*x.cells[col].textContent.localeCompare(y.cells[col].textContent,'fr');}).forEach(function(r){tb.appendChild(r);});};
+      });
+    })();
+  </script>
+</body>
+</html>

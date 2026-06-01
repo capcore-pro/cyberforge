@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{CLIENT_NAME}} — Réservation</title>
+  <link rel="stylesheet" href="{{GOOGLE_FONTS_URL}}" />
+  <style>
+    :root { --primary: {{PRIMARY_COLOR}}; --font-h: '{{FONT_HEADING}}', sans-serif; --font-b: '{{FONT_BODY}}', sans-serif; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font-b); color: #334155; background: #f8fafc; line-height: 1.6; }
+    h1, h2, h3 { font-family: var(--font-h); color: var(--primary); }
+    .wrap { width: min(1000px, 92vw); margin: 0 auto; }
+    .nav { position: sticky; top: 0; background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,0.06); z-index: 50; }
+    .nav-inner { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; flex-wrap: wrap; gap: 1rem; }
+    .btn-rdv { background: var(--primary); color: #fff; padding: 0.55rem 1.2rem; border: none; border-radius: 8px; cursor: pointer; font: inherit; }
+    .hero { padding: 3.5rem 0; text-align: center; background: var(--primary); color: #fff; }
+    .hero h1 { color: #fff; }
+    section { padding: 3rem 0; }
+    .services { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+    .service-card { background: #fff; padding: 1.25rem; border-radius: 8px; border: 1px solid #e2e8f0; cursor: pointer; }
+    .service-card.selected { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary); }
+    .booking-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.35rem; background: #fff; padding: 1rem; border-radius: 8px; }
+    .day-col { display: flex; flex-direction: column; gap: 0.3rem; }
+    .day-label { font-size: 0.7rem; font-weight: 700; text-align: center; }
+    .slot { padding: 0.4rem; font-size: 0.7rem; border: 1px solid #e2e8f0; border-radius: 4px; cursor: pointer; background: #fff; }
+    .slot.selected { background: var(--primary); color: #fff; }
+    .slot.unavailable { opacity: 0.35; pointer-events: none; }
+    #cf-contact-form { background: #fff; padding: 1.25rem; border-radius: 8px; border: 1px solid #e2e8f0; }
+    #cf-contact-form label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+    #cf-contact-form input, #cf-contact-form textarea { width: 100%; padding: 0.6rem; margin-bottom: 0.85rem; border: 1px solid #e2e8f0; border-radius: 6px; font: inherit; }
+    .team { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; text-align: center; }
+    footer { background: #1e293b; color: #fff; padding: 2rem 0; text-align: center; }
+    @media (max-width: 768px) { .booking-layout, .team { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <nav class="nav"><div class="wrap nav-inner">
+    <strong>{{CLIENT_NAME}}</strong>
+    <div><a href="#services">Services</a> · <a href="#rdv">RDV</a> · <button class="btn-rdv" onclick="location.hash='rdv'">Réserver</button></div>
+  </div></nav>
+  <header class="hero"><div class="wrap"><h1>{{CLIENT_NAME}}</h1><p>Réservez votre créneau en ligne</p></div></header>
+  <section id="services"><div class="wrap"><h2 style="text-align:center;margin-bottom:1.5rem">Services</h2>
+    <div class="services">
+      <div class="service-card" data-service="{{SERVICE_1}}" data-duration="{{SERVICE_1_DURATION}}" data-price="{{SERVICE_1_PRICE}}"><h3>{{SERVICE_1}}</h3><p>{{SERVICE_1_DURATION}} — {{SERVICE_1_PRICE}} €</p></div>
+      <div class="service-card" data-service="{{SERVICE_2}}" data-duration="{{SERVICE_2_DURATION}}" data-price="{{SERVICE_2_PRICE}}"><h3>{{SERVICE_2}}</h3><p>{{SERVICE_2_DURATION}} — {{SERVICE_2_PRICE}} €</p></div>
+      <div class="service-card" data-service="{{SERVICE_3}}" data-duration="{{SERVICE_3_DURATION}}" data-price="{{SERVICE_3_PRICE}}"><h3>{{SERVICE_3}}</h3><p>{{SERVICE_3_DURATION}} — {{SERVICE_3_PRICE}} €</p></div>
+    </div>
+  </div></section>
+  <section id="rdv"><div class="wrap"><h2 style="text-align:center;margin-bottom:1.5rem">Calendrier</h2>
+    <div class="booking-layout">
+      <div class="week-grid" id="weekCalendar"></div>
+      <form id="cf-contact-form">
+        <input type="hidden" id="fieldSlot" name="creneau" />
+        <input type="hidden" id="fieldService" name="service" />
+        <label for="nom">Nom</label><input id="nom" name="nom" required />
+        <label for="prenom">Prénom</label><input id="prenom" name="prenom" required />
+        <label for="tel">Téléphone</label><input id="tel" name="tel" required />
+        <label for="email">Email</label><input id="email" name="email" type="email" required />
+        <label for="recap">Récap</label><textarea id="recap" name="recap" rows="3" readonly></textarea>
+        <button type="submit" class="btn-rdv" style="width:100%">Confirmer</button>
+      </form>
+    </div>
+  </div></section>
+  <section id="equipe"><div class="wrap"><h2 style="text-align:center;margin-bottom:1.5rem">Équipe</h2>
+    <div class="team"><div><h3>Membre 1</h3></div><div><h3>Membre 2</h3></div><div><h3>Membre 3</h3></div></div>
+  </div></section>
+  <footer id="contact"><div class="wrap"><p>{{CLIENT_NAME}} — {{ADDRESS}}</p><p>{{PHONE}} | {{EMAIL}}</p></div></footer>
+  <script>
+    (function(){
+      var days=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'],times=['09:00','10:00','11:00','14:00','15:00','16:00'];
+      var cal=document.getElementById('weekCalendar'),slot=null,svc='';
+      days.forEach(function(d){var col=document.createElement('div');col.className='day-col';
+        col.innerHTML='<div class="day-label">'+d+'</div>';
+        times.forEach(function(t){var b=document.createElement('button');b.type='button';b.className='slot';
+          b.textContent=t;b.dataset.value=d+' '+t;
+          b.onclick=function(){document.querySelectorAll('.slot.selected').forEach(function(s){s.classList.remove('selected')});
+            b.classList.add('selected');slot=b.dataset.value;document.getElementById('fieldSlot').value=slot;
+            document.getElementById('recap').value=(svc?'Service: '+svc+'\n':'')+'Créneau: '+slot;};
+          col.appendChild(b);});cal.appendChild(col);});
+      document.querySelectorAll('.service-card').forEach(function(c){c.onclick=function(){
+        document.querySelectorAll('.service-card').forEach(function(x){x.classList.remove('selected')});
+        c.classList.add('selected');svc=c.dataset.service;document.getElementById('fieldService').value=svc;
+        document.getElementById('recap').value=(slot?'Créneau: '+slot+'\n':'')+'Service: '+svc;};});
+      document.getElementById('cf-contact-form').onsubmit=function(e){e.preventDefault();if(!slot)alert('Sélectionnez un créneau');else alert('OK (démo)');};
+    })();
+  </script>
+</body>
+</html>

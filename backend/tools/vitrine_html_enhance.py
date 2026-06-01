@@ -76,6 +76,19 @@ def is_vitrine_html_plan(plan: Any | None) -> bool:
     return value in ("site_web", "landing_page")
 
 
+def is_template_first_html_plan(
+    plan: Any | None,
+    *,
+    generation_mode: str | None = None,
+) -> bool:
+    """Vitrine + ecommerce + réservation + app + desktop (HTML assemblé)."""
+    if not plan:
+        return False
+    from agents.template_first_policy import is_template_first_html_project
+
+    return is_template_first_html_project(plan, generation_mode=generation_mode)
+
+
 def _ensure_section_ids(html: str) -> str:
     """Ajoute des id sur sections héros/services/contact si absents."""
     out = html

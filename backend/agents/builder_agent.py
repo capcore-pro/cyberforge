@@ -17,7 +17,7 @@ from agents.architect_agent import ArchitectPlan
 from agents.base_agent import BaseAgent
 from agents.builder_ai import (
     append_design_system_to_prompt,
-    assemble_vitrine_html,
+    assemble_template_html,
     resolve_assembly_inputs,
     uses_llm_with_design_system,
     uses_template_assembly,
@@ -231,8 +231,9 @@ class BuilderAgent(BaseAgent):
         if not html:
             from agents.template_ai import load_sector_template_raw
 
+            sector_key = sector or plan.secteur or "commerce"
             loaded = load_sector_template_raw(
-                sector=sector or plan.secteur or "commerce",
+                sector=sector_key,
                 user_prompt=prompt,
                 plan=plan,
             )
@@ -251,7 +252,7 @@ class BuilderAgent(BaseAgent):
                 fallback_to_coremind=True,
             )
 
-        assembly = assemble_vitrine_html(
+        assembly = assemble_template_html(
             template_html=html,
             client_name=client_name,
             sector=sector,

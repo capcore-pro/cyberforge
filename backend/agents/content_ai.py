@@ -18,6 +18,12 @@ from agents.base_agent import BaseAgent
 from agents.design_system_ai import DesignSystemJSON, design_system_to_css_variables
 from agents.template_ai import fill_template_placeholders
 from core.agent_contract import AgentContractError, AgentResult
+from agents.content_slots import (
+    build_app_slots,
+    build_desktop_slots,
+    build_ecommerce_slots,
+    build_reservation_slots,
+)
 from tools.client_content_profile import (
     build_client_content_profile,
     humanize_sector_label,
@@ -251,6 +257,7 @@ def build_content_slots(
 ) -> dict[str, str]:
     """Construit toutes les valeurs de placeholders pour ContentAI."""
     research = _coerce_research_dict(research_content)
+    ds = _design_system_slots(design_system)
     profile = build_client_content_profile(
         user_prompt=user_prompt,
         research_brief=research_content,
@@ -269,12 +276,21 @@ def build_content_slots(
         user_prompt=user_prompt,
     )
 
+    tid = (template_id or "vitrine_default").strip()
+    if tid.startswith("ecommerce_"):
+        return build_ecommerce_slots(tid, brand, ds, research)
+    if tid.startswith("reservation_"):
+        return build_reservation_slots(tid, brand, city_clean, ds)
+    if tid.startswith("app_"):
+        return build_app_slots(tid, brand, ds, sector_label)
+    if tid.startswith("desktop_"):
+        return build_desktop_slots(tid, brand, ds)
+
     keywords = _research_keywords(research)
     if not keywords:
         keywords = list(profile.keywords[:5])
 
     svc1, svc2, svc3 = _resolve_services(template_id, keywords, sector_label)
-    ds = _design_system_slots(design_system)
 
     hero_title = _build_hero_title(brand, sector_label, city_clean, template_id, research)
     hero_subtitle = _build_hero_subtitle(
@@ -416,7 +432,19 @@ def fill_template_content(
             code="missing_template",
             message="template_html obligatoire.",
         )
-    if len((client_name or "").strip()) < 2:
+    profile = build_client_content_profile(
+        user_prompt=user_prompt,
+        research_brief=research_content,
+    )
+    research_dict = _coerce_research_dict(research_content)
+    city_hint = city or research_dict.get("ville") or profile.city or ""
+    resolved_name = resolve_client_business_name(
+        client_name or profile.company_name or "",
+        sector=sector or profile.sector or "",
+        city=city_hint,
+        user_prompt=user_prompt,
+    )
+    if len(resolved_name.strip()) < 2:
         return AgentResult.failure(
             agent_id=_AGENT_ID,
             agent_name=_AGENT_NAME,
@@ -426,7 +454,7 @@ def fill_template_content(
 
     try:
         slots = build_content_slots(
-            client_name=client_name,
+            client_name=resolved_name,
             sector=sector,
             city=city,
             template_html=template_html,
@@ -447,18 +475,23 @@ def fill_template_content(
         html = _fix_action_links(html)
         _validate_content_html(html)
 
-        brand = slots["CLIENT_NAME"]
+        brand = slots.get("CLIENT_NAME", html_lib.escape(resolved_name))
+        sector_out = slots.get("SECTOR") or html_lib.escape(
+            humanize_sector_label(sector or profile.sector, profile.keywords, user_prompt=user_prompt)
+        )
+        city_out = slots.get("CITY") or html_lib.escape(city_hint or "votre ville")
+        keywords_used = [
+            html_lib.unescape(slots[k])
+            for k in ("SERVICE_1", "SERVICE_2", "SERVICE_3", "PRODUCT_1_NAME", "CATEGORY_1")
+            if k in slots
+        ][:3]
         result = ContentFillResult(
             html=html,
             client_name=html_lib.unescape(brand) if "&" in brand else brand,
-            sector=html_lib.unescape(slots["SECTOR"]),
-            city=html_lib.unescape(slots["CITY"]),
+            sector=html_lib.unescape(sector_out) if "&" in sector_out else sector_out,
+            city=html_lib.unescape(city_out) if "&" in city_out else city_out,
             placeholders_filled=filled,
-            keywords_used=[
-                html_lib.unescape(slots["SERVICE_1"]),
-                html_lib.unescape(slots["SERVICE_2"]),
-                html_lib.unescape(slots["SERVICE_3"]),
-            ],
+            keywords_used=keywords_used,
         )
     except AgentContractError as exc:
         return AgentResult.failure(

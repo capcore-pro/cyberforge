@@ -23,7 +23,11 @@ from tools.client_content_profile import (
 from tools.vitrine_html_enhance import enhance_builder_vitrine_html
 from tools.codegen_service import CodeGenerateResult
 from tools.generation_sources import is_usable_preview_html
-from tools.vitrine_html_enhance import find_forbidden_placeholder_issues, is_vitrine_html_plan
+from tools.vitrine_html_enhance import (
+    find_forbidden_placeholder_issues,
+    is_template_first_html_plan,
+    is_vitrine_html_plan,
+)
 
 _REACT_SOURCE_EXT = re.compile(r"\.(tsx|jsx)$", re.I)
 
@@ -480,7 +484,7 @@ class BugHunterAgent(BaseAgent):
         file_issues = self._generation_file_issues(generation)
         html = preview_html_from_generation(generation, title=title)
         profile: ClientContentProfile | None = None
-        if architect_plan and is_vitrine_html_plan(architect_plan):
+        if architect_plan and is_template_first_html_plan(architect_plan):
             profile = build_client_content_profile(
                 user_prompt=user_prompt,
                 research_brief=research_brief,
@@ -488,7 +492,7 @@ class BugHunterAgent(BaseAgent):
             )
             if not profile.company_name:
                 profile = None
-        if architect_plan and is_vitrine_html_plan(architect_plan):
+        if architect_plan and is_template_first_html_plan(architect_plan):
             html_report = analyze_vitrine_html(html, client_profile=profile)
         else:
             html_report = self.analyze_html(html, client_profile=profile)

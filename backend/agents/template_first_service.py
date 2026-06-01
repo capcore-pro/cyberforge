@@ -11,6 +11,7 @@ from typing import Any
 
 from agents.architect_agent import ArchitectPlan
 from agents.coremind_agent import CoreMindAnalysis
+from agents.template_first_policy import is_template_first_html_project
 from agents.vitrine_policy import is_vitrine_html_project
 from core.agent_contract import AgentContractError, AgentResult, require_ok
 from core.template_engine import render_template
@@ -33,6 +34,8 @@ def must_use_template_first(
     if mode == "real_app":
         return False
     if mode == "vitrine_next":
+        return False
+    if is_template_first_html_project(plan, generation_mode=generation_mode):
         return True
     if is_vitrine_html_project(plan, generation_mode=generation_mode):
         return True

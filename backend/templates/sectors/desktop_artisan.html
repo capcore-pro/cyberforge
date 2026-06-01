@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{APP_NAME}} — {{CLIENT_NAME}}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 12px;
+      background: #f0f0f0;
+      color: #1a1a1a;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+    :root { --primary: {{PRIMARY_COLOR}}; --title-bg: #e8e8e8; --chrome: #f3f3f3; --border: #a0a0a0; --accent: var(--primary); }
+    .title-bar {
+      height: 32px; background: var(--title-bg);
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      -webkit-app-region: drag;
+    }
+    .title-bar .title { padding-left: 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    .title-bar .icon { width: 16px; height: 16px; background: var(--accent); border-radius: 2px; display: inline-block; }
+    .window-controls { display: flex; height: 100%; -webkit-app-region: no-drag; }
+    .win-btn {
+      width: 46px; height: 32px; border: none; background: transparent;
+      font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-family: 'Segoe MDL2 Assets', 'Segoe UI', sans-serif;
+    }
+    .win-btn:hover { background: #e5e5e5; }
+    .win-btn.close:hover { background: #e81123; color: #fff; }
+    .menu-bar {
+      height: 24px; background: var(--chrome); border-bottom: 1px solid #d4d4d4;
+      display: flex; align-items: stretch; padding: 0 4px;
+    }
+    .menu-item {
+      padding: 0 10px; display: flex; align-items: center; cursor: default;
+      position: relative;
+    }
+    .menu-item:hover { background: #e5f3ff; }
+    .menu-item.active .dropdown { display: block; }
+    .dropdown {
+      display: none; position: absolute; top: 100%; left: 0;
+      background: #fff; border: 1px solid #999; box-shadow: 2px 2px 6px rgba(0,0,0,0.15);
+      min-width: 180px; z-index: 100; padding: 4px 0;
+    }
+    .dropdown div { padding: 6px 24px 6px 12px; cursor: default; }
+    .dropdown div:hover { background: #e5f3ff; }
+    .dropdown .sep { height: 1px; background: #e0e0e0; margin: 4px 0; padding: 0; }
+    .app-body { flex: 1; display: flex; min-height: 0; }
+    .sidebar {
+      width: 200px; background: #ece9e6; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; padding: 8px 0;
+    }
+    .sidebar h3 { padding: 8px 12px; font-size: 11px; color: #666; font-weight: 600; text-transform: uppercase; }
+    .module-btn {
+      padding: 8px 12px; margin: 2px 6px; text-align: left; border: 1px solid transparent;
+      background: transparent; cursor: pointer; font: inherit; font-size: 12px; border-radius: 3px;
+      display: flex; align-items: center; gap: 8px; width: calc(100% - 12px);
+    }
+    .module-btn:hover { background: #ddd9d4; }
+    .module-btn.active { background: #fff; border-color: var(--border); box-shadow: inset 0 0 0 1px #fff; font-weight: 600; }
+    .module-btn::before { content: '▸'; color: var(--accent); font-size: 10px; }
+    .main-area { flex: 1; display: flex; flex-direction: column; background: #fff; min-width: 0; }
+    .toolbar {
+      height: 36px; background: var(--chrome); border-bottom: 1px solid #d4d4d4;
+      display: flex; align-items: center; gap: 6px; padding: 0 8px;
+    }
+    .toolbar button {
+      padding: 4px 12px; border: 1px solid #adadad; background: linear-gradient(180deg, #fff 0%, #e8e8e8 100%);
+      border-radius: 3px; cursor: pointer; font: inherit; font-size: 11px;
+    }
+    .toolbar button:hover { border-color: #0078d4; }
+    .toolbar button:active { background: #d0d0d0; }
+    .form-workspace { flex: 1; overflow: auto; padding: 16px 20px; }
+    .form-group { margin-bottom: 14px; max-width: 480px; }
+    .form-group label { display: block; margin-bottom: 4px; color: #333; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 5px 8px; border: 1px solid #a0a0a0;
+      font: inherit; font-size: 12px; background: #fff;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: 1px solid #0078d4; border-color: #0078d4;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    fieldset { border: 1px solid #d4d4d4; padding: 12px 14px 16px; margin-bottom: 16px; }
+    fieldset legend { padding: 0 6px; font-weight: 600; }
+    .status-bar {
+      height: 22px; background: var(--chrome); border-top: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 8px; font-size: 11px; color: #444; gap: 16px;
+    }
+    .status-bar .sep { width: 1px; height: 14px; background: #bbb; }
+    .panel-hidden { display: none; }
+    .data-grid { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+    .data-grid th, .data-grid td { border: 1px solid #d4d4d4; padding: 4px 8px; text-align: left; }
+    .data-grid th { background: #e8e8e8; font-weight: 600; }
+    .data-grid tr:nth-child(even) { background: #f9f9f9; }
+    .data-grid tr.selected { background: #cce8ff; }
+  </style>
+</head>
+<body>
+  <div class="title-bar">
+    <div class="title"><span class="icon"></span> {{APP_NAME}} — {{CLIENT_NAME}}</div>
+    <div class="window-controls">
+      <button type="button" class="win-btn" id="btnMin" title="Réduire">&#9472;</button>
+      <button type="button" class="win-btn" id="btnMax" title="Agrandir">&#9633;</button>
+      <button type="button" class="win-btn close" id="btnClose" title="Fermer">&#10005;</button>
+    </div>
+  </div>
+
+  <div class="menu-bar" id="menuBar">
+    <div class="menu-item" data-menu="fichier">Fichier
+      <div class="dropdown">
+        <div data-action="new">Nouveau devis</div>
+        <div data-action="open">Ouvrir…</div>
+        <div class="sep"></div>
+        <div data-action="save">Enregistrer</div>
+        <div data-action="export">Exporter PDF</div>
+        <div class="sep"></div>
+        <div data-action="quit">Quitter</div>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="edition">Édition
+      <div class="dropdown">
+        <div data-action="undo">Annuler</div>
+        <div data-action="redo">Rétablir</div>
+        <div class="sep"></div>
+        <div data-action="copy">Copier</div>
+        <div data-action="paste">Coller</div>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="affichage">Affichage
+      <div class="dropdown">
+        <div data-action="zoom-in">Zoom +</div>
+        <div data-action="zoom-out">Zoom −</div>
+        <div data-action="reset-view">Vue par défaut</div>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="aide">Aide
+      <div class="dropdown">
+        <div data-action="help">Aide {{APP_NAME}}</div>
+        <div data-action="about">À propos de {{CLIENT_NAME}}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-body">
+    <aside class="sidebar">
+      <h3>Modules</h3>
+      <button type="button" class="module-btn active" data-module="devis">{{MODULE_1}}</button>
+      <button type="button" class="module-btn" data-module="clients">{{MODULE_2}}</button>
+      <button type="button" class="module-btn" data-module="planning">{{MODULE_3}}</button>
+    </aside>
+
+    <div class="main-area">
+      <div class="toolbar">
+        <button type="button" id="tbNew">Nouveau</button>
+        <button type="button" id="tbSave">Enregistrer</button>
+        <button type="button" id="tbPrint">Imprimer</button>
+      </div>
+
+      <div class="form-workspace">
+        <section id="panel-devis" class="module-panel">
+          <fieldset>
+            <legend>Devis artisan</legend>
+            <div class="form-row">
+              <div class="form-group"><label>Référence</label><input type="text" id="refDevis" value="DEV-2026-001" /></div>
+              <div class="form-group"><label>Date</label><input type="date" id="dateDevis" /></div>
+            </div>
+            <div class="form-group"><label>Client</label><input type="text" placeholder="Nom du client" /></div>
+            <div class="form-group"><label>Description des travaux</label><textarea rows="4" placeholder="Détail des prestations…"></textarea></div>
+            <div class="form-row">
+              <div class="form-group"><label>Montant HT (€)</label><input type="number" step="0.01" value="1250.00" /></div>
+              <div class="form-group"><label>TVA (%)</label><select><option>20</option><option>10</option><option>5.5</option></select></div>
+            </div>
+          </fieldset>
+        </section>
+
+        <section id="panel-clients" class="module-panel panel-hidden">
+          <fieldset>
+            <legend>Clients</legend>
+            <div class="form-group"><label>Recherche</label><input type="search" id="searchClient" placeholder="Nom, ville…" /></div>
+            <table class="data-grid" id="clientGrid">
+              <thead><tr><th>Nom</th><th>Ville</th><th>Téléphone</th><th>Dernier devis</th></tr></thead>
+              <tbody>
+                <tr><td>M. Durand</td><td>Lyon</td><td>04 78 00 00 00</td><td>15/03/2026</td></tr>
+                <tr><td>SARL Bâtiment Pro</td><td>Villeurbanne</td><td>04 72 00 00 00</td><td>02/04/2026</td></tr>
+                <tr><td>Mme Petit</td><td>Caluire</td><td>06 12 34 56 78</td><td>28/02/2026</td></tr>
+              </tbody>
+            </table>
+          </fieldset>
+        </section>
+
+        <section id="panel-planning" class="module-panel panel-hidden">
+          <fieldset>
+            <legend>Planning chantiers</legend>
+            <div class="form-row">
+              <div class="form-group"><label>Chantier</label><input type="text" /></div>
+              <div class="form-group"><label>Date début</label><input type="date" /></div>
+            </div>
+            <div class="form-group"><label>Équipe assignée</label><select><option>Équipe A</option><option>Équipe B</option></select></div>
+            <div class="form-group"><label>Notes</label><textarea rows="3"></textarea></div>
+          </fieldset>
+        </section>
+      </div>
+
+      <div class="status-bar">
+        <span id="statusText">Prêt</span>
+        <span class="sep"></span>
+        <span>Module : <span id="statusModule">{{MODULE_1}}</span></span>
+        <span class="sep"></span>
+        <span>{{CLIENT_NAME}}</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      document.getElementById('dateDevis').valueAsDate = new Date();
+
+      document.getElementById('btnMin').addEventListener('click', function () {
+        document.getElementById('statusText').textContent = 'Fenêtre réduite (simulation)';
+      });
+      document.getElementById('btnMax').addEventListener('click', function () {
+        document.body.classList.toggle('maximized');
+        document.getElementById('statusText').textContent = document.body.classList.contains('maximized') ? 'Agrandi' : 'Restauré';
+      });
+      document.getElementById('btnClose').addEventListener('click', function () {
+        if (confirm('Fermer ' + '{{APP_NAME}}' + ' ?')) document.getElementById('statusText').textContent = 'Fermeture…';
+      });
+
+      document.querySelectorAll('.menu-item').forEach(function (item) {
+        item.addEventListener('click', function (e) {
+          if (e.target.closest('.dropdown')) return;
+          document.querySelectorAll('.menu-item').forEach(function (m) { m.classList.remove('active'); });
+          item.classList.toggle('active');
+        });
+      });
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('.menu-item')) {
+          document.querySelectorAll('.menu-item').forEach(function (m) { m.classList.remove('active'); });
+        }
+      });
+      document.querySelectorAll('.dropdown div[data-action]').forEach(function (el) {
+        el.addEventListener('click', function () {
+          document.getElementById('statusText').textContent = 'Action : ' + el.dataset.action;
+          document.querySelectorAll('.menu-item').forEach(function (m) { m.classList.remove('active'); });
+        });
+      });
+
+      var modules = { devis: '{{MODULE_1}}', clients: '{{MODULE_2}}', planning: '{{MODULE_3}}' };
+      document.querySelectorAll('.module-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.module-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          var mod = btn.dataset.module;
+          document.querySelectorAll('.module-panel').forEach(function (p) { p.classList.add('panel-hidden'); });
+          document.getElementById('panel-' + mod).classList.remove('panel-hidden');
+          document.getElementById('statusModule').textContent = modules[mod];
+          document.getElementById('statusText').textContent = 'Module actif : ' + modules[mod];
+        });
+      });
+
+      document.getElementById('tbNew').addEventListener('click', function () {
+        document.getElementById('refDevis').value = 'DEV-' + Date.now().toString().slice(-6);
+        document.getElementById('statusText').textContent = 'Nouveau devis créé';
+      });
+      document.getElementById('tbSave').addEventListener('click', function () {
+        document.getElementById('statusText').textContent = 'Enregistré à ' + new Date().toLocaleTimeString('fr-FR');
+      });
+      document.getElementById('tbPrint').addEventListener('click', function () {
+        window.print();
+      });
+
+      document.querySelectorAll('#clientGrid tbody tr').forEach(function (row) {
+        row.addEventListener('click', function () {
+          document.querySelectorAll('#clientGrid tr').forEach(function (r) { r.classList.remove('selected'); });
+          row.classList.add('selected');
+          document.getElementById('statusText').textContent = 'Client : ' + row.cells[0].textContent;
+        });
+      });
+      document.getElementById('searchClient').addEventListener('input', function () {
+        var q = this.value.toLowerCase();
+        document.querySelectorAll('#clientGrid tbody tr').forEach(function (row) {
+          row.style.display = row.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

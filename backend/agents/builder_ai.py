@@ -1,10 +1,10 @@
 """
 BuilderAI v2 — assemblage template-first et enrichissement LLM.
 
-Vitrines (vitrine_next, client_demo HTML) : DesignSystem + template + Research
-→ ContentAI → optimisation HTML. Jamais de HTML généré from scratch.
+Tous les livrables HTML (vitrine, ecommerce, réservation, app web, desktop) :
+DesignSystem → Template → Content → assemble + optimise. Pas de HTML from scratch.
 
-application_web / ecommerce / site_reservation : v0/DeepSeek avec design_system injecté.
+real_app : génération React/TS via v0/DeepSeek (+ design_system).
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from agents.content_ai import fill_template_content
 from agents.design_system_ai import format_design_system_for_prompt
 from agents.demo_quality import code_result_from_html
 from agents.template_first_service import must_use_template_first
+from agents.template_first_policy import is_template_first_html_project
 from agents.vitrine_policy import is_vitrine_html_project
 from core.agent_contract import AgentContractError, AgentResult, require_ok
 from tools.client_content_profile import (
@@ -33,12 +34,8 @@ logger = logging.getLogger(__name__)
 _ASSEMBLY_PROVIDER = "builder_assembly"
 _ASSEMBLY_MODEL = "template-first-v2"
 
-# Catégories conservant la génération LLM (v0 / DeepSeek) + design_system
-_LLM_WITH_DESIGN_SYSTEM_CATEGORIES = frozenset({
-    "application_web",
-    "ecommerce",
-    "site_reservation",
-})
+# real_app uniquement — le reste passe par assemblage template
+_LLM_WITH_DESIGN_SYSTEM_CATEGORIES = frozenset()
 
 _VOID_TAGS = frozenset({
     "area", "base", "br", "col", "embed", "hr", "img", "input",
@@ -69,10 +66,13 @@ def uses_template_assembly(
 ) -> bool:
     """
     Modes assemblés depuis un template sectoriel — pas de HTML LLM libre.
-    Inclut vitrine_next (preview HTML) et client_demo / vitrines HTML.
-    """
+  """
     mode = (generation_mode or "client_demo").strip().lower()
+    if mode == "real_app":
+        return False
     if mode == "vitrine_next":
+        return True
+    if is_template_first_html_project(plan, generation_mode=generation_mode):
         return True
     if must_use_template_first(plan, generation_mode=generation_mode):
         return True
@@ -86,16 +86,9 @@ def uses_llm_with_design_system(
     *,
     generation_mode: str | None,
 ) -> bool:
-    """application_web, ecommerce, site_reservation (+ real_app) — prompts enrichis."""
+    """real_app — prompts enrichis v0/DeepSeek."""
     mode = (generation_mode or "").strip().lower()
-    if mode == "real_app":
-        return True
-    category = (getattr(plan, "pricing_category", None) or "").strip().lower()
-    if category in _LLM_WITH_DESIGN_SYSTEM_CATEGORIES:
-        return True
-    if plan.project_type.value == "application_web" and mode != "client_demo":
-        return True
-    return False
+    return mode == "real_app"
 
 
 def append_design_system_to_prompt(
@@ -197,7 +190,7 @@ def optimize_html(html: str, *, strict: bool = True) -> tuple[str, HtmlOptimizeR
     return optimized, report
 
 
-def assemble_vitrine_html(
+def assemble_template_html(
     *,
     template_html: str,
     client_name: str,
@@ -210,10 +203,10 @@ def assemble_vitrine_html(
     skip_content_fill: bool = False,
 ) -> AgentResult[VitrineAssemblyResult]:
     """
-    Flux vitrine BuilderAI v2 :
+    Flux template-first BuilderAI v2 :
     1. ContentAI remplit les placeholders (sauf HTML déjà rempli)
     2. Optimisation + validation
-  3. CodeGenerateResult pour le pipeline
+    3. CodeGenerateResult pour le pipeline
     """
     if not (template_html or "").strip():
         return AgentResult.failure(
@@ -253,7 +246,7 @@ def assemble_vitrine_html(
         final_html, report = optimize_html(filled_html, strict=True)
         generation = code_result_from_html(
             final_html,
-            summary=f"Assemblage vitrine — {template_id} (BuilderAI v2)",
+            summary=f"Assemblage template — {template_id} (BuilderAI v2)",
             model=_ASSEMBLY_MODEL,
             provider=_ASSEMBLY_PROVIDER,
         )
@@ -277,14 +270,18 @@ def assemble_vitrine_html(
             detail=exc.detail,
         )
     except Exception as exc:
-        logger.exception("[BuilderAI] assemble_vitrine_html")
+        logger.exception("[BuilderAI] assemble_template_html")
         return AgentResult.failure(
             agent_id="builder_ai",
             agent_name="BuilderAI",
             code="assembly_failed",
-            message="Échec assemblage vitrine.",
+            message="Échec assemblage template.",
             detail=str(exc),
         )
+
+
+# Alias rétrocompatibilité tests / imports
+assemble_vitrine_html = assemble_template_html
 
 
 def resolve_assembly_inputs(
@@ -313,10 +310,27 @@ def resolve_assembly_inputs(
         city = str(research_content.get("ville") or city)
         client_name = str(research_content.get("nom_entreprise") or client_name)
 
-    client_name = sanitize_brand_name(client_name, user_prompt=user_prompt)
+    from tools.client_content_profile import resolve_client_business_name
+
+    client_name = resolve_client_business_name(
+        client_name,
+        sector=sector or plan.secteur or "",
+        city=city,
+        user_prompt=user_prompt,
+    )
     template_id = "vitrine_default"
     html = (template_html or "").strip()
     already_filled = False
+
+    category = (getattr(plan, "pricing_category", None) or "").strip().lower()
+    if category == "ecommerce":
+        template_id = "ecommerce_default"
+    elif category == "site_reservation":
+        template_id = "reservation_default"
+    elif category == "application_desktop" or plan.project_type.value == "application_desktop":
+        template_id = "desktop_default"
+    elif category in ("application_web", "saas_dashboard"):
+        template_id = "app_default"
 
     if sector_template and isinstance(sector_template, dict):
         template_id = str(sector_template.get("template_id") or template_id)

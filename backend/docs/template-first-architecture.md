@@ -104,7 +104,9 @@ flowchart LR
 | 7 | **BuilderAI** | `generation`, `preview_html` | Assemblage + optimise HTML |
 | 8+ | VisionUI → BugHunter → TestPilot → Playwright → Lighthouse → Export | — | Qualité, export, livraison |
 
-**BuilderAI v2 (vitrine)** : n'appelle plus v0/DeepSeek pour la structure — `assemble_vitrine_html()` dans `builder_ai.py`.
+**Types template-first (HTML assemblé)** : vitrines, `ecommerce_*`, `reservation_*`, `app_*`, `desktop_*` — voir `tools/sector_template_catalog.py`.
+
+**BuilderAI v2** : `assemble_template_html()` — pas de HTML from scratch (sauf `real_app` React/TS).
 
 ## Flux technique (template-first)
 
