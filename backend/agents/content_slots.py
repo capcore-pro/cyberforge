@@ -93,6 +93,98 @@ _DESKTOP_MODULES: dict[str, tuple[str, str, str]] = {
     "desktop_default": ("Tableau de bord", "Données", "Paramètres"),
 }
 
+# Ville (clé lower) → (adresse affichée, téléphone indicatif local)
+_CITY_CONTACT: dict[str, tuple[str, str]] = {
+    "rouen": ("Rouen, Normandie", "02 35 XX XX XX"),
+    "le havre": ("Le Havre, Normandie", "02 35 XX XX XX"),
+    "havre": ("Le Havre, Normandie", "02 35 XX XX XX"),
+    "caen": ("Caen, Normandie", "02 31 XX XX XX"),
+    "cherbourg": ("Cherbourg, Normandie", "02 33 XX XX XX"),
+    "dieppe": ("Dieppe, Normandie", "02 35 XX XX XX"),
+    "évreux": ("Évreux, Normandie", "02 32 XX XX XX"),
+    "evreux": ("Évreux, Normandie", "02 32 XX XX XX"),
+    "alençon": ("Alençon, Normandie", "02 33 XX XX XX"),
+    "alencon": ("Alençon, Normandie", "02 33 XX XX XX"),
+}
+
+
+def _contact_email_slug(brand: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "", (brand or "").lower())
+    return slug[:24] or "contact"
+
+
+def _resolve_city_for_contact(
+    city: str,
+    *,
+    user_prompt: str = "",
+    research: dict[str, Any] | None = None,
+) -> str:
+    """Ville exploitable pour adresse / téléphone (jamais « votre ville »)."""
+    city_clean = sanitize_city(city)
+    if city_clean and city_clean.lower() != "votre ville":
+        return city_clean
+    if research:
+        city_clean = sanitize_city(str(research.get("ville") or ""))
+        if city_clean:
+            return city_clean
+    try:
+        from agents.research_agent import _extract_city
+
+        return sanitize_city(_extract_city(user_prompt))
+    except Exception:
+        return ""
+
+
+def build_default_contact_slots(
+    brand: str,
+    city: str = "",
+    *,
+    user_prompt: str = "",
+    research: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """
+    Valeurs par défaut crédibles pour {{ADDRESS}}, {{EMAIL}}, {{PHONE}}.
+    Ne bloque jamais le pipeline — le client ajuste via le CMS après livraison.
+    """
+    city_resolved = _resolve_city_for_contact(
+        city, user_prompt=user_prompt, research=research
+    )
+    city_key = city_resolved.lower()
+    mapped = _CITY_CONTACT.get(city_key)
+    if mapped:
+        address, phone = mapped
+    elif city_resolved:
+        address = f"{city_resolved}, France"
+        phone = "À préciser"
+    else:
+        address = "France"
+        phone = "À préciser"
+
+    email = f"contact@{_contact_email_slug(brand)}.fr"
+    return {
+        "PHONE": html_lib.escape(phone),
+        "EMAIL": html_lib.escape(email),
+        "ADDRESS": html_lib.escape(address),
+    }
+
+
+def ensure_contact_slots(
+    slots: dict[str, str],
+    brand: str,
+    city: str = "",
+    *,
+    user_prompt: str = "",
+    research: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Complète les slots contact manquants sans écraser une valeur déjà fournie."""
+    defaults = build_default_contact_slots(
+        brand, city, user_prompt=user_prompt, research=research
+    )
+    for key, value in defaults.items():
+        if not (slots.get(key) or "").strip():
+            slots[key] = value
+    return slots
+
 
 def _research_keywords(research: dict[str, Any], limit: int = 8) -> list[str]:
     raw = research.get("mots_cles") or research.get("keywords") or []
@@ -146,8 +238,11 @@ def _base_brand_context(
 def build_ecommerce_slots(
     template_id: str,
     brand: str,
+    city: str,
     ds: dict[str, str],
     research: dict[str, Any],
+    *,
+    user_prompt: str = "",
 ) -> dict[str, str]:
     cats = _ECOMMERCE_CATEGORIES.get(template_id, _ECOMMERCE_CATEGORIES["ecommerce_default"])
     products = _ECOMMERCE_PRODUCTS.get(template_id, _ECOMMERCE_PRODUCTS["ecommerce_default"])
@@ -176,7 +271,13 @@ def build_ecommerce_slots(
         "PRODUCT_3_NAME": html_lib.escape(products[2][0]),
         "PRODUCT_3_PRICE": html_lib.escape(products[2][1]),
     }
-    return slots
+    return ensure_contact_slots(
+        slots,
+        brand,
+        city,
+        user_prompt=user_prompt,
+        research=research,
+    )
 
 
 def build_reservation_slots(
@@ -184,12 +285,16 @@ def build_reservation_slots(
     brand: str,
     city: str,
     ds: dict[str, str],
+    *,
+    user_prompt: str = "",
+    research: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     services = _RESERVATION_SERVICES.get(
         template_id, _RESERVATION_SERVICES["reservation_default"]
     )
-    phone = "02 35 88 12 45"
-    email = f"contact@{re.sub(r'[^a-z0-9]+', '', brand.lower())[:20] or 'rdv'}.fr"
+    contact = build_default_contact_slots(
+        brand, city, user_prompt=user_prompt, research=research
+    )
     return {
         "CLIENT_NAME": html_lib.escape(brand),
         "PRIMARY_COLOR": ds.get("PRIMARY_COLOR", "#0D9488"),
@@ -209,9 +314,7 @@ def build_reservation_slots(
         "SERVICE_3": html_lib.escape(services[2][0]),
         "SERVICE_3_DURATION": html_lib.escape(services[2][1]),
         "SERVICE_3_PRICE": html_lib.escape(services[2][2]),
-        "PHONE": html_lib.escape(phone),
-        "EMAIL": html_lib.escape(email),
-        "ADDRESS": html_lib.escape(f"12 avenue principale, {city}"),
+        **contact,
     }
 
 

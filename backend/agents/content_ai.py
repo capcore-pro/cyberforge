@@ -20,9 +20,11 @@ from agents.template_ai import fill_template_placeholders
 from core.agent_contract import AgentContractError, AgentResult
 from agents.content_slots import (
     build_app_slots,
+    build_default_contact_slots,
     build_desktop_slots,
     build_ecommerce_slots,
     build_reservation_slots,
+    ensure_contact_slots,
 )
 from tools.html_markdown import strip_markdown_code_fences
 from tools.client_content_profile import (
@@ -211,11 +213,6 @@ def _looks_generic(text: str) -> bool:
     )
 
 
-def _email_slug(brand: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "", brand.lower())
-    return slug[:24] or "contact"
-
-
 def _design_system_slots(design_system: Any | None) -> dict[str, str]:
     if design_system is None:
         return {}
@@ -279,13 +276,41 @@ def build_content_slots(
 
     tid = (template_id or "vitrine_default").strip()
     if tid.startswith("ecommerce_"):
-        return build_ecommerce_slots(tid, brand, ds, research)
+        return build_ecommerce_slots(
+            tid,
+            brand,
+            city_clean,
+            ds,
+            research,
+            user_prompt=user_prompt,
+        )
     if tid.startswith("reservation_"):
-        return build_reservation_slots(tid, brand, city_clean, ds)
+        return build_reservation_slots(
+            tid,
+            brand,
+            city_clean,
+            ds,
+            user_prompt=user_prompt,
+            research=research,
+        )
     if tid.startswith("app_"):
-        return build_app_slots(tid, brand, ds, sector_label)
+        slots = build_app_slots(tid, brand, ds, sector_label)
+        return ensure_contact_slots(
+            slots,
+            brand,
+            city_clean,
+            user_prompt=user_prompt,
+            research=research,
+        )
     if tid.startswith("desktop_"):
-        return build_desktop_slots(tid, brand, ds)
+        slots = build_desktop_slots(tid, brand, ds)
+        return ensure_contact_slots(
+            slots,
+            brand,
+            city_clean,
+            user_prompt=user_prompt,
+            research=research,
+        )
 
     keywords = _research_keywords(research)
     if not keywords:
@@ -298,10 +323,12 @@ def build_content_slots(
         brand, sector_label, city_clean, keywords, research
     )
 
-    phone_raw = "01 23 45 67 89"
-    phone_href = re.sub(r"\D", "", phone_raw)
-    email_addr = f"contact@{_email_slug(brand)}.fr"
-    address = f"12 rue principale, {html_lib.escape(city_clean)}"
+    contact = build_default_contact_slots(
+        brand,
+        city_clean,
+        user_prompt=user_prompt,
+        research=research,
+    )
 
     slots: dict[str, str] = {
         "CLIENT_NAME": html_lib.escape(brand),
@@ -317,9 +344,7 @@ def build_content_slots(
         "SERVICE_2": html_lib.escape(svc2),
         "SERVICE_3": html_lib.escape(svc3),
         "CTA_TEXT": html_lib.escape(f"Contactez {brand}"),
-        "PHONE": html_lib.escape(phone_raw),
-        "EMAIL": html_lib.escape(email_addr),
-        "ADDRESS": address,
+        **contact,
         "GOOGLE_FONTS_URL": ds.get(
             "GOOGLE_FONTS_URL",
             "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap",
