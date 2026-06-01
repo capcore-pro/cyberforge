@@ -12,6 +12,26 @@ CYBERFORGE_INTERNAL_PREVIEW_QUERY = "preview"
 CYBERFORGE_INTERNAL_PREVIEW_VALUE = "cyberforge_internal"
 
 
+def strip_internal_preview_chrome(html: str) -> str:
+    """Retire le bouton Verrouiller (réservé aux liens client livrés)."""
+    if not html:
+        return html
+    out = re.sub(
+        r'<button\b[^>]*\bid\s*=\s*["\']cf-lock-btn["\'][^>]*>[\s\S]*?</button>',
+        "",
+        html,
+        count=1,
+        flags=re.I,
+    )
+    out = re.sub(
+        r"#cf-demo-content\.cf-unlocked\s+\.cf-lock-btn\s*\{[^}]*\}",
+        "",
+        out,
+        flags=re.I,
+    )
+    return out
+
+
 def is_password_gated(html: str) -> bool:
     low = (html or "").lower()
     return "cf-login-screen" in low and "cf-demo-content" in low
@@ -38,6 +58,7 @@ def strip_password_gate(html: str) -> str:
         return html
 
     inner = html[inner_start : inner_start + body_end.start()].strip()
+    inner = strip_internal_preview_chrome(inner)
     inner = re.sub(r"^```html\s*", "", inner, flags=re.I)
     inner = re.sub(r"```\s*$", "", inner, flags=re.I)
 
@@ -74,13 +95,15 @@ def append_cyberforge_internal_preview_query(url: str) -> str:
 
 
 def prepare_internal_app_preview_html(html: str) -> str:
-    """Aperçu in-app (iframe srcDoc) — jamais l'écran « Démo protégée »."""
+    """Aperçu in-app (iframe srcDoc) — jamais l'écran « Démo protégée » ni Verrouiller."""
     raw = (html or "").strip()
-    if not raw or not is_password_gated(raw):
+    if not raw:
         return raw
-    stripped = strip_password_gate(raw)
-    if not is_password_gated(stripped):
-        return stripped
-    from tools.vitrine_html_normalize import extract_unlocked_demo_html
+    if is_password_gated(raw):
+        stripped = strip_password_gate(raw)
+        if not is_password_gated(stripped):
+            return strip_internal_preview_chrome(stripped)
+        from tools.vitrine_html_normalize import extract_unlocked_demo_html
 
-    return extract_unlocked_demo_html(raw)
+        return strip_internal_preview_chrome(extract_unlocked_demo_html(raw))
+    return strip_internal_preview_chrome(raw)

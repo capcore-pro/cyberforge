@@ -44,6 +44,39 @@ _GENERIC_BRAND_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Mots du prompt — jamais utilisés comme nom de marque.
+_PROMPT_KEYWORD_NAMES: frozenset[str] = frozenset(
+    {
+        "vitrine",
+        "site",
+        "web",
+        "artisanale",
+        "artisanal",
+        "artisan",
+        "boulangerie",
+        "restaurant",
+        "restauration",
+        "pâtisserie",
+        "patisserie",
+        "commerce",
+        "local",
+        "locale",
+        "professionnel",
+        "professionnelle",
+        "entreprise",
+        "activité",
+        "activite",
+        "notre",
+        "entreprise",
+    }
+)
+
+_BUSINESS_NAME_PREFIX_RE = re.compile(
+    r"^(?:Le|La|Les|L['\u2019]|Aux|Chez|Boulangerie|Restaurant|Salon|"
+    r"Cabinet|Studio|Agence|Fournil|Atelier|Maison)\b",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class ClientContentProfile:
@@ -75,10 +108,118 @@ def _looks_like_prompt_fragment(text: str) -> bool:
     return bool(_PROMPT_LIKE_RE.search(s))
 
 
+def is_plausible_business_name(
+    name: str,
+    *,
+    city: str = "",
+    user_prompt: str = "",
+) -> bool:
+    """True si le nom ressemble à une enseigne (pas un mot-clé du brief)."""
+    n = (name or "").strip()
+    if len(n) < 3 or n == "Notre entreprise":
+        return False
+    low = n.lower()
+    if low in _PROMPT_KEYWORD_NAMES:
+        return False
+    if _GENERIC_BRAND_RE.search(n):
+        return False
+    if _looks_like_prompt_fragment(n):
+        return False
+    city_clean = sanitize_city(city).lower()
+    if city_clean and low == city_clean:
+        return False
+    words = n.split()
+    if len(words) == 1 and words[0].lower() in _PROMPT_KEYWORD_NAMES:
+        return False
+    if len(words) >= 2:
+        return True
+    if _BUSINESS_NAME_PREFIX_RE.match(n):
+        return True
+    # Mot unique capitalisé type « Dupont » (nom propre court)
+    if len(words) == 1 and words[0][0].isupper() and len(words[0]) >= 4:
+        if words[0].lower() not in _PROMPT_KEYWORD_NAMES:
+            return True
+    return False
+
+
+def generate_fictional_business_name(
+    *,
+    sector: str = "",
+    city: str = "",
+    user_prompt: str = "",
+) -> str:
+    """Nom d'enseigne crédible quand le prompt ne cite pas le client."""
+    city_label = sanitize_city(city) or "France"
+    blob = f"{sector} {user_prompt}".lower()
+
+    if any(x in blob for x in ("boulanger", "pâtiss", "patiss", "four", "pain")):
+        variants = (
+            f"Le Fournil de {city_label}",
+            f"Boulangerie du Vieux-Marché",
+            f"Aux Délices de {city_label}",
+            f"La Mie de {city_label}",
+            f"Boulangerie {city_label}",
+        )
+    elif any(x in blob for x in ("restaurant", "restauration", "brasserie", "bistrot")):
+        variants = (
+            f"La Table de {city_label}",
+            f"Restaurant Le Jardin",
+            f"Chez Auguste — {city_label}",
+            f"Brasserie du Centre",
+        )
+    elif any(x in blob for x in ("coiff", "salon", "beauté", "beaute")):
+        variants = (
+            f"Salon Élégance {city_label}",
+            f"Coiffure & Style {city_label}",
+            f"L'Atelier Beauté",
+        )
+    elif any(x in blob for x in ("plomb", "électric", "electric", "artisan", "btp")):
+        variants = (
+            f"Artisan Pro {city_label}",
+            f"Les Compagnons de {city_label}",
+            f"Atelier {city_label}",
+        )
+    else:
+        sector_h = humanize_sector_label(sector, user_prompt=user_prompt)
+        variants = (
+            f"{sector_h} {city_label}",
+            f"Les Affaires de {city_label}",
+            f"Maison {sector_h} — {city_label}",
+        )
+
+    seed = sum(ord(c) for c in f"{city_label}|{sector}|{user_prompt[:80]}")
+    return variants[seed % len(variants)]
+
+
+def resolve_client_business_name(
+    raw_name: str,
+    *,
+    sector: str = "",
+    city: str = "",
+    user_prompt: str = "",
+) -> str:
+    """Sanitize puis nom fictif sectoriel si le prompt n'a pas de vraie enseigne."""
+    candidate = sanitize_brand_name(raw_name, user_prompt=user_prompt)
+    if is_plausible_business_name(
+        candidate, city=city, user_prompt=user_prompt
+    ):
+        return candidate
+    return generate_fictional_business_name(
+        sector=sector,
+        city=city,
+        user_prompt=user_prompt,
+    )
+
+
 def sanitize_brand_name(raw: str, *, user_prompt: str = "", html: str = "") -> str:
     """Nom court de marque — jamais le prompt complet."""
     s = (raw or "").strip()
-    if s and not _looks_like_prompt_fragment(s) and len(s) <= 48:
+    if (
+        s
+        and not _looks_like_prompt_fragment(s)
+        and len(s) <= 48
+        and is_plausible_business_name(s, user_prompt=user_prompt)
+    ):
         return s
 
     for match in _LOGO_NAME_RE.finditer(html or ""):
@@ -90,7 +231,9 @@ def sanitize_brand_name(raw: str, *, user_prompt: str = "", html: str = "") -> s
     for match in _QUOTED_NAME_RE.finditer(prompt):
         for group in match.groups():
             if group and not _looks_like_prompt_fragment(group):
-                return group.strip()[:48]
+                candidate = group.strip()[:48]
+                if is_plausible_business_name(candidate, user_prompt=prompt):
+                    return candidate
 
     m = re.search(
         r"\b(?:pour|chez|de)\s+((?:Aux|Le|La|Les)\s+)?([A-ZÀ-ÖÙ-Ý][\w''\-]+(?:\s+[A-ZÀ-ÖÙ-Ý][\w''\-]+){0,2})",
@@ -101,23 +244,24 @@ def sanitize_brand_name(raw: str, *, user_prompt: str = "", html: str = "") -> s
         prefix = (m.group(1) or "").strip()
         core = (m.group(2) or "").strip()
         name = f"{prefix} {core}".strip() if prefix else core
-        if name and not _looks_like_prompt_fragment(name):
+        if name and is_plausible_business_name(name, user_prompt=prompt):
             return name[:48]
 
     m = re.search(
-        r"\b((?:Aux|Le|La|Les|Chez)\s+)?([A-ZÀ-ÖÙ-Ý][\w''\-]+(?:\s+[A-ZÀ-ÖÙ-Ý][\w''\-]+){0,2})\b",
+        r"\b((?:Aux|Le|La|Les|Chez|Boulangerie|Restaurant|Salon)\s+)"
+        r"([A-ZÀ-ÖÙ-Ý][\w''\-]+(?:\s+[A-ZÀ-ÖÙ-Ý][\w''\-]+){0,3})",
         prompt,
     )
     if m:
-        name = (m.group(1) or "") + m.group(2)
-        if name and not _looks_like_prompt_fragment(name):
-            return name.strip()[:48]
+        name = f"{m.group(1).strip()} {m.group(2).strip()}".strip()
+        if is_plausible_business_name(name, user_prompt=prompt):
+            return name[:48]
 
     if s and len(s) <= 48:
         cut = s.split(".")[0].split("?")[0].strip()
-        if cut and not _looks_like_prompt_fragment(cut):
+        if cut and is_plausible_business_name(cut, user_prompt=prompt):
             return cut[:48]
-    return "Notre entreprise"
+    return ""
 
 
 def sanitize_city(raw: str) -> str:
@@ -272,7 +416,14 @@ def build_client_content_profile(
         sector = (plan.secteur or sector).strip()
 
     city = sanitize_city(city)
-    name = sanitize_brand_name(name, user_prompt=user_prompt)
+    if not sector and ctx.get("secteur"):
+        sector = (ctx.get("secteur") or "").strip()
+    name = resolve_client_business_name(
+        name,
+        sector=sector,
+        city=city,
+        user_prompt=user_prompt,
+    )
 
     return ClientContentProfile(
         company_name=name,

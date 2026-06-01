@@ -5,7 +5,10 @@ from __future__ import annotations
 from agents.research_agent import ResearchBrief
 from tools.client_content_profile import (
     build_client_content_profile,
+    generate_fictional_business_name,
+    is_plausible_business_name,
     repair_client_literals_in_html,
+    resolve_client_business_name,
     validate_client_literals,
 )
 
@@ -49,6 +52,28 @@ def test_validate_client_literals_requires_name_twice() -> None:
         "<p>plomberie à Nantes — Dupont SARL</p></body></html>"
     )
     assert not validate_client_literals(ok_html, profile)
+
+
+def test_artisanale_is_not_a_business_name() -> None:
+    assert not is_plausible_business_name("artisanale")
+    name = resolve_client_business_name(
+        "artisanale",
+        sector="boulangerie",
+        city="Rouen",
+        user_prompt="vitrine boulangerie artisanale Rouen",
+    )
+    assert name != "artisanale"
+    assert "Rouen" in name or "Fournil" in name or "Boulangerie" in name
+
+
+def test_fictional_bakery_name_for_rouen() -> None:
+    name = generate_fictional_business_name(
+        sector="boulangerie",
+        city="Rouen",
+        user_prompt="vitrine boulangerie artisanale Rouen",
+    )
+    assert "artisanale" not in name.lower()
+    assert len(name) >= 8
 
 
 def test_build_profile_from_research_brief_dict() -> None:

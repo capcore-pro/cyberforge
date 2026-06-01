@@ -199,9 +199,17 @@ def _extract_company_name(prompt: str) -> str:
         name = match.group(1).strip()
         if len(name) >= 2:
             return sanitize_brand_name(name[:80], user_prompt=prompt)
+    from tools.client_content_profile import (
+        is_plausible_business_name,
+        sanitize_brand_name,
+    )
+
     title = clean_project_title(prompt, max_len=60)
     if title and title != "Projet sans titre":
-        return sanitize_brand_name(title, user_prompt=prompt)
+        candidate = sanitize_brand_name(title, user_prompt=prompt)
+        city = _extract_city(prompt)
+        if is_plausible_business_name(candidate, city=city, user_prompt=prompt):
+            return candidate
     return ""
 
 

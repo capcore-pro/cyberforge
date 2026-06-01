@@ -21,7 +21,7 @@ from core.agent_contract import AgentContractError, AgentResult
 from tools.client_content_profile import (
     build_client_content_profile,
     humanize_sector_label,
-    sanitize_brand_name,
+    resolve_client_business_name,
     sanitize_city,
 )
 
@@ -255,14 +255,14 @@ def build_content_slots(
         user_prompt=user_prompt,
         research_brief=research_content,
     )
-    brand = sanitize_brand_name(
-        client_name or profile.company_name or profile.display_name,
+    city_clean = sanitize_city(city or research.get("ville") or profile.city) or "votre ville"
+    sector_raw = sector or research.get("secteur") or profile.sector
+    brand = resolve_client_business_name(
+        client_name or profile.company_name or "",
+        sector=str(sector_raw or ""),
+        city=city_clean if city_clean != "votre ville" else profile.city,
         user_prompt=user_prompt,
     )
-    if not brand or brand == "Notre entreprise":
-        brand = sanitize_brand_name(profile.company_name, user_prompt=user_prompt)
-
-    city_clean = sanitize_city(city or research.get("ville") or profile.city) or "votre ville"
     sector_label = humanize_sector_label(
         sector or research.get("secteur") or profile.sector,
         profile.keywords,

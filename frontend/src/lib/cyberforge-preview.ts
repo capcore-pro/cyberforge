@@ -25,9 +25,15 @@ export function prepareInternalPreviewSrcDoc(html: string): string {
   if (!body || !body.toLowerCase().includes("cf-login-screen")) {
     return body;
   }
-  const unlock = `<script>(function(){var l=document.getElementById("cf-login-screen");var d=document.getElementById("cf-demo-content");if(l&&d){l.style.display="none";d.classList.add("cf-unlocked");d.removeAttribute("aria-hidden");}})();</script>`;
-  if (/<head\b/i.test(body)) {
-    return body.replace(/<head([^>]*)>/i, `<head$1>${unlock}`);
+  const unlock = `<script>(function(){var l=document.getElementById("cf-login-screen");var d=document.getElementById("cf-demo-content");if(l&&d){l.style.display="none";d.classList.add("cf-unlocked");d.removeAttribute("aria-hidden");}var b=document.getElementById("cf-lock-btn");if(b){b.remove();}})();</script>`;
+  let doc = body;
+  if (/<head\b/i.test(doc)) {
+    doc = doc.replace(/<head([^>]*)>/i, `<head$1>${unlock}`);
+  } else {
+    doc = unlock + doc;
   }
-  return unlock + body;
+  return doc.replace(
+    /<button\b[^>]*\bid\s*=\s*["']cf-lock-btn["'][^>]*>[\s\S]*?<\/button>/gi,
+    "",
+  );
 }

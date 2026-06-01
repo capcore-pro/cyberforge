@@ -19,4 +19,6 @@ def test_strip_gate_for_internal_preview() -> None:
     assert "cf-login-screen" in gated
     stripped = prepare_internal_app_preview_html(gated)
     assert "Démo protégée" not in stripped
+    assert 'id="cf-lock-btn"' not in stripped
+    assert ">Verrouiller<" not in stripped.replace(" ", "")
     assert "Client" in stripped
