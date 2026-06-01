@@ -103,6 +103,48 @@ def resolve_export_html_for_upload(
     return "", "none", tid
 
 
+def resolve_pipeline_preview_html(
+    *,
+    assembled_html: str | None = None,
+    preview_html: str | None = None,
+    sector_template_html: str | None = None,
+    generation: CodeGenerateResult | None = None,
+    title: str = "Démo CyberForge",
+    user_prompt: str = "",
+) -> tuple[str | None, str | None]:
+    """
+    HTML d'aperçu final pour finalize / Supabase.
+    Priorité : assembled_html > preview_html > sector_template > generation.
+    Retourne (preview_html, assembled_html) identiques après préparation interne.
+    """
+    from agents.demo_quality import preview_html_from_generation
+    from tools.demo_preview_gate import prepare_internal_app_preview_html
+
+    assembled = _normalize_index_html(assembled_html or "") or ""
+    preview = _normalize_index_html(preview_html or "") or ""
+    sector = _normalize_index_html(sector_template_html or "") or ""
+
+    canonical = assembled or preview or sector
+    if not canonical and generation is not None:
+        try:
+            canonical = preview_html_from_generation(
+                generation,
+                title=title,
+                user_prompt=user_prompt,
+            )
+        except ValueError:
+            canonical = ""
+        canonical = _normalize_index_html(canonical) or ""
+
+    if not canonical:
+        return None, None
+
+    prepared = prepare_internal_app_preview_html(canonical)
+    if not prepared.strip():
+        return None, None
+    return prepared, prepared
+
+
 def log_export_upload_source(
     *,
     source: str,

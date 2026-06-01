@@ -5,6 +5,7 @@ Catalogue templates sectoriels — project_type + pricing_category + secteur.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -111,14 +112,33 @@ def _blob(sector: str, user_prompt: str) -> str:
     return f"{normalize_sector_key(sector)} {user_prompt}".lower()
 
 
+_APP_CRM_KEYWORDS = frozenset(
+    {"crm", "commercial", "prospect", "vente", "pipeline"}
+)
+
+
+def _keyword_in_blob(blob: str, keyword: str, *, word_boundary: bool) -> bool:
+    if not keyword:
+        return False
+    if word_boundary:
+        return bool(
+            re.search(rf"\b{re.escape(keyword)}\b", blob, flags=re.IGNORECASE)
+        )
+    return keyword in blob
+
+
 def _match_hints(
     blob: str,
     hints: tuple[tuple[tuple[str, ...], str], ...],
     default: str,
+    *,
+    word_boundary_keywords: frozenset[str] | None = None,
 ) -> str:
+    wb = word_boundary_keywords or frozenset()
     for keywords, filename in hints:
-        if any(kw in blob for kw in keywords):
-            return filename
+        for kw in keywords:
+            if _keyword_in_blob(blob, kw, word_boundary=kw in wb):
+                return filename
     return default
 
 
@@ -207,7 +227,12 @@ def resolve_sector_template_from_plan(
     elif family == "desktop":
         filename = _match_hints(blob, _DESKTOP_HINTS, "desktop_default.html")
     elif family == "app":
-        filename = _match_hints(blob, _APP_HINTS, "app_default.html")
+        filename = _match_hints(
+            blob,
+            _APP_HINTS,
+            "app_dashboard.html",
+            word_boundary_keywords=_APP_CRM_KEYWORDS,
+        )
     else:
         filename = resolve_vitrine_template_file(sector, user_prompt)
 

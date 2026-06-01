@@ -495,6 +495,15 @@ async def content_ai_node(
         return {"error": f"ContentAI : {msg}"}
 
     data = result.data
+    from tools.export_html_resolve import resolve_pipeline_preview_html
+
+    filled_preview, filled_assembled = resolve_pipeline_preview_html(
+        assembled_html=data.html,
+        preview_html=data.html,
+        sector_template_html=data.html,
+        title=plan.project_type_label if plan else "Démo CyberForge",
+        user_prompt=base_prompt,
+    )
     await _step(
         cb,
         "content_ai",
@@ -502,7 +511,7 @@ async def content_ai_node(
         f"Contenu {data.client_name} — {template_id}",
         client_name=data.client_name,
     )
-    return {
+    out: dict[str, Any] = {
         "sector_template": {
             **sector_tpl,
             "html": data.html,
@@ -510,6 +519,10 @@ async def content_ai_node(
             "keywords_used": data.keywords_used,
         },
     }
+    if filled_preview:
+        out["preview_html"] = filled_preview
+        out["assembled_html"] = filled_assembled
+    return out
 
 
 def _sector_template_html_from_state(state: PipelineState) -> str | None:
@@ -2037,8 +2050,8 @@ async def finalize_node(
     if not analysis or not generation or not architect:
         return {"error": "Pipeline terminé sans résultat exploitable."}
 
-    from agents.demo_quality import code_result_from_html, preview_html_from_generation
-    from tools.demo_preview_gate import prepare_internal_app_preview_html
+    from agents.demo_quality import code_result_from_html
+    from tools.export_html_resolve import resolve_pipeline_preview_html
     from tools.html_markdown import strip_markdown_code_fences
 
     if generation:
@@ -2061,28 +2074,26 @@ async def finalize_node(
             demo_seed=generation.demo_seed,
         )
 
-    assembled_html = strip_markdown_code_fences(str(state.get("assembled_html") or "")) or None
-    preview_html = strip_markdown_code_fences(str(preview_html or "")) or None
-    canonical_html = assembled_html or preview_html
+    sector_tpl = state.get("sector_template")
+    sector_html = None
+    if isinstance(sector_tpl, dict):
+        sector_html = sector_tpl.get("html") or sector_tpl.get("html_raw")
 
-    if not (canonical_html or "").strip() and generation:
-        canonical_html = preview_html_from_generation(
-            generation,
-            title=architect.project_type_label,
-            user_prompt=state.get("prompt") or "",
+    preview_html, assembled_html = resolve_pipeline_preview_html(
+        assembled_html=state.get("assembled_html"),
+        preview_html=preview_html,
+        sector_template_html=sector_html,
+        generation=generation,
+        title=architect.project_type_label,
+        user_prompt=state.get("prompt") or "",
+    )
+    if preview_html and generation:
+        generation = code_result_from_html(
+            preview_html,
+            summary=generation.summary or "HTML livrable",
+            model=generation.model,
+            provider=generation.provider,
         )
-        preview_html = canonical_html
-    if canonical_html:
-        preview_html = prepare_internal_app_preview_html(str(canonical_html))
-        if assembled_html:
-            assembled_html = preview_html
-        if generation and (preview_html or "").strip():
-            generation = code_result_from_html(
-                preview_html,
-                summary=generation.summary or "HTML livrable",
-                model=generation.model,
-                provider=generation.provider,
-            )
 
     await _step(cb, "finalize", "start", "Assemblage de la réponse…")
     settings = _settings_from_config(config)

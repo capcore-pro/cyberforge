@@ -84,13 +84,31 @@ def test_app_garage_uses_dashboard_not_crm() -> None:
     assert fname == "app_dashboard.html"
 
 
-def test_app_generic_defaults_to_app_default() -> None:
+def test_app_generic_defaults_to_app_dashboard() -> None:
     plan = _plan("application_web", ProjectType.APPLICATION_WEB)
     tid, fname = resolve_sector_template_from_plan(
         plan, "services", "outil interne de suivi des dossiers"
     )
-    assert tid == "app_default"
-    assert fname == "app_default.html"
+    assert tid == "app_dashboard"
+    assert fname == "app_dashboard.html"
+
+
+def test_app_garage_martin_not_app_crm() -> None:
+    plan = _plan("application_web", ProjectType.APPLICATION_WEB)
+    tid, _ = resolve_sector_template_from_plan(
+        plan, "automobile", "Garage Martin gestion atelier"
+    )
+    assert tid == "app_dashboard"
+    assert tid != "app_crm"
+
+
+def test_app_menuiserie_dubois_not_app_crm() -> None:
+    plan = _plan("application_web", ProjectType.APPLICATION_WEB)
+    tid, _ = resolve_sector_template_from_plan(
+        plan, "artisanat", "Menuiserie Dubois suivi devis"
+    )
+    assert tid == "app_dashboard"
+    assert tid != "app_crm"
 
 
 def test_desktop_gestion_template() -> None:
