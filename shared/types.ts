@@ -243,6 +243,8 @@ export interface PipelineStepEvent {
   vision_screenshot_url?: string | null;
   vision_preview_source?: VisionPreviewSource | null;
   vision_local_html?: string | null;
+  /** HTML déverrouillé (aperçu iframe interne après BuilderAI). */
+  preview_html?: string | null;
   validation_status?: ValidationStatus | null;
   validation_badge?: string | null;
   testpilot_passed?: boolean | null;

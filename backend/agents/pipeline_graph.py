@@ -904,6 +904,12 @@ async def builder_node(
             getattr(result.generation, "model", "?"),
         )
 
+    from tools.demo_preview_gate import prepare_internal_app_preview_html
+
+    builder_preview = result.preview_html
+    if builder_preview:
+        builder_preview = prepare_internal_app_preview_html(str(builder_preview))
+
     await _step(
         cb,
         "builder",
@@ -911,12 +917,13 @@ async def builder_node(
         f"Génération via {provider_label} réussie.",
         provider=result.decision.provider.value,
         fallback=False,
+        preview_html=builder_preview,
     )
     return {
         "builder_provider": result.decision.provider.value,
         "builder_fallback": False,
         "generation": result.generation,
-        "preview_html": result.preview_html,
+        "preview_html": builder_preview,
     }
 
 
@@ -1987,10 +1994,24 @@ async def finalize_node(
     if not analysis or not generation or not architect:
         return {"error": "Pipeline terminé sans résultat exploitable."}
 
-    from tools.demo_preview_gate import strip_password_gate
+    from agents.demo_quality import code_result_from_html, preview_html_from_generation
+    from tools.demo_preview_gate import prepare_internal_app_preview_html
 
+    if not (preview_html or "").strip() and generation:
+        preview_html = preview_html_from_generation(
+            generation,
+            title=architect.project_type_label,
+            user_prompt=state.get("prompt") or "",
+        )
     if preview_html:
-        preview_html = strip_password_gate(str(preview_html))
+        preview_html = prepare_internal_app_preview_html(str(preview_html))
+        if generation and (preview_html or "").strip():
+            generation = code_result_from_html(
+                preview_html,
+                summary=generation.summary or "HTML livrable",
+                model=generation.model,
+                provider=generation.provider,
+            )
 
     await _step(cb, "finalize", "start", "Assemblage de la réponse…")
     settings = _settings_from_config(config)

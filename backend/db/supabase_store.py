@@ -534,6 +534,10 @@ class SupabaseStore:
                 project_id=project_id,
             )
             preview_html = document.html
+        if preview_html:
+            from tools.demo_preview_gate import prepare_internal_app_preview_html
+
+            preview_html = prepare_internal_app_preview_html(str(preview_html))
 
         payload = {
             "project_id": project_id,

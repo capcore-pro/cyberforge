@@ -1,5 +1,8 @@
 import type { VisionPreviewSource } from "@shared/types";
-import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
+import {
+  isUsablePreviewHtml,
+  prepareInternalPreviewSrcDoc,
+} from "@/lib/cyberforge-preview";
 
 interface VisionUIPreviewProps {
   screenshotUrl: string | null;
@@ -20,8 +23,7 @@ export function VisionUIPreview({
   compact = false,
 }: VisionUIPreviewProps) {
   const previewDoc = html ? prepareInternalPreviewSrcDoc(html) : "";
-  const showIframe =
-    previewSource === "local" && Boolean(previewDoc.trim().length > 0);
+  const showIframe = isUsablePreviewHtml(previewDoc);
   const showImage =
     Boolean(screenshotUrl) &&
     !showIframe &&

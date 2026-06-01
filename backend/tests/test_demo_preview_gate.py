@@ -13,6 +13,14 @@ def test_append_internal_preview_query() -> None:
     assert "preview=cyberforge_internal" in url
 
 
+def test_gated_html_unlock_demo_on_internal_query() -> None:
+    inner = "<h1>Boutique</h1><p>Contenu</p>"
+    gated = wrap_with_password_gate(inner, "secret-pass", title="Test")
+    assert "unlockDemo" in gated
+    assert "preview=cyberforge_internal" in gated
+    assert "URLSearchParams" in gated
+
+
 def test_strip_gate_for_internal_preview() -> None:
     inner = "<h1>Client</h1><section id='contact'><form></form></section>"
     gated = wrap_with_password_gate(inner, "secret-pass", title="Test")

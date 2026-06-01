@@ -50,6 +50,9 @@ import {
   mergeCustomizationIntoSeed,
 } from "@/lib/demo-customization";
 import { fetchTaskflowPreviewHtml } from "@/lib/preview-html-api";
+import {
+  pickPreviewHtml,
+} from "@/lib/cyberforge-preview";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { projectTitleFromPrompt } from "@/lib/project-title";
 import { fetchClientBranding, listClients, type ClientRecord } from "@/lib/clients-api";
@@ -443,12 +446,11 @@ export function GeneratorPage({
   const showGenerationBlock = isRunning || phase === "done" || phase === "error";
 
   function resolvePreviewHtml(run: typeof result): string | null {
-    if (livePreviewHtml?.includes("saas-shell")) return livePreviewHtml;
-    const fromServer = run?.preview_html?.trim();
-    if (fromServer?.includes("saas-shell")) return fromServer;
-    const code = run?.generation.code?.trim();
-    if (code?.includes("saas-shell")) return code;
-    return fromServer || null;
+    return pickPreviewHtml(
+      livePreviewHtml,
+      run?.preview_html,
+      run?.generation.code,
+    );
   }
 
   const effectiveDemoSeed = useCallback(() => {
@@ -683,6 +685,14 @@ export function GeneratorPage({
           testpilotPassed: event.ok ?? null,
         });
       }
+      if (event.type === "step_done" && event.agent === "builder") {
+        const built = pickPreviewHtml(
+          typeof event.preview_html === "string" ? event.preview_html : null,
+        );
+        if (built) {
+          patch({ livePreviewHtml: built, visionPreviewSource: "local" });
+        }
+      }
       if (event.type === "step_done" && event.agent === "export") {
         patch({
           productionUrl: event.production_url ?? null,
@@ -692,11 +702,14 @@ export function GeneratorPage({
       }
       if (event.type === "step_done" && event.agent === "visionui") {
         const localHtml = event.vision_local_html?.trim();
+        const resolved = pickPreviewHtml(localHtml);
         patch({
           visionScreenshotUrl: event.vision_screenshot_url ?? null,
-          visionPreviewSource: event.vision_preview_source ?? "local",
+          visionPreviewSource: resolved
+            ? "local"
+            : (event.vision_preview_source ?? "local"),
           visionMessage: event.message ?? null,
-          ...(localHtml ? { livePreviewHtml: localHtml } : {}),
+          ...(resolved ? { livePreviewHtml: resolved } : {}),
         });
       }
     };
@@ -755,6 +768,10 @@ export function GeneratorPage({
         projectTitleFromPrompt(trimmed),
       );
       const serverPreview = normalized.preview_html?.trim();
+      const resolvedPreview = pickPreviewHtml(
+        serverPreview,
+        normalized.generation.code,
+      );
       const persistedId = normalized.persistence?.project_id;
       if (persistedId) {
         setRunProjectId(persistedId);
@@ -786,8 +803,8 @@ export function GeneratorPage({
         customizeOpen: true,
         activeFile: 0,
         phase: "done",
-        ...(serverPreview?.includes("saas-shell")
-          ? { previewHtml: serverPreview, livePreviewHtml: serverPreview }
+        ...(resolvedPreview
+          ? { previewHtml: resolvedPreview, livePreviewHtml: resolvedPreview }
           : {}),
         visionScreenshotUrl: normalized.vision_screenshot_url ?? null,
         visionPreviewSource: normalized.vision_preview_source ?? null,
@@ -1455,6 +1472,11 @@ export function GeneratorPage({
                 unlockUrl={unlockUrl}
                 demoPassword={demoPassword}
                 githubUrl={githubExportUrl}
+                onInternalPreview={() => {
+                  const html = resolvePreviewHtml(result);
+                  if (html) patch({ previewHtml: html });
+                }}
+                internalPreviewReady={Boolean(resolvePreviewHtml(result))}
               />
             ) : null}
 
@@ -1495,6 +1517,11 @@ export function GeneratorPage({
                   unlockUrl={unlockUrl ?? result.unlock_url}
                   demoPassword={demoPassword ?? result.demo_password}
                   githubUrl={githubExportUrl ?? result.github_export_url}
+                  onInternalPreview={() => {
+                    const html = resolvePreviewHtml(result);
+                    if (html) patch({ previewHtml: html });
+                  }}
+                  internalPreviewReady={Boolean(resolvePreviewHtml(result))}
                 />
 
                 {(validationStatus || result.validation_status) ? (

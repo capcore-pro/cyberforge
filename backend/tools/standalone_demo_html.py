@@ -585,12 +585,25 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
 
   function isCyberforgeInternalPreview() {{
     try {{
-      var q = (window.location && window.location.search) || "";
-      return q.indexOf("preview=cyberforge_internal") >= 0;
-    }} catch (e) {{
-      return false;
-    }}
+      var search = (window.location && window.location.search) || "";
+      var params = new URLSearchParams(search);
+      if (params.get("preview") === "cyberforge_internal") return true;
+      if (search.indexOf("preview=cyberforge_internal") >= 0) return true;
+      var hash = (window.location && window.location.hash) || "";
+      if (hash.indexOf("preview=cyberforge_internal") >= 0) return true;
+      var meta = document.querySelector('meta[name="cf-cyberforge-internal-preview"]');
+      if (meta && String(meta.getAttribute("content") || "") === "1") return true;
+      if (window.parent && window.parent !== window) {{
+        try {{
+          var ps = (window.parent.location && window.parent.location.search) || "";
+          if (new URLSearchParams(ps).get("preview") === "cyberforge_internal") return true;
+        }} catch (e) {{}}
+      }}
+    }} catch (e) {{}}
+    return false;
   }}
+
+  window.unlockDemo = unlock;
 
   if (isCyberforgeInternalPreview()) {{
     unlock();

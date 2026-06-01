@@ -134,6 +134,16 @@ def append_cyberforge_internal_preview_query(url: str) -> str:
     return urlunparse(parsed._replace(query=new_query))
 
 
+def inject_internal_preview_meta(html: str) -> str:
+    """Marqueur pour unlockDemo() dans les pages gate (fichier local sans query string)."""
+    if not html or 'name="cf-cyberforge-internal-preview"' in html:
+        return html
+    tag = '<meta name="cf-cyberforge-internal-preview" content="1" />'
+    if re.search(r"<head\b", html, re.I):
+        return re.sub(r"(<head[^>]*>)", r"\1\n" + tag, html, count=1, flags=re.I)
+    return tag + html
+
+
 def prepare_internal_app_preview_html(html: str) -> str:
     """Aperçu in-app (iframe srcDoc) — jamais l'écran « Démo protégée » ni Verrouiller."""
     raw = (html or "").strip()

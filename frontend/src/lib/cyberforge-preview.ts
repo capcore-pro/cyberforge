@@ -1,6 +1,24 @@
 /** Paramètre URL — bypass écran « Démo protégée » pour Mat dans CyberForge. */
 export const CYBERFORGE_INTERNAL_PREVIEW_QUERY = "preview=cyberforge_internal";
 
+/** HTML suffisant pour iframe srcDoc (template-first, vitrine, ecommerce). */
+export function isUsablePreviewHtml(html: string | null | undefined): boolean {
+  const s = html?.trim();
+  if (!s || s.length < 200) return false;
+  const low = s.toLowerCase();
+  return low.includes("<!doctype") || low.includes("<html");
+}
+
+/** Premier candidat HTML exploitable (aperçu interne, pas l’URL /demo/{token}). */
+export function pickPreviewHtml(
+  ...candidates: Array<string | null | undefined>
+): string | null {
+  for (const c of candidates) {
+    if (isUsablePreviewHtml(c)) return c!.trim();
+  }
+  return null;
+}
+
 export function withCyberforgeInternalPreview(url: string): string {
   const raw = url.trim();
   if (!raw) return raw;
@@ -49,7 +67,7 @@ export function prepareInternalPreviewSrcDoc(html: string): string {
   if (!body) {
     return body;
   }
-  const unlock = `<script>(function(){var l=document.getElementById("cf-login-screen");var d=document.getElementById("cf-demo-content");if(l&&d){l.style.display="none";d.classList.add("cf-unlocked");d.removeAttribute("aria-hidden");}var b=document.getElementById("cf-lock-btn");if(b){b.remove();}document.querySelectorAll(".cf-lock-btn").forEach(function(n){n.remove();});})();</script>`;
+  const unlock = `<script>(function(){function u(){var l=document.getElementById("cf-login-screen");var d=document.getElementById("cf-demo-content");if(l&&d){l.style.display="none";d.classList.add("cf-unlocked");d.removeAttribute("aria-hidden");}var b=document.getElementById("cf-lock-btn");if(b){b.remove();}document.querySelectorAll(".cf-lock-btn").forEach(function(n){n.remove();});}window.unlockDemo=u;u();})();</script>`;
   let doc = body;
   if (body.toLowerCase().includes("cf-login-screen")) {
     if (/<head\b/i.test(doc)) {

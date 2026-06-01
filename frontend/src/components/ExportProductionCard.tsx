@@ -5,9 +5,13 @@ import { withCyberforgeInternalPreview } from "@/lib/cyberforge-preview";
 interface ExportProductionCardProps {
   productionUrl: string | null | undefined;
   exportProvider?: string | null;
+  /** Lien client SPA (/demo/{token}) — envoi Gmail uniquement, pas l’aperçu in-app. */
   unlockUrl?: string | null;
   demoPassword?: string | null;
   githubUrl?: string | null;
+  /** Ouvre l’iframe modale avec le HTML déjà en mémoire (pas localhost/demo). */
+  onInternalPreview?: () => void;
+  internalPreviewReady?: boolean;
 }
 
 /**
@@ -19,6 +23,8 @@ export function ExportProductionCard({
   unlockUrl,
   demoPassword,
   githubUrl,
+  onInternalPreview,
+  internalPreviewReady = false,
 }: ExportProductionCardProps) {
   if (!productionUrl?.trim()) {
     return null;
@@ -52,13 +58,22 @@ export function ExportProductionCard({
         <PasswordRevealField password={demoPassword} label="Mot de passe démo" />
       ) : null}
       <div className="flex flex-wrap gap-2">
+        {internalPreviewReady && onInternalPreview ? (
+          <button
+            type="button"
+            onClick={onInternalPreview}
+            className="cyber-action-btn cyber-action-btn-primary"
+          >
+            Aperçu CyberForge
+          </button>
+        ) : null}
         <a
           href={openUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="cyber-action-btn cyber-action-btn-primary"
+          className="cyber-action-btn"
         >
-          Ouvrir
+          Ouvrir (Cloudflare)
         </a>
         <a
           href={gmailComposeUrl}

@@ -1,6 +1,7 @@
 import { BrowserWindow } from "electron";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import type { PreviewOpenPayload } from "@shared/ipc";
 
@@ -37,5 +38,7 @@ export async function openPreviewWindow(payload: PreviewOpenPayload): Promise<vo
     previewWindow = null;
   });
 
-  await previewWindow.loadFile(filePath);
+  const fileUrl = pathToFileURL(filePath);
+  fileUrl.searchParams.set("preview", "cyberforge_internal");
+  await previewWindow.loadURL(fileUrl.toString());
 }
