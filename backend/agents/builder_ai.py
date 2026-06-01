@@ -28,6 +28,11 @@ from tools.client_content_profile import (
     sanitize_brand_name,
 )
 from tools.codegen_service import CodeGenerateResult
+from tools.html_markdown import strip_markdown_code_fences
+from tools.sector_template_catalog import (
+    load_sector_template_html_for_plan,
+    resolve_template_family_from_plan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +221,13 @@ def assemble_template_html(
             message="template_html obligatoire pour l'assemblage.",
         )
 
-    raw = template_html.strip()
+    logger.info(
+        "[BuilderAI] assemble_template_html | template_id=%s | skip_content_fill=%s | html_chars=%d",
+        template_id,
+        skip_content_fill,
+        len(template_html),
+    )
+    raw = strip_markdown_code_fences(template_html.strip())
     has_placeholders = "{{" in raw and "}}" in raw
 
     try:
@@ -243,7 +254,10 @@ def assemble_template_html(
                 )
             filled_html = require_ok(content_result).html
 
-        final_html, report = optimize_html(filled_html, strict=True)
+        final_html, report = optimize_html(
+            strip_markdown_code_fences(filled_html),
+            strict=True,
+        )
         generation = code_result_from_html(
             final_html,
             summary=f"Assemblage template — {template_id} (BuilderAI v2)",
@@ -318,29 +332,67 @@ def resolve_assembly_inputs(
         city=city,
         user_prompt=user_prompt,
     )
-    template_id = "vitrine_default"
-    html = (template_html or "").strip()
+    sector_key = sector or plan.secteur or "commerce"
+    expected_id, _expected_file, catalog_html = load_sector_template_html_for_plan(
+        plan,
+        sector_key,
+        user_prompt,
+    )
+    template_id = expected_id
+    html = (template_html or "").strip() or catalog_html
     already_filled = False
-
-    category = (getattr(plan, "pricing_category", None) or "").strip().lower()
-    if category == "ecommerce":
-        template_id = "ecommerce_default"
-    elif category == "site_reservation":
-        template_id = "reservation_default"
-    elif category == "application_desktop" or plan.project_type.value == "application_desktop":
-        template_id = "desktop_default"
-    elif category in ("application_web", "saas_dashboard"):
-        template_id = "app_default"
+    family = resolve_template_family_from_plan(plan)
 
     if sector_template and isinstance(sector_template, dict):
-        template_id = str(sector_template.get("template_id") or template_id)
-        if sector_template.get("content_filled") and sector_template.get("html"):
-            html = str(sector_template["html"])
-            already_filled = "{{" not in html
-        elif sector_template.get("html_raw"):
-            html = str(sector_template["html_raw"])
-        elif sector_template.get("html"):
-            html = str(sector_template["html"])
-        sector = str(sector_template.get("sector") or sector)
+        current_id = str(sector_template.get("template_id") or "")
+        wrong_family = (
+            family == "ecommerce"
+            and (current_id.startswith("app_") or current_id.startswith("vitrine_"))
+        ) or (
+            family == "app"
+            and current_id.startswith("ecommerce_")
+        )
+        if current_id and current_id != expected_id:
+            logger.warning(
+                "[BuilderAI] template_id pipeline=%s attendu=%s (family=%s) — correction catalogue",
+                current_id,
+                expected_id,
+                family,
+            )
+            html = catalog_html
+            template_id = expected_id
+            already_filled = False
+        elif wrong_family:
+            logger.warning(
+                "[BuilderAI] famille %s incompatible avec template_id=%s — rechargement %s",
+                family,
+                current_id,
+                expected_id,
+            )
+            html = catalog_html
+            template_id = expected_id
+            already_filled = False
+        else:
+            template_id = current_id or expected_id
+            if sector_template.get("content_filled") and sector_template.get("html"):
+                html = strip_markdown_code_fences(str(sector_template["html"]))
+                already_filled = "{{" not in html
+            elif sector_template.get("html_raw"):
+                html = strip_markdown_code_fences(str(sector_template["html_raw"]))
+            elif sector_template.get("html"):
+                html = strip_markdown_code_fences(str(sector_template["html"]))
+            sector = str(sector_template.get("sector") or sector)
 
+    if family == "ecommerce" and not template_id.startswith("ecommerce_"):
+        logger.warning(
+            "[BuilderAI] force ecommerce | template_id=%s → %s",
+            template_id,
+            expected_id,
+        )
+        template_id, _, html = load_sector_template_html_for_plan(
+            plan, sector_key, user_prompt
+        )
+        already_filled = False
+
+    html = strip_markdown_code_fences(html)
     return html, client_name, sector, city, template_id, already_filled

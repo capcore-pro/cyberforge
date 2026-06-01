@@ -14,6 +14,7 @@ from tools.client_content_profile import (
     validate_client_literals,
 )
 from tools.demo_preview_gate import strip_password_gate
+from tools.html_markdown import strip_markdown_code_fences
 from tools.demo_runtime import resolve_demo_api_base_url
 from tools.vitrine_shell import apply_vitrine_premium_shell
 from tools.premium_base import premium_contact_modal_html, premium_interaction_scripts
@@ -183,7 +184,7 @@ def enhance_builder_vitrine_html(
     if not html or not html.strip():
         return html
 
-    out = strip_password_gate(html)
+    out = strip_markdown_code_fences(strip_password_gate(html))
 
     name = client_name.strip()
     if not name and isinstance(research_brief, ResearchBrief):

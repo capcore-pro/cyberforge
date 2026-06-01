@@ -391,6 +391,20 @@ async def template_ai_node(
         or detect_sector_from_prompt_for_design(base_prompt, plan)
     )
 
+    pt_value = (
+        plan.project_type.value
+        if hasattr(plan.project_type, "value")
+        else str(plan.project_type)
+    )
+    pricing_cat = (getattr(plan, "pricing_category", None) or "").strip().lower()
+    logger.info(
+        "[TemplateAI] entrée | project_type=%s | pricing_category=%s | sector=%s | prompt_len=%d",
+        pt_value,
+        pricing_cat or "?",
+        sector,
+        len(base_prompt),
+    )
+
     result = load_sector_template_raw(
         sector=sector,
         user_prompt=base_prompt,
@@ -403,6 +417,13 @@ async def template_ai_node(
         return {"error": f"TemplateAI : {msg}"}
 
     data = result.data
+    logger.info(
+        "[TemplateAI] choix catalogue | project_type=%s | pricing_category=%s → template_id=%s (%s)",
+        pt_value,
+        pricing_cat or "?",
+        data.template_id,
+        data.template_file,
+    )
     await _step(
         cb,
         "template_ai",
@@ -823,6 +844,20 @@ async def builder_node(
         len(user_prompt),
         type(state.get("research_brief")).__name__,
     )
+    sector_tpl = state.get("sector_template")
+    sector_tid = (
+        str(sector_tpl.get("template_id"))
+        if isinstance(sector_tpl, dict) and sector_tpl.get("template_id")
+        else "?"
+    )
+    logger.info(
+        "[BuilderAI] pipeline | project_type=%s | pricing_category=%s | sector_template_id=%s | assemble_attendu=%s",
+        plan.project_type.value,
+        getattr(plan, "pricing_category", ""),
+        sector_tid,
+        True,
+    )
+
     result = await agent.build(
         user_prompt,
         plan=plan,
@@ -831,7 +866,7 @@ async def builder_node(
         project_id=state.get("project_id"),
         design_system=state.get("design_system"),
         sector_template_html=_sector_template_html_from_state(state),
-        sector_template=state.get("sector_template"),
+        sector_template=sector_tpl,
         research_brief=state.get("research_brief"),
         generation_mode=state.get("generation_mode"),
     )
@@ -843,6 +878,12 @@ async def builder_node(
         provider_label = "DeepSeek"
 
     if result.fallback_to_coremind:
+        logger.warning(
+            "[BuilderAI] fallback CoreMind | provider=%s | sector_template_id=%s — "
+            "risque template premium dashboard si pas de reprise template-first",
+            result.decision.provider.value,
+            sector_tid,
+        )
         await _step(
             cb,
             "builder",
@@ -855,6 +896,13 @@ async def builder_node(
             "builder_provider": result.decision.provider.value,
             "builder_fallback": True,
         }
+
+    if result.generation:
+        logger.info(
+            "[BuilderAI] assemble_template_html OK | preview_chars=%d | model=%s",
+            len(result.preview_html or result.generation.code or ""),
+            getattr(result.generation, "model", "?"),
+        )
 
     await _step(
         cb,
@@ -1115,6 +1163,58 @@ async def coremind_node(
             # Pas d'aperçu HTML : le code React n'est pas rendu directement.
             "preview_html": None,
         }
+
+    # --- Template-first (ecommerce, réservation, app, desktop) : pas de dashboard premium ---
+    from agents.template_first_policy import is_template_first_html_project
+
+    if is_template_first_html_project(plan, generation_mode=generation_mode):
+        sector_tpl = state.get("sector_template")
+        await _step(
+            cb,
+            "coremind",
+            "start",
+            "Reprise assemblage template sectoriel (évite template premium dashboard)…",
+        )
+        builder = BuilderAgent(settings)
+        retry = await builder.build(
+            prompt,
+            plan=plan,
+            analysis=analysis,
+            settings=settings,
+            project_id=state.get("project_id"),
+            design_system=state.get("design_system"),
+            sector_template_html=_sector_template_html_from_state(state),
+            sector_template=sector_tpl,
+            research_brief=state.get("research_brief"),
+            generation_mode=generation_mode,
+        )
+        if not retry.fallback_to_coremind and retry.generation:
+            tid = (
+                str(sector_tpl.get("template_id"))
+                if isinstance(sector_tpl, dict)
+                else "?"
+            )
+            logger.info(
+                "[CoreMindAI] reprise template-first OK | sector_template_id=%s | model=%s",
+                tid,
+                getattr(retry.generation, "model", "?"),
+            )
+            await _step(
+                cb,
+                "coremind",
+                "done",
+                f"Assemblage sectoriel — {getattr(retry.generation, 'model', 'template')}",
+                template=tid,
+            )
+            return {
+                "generation": retry.generation,
+                "preview_html": retry.preview_html,
+                "builder_fallback": False,
+            }
+        logger.warning(
+            "[CoreMindAI] reprise template-first échouée — fallback demo premium (%s)",
+            plan.template,
+        )
 
     # --- Mode "Démo client" (par défaut) : pipeline HTML premium TaskFlow ---
     await _step(cb, "coremind", "start", "Génération HTML et seed adaptée au template…")

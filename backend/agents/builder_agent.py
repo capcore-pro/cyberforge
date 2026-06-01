@@ -186,7 +186,15 @@ class BuilderAgent(BaseAgent):
         """
         del settings  # réservé extensions
 
-        if uses_template_assembly(plan, generation_mode=generation_mode):
+        uses_assembly = uses_template_assembly(plan, generation_mode=generation_mode)
+        logger.info(
+            "[BuilderAI] build | project_type=%s | pricing_category=%s | generation_mode=%s | uses_template_assembly=%s",
+            plan.project_type.value,
+            getattr(plan, "pricing_category", ""),
+            generation_mode,
+            uses_assembly,
+        )
+        if uses_assembly:
             return await self._build_template_assembly(
                 prompt,
                 plan=plan,

@@ -4,8 +4,11 @@ Catalogue templates sectoriels — project_type + pricing_category + secteur.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from agents.design_system_ai import resolve_visual_family
 from tools.toolbox_sectors import normalize_sector_key
@@ -152,6 +155,16 @@ def resolve_vitrine_template_file(sector: str, user_prompt: str = "") -> str:
     )
 
 
+def resolve_template_family_from_plan(plan: Any) -> str:
+    """Famille imposée par pricing_category / project_type (diagnostic pipeline)."""
+    category = (getattr(plan, "pricing_category", None) or "").strip().lower()
+    return _resolve_template_family(category, _project_type_value(plan))
+
+
+def is_ecommerce_plan(plan: Any) -> bool:
+    return resolve_template_family_from_plan(plan) == "ecommerce"
+
+
 def resolve_sector_template_from_plan(
     plan: Any,
     sector: str,
@@ -178,7 +191,27 @@ def resolve_sector_template_from_plan(
         filename = resolve_vitrine_template_file(sector, user_prompt)
 
     template_id = Path(filename).stem
+    logger.info(
+        "[sector_template_catalog] pricing_category=%s project_type=%s family=%s → %s (%s)",
+        category or "?",
+        pt_value or "?",
+        family,
+        template_id,
+        filename,
+    )
     return template_id, filename
+
+
+def load_sector_template_html_for_plan(
+    plan: Any,
+    sector: str,
+    user_prompt: str = "",
+) -> tuple[str, str, str]:
+    """Charge le fichier HTML sectoriel attendu pour le plan (template_id, filename, html)."""
+    from agents.template_ai import load_sector_template_html
+
+    template_id, filename = resolve_sector_template_from_plan(plan, sector, user_prompt)
+    return template_id, filename, load_sector_template_html(filename)
 
 
 def is_template_first_pricing_category(category: str | None) -> bool:

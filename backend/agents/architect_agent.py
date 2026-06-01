@@ -215,6 +215,12 @@ class ArchitectAgent(BaseAgent):
 
         coremind = CoreMindAgent(self._settings)
         type_hint = forced_project_type or project_type_hint
+        if (
+            forced_category is None
+            and type_hint == ProjectType.SAAS_DASHBOARD
+        ):
+            # Carte « E-commerce » du générateur (project_type saas_dashboard).
+            forced_category = "ecommerce"
         analysis = await coremind.analyze(work_prompt, type_hint)
         type_label = PROJECT_TYPE_LABELS[analysis.project_type]
         pricing = build_complexity_pricing(

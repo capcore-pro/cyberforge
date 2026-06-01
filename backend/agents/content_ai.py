@@ -24,6 +24,7 @@ from agents.content_slots import (
     build_ecommerce_slots,
     build_reservation_slots,
 )
+from tools.html_markdown import strip_markdown_code_fences
 from tools.client_content_profile import (
     build_client_content_profile,
     humanize_sector_label,
@@ -471,6 +472,7 @@ def fill_template_content(
                 code="missing_placeholders",
                 message=f"Placeholders non remplis : {', '.join(missing)}",
             )
+        html = strip_markdown_code_fences(html)
         html = _apply_design_system_css(html, design_system)
         html = _fix_action_links(html)
         _validate_content_html(html)

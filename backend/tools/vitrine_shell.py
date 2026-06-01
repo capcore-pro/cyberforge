@@ -195,9 +195,9 @@ def _hero_image_for_profile(profile: ClientContentProfile, prompt: str = "") -> 
 
 def _sanitize_html_body(html: str) -> str:
     """Retire fences markdown, documents HTML imbriqués et blocs auto-injectés."""
-    out = html or ""
-    out = re.sub(r"```html\s*", "", out, flags=re.I)
-    out = re.sub(r"```\s*", "", out)
+    from tools.html_markdown import strip_markdown_code_fences
+
+    out = strip_markdown_code_fences(html or "")
     if out.lower().count("<!doctype") > 1 or out.lower().count("<html") > 1:
         matches = list(re.finditer(r"<!DOCTYPE html>[\s\S]*?</html>", out, re.I))
         if matches:
