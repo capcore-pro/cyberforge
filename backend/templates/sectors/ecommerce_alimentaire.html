@@ -105,8 +105,34 @@
     .cart-footer { padding: 1.25rem; border-top: 1px solid #eee; }
     .cart-total { font-size: 1.35rem; font-weight: 700; margin-bottom: 1rem; }
     .shipping-note { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
-    footer { background: var(--primary); color: #fff; padding: 2.5rem 0; text-align: center; }
-    footer a { opacity: 0.9; }
+    .contact-section { background: #fff; }
+    .contact-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem; align-items: start;
+    }
+    .contact-section label { display: block; font-weight: 600; margin-bottom: 0.35rem; font-size: 0.9rem; }
+    .contact-section input,
+    .contact-section textarea {
+      width: 100%; padding: 0.65rem 0.85rem; border: 1px solid #ddd;
+      border-radius: 8px; font: inherit; margin-bottom: 1rem;
+    }
+    .contact-section textarea { min-height: 120px; resize: vertical; }
+    #cf-contact-form .btn-submit {
+      width: 100%; background: var(--primary); color: #fff; border: none;
+      padding: 0.85rem 1.25rem; border-radius: 999px; font-weight: 600; cursor: pointer; font: inherit;
+    }
+    #cf-contact-form .btn-submit:hover { filter: brightness(1.08); }
+    .footer-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 2rem; text-align: left; margin-bottom: 2rem;
+    }
+    .footer-grid h3 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .footer-grid p, .footer-grid a { font-size: 0.95rem; opacity: 0.92; line-height: 1.7; }
+    .footer-grid a:hover { text-decoration: underline; }
+    footer { background: var(--primary); color: #fff; padding: 2.5rem 0; }
+    footer .footer-bottom { text-align: center; font-size: 0.9rem; opacity: 0.85; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.2); }
+    footer a { color: #fff; }
+    .cat-card a.card-link { display: block; color: inherit; }
     @media (max-width: 640px) { .nav-links { display: none; } }
   </style>
 </head>
@@ -115,9 +141,10 @@
     <div class="wrap nav-inner">
       <a href="#" class="logo">{{CLIENT_NAME}}</a>
       <div class="nav-links">
-        <a href="#categories">Catégories</a>
         <a href="#produits">Produits</a>
+        <a href="#categories">Catégories</a>
         <a href="#pourquoi">Pourquoi nous</a>
+        <a href="#contact">Contact</a>
       </div>
       <button type="button" class="cart-btn" id="openCart" aria-label="Panier">
         🛒 Panier <span class="cart-count" id="cartCount">0</span>
@@ -130,7 +157,10 @@
       <span class="promo-badge">Livraison sous {{SHIPPING_DELAY}}</span>
       <h1>Bienvenue chez {{CLIENT_NAME}}</h1>
       <p>Produits frais, locaux et sélectionnés avec soin pour votre table.</p>
-      <a href="#produits" class="btn">Découvrir la boutique</a>
+      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+        <a href="#produits" class="btn">Découvrir la boutique</a>
+        <a href="#contact" class="btn btn-outline">Nous contacter</a>
+      </div>
     </div>
   </header>
 
@@ -139,16 +169,22 @@
       <h2 class="section-title">Nos rayons</h2>
       <div class="grid-3">
         <article class="cat-card">
-          <img src="https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=600&q=80" alt="" />
-          <div class="body"><h3>{{CATEGORY_1}}</h3><p>Fraîcheur garantie</p></div>
+          <a href="#produits" class="card-link">
+            <img src="https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=600&q=80" alt="" />
+            <div class="body"><h3>{{CATEGORY_1}}</h3><p>Fraîcheur garantie</p></div>
+          </a>
         </article>
         <article class="cat-card">
-          <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600&q=80" alt="" />
-          <div class="body"><h3>{{CATEGORY_2}}</h3><p>Sélection du terroir</p></div>
+          <a href="#produits" class="card-link">
+            <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600&q=80" alt="" />
+            <div class="body"><h3>{{CATEGORY_2}}</h3><p>Sélection du terroir</p></div>
+          </a>
         </article>
         <article class="cat-card">
-          <img src="https://images.unsplash.com/photo-1558961363-fa8eae98cdb3?w=600&q=80" alt="" />
-          <div class="body"><h3>{{CATEGORY_3}}</h3><p>Gourmandises artisanales</p></div>
+          <a href="#produits" class="card-link">
+            <img src="https://images.unsplash.com/photo-1558961363-fa8eae98cdb3?w=600&q=80" alt="" />
+            <div class="body"><h3>{{CATEGORY_3}}</h3><p>Gourmandises artisanales</p></div>
+          </a>
         </article>
       </div>
     </div>
@@ -221,11 +257,55 @@
     </div>
   </section>
 
+  <section id="contact" class="contact-section">
+    <div class="wrap">
+      <h2 class="section-title">Contactez-nous</h2>
+      <div class="contact-grid">
+        <div>
+          <p style="color:var(--muted);margin-bottom:1rem">
+            Une question sur nos produits, une commande spéciale ou un événement ?
+            Écrivez-nous, nous répondons sous 48 h.
+          </p>
+          <p><strong>{{CLIENT_NAME}}</strong></p>
+          <p>{{ADDRESS}}</p>
+          <p>Tél. <a href="tel:{{PHONE}}">{{PHONE}}</a></p>
+          <p><a href="mailto:{{EMAIL}}">{{EMAIL}}</a></p>
+        </div>
+        <form id="cf-contact-form" class="cf-contact-form" action="#contact" method="post" novalidate>
+          <label for="cf-name">Nom</label>
+          <input type="text" id="cf-name" name="name" required placeholder="Votre nom" autocomplete="name" />
+          <label for="cf-email">Email</label>
+          <input type="email" id="cf-email" name="email" required placeholder="vous@exemple.fr" autocomplete="email" />
+          <label for="cf-message">Message</label>
+          <textarea id="cf-message" name="message" required placeholder="Votre message…"></textarea>
+          <button type="submit" class="btn-submit">Envoyer ma demande</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
   <footer>
     <div class="wrap">
-      <p><strong>{{CLIENT_NAME}}</strong> — Épicerie fine en ligne</p>
-      <p class="shipping-note">Délai de livraison : {{SHIPPING_DELAY}}</p>
-      <p style="margin-top:1rem;font-size:0.9rem;opacity:0.85">© {{CLIENT_NAME}}</p>
+      <div class="footer-grid">
+        <div>
+          <h3>{{CLIENT_NAME}}</h3>
+          <p>Épicerie fine en ligne — produits frais et locaux.</p>
+          <p class="shipping-note" style="color:rgba(255,255,255,0.85);margin-top:0.5rem">Livraison : {{SHIPPING_DELAY}}</p>
+        </div>
+        <div>
+          <h3>Boutique</h3>
+          <p><a href="#produits">Nos produits</a></p>
+          <p><a href="#categories">Nos rayons</a></p>
+          <p><a href="#contact">Contact</a></p>
+        </div>
+        <div>
+          <h3>Coordonnées</h3>
+          <p>{{ADDRESS}}</p>
+          <p>Tél. <a href="tel:{{PHONE}}">{{PHONE}}</a></p>
+          <p><a href="mailto:{{EMAIL}}">{{EMAIL}}</a></p>
+        </div>
+      </div>
+      <p class="footer-bottom">© {{CLIENT_NAME}} — Tous droits réservés</p>
     </div>
   </footer>
 
@@ -238,7 +318,7 @@
     <div class="cart-items" id="cartItems"></div>
     <div class="cart-footer">
       <div class="cart-total">Total : <span id="cartTotal">0,00</span> €</div>
-      <button type="button" class="btn" style="width:100%;background:var(--primary);color:#fff">Commander</button>
+      <a href="#contact" class="btn" style="width:100%;background:var(--primary);color:#fff;text-align:center">Commander</a>
       <p class="shipping-note">Livraison estimée : {{SHIPPING_DELAY}}</p>
     </div>
   </aside>
