@@ -33,6 +33,10 @@ from tools.export_github import (
 )
 from tools.export_railway import RailwayExportError, deploy_to_railway
 from cost_tracker import maybe_track_cost
+from tools.export_html_resolve import (
+    log_export_upload_source,
+    resolve_export_html_for_upload,
+)
 from tools.generation_sources import is_usable_preview_html
 
 logger = logging.getLogger(__name__)
@@ -87,20 +91,25 @@ class ExportAgent(BaseAgent):
     def _collect_files(
         self,
         generation: CodeGenerateResult,
-        preview_html: str,
+        resolved_index_html: str,
     ) -> dict[str, str]:
+        """index.html = HTML pipeline résolu uniquement (pas generation.code dashboard)."""
         files: dict[str, str] = {}
+        if resolved_index_html.strip() and is_usable_preview_html(resolved_index_html):
+            files["index.html"] = resolved_index_html.strip()
         if generation.files:
             for f in generation.files:
-                if f.path and f.content:
-                    files[f.path] = f.content
+                if not f.path or not f.content:
+                    continue
+                path = f.path.strip().lstrip("/").replace("\\", "/").lower()
+                if path in ("index.html", "index.htm"):
+                    continue
+                files[f.path] = f.content
         code = (generation.code or "").strip()
-        if code:
+        if code and "index.html" not in files:
             is_html = code.lower().startswith("<!") or "<html" in code[:500].lower()
-            path = "index.html" if is_html else "src/App.tsx"
-            files.setdefault(path, code)
-        if preview_html.strip() and is_usable_preview_html(preview_html):
-            files["index.html"] = preview_html.strip()
+            if not is_html:
+                files.setdefault("src/App.tsx", code)
         return files
 
     async def export(
@@ -110,7 +119,11 @@ class ExportAgent(BaseAgent):
         plan: ArchitectPlan,
         analysis: CoreMindAnalysis,
         generation: CodeGenerateResult,
+        assembled_html: str = "",
         preview_html: str = "",
+        template_id: str | None = None,
+        sector_template: dict[str, Any] | None = None,
+        expect_sector_template: bool = False,
         settings: Settings | None = None,
         project_id: str | None = None,
         generation_mode: str | None = None,
@@ -135,7 +148,20 @@ class ExportAgent(BaseAgent):
             if generation.stack and "vitrine_next" in generation.stack
             else select_export_provider(plan.project_type, prompt)
         )
-        files = self._collect_files(generation, preview_html)
+        html, upload_source, resolved_template_id = resolve_export_html_for_upload(
+            assembled_html=assembled_html or None,
+            preview_html=preview_html or None,
+            generation=generation,
+            template_id=template_id,
+            sector_template=sector_template,
+            expect_sector_template=expect_sector_template,
+        )
+        log_export_upload_source(
+            source=upload_source,
+            template_id=resolved_template_id,
+            html=html,
+        )
+        files = self._collect_files(generation, html)
         file_paths = list(files.keys())
 
         env: dict[str, str] = {
@@ -150,8 +176,6 @@ class ExportAgent(BaseAgent):
         unlock_url: str | None = None
         message = ""
 
-        html = files.get("index.html") or preview_html or generation.code or ""
-
         title = (
             (project_title or "").strip()
             or plan.project_type_label
@@ -161,7 +185,7 @@ class ExportAgent(BaseAgent):
         async def _deploy_dedicated() -> None:
             nonlocal production_url, provider, message
             deploy_files = dict(files)
-            html_candidate = (html or preview_html or "").strip()
+            html_candidate = html.strip()
             if html_candidate and is_usable_preview_html(html_candidate):
                 deploy_files["index.html"] = html_candidate
             if "index.html" not in deploy_files:

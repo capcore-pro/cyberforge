@@ -24,6 +24,7 @@ from tools.demo_runtime import ensure_demo_runtime_config, extract_demo_title_fr
 from tools.demo_urls import unlock_demo_url
 from tools.demo_preview_gate import strip_password_gate
 from tools.standalone_demo_html import wrap_with_password_gate
+from tools.export_html_resolve import resolve_export_html_for_upload
 from tools.theme_enforce import enforce_capcore_theme
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,11 @@ async def persist_pipeline_cloudflare_demo(
         )
         return existing.id
 
-    preview = (run_result.preview_html or run_result.generation.code or "").strip()
+    preview, _, _ = resolve_export_html_for_upload(
+        assembled_html=getattr(run_result, "assembled_html", None),
+        preview_html=run_result.preview_html,
+        generation=run_result.generation,
+    )
     if not preview:
         logger.warning(
             "persist_pipeline_cloudflare_demo: HTML vide | generation=%s",

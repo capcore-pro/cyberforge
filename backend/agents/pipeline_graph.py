@@ -154,6 +154,7 @@ class PipelineState(TypedDict, total=False):
     builder_fallback: bool
     openhands_fallback: bool | None
     generation: Any
+    assembled_html: str | None
     preview_html: str | None
     vision_screenshot_url: str | None
     vision_preview_source: str | None
@@ -923,6 +924,7 @@ async def builder_node(
         "builder_provider": result.decision.provider.value,
         "builder_fallback": False,
         "generation": result.generation,
+        "assembled_html": builder_preview,
         "preview_html": builder_preview,
     }
 
@@ -1236,9 +1238,11 @@ async def coremind_node(
                 f"Assemblage sectoriel — {getattr(retry.generation, 'model', 'template')}",
                 template=tid,
             )
+            retry_preview = retry.preview_html
             return {
                 "generation": retry.generation,
-                "preview_html": retry.preview_html,
+                "assembled_html": retry_preview,
+                "preview_html": retry_preview,
                 "builder_fallback": False,
             }
         logger.warning(
@@ -1965,19 +1969,35 @@ async def export_node(
 
     settings = _settings_from_config(config)
     agent = ExportAgent(settings)
-    # Pas d'aperçu HTML pour React / vitrine Next (évite export Cloudflare démo).
-    preview_html = (
-        ""
-        if generation_mode in ("real_app", "vitrine_next")
-        else (state.get("preview_html") or "")
+    sector_tpl = state.get("sector_template")
+    template_id = (
+        str(sector_tpl.get("template_id"))
+        if isinstance(sector_tpl, dict) and sector_tpl.get("template_id")
+        else None
     )
+    from agents.template_first_policy import is_template_first_html_project
+
+    expect_sector = is_template_first_html_project(
+        plan, generation_mode=generation_mode
+    )
+    # Pas d'aperçu HTML pour React / vitrine Next (évite export Cloudflare démo).
+    if generation_mode in ("real_app", "vitrine_next"):
+        assembled_html = ""
+        preview_html = ""
+    else:
+        assembled_html = str(state.get("assembled_html") or "")
+        preview_html = str(state.get("preview_html") or "")
 
     result = await agent.export(
         state["prompt"],
         plan=plan,
         analysis=analysis,
         generation=generation,
+        assembled_html=assembled_html,
         preview_html=str(preview_html),
+        template_id=template_id,
+        sector_template=sector_tpl if isinstance(sector_tpl, dict) else None,
+        expect_sector_template=expect_sector,
         settings=settings,
         project_id=state.get("project_id"),
         generation_mode=generation_mode,
@@ -2041,16 +2061,21 @@ async def finalize_node(
             demo_seed=generation.demo_seed,
         )
 
+    assembled_html = strip_markdown_code_fences(str(state.get("assembled_html") or "")) or None
     preview_html = strip_markdown_code_fences(str(preview_html or "")) or None
+    canonical_html = assembled_html or preview_html
 
-    if not (preview_html or "").strip() and generation:
-        preview_html = preview_html_from_generation(
+    if not (canonical_html or "").strip() and generation:
+        canonical_html = preview_html_from_generation(
             generation,
             title=architect.project_type_label,
             user_prompt=state.get("prompt") or "",
         )
-    if preview_html:
-        preview_html = prepare_internal_app_preview_html(str(preview_html))
+        preview_html = canonical_html
+    if canonical_html:
+        preview_html = prepare_internal_app_preview_html(str(canonical_html))
+        if assembled_html:
+            assembled_html = preview_html
         if generation and (preview_html or "").strip():
             generation = code_result_from_html(
                 preview_html,
@@ -2164,6 +2189,7 @@ async def finalize_node(
         planned_models=planned,
         demo_pipeline=pipeline_info,
         preview_html=preview_html,
+        assembled_html=assembled_html or preview_html,
         vision_screenshot_url=state.get("vision_screenshot_url"),
         vision_preview_source=state.get("vision_preview_source"),
         testpilot_passed=testpilot_passed,

@@ -263,6 +263,10 @@ class CoreMindRunResult(BaseModel):
         default=None,
         description="HTML premium unique (identique au fichier index.html livré)",
     )
+    assembled_html: str | None = Field(
+        default=None,
+        description="HTML assemble_template_html (priorité upload Cloudflare)",
+    )
     vision_screenshot_url: str | None = Field(
         default=None,
         description="URL ou data URL de la capture VisionUI (Replicate)",
