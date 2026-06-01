@@ -36,11 +36,97 @@ def _slug_from_prompt(prompt: str) -> str:
     return slug.strip("-") or "cyberforge-extension"
 
 
+_TYPE_PREFIX_RE = re.compile(r"^TYPE:\s*extension_navigateur\s*", re.I)
+_NOM_LABEL_RE = re.compile(
+    r"nom\s*:\s*['\"]?([^'\"\n,;.]{2,48})['\"]?",
+    re.I,
+)
+_QUOTED_NAME_RE = re.compile(
+    r"""['"]([A-Za-zÀ-ÿ][\wÀ-ÿ\-']{1,40})['"]""",
+)
+_NAME_STOPWORDS = frozenset(
+    {
+        "extension",
+        "chrome",
+        "navigateur",
+        "type",
+        "pour",
+        "avec",
+        "une",
+        "des",
+        "les",
+        "the",
+        "and",
+        "qui",
+        "dans",
+        "sur",
+        "manifest",
+        "popup",
+        "creer",
+        "créer",
+        "generer",
+        "générer",
+    }
+)
+
+
+def extract_extension_display_name(prompt: str, *, slug: str = "") -> str:
+    """
+    Nom court pour titre popup / manifest — jamais le prompt complet.
+    Priorité : guillemets ('CleanShop'), « Nom : … », puis mots-clés.
+    """
+    text = _TYPE_PREFIX_RE.sub("", (prompt or "").strip())
+    text = re.sub(r"\s+", " ", text).strip()
+
+    nom_m = _NOM_LABEL_RE.search(text)
+    if nom_m:
+        label = nom_m.group(1).strip().strip("'\"")
+        label = re.split(r"\s*[—–\-]\s*", label, maxsplit=1)[0].strip()
+        if 2 <= len(label) <= 48:
+            return _format_display_name(label)
+
+    for m in _QUOTED_NAME_RE.finditer(text):
+        candidate = m.group(1).strip()
+        if len(candidate) < 2:
+            continue
+        if candidate.lower() in _NAME_STOPWORDS:
+            continue
+        return _format_display_name(candidate)
+
+    words = re.findall(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\-]{2,}", text)
+    keywords: list[str] = []
+    for w in words:
+        low = w.lower()
+        if low in _NAME_STOPWORDS:
+            continue
+        if w.isupper() and len(w) <= 5:
+            continue
+        keywords.append(w)
+        if len(keywords) >= 3:
+            break
+
+    if keywords:
+        return _format_display_name(" ".join(keywords))
+
+    if slug:
+        return slug.replace("-", " ").title()
+    return "Mon extension"
+
+
+def _format_display_name(raw: str) -> str:
+    s = re.sub(r"\s+", " ", (raw or "").strip())[:48]
+    if not s:
+        return "Mon extension"
+    if re.search(r"[A-Z]", s[1:]):
+        return s[0].upper() + s[1:]
+    parts = s.split()
+    if len(parts) == 1:
+        return parts[0][:1].upper() + parts[0][1:].lower()
+    return " ".join(p[:1].upper() + p[1:].lower() for p in parts if p)
+
+
 def _extension_name(prompt: str, slug: str) -> str:
-    first = re.sub(r"\s+", " ", (prompt or "").strip())[:60]
-    if first:
-        return first[0].upper() + first[1:]
-    return slug.replace("-", " ").title()
+    return extract_extension_display_name(prompt, slug=slug)
 
 
 def _permissions_for_prompt(prompt: str) -> list[str]:
@@ -431,13 +517,234 @@ def extension_artifact_download_path(project_id: str) -> str:
     return f"/api/pipeline/extension-artifact/{safe}"
 
 
-def prepare_extension_preview_html(popup_html: str) -> str:
-    """Aperçu iframe = popup seule (380×500), pas une page pleine largeur."""
-    from tools.demo_preview_gate import prepare_internal_app_preview_html
+def build_extension_export_manifest(
+    *,
+    project_id: str,
+    project_type_label: str,
+    files: list[str],
+    zip_bytes: int,
+    download_url: str,
+) -> dict[str, Any]:
+    """
+    Métadonnées export extension — pas de domaine, env cloud ni deploy manifest universel.
+    """
+    return {
+        "version": "1",
+        "artifact_type": "chrome_extension_zip",
+        "project_name": project_id,
+        "project_type": ProjectType.EXTENSION_NAVIGATEUR.value,
+        "project_type_label": project_type_label,
+        "provider": "zip",
+        "files": sorted(set(files)),
+        "artifact_bytes": zip_bytes,
+        "download_url": download_url,
+    }
 
-    raw = (popup_html or "").strip()
-    if not raw:
-        return raw
-    if 'width: 380px' in raw or 'width:380px' in raw.replace(" ", ""):
-        return prepare_internal_app_preview_html(raw)
-    return prepare_internal_app_preview_html(raw)
+
+_EXTENSION_PREVIEW_FRAME_CSS = """
+<style id="cf-extension-preview-frame">
+html, body {
+  width: auto !important;
+  min-height: 100vh;
+  max-height: none !important;
+  overflow: auto !important;
+  background: #e2e8f0;
+}
+.cf-extension-preview-shell {
+  max-width: 380px;
+  margin: 20px auto;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+.cf-extension-preview-shell .popup {
+  width: 380px;
+  max-width: 100%;
+}
+</style>"""
+
+_EXTENSION_PREVIEW_CHROME_SHIM = """<script id="cf-extension-preview-shim">
+(function () {
+  if (window.chrome && window.chrome.storage && window.chrome.storage.local) return;
+  var data = {
+    cf_master_enabled: true,
+    cf_page_enabled: true,
+    cf_notif_enabled: false,
+    cf_stat_actions: 0,
+    cf_stat_pages: 0,
+    cf_opt_label: "",
+    cf_opt_delay: 300
+  };
+  function resolveKeys(keys) {
+    if (keys == null) return {};
+    var out = {};
+    if (typeof keys === "string") {
+      out[keys] = data[keys];
+      return out;
+    }
+    if (Array.isArray(keys)) {
+      keys.forEach(function (k) { out[k] = data[k]; });
+      return out;
+    }
+    if (typeof keys === "object") {
+      Object.keys(keys).forEach(function (k) {
+        out[k] = Object.prototype.hasOwnProperty.call(data, k) ? data[k] : keys[k];
+      });
+    }
+    return out;
+  }
+  window.chrome = {
+    storage: {
+      local: {
+        get: function (keys) { return Promise.resolve(resolveKeys(keys)); },
+        set: function (items) {
+          Object.assign(data, items || {});
+          return Promise.resolve();
+        }
+      }
+    },
+    runtime: { sendMessage: function () { return Promise.resolve(); } }
+  };
+})();
+</script>"""
+
+
+def _normalize_popup_path(path: str) -> str:
+    return (path or "").strip().replace("\\", "/").lower()
+
+
+def extract_extension_popup_html(
+    *,
+    extension_files: dict[str, str] | None = None,
+    generation: Any = None,
+    assembled_html: str | None = None,
+    preview_html: str | None = None,
+) -> tuple[str, str]:
+    """
+    Retourne (popup.html, popup.js) depuis extension_files, generation.files ou fallbacks.
+    """
+    popup = ""
+    popup_js = ""
+
+    def absorb_files(files: dict[str, str]) -> None:
+        nonlocal popup, popup_js
+        for path, content in files.items():
+            norm = _normalize_popup_path(path)
+            if norm.endswith("popup.html") and content:
+                popup = str(content).strip()
+            elif norm.endswith("popup.js") and content:
+                popup_js = str(content).strip()
+
+    if extension_files:
+        absorb_files(extension_files)
+
+    if not popup:
+        for f in getattr(generation, "files", None) or []:
+            path = _normalize_popup_path(str(getattr(f, "path", "") or ""))
+            content = str(getattr(f, "content", "") or "").strip()
+            if path.endswith("popup.html") and content:
+                popup = content
+            elif path.endswith("popup.js") and content:
+                popup_js = content
+
+    for candidate in (assembled_html, preview_html, getattr(generation, "code", None)):
+        text = str(candidate or "").strip()
+        if not text:
+            continue
+        low = text.lower()
+        if "<!doctype" in low or "<html" in low:
+            popup = text
+            break
+
+    return popup, popup_js
+
+
+def _apply_extension_display_name_to_html(html: str, name: str) -> str:
+    safe = html_lib.escape(name)
+    html = re.sub(r"<title>[^<]*</title>", f"<title>{safe}</title>", html, count=1, flags=re.I)
+    html = re.sub(r"(<h1[^>]*>)[^<]*(</h1>)", rf"\1{safe}\2", html, count=1, flags=re.I)
+    html = re.sub(
+        r'(<input[^>]*\bid=["\']optLabel["\'][^>]*\bvalue=["\'])[^"\']*(["\'])',
+        rf'\1{safe}\2',
+        html,
+        count=1,
+        flags=re.I,
+    )
+    return html
+
+
+def _wrap_popup_preview_shell(html: str) -> str:
+    if "cf-extension-preview-shell" in html:
+        return html
+
+    if 'id="cf-extension-preview-frame"' not in html:
+        if re.search(r"</head>", html, re.I):
+            html = re.sub(
+                r"(</head>)",
+                _EXTENSION_PREVIEW_FRAME_CSS + r"\1",
+                html,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            html = _EXTENSION_PREVIEW_FRAME_CSS + html
+
+    body_m = re.search(r"<body[^>]*>([\s\S]*?)</body>", html, re.I)
+    if not body_m:
+        return html
+    inner = body_m.group(1).strip()
+    if not inner.startswith('<div class="cf-extension-preview-shell"'):
+        wrapped = f'<div class="cf-extension-preview-shell">{inner}</div>'
+        html = (
+            html[: body_m.start(1)]
+            + wrapped
+            + html[body_m.end(1) :]
+        )
+    return html
+
+
+def prepare_extension_preview_html(
+    popup_html: str,
+    *,
+    popup_js: str | None = None,
+    prompt: str | None = None,
+) -> str:
+    """
+    Aperçu iframe CyberForge : popup centrée 380px, JS inline, mock chrome.*.
+    """
+    from tools.demo_preview_gate import inject_internal_preview_meta
+    from tools.html_markdown import strip_markdown_code_fences
+
+    html = strip_markdown_code_fences((popup_html or "").strip())
+    if not html:
+        return html
+
+    if prompt is not None:
+        display_name = extract_extension_display_name(prompt)
+        html = _apply_extension_display_name_to_html(html, display_name)
+
+    js = (popup_js or "").strip()
+    if js:
+        html = re.sub(
+            r'<script\s+src=["\']popup\.js["\']\s*></script>',
+            f"<script>\n{js}\n</script>",
+            html,
+            count=1,
+            flags=re.I,
+        )
+
+    if 'id="cf-extension-preview-shim"' not in html:
+        if re.search(r"<head\b", html, re.I):
+            html = re.sub(
+                r"(<head[^>]*>)",
+                r"\1\n" + _EXTENSION_PREVIEW_CHROME_SHIM,
+                html,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            html = _EXTENSION_PREVIEW_CHROME_SHIM + html
+
+    html = _wrap_popup_preview_shell(html)
+    return inject_internal_preview_meta(html)

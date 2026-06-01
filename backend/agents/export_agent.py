@@ -135,8 +135,14 @@ class ExportAgent(BaseAgent):
     ) -> ExportResult:
         resolved = settings or self._settings
 
-        if plan.project_type == ProjectType.EXTENSION_NAVIGATEUR:
+        from tools.extension_pipeline import is_extension_project_type
+
+        if (
+            plan.project_type == ProjectType.EXTENSION_NAVIGATEUR
+            or is_extension_project_type(plan)
+        ):
             from tools.extension_pipeline import (
+                build_extension_export_manifest,
                 build_extension_zip,
                 extension_artifact_download_path,
                 save_extension_zip_artifact,
@@ -159,20 +165,19 @@ class ExportAgent(BaseAgent):
             )
             save_extension_zip_artifact(pid, zip_bytes)
             download_url = extension_artifact_download_path(pid)
-            manifest = build_deploy_manifest(
-                project_name=pid,
-                project_type=plan.project_type.value,
+            manifest = build_extension_export_manifest(
+                project_id=pid,
                 project_type_label=plan.project_type_label,
-                provider="zip",
                 files=list(files.keys()),
+                zip_bytes=len(zip_bytes),
+                download_url=download_url,
             )
-            manifest.env["ARTIFACT_BYTES"] = str(len(zip_bytes))
             return ExportResult(
                 success=True,
                 provider="zip",
                 production_url=None,
                 artifact_download_url=download_url,
-                manifest=manifest.model_dump(),
+                manifest=manifest,
                 message=f"Extension Chrome prête — télécharger le ZIP ({len(zip_bytes)} octets).",
             )
 

@@ -616,7 +616,11 @@ async def extension_build_node(
         return {"error": f"Extension : {exc}"}
 
     popup_html = files.get("popup.html", "")
-    preview_html = prepare_extension_preview_html(popup_html)
+    preview_html = prepare_extension_preview_html(
+        popup_html,
+        popup_js=files.get("popup.js"),
+        prompt=prompt,
+    )
     gen_files = [
         GeneratedFile(path=path, content=content)
         for path, content in sorted(files.items())
@@ -2170,13 +2174,52 @@ async def finalize_node(
     if isinstance(sector_tpl, dict):
         sector_html = sector_tpl.get("html") or sector_tpl.get("html_raw")
 
+    from tools.extension_pipeline import (
+        extract_extension_popup_html,
+        is_extension_project_type,
+        prepare_extension_preview_html,
+    )
+
+    is_extension = (
+        architect.project_type == ProjectType.EXTENSION_NAVIGATEUR
+        or is_extension_project_type(architect)
+    )
+
+    ext_files = state.get("extension_files")
+    ext_files_dict = ext_files if isinstance(ext_files, dict) else None
+
     state_assembled_raw = strip_markdown_code_fences(
         str(state.get("assembled_html") or "")
     )
     asm_present = bool(state_assembled_raw.strip())
     asm_bytes = len(state_assembled_raw.encode("utf-8")) if asm_present else 0
 
-    if asm_present:
+    if is_extension:
+        popup_raw, popup_js = extract_extension_popup_html(
+            extension_files=ext_files_dict,
+            generation=generation,
+            assembled_html=state.get("assembled_html"),
+            preview_html=preview_html,
+        )
+        if popup_raw.strip():
+            preview_html = prepare_extension_preview_html(
+                popup_raw,
+                popup_js=popup_js,
+                prompt=state.get("prompt") or "",
+            )
+            assembled_html = popup_raw
+            asm_present = True
+            asm_bytes = len(popup_raw.encode("utf-8"))
+            logger.info(
+                "[finalize] extension popup.html -> preview_html (%d bytes, js_inlined=%s)",
+                len((preview_html or "").encode("utf-8")),
+                bool(popup_js.strip()),
+            )
+        else:
+            logger.warning("[finalize] extension_navigateur sans popup.html exploitable")
+            preview_html = preview_html or ""
+            assembled_html = assembled_html or preview_html
+    elif asm_present:
         from tools.demo_preview_gate import prepare_internal_app_preview_html
 
         preview_html = (
@@ -2211,12 +2254,31 @@ async def finalize_node(
         preview_saved,
     )
     if preview_html and generation:
-        generation = code_result_from_html(
-            preview_html,
-            summary=generation.summary or "HTML livrable",
-            model=generation.model,
-            provider=generation.provider,
-        )
+        if is_extension:
+            gen_files = list(getattr(generation, "files", None) or [])
+            if ext_files_dict and not gen_files:
+                from tools.codegen_service import GeneratedFile
+
+                gen_files = [
+                    GeneratedFile(path=path, content=content)
+                    for path, content in sorted(ext_files_dict.items())
+                ]
+            generation = CodeGenerateResult(
+                summary=generation.summary or "Extension Chrome MV3",
+                code=preview_html,
+                files=gen_files,
+                stack=list(generation.stack),
+                model=generation.model,
+                provider=generation.provider,
+                demo_seed=generation.demo_seed,
+            )
+        else:
+            generation = code_result_from_html(
+                preview_html,
+                summary=generation.summary or "HTML livrable",
+                model=generation.model,
+                provider=generation.provider,
+            )
 
     await _step(cb, "finalize", "start", "Assemblage de la réponse…")
     settings = _settings_from_config(config)
