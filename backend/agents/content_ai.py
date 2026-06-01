@@ -389,8 +389,15 @@ def _apply_design_system_css(html: str, design_system: Any | None) -> str:
 def _fix_action_links(html: str) -> str:
     """Remplace href='#' inertes par des ancres ou actions réelles."""
     html = re.sub(
+        r'(<a[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*)href=["\'][^"\']*["\']',
+        r'\1 href="#top"',
+        html,
+        count=1,
+        flags=re.I,
+    )
+    html = re.sub(
         r'<a([^>]*)\shref=["\']#["\']([^>]*)>',
-        r'<a\1 href="#contact"\2>',
+        r'<a\1 href="#top"\2>',
         html,
         flags=re.I,
     )
@@ -398,14 +405,6 @@ def _fix_action_links(html: str) -> str:
         r'<form([^>]*)action=["\']#["\']([^>]*)>',
         r'<form\1 action="javascript:void(0)"\2>',
         html,
-        flags=re.I,
-    )
-    # Liens logo → accueil
-    html = re.sub(
-        r'(<a[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*)href=["\']#contact["\']',
-        r'\1 href="#top"',
-        html,
-        count=1,
         flags=re.I,
     )
     if 'id="top"' not in html and "<body" in html.lower():
@@ -500,6 +499,13 @@ def fill_template_content(
         html = strip_markdown_code_fences(html)
         html = _apply_design_system_css(html, design_system)
         html = _fix_action_links(html)
+        if (template_id or "").startswith("ecommerce_"):
+            from tools.ecommerce_product_images import ensure_ecommerce_product_thumbnails
+
+            html = ensure_ecommerce_product_thumbnails(html, template_id)
+        from tools.standalone_demo_html import inject_demo_link_navigation_script
+
+        html = inject_demo_link_navigation_script(html)
         _validate_content_html(html)
 
         brand = slots.get("CLIENT_NAME", html_lib.escape(resolved_name))

@@ -146,14 +146,19 @@ def inject_internal_preview_meta(html: str) -> str:
 
 def prepare_internal_app_preview_html(html: str) -> str:
     """Aperçu in-app (iframe srcDoc) — jamais l'écran « Démo protégée » ni Verrouiller."""
+    from tools.standalone_demo_html import inject_demo_link_navigation_script
+
     raw = (html or "").strip()
     if not raw:
         return raw
     if is_password_gated(raw):
         stripped = strip_password_gate(raw)
         if not is_password_gated(stripped):
-            return strip_internal_preview_chrome(stripped)
-        from tools.vitrine_html_normalize import extract_unlocked_demo_html
+            out = strip_internal_preview_chrome(stripped)
+        else:
+            from tools.vitrine_html_normalize import extract_unlocked_demo_html
 
-        return strip_internal_preview_chrome(extract_unlocked_demo_html(raw))
-    return strip_internal_preview_chrome(raw)
+            out = strip_internal_preview_chrome(extract_unlocked_demo_html(raw))
+    else:
+        out = strip_internal_preview_chrome(raw)
+    return inject_demo_link_navigation_script(inject_internal_preview_meta(out))

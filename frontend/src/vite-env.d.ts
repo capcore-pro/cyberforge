@@ -27,6 +27,7 @@ declare global {
       preview?: {
         open: (payload: PreviewOpenPayload) => Promise<void>;
       };
+      openExternal?: (url: string) => Promise<void>;
     };
   }
 }

@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, shell } from "electron";
 import {
   IPC_CHANNELS,
   type ApiRequestPayload,
@@ -22,4 +22,16 @@ export function registerIpcHandlers(): void {
       await openPreviewWindow(payload);
     },
   );
+
+  ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL, async (_event, url: string) => {
+    const target = (url || "").trim();
+    if (
+      target.startsWith("https:") ||
+      target.startsWith("http:") ||
+      target.startsWith("mailto:") ||
+      target.startsWith("tel:")
+    ) {
+      await shell.openExternal(target);
+    }
+  });
 }

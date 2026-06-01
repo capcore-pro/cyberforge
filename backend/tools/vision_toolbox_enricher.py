@@ -403,4 +403,15 @@ async def enrich_html_with_toolbox(
     out = await _inject_illustrations(
         out, settings=resolved, project_id=project_id, stats=stats
     )
+    if "product-card" in out and 'class="thumb"' in out:
+        from tools.ecommerce_product_images import ensure_ecommerce_product_thumbnails
+
+        template_id = "ecommerce_default"
+        if plan and getattr(plan, "pricing_category", None) == "ecommerce":
+            blob = f"{getattr(plan, 'secteur', '')} {prompt or ''}".lower()
+            if any(x in blob for x in ("boulanger", "pâtiss", "patiss", "épicerie", "aliment")):
+                template_id = "ecommerce_alimentaire"
+            elif any(x in blob for x in ("mode", "fashion", "vêtement", "vetement")):
+                template_id = "ecommerce_mode"
+        out = ensure_ecommerce_product_thumbnails(out, template_id)
     return out, stats

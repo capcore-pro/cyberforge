@@ -72,6 +72,25 @@ export default function App() {
   );
 }
 
+/** Liens externes depuis les iframes d'aperçu HTML (postMessage). */
+function usePreviewExternalLinkBridge(): void {
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null;
+      if (data?.type !== "cyberforge-open-external" || typeof data.url !== "string") {
+        return;
+      }
+      const url = data.url.trim();
+      if (!url) {
+        return;
+      }
+      void window.cyberforge?.openExternal?.(url);
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+}
+
 function AppWithNotifications({
   page,
   setPage,
@@ -79,6 +98,7 @@ function AppWithNotifications({
   page: AppPage;
   setPage: (p: AppPage) => void;
 }) {
+  usePreviewExternalLinkBridge();
   const { markAllSeen } = useContactNotifications();
   const [generatorFromProjects, setGeneratorFromProjects] = useState(false);
   const [generatorFromPerso, setGeneratorFromPerso] = useState(false);

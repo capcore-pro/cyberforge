@@ -268,6 +268,109 @@ def _log_html_structure(context: str, html: str, *, max_chars: int = 3500) -> No
         logger.info("[standalone_demo_html] %s | <body>:\n%s", context, snippet)
 
 
+_DEMO_LINK_NAVIGATION_SCRIPT = """
+<script id="cf-demo-link-nav">
+(function () {
+  function scrollToHash(hash) {
+    if (!hash || hash === "#") {
+      (document.getElementById("top") || document.body).scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      return;
+    }
+    var id = hash.charAt(0) === "#" ? hash.slice(1) : hash;
+    var el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      (document.getElementById("top") || document.body).scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }
+  function openExternal(url) {
+    try {
+      window.parent.postMessage({ type: "cyberforge-open-external", url: url }, "*");
+    } catch (e) {}
+    try {
+      var w = window.open(url, "_blank", "noopener,noreferrer");
+      if (w) {
+        w.opener = null;
+      }
+    } catch (e2) {}
+  }
+  document.addEventListener(
+    "click",
+    function (ev) {
+      var a = ev.target && ev.target.closest ? ev.target.closest("a[href]") : null;
+      if (!a) {
+        return;
+      }
+      var href = (a.getAttribute("href") || "").trim();
+      if (!href) {
+        return;
+      }
+      if (href.charAt(0) === "#") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        scrollToHash(href);
+        return;
+      }
+      if (/^(https?:|mailto:|tel:)/i.test(href)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openExternal(href);
+        return;
+      }
+      if (href.indexOf("javascript:") === 0) {
+        return;
+      }
+      ev.preventDefault();
+      ev.stopPropagation();
+    },
+    true
+  );
+  document.addEventListener(
+    "submit",
+    function (ev) {
+      var form = ev.target;
+      if (!form || form.tagName !== "FORM") {
+        return;
+      }
+      var action = (form.getAttribute("action") || "").trim();
+      if (!action || action === "#" || action.indexOf("#") === 0) {
+        ev.preventDefault();
+      }
+    },
+    true
+  );
+})();
+</script>
+"""
+
+
+def inject_demo_link_navigation_script(html: str) -> str:
+    """
+    Ancres internes → scroll doux (pas de navigation Electron / doublon app).
+    Liens http(s)/mailto/tel → navigateur système via postMessage ou window.open.
+    """
+    if not (html or "").strip():
+        return html
+    if 'id="cf-demo-link-nav"' in html:
+        return html
+    if re.search(r"</body>", html, re.I):
+        return re.sub(
+            r"</body>",
+            _DEMO_LINK_NAVIGATION_SCRIPT + "\n</body>",
+            html,
+            count=1,
+            flags=re.I,
+        )
+    return html + _DEMO_LINK_NAVIGATION_SCRIPT
+
+
 def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Démo CyberForge") -> str:
     """
     Enveloppe le livrable dans un écran de login cyber (validation JS côté client).
@@ -276,7 +379,9 @@ def wrap_with_password_gate(demo_html: str, password: str, *, title: str = "Dém
     secret = json.dumps(password, ensure_ascii=False)
     page_title = escape_html(title.strip() or "Démo CyberForge")
     demo_styles = _extract_head_styles(demo_html)
-    demo_inner = _extract_body_inner_html(demo_html)
+    demo_inner = inject_demo_link_navigation_script(
+        _extract_body_inner_html(demo_html)
+    )
 
     _log_html_structure("wrap_with_password_gate:input", demo_html)
     logger.info(

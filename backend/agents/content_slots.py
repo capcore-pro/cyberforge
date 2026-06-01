@@ -16,10 +16,37 @@ from tools.client_content_profile import (
 )
 
 _ECOMMERCE_CATEGORIES: dict[str, tuple[str, str, str]] = {
-    "ecommerce_alimentaire": ("Épicerie fine", "Viennoiseries", "Traiteur"),
+    "ecommerce_alimentaire": (
+        "Pains artisanaux",
+        "Viennoiseries",
+        "Pâtisseries",
+    ),
     "ecommerce_mode": ("Nouveautés", "Femme", "Homme"),
     "ecommerce_default": ("Best-sellers", "Promotions", "Cadeaux"),
 }
+
+# Mots-clés ResearchAI / brief — jamais en libellés de rayons boutique
+_BLOCKED_CATEGORY_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "solution",
+        "solutions",
+        "saas",
+        "dashboard",
+        "logiciel",
+        "software",
+        "app",
+        "application",
+        "startup",
+        "tech",
+        "digital",
+        "cloud",
+        "api",
+        "crm",
+        "erp",
+        "platform",
+        "plateforme",
+    }
+)
 
 _ECOMMERCE_PRODUCTS: dict[str, list[tuple[str, str]]] = {
     "ecommerce_alimentaire": [
@@ -186,6 +213,46 @@ def ensure_contact_slots(
     return slots
 
 
+def _is_usable_category_keyword(keyword: str) -> bool:
+    token = (keyword or "").strip().lower()
+    if len(token) < 3 or len(token) > 32:
+        return False
+    if token in _BLOCKED_CATEGORY_KEYWORDS:
+        return False
+    if any(blocked in token.split() for blocked in _BLOCKED_CATEGORY_KEYWORDS):
+        return False
+    return True
+
+
+def _resolve_ecommerce_categories(
+    template_id: str,
+    research: dict[str, Any],
+) -> tuple[str, str, str]:
+    """Rayons catalogue — fixes pour l'alimentaire ; filtrage anti-mots-clés tech."""
+    defaults = _ECOMMERCE_CATEGORIES.get(
+        template_id, _ECOMMERCE_CATEGORIES["ecommerce_default"]
+    )
+    if template_id == "ecommerce_alimentaire":
+        return defaults
+
+    kws = [
+        k
+        for k in _research_keywords(research)
+        if _is_usable_category_keyword(k)
+    ]
+    if len(kws) >= 3:
+        return (
+            kws[0].capitalize(),
+            kws[1].capitalize(),
+            kws[2].capitalize(),
+        )
+    if len(kws) == 2:
+        return (kws[0].capitalize(), kws[1].capitalize(), defaults[2])
+    if len(kws) == 1:
+        return (kws[0].capitalize(), defaults[1], defaults[2])
+    return defaults
+
+
 def _research_keywords(research: dict[str, Any], limit: int = 8) -> list[str]:
     raw = research.get("mots_cles") or research.get("keywords") or []
     if not isinstance(raw, list):
@@ -244,11 +311,8 @@ def build_ecommerce_slots(
     *,
     user_prompt: str = "",
 ) -> dict[str, str]:
-    cats = _ECOMMERCE_CATEGORIES.get(template_id, _ECOMMERCE_CATEGORIES["ecommerce_default"])
+    cats = _resolve_ecommerce_categories(template_id, research)
     products = _ECOMMERCE_PRODUCTS.get(template_id, _ECOMMERCE_PRODUCTS["ecommerce_default"])
-    kws = _research_keywords(research)
-    if kws:
-        cats = (kws[0].capitalize(), kws[1].capitalize() if len(kws) > 1 else cats[1], cats[2])
 
     slots = {
         "CLIENT_NAME": html_lib.escape(brand),

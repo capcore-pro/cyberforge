@@ -39,4 +39,6 @@ contextBridge.exposeInMainWorld("cyberforge", {
     open: (payload: PreviewOpenPayload): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.PREVIEW_OPEN, payload),
   },
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OPEN_EXTERNAL, url),
 });
