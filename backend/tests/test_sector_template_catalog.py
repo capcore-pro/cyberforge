@@ -6,6 +6,7 @@ from agents.architect_agent import ArchitectPlan, ToolboxPalette
 from agents.coremind_agent import ProjectType
 from tools.sector_template_catalog import (
     resolve_sector_template_from_plan,
+    resolve_template_family_from_plan,
     resolve_vitrine_template_file,
     template_file_path,
 )
@@ -150,6 +151,18 @@ def test_ecommerce_category_overrides_application_web_pt() -> None:
     )
     assert tid.startswith("ecommerce_")
     assert tid != "app_dashboard"
+
+
+def test_extension_navigateur_never_ecommerce_or_vitrine() -> None:
+    plan = _plan("extension_navigateur", ProjectType.EXTENSION_NAVIGATEUR)
+    assert resolve_template_family_from_plan(plan) == "extension"
+    tid, fname = resolve_sector_template_from_plan(
+        plan, "commerce", "boutique ecommerce vitrine en ligne"
+    )
+    assert tid == "extension_chrome"
+    assert fname == "extension_chrome.html"
+    assert not tid.startswith("ecommerce_")
+    assert not fname.startswith("vitrine_")
 
 
 def test_application_web_stays_app_family_despite_boutique_in_prompt() -> None:

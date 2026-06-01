@@ -5,6 +5,7 @@ Politique template-first HTML — tous types livrables en assemblage (pas LLM fr
 from __future__ import annotations
 
 from agents.architect_agent import ArchitectPlan
+from agents.coremind_agent import ProjectType
 from agents.vitrine_policy import is_vitrine_html_project
 from tools.sector_template_catalog import is_template_first_pricing_category
 
@@ -18,6 +19,8 @@ def is_template_first_html_project(
     True si le pipeline doit charger template sectoriel + ContentAI + Builder assemble.
     Exclut real_app (React/TS généré) et vitrine_next (Next.js déployé).
     """
+    if plan.project_type == ProjectType.EXTENSION_NAVIGATEUR:
+        return False
     mode = (generation_mode or "client_demo").strip().lower()
     if mode == "real_app":
         return False

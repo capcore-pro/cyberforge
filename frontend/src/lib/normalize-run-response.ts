@@ -108,8 +108,16 @@ export function normalizeRunResponse(
       ? raw.production_url.trim()
       : null;
   const export_provider =
-    raw.export_provider === "cloudflare" || raw.export_provider === "railway"
+    raw.export_provider === "cloudflare" ||
+    raw.export_provider === "railway" ||
+    raw.export_provider === "zip"
       ? raw.export_provider
+      : typeof raw.export_provider === "string" && raw.export_provider.trim()
+        ? raw.export_provider.trim()
+        : null;
+  const artifact_download_url =
+    typeof raw.artifact_download_url === "string" && raw.artifact_download_url.trim()
+      ? raw.artifact_download_url.trim()
       : null;
   const github_export_url =
     typeof raw.github_export_url === "string" && raw.github_export_url.trim()
@@ -156,6 +164,7 @@ export function normalizeRunResponse(
     lighthouse_report,
     production_url,
     export_provider,
+    artifact_download_url,
     github_export_url,
     unlock_url,
     demo_token,

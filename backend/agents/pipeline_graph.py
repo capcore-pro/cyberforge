@@ -174,6 +174,8 @@ class PipelineState(TypedDict, total=False):
     pages_project_slug: str | None
     project_title: str | None
     export_result: Any
+    extension_files: dict[str, str] | None
+    artifact_download_url: str | None
     result: CoreMindRunResult | None
     error: str | None
 
@@ -559,10 +561,89 @@ def _route_after_research(state: PipelineState) -> str:
     return NODE_DESIGN_SYSTEM
 
 
+def _is_extension_pipeline(state: PipelineState) -> bool:
+    plan = state.get("architect_plan")
+    if not plan:
+        return False
+    from tools.extension_pipeline import is_extension_project_type
+
+    return is_extension_project_type(plan)
+
+
 def _route_after_design_system(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
+    if _is_extension_pipeline(state):
+        return "extension_build"
     return "template_ai"
+
+
+async def extension_build_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Extension Chrome MV3 — popup + manifest + scripts (pas template-first)."""
+    cb = _callback_from_config(config)
+    plan = state.get("architect_plan")
+    if not plan:
+        return {"error": "Plan Architect manquant pour l'extension."}
+
+    await _step(cb, "extension_build", "start", "Génération extension Chrome MV3…")
+
+    from tools.codegen_service import CodeGenerateResult, GeneratedFile
+    from tools.extension_pipeline import (
+        _EXTENSION_MODEL,
+        _EXTENSION_PROVIDER,
+        build_extension_files,
+        prepare_extension_preview_html,
+    )
+
+    prompt = state.get("prompt") or ""
+    primary = "#4f46e5"
+    ds = state.get("design_system")
+    if isinstance(ds, dict):
+        primary = str(ds.get("PRIMARY_COLOR") or ds.get("primary") or primary)
+
+    slug = (state.get("pages_project_slug") or state.get("project_id") or "").strip()
+    if not slug:
+        slug = None
+
+    try:
+        files = build_extension_files(prompt, slug=slug, primary_color=primary)
+    except Exception as exc:
+        logger.exception("[extension_build] échec")
+        await _step(cb, "extension_build", "error", str(exc))
+        return {"error": f"Extension : {exc}"}
+
+    popup_html = files.get("popup.html", "")
+    preview_html = prepare_extension_preview_html(popup_html)
+    gen_files = [
+        GeneratedFile(path=path, content=content)
+        for path, content in sorted(files.items())
+    ]
+    generation = CodeGenerateResult(
+        summary=f"Extension Chrome MV3 — {len(files)} fichiers",
+        code=popup_html,
+        files=gen_files,
+        stack=["chrome-extension", "manifest-v3"],
+        model=_EXTENSION_MODEL,
+        provider=_EXTENSION_PROVIDER,
+    )
+
+    await _step(
+        cb,
+        "extension_build",
+        "done",
+        f"Extension MV3 — popup {len(popup_html)} car.",
+        preview_html=preview_html,
+    )
+    return {
+        "generation": generation,
+        "assembled_html": popup_html,
+        "preview_html": preview_html,
+        "extension_files": files,
+        "builder_fallback": False,
+    }
 
 
 def _route_after_template_ai(state: PipelineState) -> str:
@@ -1962,6 +2043,8 @@ async def export_node(
         return {}
 
     generation_mode = state.get("generation_mode") or "client_demo"
+    if plan.project_type == ProjectType.EXTENSION_NAVIGATEUR:
+        await _step(cb, "export", "start", "Export ZIP extension Chrome…")
     personal = bool(state.get("personal_project"))
     if personal and generation_mode == "real_app":
         await _step(
@@ -2017,6 +2100,7 @@ async def export_node(
         personal_project=personal,
         pages_project_slug=state.get("pages_project_slug"),
         project_title=state.get("project_title"),
+        extension_files=state.get("extension_files"),
     )
 
     await _step(
@@ -2027,11 +2111,15 @@ async def export_node(
         ok=result.success,
         production_url=result.production_url,
         export_provider=result.provider,
+        artifact_download_url=result.artifact_download_url,
         github_url=result.github_url,
         unlock_url=result.unlock_url,
         newsletter_triggered=bool(getattr(result, "newsletter_triggered", False)),
     )
-    return {"export_result": result}
+    out: dict[str, Any] = {"export_result": result}
+    if result.artifact_download_url:
+        out["artifact_download_url"] = result.artifact_download_url
+    return out
 
 
 async def finalize_node(
@@ -2209,10 +2297,14 @@ async def finalize_node(
     demo_token = None
     demo_password = None
     unlock_url = None
+    artifact_download_url = state.get("artifact_download_url")
     if export_data is not None:
         export_manifest = getattr(export_data, "manifest", None)
         production_url = getattr(export_data, "production_url", None)
         export_provider = getattr(export_data, "provider", None)
+        artifact_download_url = artifact_download_url or getattr(
+            export_data, "artifact_download_url", None
+        )
         github_export_url = getattr(export_data, "github_url", None)
         demo_token = getattr(export_data, "demo_token", None)
         demo_password = getattr(export_data, "demo_password", None)
@@ -2248,6 +2340,7 @@ async def finalize_node(
         export_manifest=export_manifest,
         production_url=production_url,
         export_provider=export_provider,
+        artifact_download_url=artifact_download_url,
         github_export_url=github_export_url,
         demo_token=demo_token,
         demo_password=demo_password,
@@ -2270,6 +2363,7 @@ def build_pipeline_graph() -> Any:
     graph = StateGraph(PipelineState)
     graph.add_node("architect", architect_node)
     graph.add_node(NODE_DESIGN_SYSTEM, design_system_node)
+    graph.add_node("extension_build", extension_build_node)
     graph.add_node("template_ai", template_ai_node)
     graph.add_node("content_ai", content_ai_node)
     graph.add_node("research", research_node)
@@ -2308,10 +2402,12 @@ def build_pipeline_graph() -> Any:
         NODE_DESIGN_SYSTEM,
         _route_after_design_system,
         {
+            "extension_build": "extension_build",
             "template_ai": "template_ai",
             "finalize": "finalize",
         },
     )
+    graph.add_edge("extension_build", "export")
     graph.add_conditional_edges(
         "template_ai",
         _route_after_template_ai,

@@ -201,6 +201,7 @@ export function GeneratorPage({
     lighthouseReport,
     productionUrl,
     exportProvider,
+    artifactDownloadUrl,
     unlockUrl,
     demoPassword,
     githubExportUrl,
@@ -270,6 +271,12 @@ export function GeneratorPage({
     () => getGeneratorKind(selectedKind),
     [selectedKind],
   );
+
+  const isExtensionPreview = useMemo(() => {
+    if (selectedKind === "extension") return true;
+    if (projectType === "extension_navigateur") return true;
+    return result?.analysis?.project_type === "extension_navigateur";
+  }, [selectedKind, projectType, result?.analysis?.project_type]);
 
   const estimation = useMemo(
     () => computeProjectEstimation(selectedKind, prompt),
@@ -630,6 +637,7 @@ export function GeneratorPage({
       lighthouseReport: null,
       productionUrl: null,
       exportProvider: null,
+      artifactDownloadUrl: null,
       unlockUrl: null,
       demoPassword: null,
       githubExportUrl: null,
@@ -686,7 +694,10 @@ export function GeneratorPage({
           testpilotPassed: event.ok ?? null,
         });
       }
-      if (event.type === "step_done" && event.agent === "builder") {
+      if (
+        event.type === "step_done" &&
+        (event.agent === "builder" || event.agent === "extension_build")
+      ) {
         const built = pickPreviewHtml(
           typeof event.preview_html === "string" ? event.preview_html : null,
         );
@@ -698,6 +709,7 @@ export function GeneratorPage({
         patch({
           productionUrl: event.production_url ?? null,
           exportProvider: event.export_provider ?? null,
+          artifactDownloadUrl: event.artifact_download_url ?? null,
           unlockUrl: event.unlock_url ?? null,
         });
       }
@@ -817,6 +829,7 @@ export function GeneratorPage({
         lighthouseReport: normalized.lighthouse_report ?? null,
         productionUrl: normalized.production_url ?? null,
         exportProvider: normalized.export_provider ?? null,
+        artifactDownloadUrl: normalized.artifact_download_url ?? null,
         unlockUrl: normalized.unlock_url ?? null,
         demoPassword: normalized.demo_password ?? null,
         githubExportUrl: normalized.github_export_url ?? null,
@@ -1466,10 +1479,11 @@ export function GeneratorPage({
               />
             ) : null}
 
-            {isRunning && productionUrl ? (
+            {isRunning && (productionUrl || artifactDownloadUrl) ? (
               <ExportProductionCard
                 productionUrl={productionUrl}
                 exportProvider={exportProvider}
+                artifactDownloadUrl={artifactDownloadUrl}
                 unlockUrl={unlockUrl}
                 demoPassword={demoPassword}
                 githubUrl={githubExportUrl}
@@ -1506,6 +1520,7 @@ export function GeneratorPage({
                   previewSource={visionPreviewSource}
                   html={livePreviewHtml ?? previewHtml ?? result?.preview_html ?? null}
                   message={visionMessage ?? undefined}
+                  extensionPopup={isExtensionPreview}
                 />
               </div>
             ) : null}
@@ -1515,6 +1530,9 @@ export function GeneratorPage({
                 <ExportProductionCard
                   productionUrl={productionUrl ?? result.production_url}
                   exportProvider={exportProvider ?? result.export_provider}
+                  artifactDownloadUrl={
+                    artifactDownloadUrl ?? result.artifact_download_url
+                  }
                   unlockUrl={unlockUrl ?? result.unlock_url}
                   demoPassword={demoPassword ?? result.demo_password}
                   githubUrl={githubExportUrl ?? result.github_export_url}

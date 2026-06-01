@@ -54,6 +54,7 @@ export interface GeneratorSessionState {
   lighthouseReport: LighthouseReportSummary | null;
   productionUrl: string | null;
   exportProvider: string | null;
+  artifactDownloadUrl: string | null;
   unlockUrl: string | null;
   demoPassword: string | null;
   githubExportUrl: string | null;
@@ -92,6 +93,7 @@ const initialSession = (): GeneratorSessionState => ({
   lighthouseReport: null,
   productionUrl: null,
   exportProvider: null,
+  artifactDownloadUrl: null,
   unlockUrl: null,
   demoPassword: null,
   githubExportUrl: null,

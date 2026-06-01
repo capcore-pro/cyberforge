@@ -154,6 +154,9 @@ def _resolve_template_family(category: str, pt_value: str) -> str:
     """
     cat = (category or "").strip().lower()
 
+    if pt_value == "extension_navigateur" or cat == "extension_navigateur":
+        return "extension"
+
     # pricing_category prime — jamais ecommerce/app si site_reservation imposé.
     if cat == "site_reservation":
         return "reservation"
@@ -219,6 +222,12 @@ def resolve_sector_template_from_plan(
     category = (getattr(plan, "pricing_category", None) or "").strip().lower()
     pt_value = _project_type_value(plan)
     family = _resolve_template_family(category, pt_value)
+
+    if family == "extension":
+        logger.info(
+            "[sector_template_catalog] extension_navigateur — pas de template HTML sectoriel"
+        )
+        return "extension_chrome", "extension_chrome.html"
 
     if family == "ecommerce":
         filename = _match_hints(blob, _ECOMMERCE_HINTS, "ecommerce_default.html")

@@ -213,6 +213,7 @@ export type PipelineAgentId =
   | "stitch"
   | "openhands"
   | "builder"
+  | "extension_build"
   | "coremind"
   | "visionui"
   | "bughunter"
@@ -223,7 +224,7 @@ export type PipelineAgentId =
   | "export"
   | "finalize";
 
-export type ExportProvider = "cloudflare" | "railway";
+export type ExportProvider = "cloudflare" | "railway" | "zip";
 
 export type ValidationStatus = "validated" | "corrected";
 
@@ -250,6 +251,7 @@ export interface PipelineStepEvent {
   testpilot_passed?: boolean | null;
   production_url?: string | null;
   export_provider?: ExportProvider | string | null;
+  artifact_download_url?: string | null;
   github_export_url?: string | null;
   unlock_url?: string | null;
   demo_token?: string | null;
@@ -295,6 +297,7 @@ export interface CoreMindRunResponse {
   export_manifest?: Record<string, unknown> | null;
   production_url?: string | null;
   export_provider?: ExportProvider | string | null;
+  artifact_download_url?: string | null;
   github_export_url?: string | null;
   demo_token?: string | null;
   demo_password?: string | null;

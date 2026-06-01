@@ -23,6 +23,7 @@ const FRIENDLY_LABELS: Record<string, string> = {
   stitch: "Maquettes Stitch",
   openhands: "Code avancé OpenHands",
   builder: "Structure des pages",
+  extension_build: "Extension Chrome MV3",
   coremind: "Rédaction du contenu",
   visionui: "Mise en forme visuelle",
   bughunter: "Contrôle qualité",
@@ -65,6 +66,7 @@ export function applyPipelineStepEvent(
   if (
     idx < 0 &&
     (agent === "autofix" ||
+      agent === "extension_build" ||
       agent === "testpilot" ||
       agent === "export" ||
       agent === "openhands" ||
@@ -76,19 +78,21 @@ export function applyPipelineStepEvent(
     const label =
       agent === "autofix"
         ? "AutoFixAI"
-        : agent === "testpilot"
-          ? "TestPilotAI"
-          : agent === "openhands"
-            ? "OpenHands"
-            : agent === "research"
-              ? "ResearchAI"
-              : agent === "stitch"
-                ? "StitchAI"
-                : agent === "playwright"
-                  ? "Playwright"
-                  : agent === "lighthouse"
-                    ? "Lighthouse"
-                    : "ExportAI";
+        : agent === "extension_build"
+          ? "Extension Chrome"
+          : agent === "testpilot"
+            ? "TestPilotAI"
+            : agent === "openhands"
+              ? "OpenHands"
+              : agent === "research"
+                ? "ResearchAI"
+                : agent === "stitch"
+                  ? "StitchAI"
+                  : agent === "playwright"
+                    ? "Playwright"
+                    : agent === "lighthouse"
+                      ? "Lighthouse"
+                      : "ExportAI";
     next = [
       ...next,
       { id: agent, label, status: "pending" as const },

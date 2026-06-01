@@ -72,6 +72,10 @@ def uses_template_assembly(
     """
     Modes assemblés depuis un template sectoriel — pas de HTML LLM libre.
   """
+    from agents.coremind_agent import ProjectType
+
+    if plan.project_type == ProjectType.EXTENSION_NAVIGATEUR:
+        return False
     mode = (generation_mode or "client_demo").strip().lower()
     if mode == "real_app":
         return False

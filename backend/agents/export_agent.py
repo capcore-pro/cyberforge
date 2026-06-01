@@ -50,6 +50,7 @@ class ExportResult(BaseModel):
     success: bool = False
     provider: str = "cloudflare"
     production_url: str | None = None
+    artifact_download_url: str | None = None
     github_url: str | None = None
     demo_token: str | None = None
     demo_password: str | None = None
@@ -130,8 +131,51 @@ class ExportAgent(BaseAgent):
         personal_project: bool = False,
         pages_project_slug: str | None = None,
         project_title: str | None = None,
+        extension_files: dict[str, str] | None = None,
     ) -> ExportResult:
         resolved = settings or self._settings
+
+        if plan.project_type == ProjectType.EXTENSION_NAVIGATEUR:
+            from tools.extension_pipeline import (
+                build_extension_zip,
+                extension_artifact_download_path,
+                save_extension_zip_artifact,
+            )
+
+            files = extension_files or {
+                f.path: f.content
+                for f in (generation.files or [])
+                if f.path and f.content
+            }
+            if not files:
+                return ExportResult(
+                    success=False,
+                    provider="zip",
+                    message="Aucun fichier extension à exporter.",
+                )
+            zip_bytes = build_extension_zip(files)
+            pid = project_id or slugify_project_name(
+                project_title or plan.project_type_label or "extension"
+            )
+            save_extension_zip_artifact(pid, zip_bytes)
+            download_url = extension_artifact_download_path(pid)
+            manifest = build_deploy_manifest(
+                project_name=pid,
+                project_type=plan.project_type.value,
+                project_type_label=plan.project_type_label,
+                provider="zip",
+                files=list(files.keys()),
+            )
+            manifest.env["ARTIFACT_BYTES"] = str(len(zip_bytes))
+            return ExportResult(
+                success=True,
+                provider="zip",
+                production_url=None,
+                artifact_download_url=download_url,
+                manifest=manifest.model_dump(),
+                message=f"Extension Chrome prête — télécharger le ZIP ({len(zip_bytes)} octets).",
+            )
+
         project_name = slugify_project_name(
             pages_project_slug
             or project_title

@@ -313,7 +313,11 @@ class CoreMindRunResult(BaseModel):
     )
     export_provider: str | None = Field(
         default=None,
-        description="cloudflare | railway",
+        description="cloudflare | railway | zip",
+    )
+    artifact_download_url: str | None = Field(
+        default=None,
+        description="URL téléchargement ZIP extension Chrome.",
     )
     github_export_url: str | None = Field(default=None)
     demo_token: str | None = Field(default=None)

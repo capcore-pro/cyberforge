@@ -161,6 +161,9 @@ export function buildGeneratorPipelinePrompt(
   if (kind === "ecommerce") {
     return `TYPE: ecommerce\n${body}`;
   }
+  if (kind === "extension") {
+    return `TYPE: extension_navigateur\n${body}`;
+  }
   return body;
 }
 
