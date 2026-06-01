@@ -26,6 +26,7 @@ import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
 import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
 import { isLighthouseEnabled } from "@/lib/lighthouse-preferences";
 import { isResearchEnabled } from "@/lib/research-preferences";
+import { isStitchEnabled } from "@/lib/stitch-preferences";
 import { savePlaywrightReport } from "@/lib/playwright-reports";
 import { saveLighthouseReport } from "@/lib/lighthouse-reports";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
@@ -723,6 +724,7 @@ export function GeneratorPage({
           playwright_enabled: isPlaywrightEnabled(),
           lighthouse_enabled: isLighthouseEnabled(),
           research_enabled: isResearchEnabled(),
+          stitch_enabled: isStitchEnabled(),
         },
         { onStep },
       );

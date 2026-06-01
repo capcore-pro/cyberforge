@@ -5,6 +5,7 @@ import { OpenHandsSettingsPanel } from "@/components/settings/OpenHandsSettingsP
 import { PlaywrightSettingsPanel } from "@/components/settings/PlaywrightSettingsPanel";
 import { LighthouseSettingsPanel } from "@/components/settings/LighthouseSettingsPanel";
 import { ResearchSettingsPanel } from "@/components/settings/ResearchSettingsPanel";
+import { StitchSettingsPanel } from "@/components/settings/StitchSettingsPanel";
 import { ProfileSettingsPanel } from "@/components/settings/ProfileSettingsPanel";
 import { SystemSettingsPanel } from "@/components/settings/SystemSettingsPanel";
 
@@ -53,6 +54,7 @@ export function SettingsPage() {
           <>
             <OpenHandsSettingsPanel />
             <ResearchSettingsPanel />
+            <StitchSettingsPanel />
             <PlaywrightSettingsPanel />
             <LighthouseSettingsPanel />
             <AgentsSettingsPanel />

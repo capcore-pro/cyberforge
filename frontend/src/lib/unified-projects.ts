@@ -25,6 +25,7 @@ import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
 import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
 import { isLighthouseEnabled } from "@/lib/lighthouse-preferences";
 import { isResearchEnabled } from "@/lib/research-preferences";
+import { isStitchEnabled } from "@/lib/stitch-preferences";
 import { hardDeleteReservationSite, listReservationSites } from "@/lib/site-reservation-api";
 import { hardDeleteVitrine, listVitrines } from "@/lib/vitrines-api";
 
@@ -507,6 +508,7 @@ export async function modifyUnifiedProject(
     playwright_enabled: isPlaywrightEnabled(),
     lighthouse_enabled: isLighthouseEnabled(),
     research_enabled: isResearchEnabled(),
+    stitch_enabled: isStitchEnabled(),
   });
 
   if (!res.ok) {

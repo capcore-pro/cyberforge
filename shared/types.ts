@@ -83,6 +83,8 @@ export interface CoreMindRequest {
   lighthouse_enabled?: boolean | null;
   /** ResearchAI Brave + Exa après ArchitectAI */
   research_enabled?: boolean | null;
+  /** StitchAI — maquettes Google après ResearchAI */
+  stitch_enabled?: boolean | null;
 }
 
 /** Tarification ArchitectAI (SSE ou GET /projects/{id}/costs) */
@@ -208,6 +210,7 @@ export interface DemoPipelineSummary {
 export type PipelineAgentId =
   | "architect"
   | "research"
+  | "stitch"
   | "openhands"
   | "builder"
   | "coremind"
@@ -258,6 +261,10 @@ export interface PipelineStepEvent {
   lighthouse_accessibility?: number | null;
   lighthouse_best_practices?: number | null;
   lighthouse_recommendations?: string[] | null;
+  stitch_skipped?: boolean | null;
+  stitch_project_id?: string | null;
+  stitch_mockup_count?: number | null;
+  stitch_mockups?: StitchMockupSummary[] | null;
   complexity_score?: number;
   complexity_label?: string;
   market_price_min?: number;
@@ -294,6 +301,14 @@ export interface CoreMindRunResponse {
   playwright_report?: PlaywrightReportSummary | null;
   lighthouse_score_global?: number | null;
   lighthouse_report?: LighthouseReportSummary | null;
+}
+
+/** Maquette StitchAI (HTML + capture) */
+export interface StitchMockupSummary {
+  name: string;
+  html_url: string;
+  image_url: string;
+  screen_id?: string | null;
 }
 
 /** Rapport Playwright (passed / failed / score) */

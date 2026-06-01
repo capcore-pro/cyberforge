@@ -1,5 +1,5 @@
 """
-Statut des agents IA — pipeline LangGraph toujours actif côté backend.
+Statut des agents IA — pipeline LangGraph (13 agents).
 """
 
 from fastapi import APIRouter
@@ -9,26 +9,36 @@ router = APIRouter(tags=["agents"])
 
 PIPELINE_AGENT_IDS: tuple[str, ...] = (
     "architect",
+    "research",
+    "stitch",
+    "openhands",
     "builder",
     "coremind",
     "visionui",
     "bughunter",
     "autofix",
     "testpilot",
+    "playwright",
+    "lighthouse",
     "export",
 )
 
-TOTAL_AGENTS = 8
+TOTAL_AGENTS = 13
 
 _AGENT_CATALOG: tuple[tuple[str, str, str], ...] = (
-    ("coremind", "CoreMindAI", "Orchestrateur central du pipeline LangGraph."),
     ("architect", "ArchitectAI", "Analyse du prompt et choix du template premium."),
-    ("builder", "BuilderAI", "Génération de code et scaffolding de modules."),
+    ("research", "ResearchAI", "Recherche Brave Search + Exa AI (secteur, concurrents)."),
+    ("stitch", "StitchAI", "Maquettes visuelles HTML + screenshots (Google Stitch)."),
+    ("openhands", "OpenHands", "Génération de code avancée pour projets complexes."),
+    ("builder", "BuilderAI", "Génération de code v0 / DeepSeek avec référence Stitch."),
+    ("coremind", "CoreMindAI", "Orchestrateur central du pipeline LangGraph."),
+    ("visionui", "VisionUI", "Interfaces visuelles et design system cyber."),
     ("bughunter", "BugHunterAI", "Vérification du HTML généré avant livraison."),
     ("autofix", "AutoFixAI", "Correction automatique des livrables défectueux."),
-    ("visionui", "VisionUI", "Interfaces visuelles et design system cyber."),
     ("testpilot", "TestPilotAI", "Tests automatisés et validation de régression."),
-    ("export", "ExportAI", "Export de rapports et documentation client."),
+    ("playwright", "Playwright", "Tests E2E Chromium headless."),
+    ("lighthouse", "Lighthouse", "Audit Performance, SEO, accessibilité."),
+    ("export", "ExportAI", "Export et déploiement Cloudflare / Railway."),
 )
 
 
@@ -49,9 +59,7 @@ class AgentsStatusResponse(BaseModel):
 
 @router.get("/agents/status", response_model=AgentsStatusResponse)
 async def get_agents_status() -> AgentsStatusResponse:
-    """
-    Les huit agents du pipeline LangGraph sont toujours opérationnels (ACTIF).
-    """
+    """Les agents du pipeline LangGraph sont opérationnels (ACTIF)."""
     pipeline_set = set(PIPELINE_AGENT_IDS)
     agents: list[AgentStatusItem] = []
     for agent_id, name, description in _AGENT_CATALOG:

@@ -29,30 +29,55 @@ const POLL_MS = 15_000;
 
 const PIPELINE_AGENT_IDS = [
   "architect",
+  "research",
+  "stitch",
+  "openhands",
   "builder",
   "coremind",
   "visionui",
   "bughunter",
   "autofix",
   "testpilot",
+  "playwright",
+  "lighthouse",
   "export",
 ] as const;
 
 const AGENT_CATALOG: { id: string; name: string; description: string }[] = [
-  {
-    id: "coremind",
-    name: "CoreMindAI",
-    description: "Orchestrateur central du pipeline LangGraph.",
-  },
   {
     id: "architect",
     name: "ArchitectAI",
     description: "Analyse du prompt et choix du template premium.",
   },
   {
+    id: "research",
+    name: "ResearchAI",
+    description: "Recherche Brave Search + Exa AI (secteur, concurrents).",
+  },
+  {
+    id: "stitch",
+    name: "StitchAI",
+    description: "Maquettes visuelles HTML + screenshots (Google Stitch).",
+  },
+  {
+    id: "openhands",
+    name: "OpenHands",
+    description: "Génération de code avancée pour projets complexes.",
+  },
+  {
     id: "builder",
     name: "BuilderAI",
-    description: "Génération de code et scaffolding de modules.",
+    description: "Génération v0 / DeepSeek avec référence Stitch.",
+  },
+  {
+    id: "coremind",
+    name: "CoreMindAI",
+    description: "Orchestrateur central du pipeline LangGraph.",
+  },
+  {
+    id: "visionui",
+    name: "VisionUI",
+    description: "Interfaces visuelles et design system cyber.",
   },
   {
     id: "bughunter",
@@ -65,23 +90,28 @@ const AGENT_CATALOG: { id: string; name: string; description: string }[] = [
     description: "Correction automatique des livrables défectueux.",
   },
   {
-    id: "visionui",
-    name: "VisionUI",
-    description: "Interfaces visuelles et design system cyber.",
-  },
-  {
     id: "testpilot",
     name: "TestPilotAI",
     description: "Tests automatisés et validation de régression.",
   },
   {
+    id: "playwright",
+    name: "Playwright",
+    description: "Tests E2E Chromium headless.",
+  },
+  {
+    id: "lighthouse",
+    name: "Lighthouse",
+    description: "Audit Performance, SEO, accessibilité.",
+  },
+  {
     id: "export",
     name: "ExportAI",
-    description: "Export de rapports et documentation client.",
+    description: "Export et déploiement Cloudflare / Railway.",
   },
 ];
 
-/** Aligné sur GET /api/agents/status — affiché tant que l'API n'a pas répondu. */
+/** 13 agents — aligné sur GET /api/agents/status */
 function defaultAgentsStatus(): AgentsStatusResponse {
   const pipelineSet = new Set<string>(PIPELINE_AGENT_IDS);
   return {

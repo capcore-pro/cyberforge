@@ -29,6 +29,10 @@ from agents.research_agent import (
     extract_research_context,
     format_research_brief_for_prompt,
 )
+from agents.stitch_ai import (
+    StitchAgent,
+    format_stitch_mockups_for_prompt,
+)
 from agents.auto_fix_agent import AutoFixAgent
 from agents.bug_hunter_agent import BugHunterAgent, BugHuntReport
 from agents.coremind_agent import (
@@ -79,6 +83,7 @@ PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 AGENT_LABELS: dict[str, str] = {
     "architect": "ArchitectAI",
     "research": "ResearchAI",
+    "stitch": "StitchAI",
     "openhands": "OpenHands",
     "builder": "BuilderAI",
     "coremind": "CoreMindAI",
@@ -110,6 +115,7 @@ class PipelineState(TypedDict, total=False):
     playwright_enabled: bool | None
     lighthouse_enabled: bool | None
     research_enabled: bool | None
+    stitch_enabled: bool | None
     architect_plan: ArchitectPlan | None
     analysis: CoreMindAnalysis | None
     builder_provider: str | None
@@ -129,6 +135,7 @@ class PipelineState(TypedDict, total=False):
     lighthouse_report: Any
     lighthouse_autofix_loops: int
     research_brief: Any
+    stitch_result: Any
     validation_status: str | None
     personal_project: bool | None
     pages_project_slug: str | None
@@ -242,11 +249,13 @@ async def architect_node(
 
 
 def _generation_user_prompt(state: PipelineState) -> str:
-    """Prompt utilisateur enrichi par le brief ResearchAI si présent."""
+    """Prompt enrichi : ResearchAI + maquettes StitchAI + prompt utilisateur."""
     base = (state.get("prompt") or "").strip()
-    block = format_research_brief_for_prompt(state.get("research_brief"))
-    if block:
-        return f"{block}{base}"
+    research_block = format_research_brief_for_prompt(state.get("research_brief"))
+    stitch_block = format_stitch_mockups_for_prompt(state.get("stitch_result"))
+    prefix = f"{research_block}{stitch_block}"
+    if prefix:
+        return f"{prefix}{base}"
     return base
 
 
@@ -260,7 +269,9 @@ def _route_after_architect(state: PipelineState) -> str:
         return "finalize"
     if _research_requested(state):
         return "research"
-    return _route_after_research(state)
+    if _stitch_requested(state):
+        return "stitch"
+    return _route_post_stitch(state)
 
 
 def _research_requested(state: PipelineState) -> bool:
@@ -272,6 +283,20 @@ def _research_requested(state: PipelineState) -> bool:
 def _route_after_research(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
+    if _stitch_requested(state):
+        return "stitch"
+    return _route_post_stitch(state)
+
+
+def _stitch_requested(state: PipelineState) -> bool:
+    if state.get("stitch_enabled") is False:
+        return False
+    return get_settings().stitch_enabled
+
+
+def _route_post_stitch(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
     plan = state.get("architect_plan")
     if plan and _openhands_requested(state):
         return "openhands"
@@ -279,6 +304,76 @@ def _route_after_research(state: PipelineState) -> str:
     if mode in DIRECT_COREMIND_MODES:
         return "coremind"
     return "builder"
+
+
+async def stitch_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    plan = state.get("architect_plan")
+    if not plan:
+        return {"error": "État pipeline incomplet (architect_plan manquant pour StitchAI)."}
+
+    ctx = extract_research_context(state.get("prompt") or "", plan=plan)
+    await _step(
+        cb,
+        "stitch",
+        "start",
+        f"Maquettes Stitch — {ctx.get('nom_entreprise') or plan.project_type_label}…",
+    )
+    settings = _settings_from_config(config)
+    agent = StitchAgent(settings)
+
+    async def on_progress(message: str) -> None:
+        await _step(cb, "stitch", "start", message)
+
+    result = await agent.generate_mockups(
+        architect_plan=plan,
+        generation_mode=state.get("generation_mode"),
+        research_brief=state.get("research_brief"),
+        user_prompt=state.get("prompt") or "",
+        settings=settings,
+        on_progress=on_progress,
+    )
+
+    if result.skipped:
+        await _step(
+            cb,
+            "stitch",
+            "done",
+            result.skip_reason or "StitchAI ignoré.",
+            ok=True,
+            stitch_skipped=True,
+        )
+        return {"stitch_result": result}
+
+    if not result.success or not result.mockups:
+        await _step(
+            cb,
+            "stitch",
+            "done",
+            result.error or "Maquettes Stitch non générées — suite sans référence visuelle.",
+            ok=False,
+            stitch_skipped=True,
+        )
+        return {"stitch_result": result}
+
+    await _step(
+        cb,
+        "stitch",
+        "done",
+        f"{len(result.mockups)} maquette(s) Stitch prête(s).",
+        ok=True,
+        stitch_project_id=result.project_id,
+        stitch_mockup_count=len(result.mockups),
+        stitch_mockups=[m.model_dump() for m in result.mockups],
+    )
+    return {"stitch_result": result}
+
+
+def _route_after_stitch(state: PipelineState) -> str:
+    return _route_post_stitch(state)
 
 
 async def research_node(
@@ -1443,6 +1538,7 @@ def build_pipeline_graph() -> Any:
     graph = StateGraph(PipelineState)
     graph.add_node("architect", architect_node)
     graph.add_node("research", research_node)
+    graph.add_node("stitch", stitch_node)
     graph.add_node("openhands", openhands_node)
     graph.add_node("builder", builder_node)
     graph.add_node("coremind", coremind_node)
@@ -1461,6 +1557,7 @@ def build_pipeline_graph() -> Any:
         _route_after_architect,
         {
             "research": "research",
+            "stitch": "stitch",
             "openhands": "openhands",
             "coremind": "coremind",
             "builder": "builder",
@@ -1470,6 +1567,17 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         "research",
         _route_after_research,
+        {
+            "stitch": "stitch",
+            "openhands": "openhands",
+            "coremind": "coremind",
+            "builder": "builder",
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        "stitch",
+        _route_after_stitch,
         {
             "openhands": "openhands",
             "coremind": "coremind",
@@ -1544,6 +1652,7 @@ async def run_generation_pipeline(
     playwright_enabled: bool | None = None,
     lighthouse_enabled: bool | None = None,
     research_enabled: bool | None = None,
+    stitch_enabled: bool | None = None,
     project_id: str | None = None,
     inspiration_brief: str | None = None,
     personal_project: bool = False,
@@ -1570,6 +1679,7 @@ async def run_generation_pipeline(
         "playwright_enabled": playwright_enabled,
         "lighthouse_enabled": lighthouse_enabled,
         "research_enabled": research_enabled,
+        "stitch_enabled": stitch_enabled,
         "personal_project": personal_project,
         "pages_project_slug": (pages_project_slug or "").strip() or None,
         "project_title": (project_title or "").strip() or None,
