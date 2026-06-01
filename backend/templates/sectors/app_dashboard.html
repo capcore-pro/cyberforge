@@ -84,10 +84,14 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">{{APP_NAME}}</div>
       <nav class="sidebar-nav">
-        <a href="#dashboard" class="cf-nav-link active" data-cf-section="dashboard">📊 Dashboard</a>
-        <a href="#projects" class="cf-nav-link" data-cf-section="projects">📁 Projets</a>
-        <a href="#team" class="cf-nav-link" data-cf-section="team">👥 Équipe</a>
-        <a href="#settings" class="cf-nav-link" data-cf-section="settings">⚙️ Paramètres</a>
+        <a href="#dashboard" class="cf-nav-link active" data-cf-section="dashboard">Dashboard</a>
+        <a href="#interventions" class="cf-nav-link" data-cf-section="interventions">Interventions</a>
+        <a href="#devis" class="cf-nav-link" data-cf-section="devis">Devis</a>
+        <a href="#factures" class="cf-nav-link" data-cf-section="factures">Factures</a>
+        <a href="#clients" class="cf-nav-link" data-cf-section="clients">Clients</a>
+        <a href="#vehicules" class="cf-nav-link" data-cf-section="vehicules">Véhicules</a>
+        <a href="#equipe" class="cf-nav-link" data-cf-section="equipe">Équipe</a>
+        <a href="#parametres" class="cf-nav-link" data-cf-section="parametres">Paramètres</a>
       </nav>
       <div style="padding:1rem 1.25rem;color:var(--muted);font-size:0.8rem;border-top:1px solid var(--border)">{{CLIENT_NAME}}</div>
     </aside>
@@ -106,10 +110,16 @@
             <div class="stat-card"><div class="label">{{STAT_3_LABEL}}</div><div class="value">{{STAT_3_VALUE}}</div></div>
             <div class="stat-card"><div class="label">{{STAT_4_LABEL}}</div><div class="value">{{STAT_4_VALUE}}</div></div>
           </div>
+          <div class="panel" style="padding:1.25rem">
+            <h2>Vue d'ensemble</h2>
+            <p style="color:var(--muted);margin-top:0.5rem">Indicateurs atelier — utilisez le menu pour gérer interventions, devis et factures.</p>
+          </div>
+        </section>
+        <section data-cf-section="interventions">
           <div class="panel">
             <div class="panel-header">
               <h2>{{TABLE_TITLE}}</h2>
-              <button type="button" class="btn btn-primary" id="btnAdd" data-cf-add-label="Nouveau">+ Nouveau</button>
+              <button type="button" class="btn btn-primary" id="btnAdd" data-cf-add-label="Nouvelle intervention">+ Nouveau</button>
             </div>
             <table id="dataTable">
               <thead>
@@ -129,14 +139,23 @@
             </table>
           </div>
         </section>
-        <section data-cf-section="projects">
-          <div class="panel" style="padding:1.5rem"><h2>Projets</h2><p style="color:var(--muted);margin-top:0.75rem">Suivi des dossiers en cours — démo interactive.</p></div>
+        <section data-cf-section="devis">
+          <div class="panel" style="padding:1.25rem"><h2>Devis</h2><p style="color:var(--muted);margin-top:0.5rem">Devis en attente de validation client — démo interactive.</p></div>
         </section>
-        <section data-cf-section="team">
-          <div class="panel" style="padding:1.5rem"><h2>Équipe</h2><p style="color:var(--muted);margin-top:0.75rem">Mécaniciens et réception — démo interactive.</p></div>
+        <section data-cf-section="factures">
+          <div class="panel" style="padding:1.25rem"><h2>Factures</h2><p style="color:var(--muted);margin-top:0.5rem">Facturation et règlements — démo interactive.</p></div>
         </section>
-        <section data-cf-section="settings">
-          <div class="panel" style="padding:1.5rem"><h2>Paramètres</h2><p style="color:var(--muted);margin-top:0.75rem">Préférences de l'application — démo interactive.</p></div>
+        <section data-cf-section="clients">
+          <div class="panel" style="padding:1.25rem"><h2>Clients</h2><p style="color:var(--muted);margin-top:0.5rem">Carnet clients et historique — démo interactive.</p></div>
+        </section>
+        <section data-cf-section="vehicules">
+          <div class="panel" style="padding:1.25rem"><h2>Véhicules</h2><p style="color:var(--muted);margin-top:0.5rem">Parc et immatriculations — démo interactive.</p></div>
+        </section>
+        <section data-cf-section="equipe">
+          <div class="panel" style="padding:1.25rem"><h2>Équipe</h2><p style="color:var(--muted);margin-top:0.5rem">Mécaniciens et réception — démo interactive.</p></div>
+        </section>
+        <section data-cf-section="parametres">
+          <div class="panel" style="padding:1.25rem"><h2>Paramètres</h2><p style="color:var(--muted);margin-top:0.5rem">Préférences de l'application — démo interactive.</p></div>
         </section>
       </main>
     </div>

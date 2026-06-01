@@ -145,6 +145,48 @@ def resolve_pipeline_preview_html(
     return prepared, prepared
 
 
+def force_finalize_preview_from_assembled(
+    *,
+    state_assembled_html: str | None,
+    preview_html: str | None,
+    assembled_html: str | None,
+    sector_template_html: str | None,
+    generation: CodeGenerateResult | None = None,
+    title: str = "Démo CyberForge",
+    user_prompt: str = "",
+) -> tuple[str | None, str | None]:
+    """
+    Copie obligatoire assembled → preview_html (tous types de projets).
+    Évite le fallback mockup CyberForge si un HTML pipeline existe.
+    """
+    state_asm = _normalize_index_html(state_assembled_html or "") or ""
+    resolved_asm = _normalize_index_html(assembled_html or "") or ""
+    resolved_preview = _normalize_index_html(preview_html or "") or ""
+    sector = _normalize_index_html(sector_template_html or "") or ""
+
+    canonical = state_asm or resolved_asm or resolved_preview or sector
+    if not canonical and generation is not None:
+        preview_pair = resolve_pipeline_preview_html(
+            assembled_html=None,
+            preview_html=None,
+            sector_template_html=None,
+            generation=generation,
+            title=title,
+            user_prompt=user_prompt,
+        )
+        canonical = _normalize_index_html(preview_pair[0] or "") or ""
+
+    if not canonical:
+        return None, None
+
+    from tools.demo_preview_gate import prepare_internal_app_preview_html
+
+    prepared = prepare_internal_app_preview_html(canonical)
+    if not prepared.strip():
+        return None, None
+    return prepared, prepared
+
+
 def log_export_upload_source(
     *,
     source: str,

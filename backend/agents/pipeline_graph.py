@@ -2051,7 +2051,10 @@ async def finalize_node(
         return {"error": "Pipeline terminé sans résultat exploitable."}
 
     from agents.demo_quality import code_result_from_html
-    from tools.export_html_resolve import resolve_pipeline_preview_html
+    from tools.export_html_resolve import (
+        force_finalize_preview_from_assembled,
+        resolve_pipeline_preview_html,
+    )
     from tools.html_markdown import strip_markdown_code_fences
 
     if generation:
@@ -2086,6 +2089,29 @@ async def finalize_node(
         generation=generation,
         title=architect.project_type_label,
         user_prompt=state.get("prompt") or "",
+    )
+    preview_html, assembled_html = force_finalize_preview_from_assembled(
+        state_assembled_html=state.get("assembled_html"),
+        preview_html=preview_html,
+        assembled_html=assembled_html,
+        sector_template_html=sector_html,
+        generation=generation,
+        title=architect.project_type_label,
+        user_prompt=state.get("prompt") or "",
+    )
+    finalize_type = (
+        (getattr(architect, "pricing_category", None) or "").strip()
+        or (
+            architect.project_type.value
+            if hasattr(architect.project_type, "value")
+            else str(architect.project_type or "")
+        )
+    )
+    preview_bytes = len((preview_html or "").encode("utf-8"))
+    logger.info(
+        "[finalize] preview_html saved | bytes=%d | type=%s",
+        preview_bytes,
+        finalize_type or "unknown",
     )
     if preview_html and generation:
         generation = code_result_from_html(

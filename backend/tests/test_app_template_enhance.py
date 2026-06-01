@@ -43,3 +43,21 @@ def test_app_templates_have_interactive_markup() -> None:
         assert "data-cf-section" in html
         assert "openM(" not in html
         assert "function(){openM" not in html
+
+
+def test_app_dashboard_garage_sidebar_sections() -> None:
+    path = Path(__file__).resolve().parents[1] / "templates" / "sectors" / "app_dashboard.html"
+    html = path.read_text(encoding="utf-8")
+    for section in (
+        "dashboard",
+        "interventions",
+        "devis",
+        "factures",
+        "clients",
+        "vehicules",
+        "equipe",
+        "parametres",
+    ):
+        assert f'data-cf-section="{section}"' in html
+    assert 'id="tableBody"' in html
+    assert 'id="modalOverlay"' in html
