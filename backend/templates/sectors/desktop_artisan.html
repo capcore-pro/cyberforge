@@ -230,7 +230,9 @@
         document.getElementById('statusText').textContent = document.body.classList.contains('maximized') ? 'Agrandi' : 'Restauré';
       });
       document.getElementById('btnClose').addEventListener('click', function () {
-        if (confirm('Fermer ' + '{{APP_NAME}}' + ' ?')) document.getElementById('statusText').textContent = 'Fermeture…';
+        var appTitle = document.querySelector('.title-bar .title');
+        var appLabel = appTitle ? appTitle.textContent.replace(/^\s+|\s+$/g, '') : 'Application';
+        if (confirm('Fermer ' + appLabel + ' ?')) document.getElementById('statusText').textContent = 'Fermeture…';
       });
 
       document.querySelectorAll('.menu-item').forEach(function (item) {
@@ -252,16 +254,16 @@
         });
       });
 
-      var modules = { devis: '{{MODULE_1}}', clients: '{{MODULE_2}}', planning: '{{MODULE_3}}' };
       document.querySelectorAll('.module-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
           document.querySelectorAll('.module-btn').forEach(function (b) { b.classList.remove('active'); });
           btn.classList.add('active');
           var mod = btn.dataset.module;
+          var label = btn.textContent.replace(/^\s+|\s+$/g, '');
           document.querySelectorAll('.module-panel').forEach(function (p) { p.classList.add('panel-hidden'); });
           document.getElementById('panel-' + mod).classList.remove('panel-hidden');
-          document.getElementById('statusModule').textContent = modules[mod];
-          document.getElementById('statusText').textContent = 'Module actif : ' + modules[mod];
+          document.getElementById('statusModule').textContent = label;
+          document.getElementById('statusText').textContent = 'Module actif : ' + label;
         });
       });
 

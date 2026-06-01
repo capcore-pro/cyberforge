@@ -183,7 +183,6 @@
 
   <script>
     (function () {
-      var labels = { compta: '{{MODULE_1}}', rh: '{{MODULE_2}}', stock: '{{MODULE_3}}' };
       document.querySelectorAll('.menu-item').forEach(function (mi) {
         mi.addEventListener('click', function (e) {
           if (e.target.closest('.dropdown')) {
@@ -206,9 +205,10 @@
           document.querySelectorAll('.module-btn').forEach(function (b) { b.classList.remove('active'); });
           btn.classList.add('active');
           var m = btn.dataset.m;
+          var label = btn.textContent.replace(/^\s+|\s+$/g, '');
           document.querySelectorAll('.panel').forEach(function (p) { p.classList.add('hidden'); });
           document.getElementById('p-' + m).classList.remove('hidden');
-          document.getElementById('stMod').textContent = labels[m];
+          document.getElementById('stMod').textContent = label;
         };
       });
 

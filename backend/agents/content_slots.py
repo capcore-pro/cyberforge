@@ -527,11 +527,13 @@ def build_desktop_slots(
 ) -> dict[str, str]:
     modules = _DESKTOP_MODULES.get(template_id, _DESKTOP_MODULES["desktop_default"])
     app_name = brand[:40]
+    # Libellés modules : texte catalogue (contient « & ») — pas d'escape HTML
+    # (sinon &amp; visible dans la sidebar / barre de statut via JS).
     return {
         "APP_NAME": html_lib.escape(app_name),
         "CLIENT_NAME": html_lib.escape(brand),
         "PRIMARY_COLOR": ds.get("PRIMARY_COLOR", "#0078D4"),
-        "MODULE_1": html_lib.escape(modules[0]),
-        "MODULE_2": html_lib.escape(modules[1]),
-        "MODULE_3": html_lib.escape(modules[2]),
+        "MODULE_1": modules[0],
+        "MODULE_2": modules[1],
+        "MODULE_3": modules[2],
     }

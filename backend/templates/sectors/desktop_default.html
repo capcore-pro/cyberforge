@@ -109,7 +109,6 @@
 
   <script>
     (function () {
-      var names = { v1: '{{MODULE_1}}', v2: '{{MODULE_2}}', v3: '{{MODULE_3}}' };
       document.getElementById('wMin').onclick = function () { document.getElementById('statusMsg').textContent = 'Minimisé'; };
       document.getElementById('wMax').onclick = function () { document.getElementById('statusMsg').textContent = 'Maximisé'; };
       document.getElementById('wClose').onclick = function () {
@@ -119,10 +118,11 @@
         btn.onclick = function () {
           document.querySelectorAll('.mod').forEach(function (b) { b.classList.remove('active'); });
           btn.classList.add('active');
+          var label = btn.textContent.replace(/^\s+|\s+$/g, '');
           document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active'); });
           document.getElementById(btn.dataset.v).classList.add('active');
-          document.getElementById('statusMod').textContent = names[btn.dataset.v];
-          document.getElementById('statusMsg').textContent = 'Module : ' + names[btn.dataset.v];
+          document.getElementById('statusMod').textContent = label;
+          document.getElementById('statusMsg').textContent = 'Module : ' + label;
         };
       });
       document.getElementById('tSave').onclick = function () {
