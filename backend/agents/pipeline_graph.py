@@ -50,6 +50,7 @@ from agents.export_agent import ExportAgent
 from agents import database_ai
 from agents import auth_ai
 from agents import electron_ai
+from agents import payment_ai
 from config import Settings, get_settings
 from cockpit_sync import flush_project_costs
 from cost_tracker import set_architect_plan
@@ -90,6 +91,7 @@ NODE_DESIGN_SYSTEM = "design_system_ai"
 NODE_DATABASE = "database_ai"
 NODE_AUTH = "auth_ai"
 NODE_ELECTRON = "electron_ai"
+NODE_PAYMENT = "payment_ai"
 
 VITRINE_PIPELINE_ORDER: tuple[str, ...] = (
     "architect",
@@ -188,6 +190,7 @@ class PipelineState(TypedDict, total=False):
     database_schema: Any
     auth_schema: Any
     electron_files: Any
+    payment_config: Any
 
 
 def is_vitrine_generation_mode(state: PipelineState) -> bool:
@@ -404,6 +407,50 @@ async def auth_ai_node(
 
 def _should_run_electron_ai(state: PipelineState) -> bool:
     return (state.get("project_type") or "").strip().lower() == "application_desktop"
+
+
+def _should_run_payment_ai(state: PipelineState) -> bool:
+    pt = (state.get("project_type") or "").strip().lower()
+    desc = (state.get("prompt") or "").strip()
+    return payment_ai.detect_payment_type(desc, pt) != "none"
+
+
+async def payment_ai_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    await _step(cb, NODE_PAYMENT, "start", "Génération config paiements (Stripe)…")
+    try:
+        result = await payment_ai.run(
+            project_description=state.get("prompt") or "",
+            project_type=str(state.get("project_type") or ""),
+            database_schema=state.get("database_schema") if isinstance(state.get("database_schema"), dict) else {},
+        )
+    except Exception as exc:
+        logger.exception("PaymentAI erreur non bloquante: %s", exc)
+        await _step(
+            cb,
+            NODE_PAYMENT,
+            "done",
+            "PaymentAI indisponible — suite du pipeline.",
+            ok=True,
+            skipped=True,
+        )
+        return {}
+
+    if (result.get("payment_type") or "").strip().lower() == "none":
+        await _step(cb, NODE_PAYMENT, "done", "Paiement non requis — étape ignorée.", ok=True, skipped=True)
+        return {}
+
+    await _step(
+        cb,
+        NODE_PAYMENT,
+        "done",
+        str(result.get("summary") or "Configuration paiements générée."),
+        ok=True,
+    )
+    return {"payment_config": result}
 
 
 async def electron_ai_node(
@@ -723,12 +770,24 @@ def _route_after_auth_ai(state: PipelineState) -> str:
         return "finalize"
     if _should_run_electron_ai(state):
         return NODE_ELECTRON
+    if _should_run_payment_ai(state):
+        return NODE_PAYMENT
     if _research_requested(state):
         return "research"
     return NODE_DESIGN_SYSTEM
 
 
 def _route_after_electron_ai(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
+    if _should_run_payment_ai(state):
+        return NODE_PAYMENT
+    if _research_requested(state):
+        return "research"
+    return NODE_DESIGN_SYSTEM
+
+
+def _route_after_payment_ai(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
     if _research_requested(state):
@@ -2608,6 +2667,7 @@ def build_pipeline_graph() -> Any:
     graph.add_node(NODE_DATABASE, database_ai_node)
     graph.add_node(NODE_AUTH, auth_ai_node)
     graph.add_node(NODE_ELECTRON, electron_ai_node)
+    graph.add_node(NODE_PAYMENT, payment_ai_node)
     graph.add_node(NODE_DESIGN_SYSTEM, design_system_node)
     graph.add_node("extension_build", extension_build_node)
     graph.add_node("template_ai", template_ai_node)
@@ -2651,6 +2711,7 @@ def build_pipeline_graph() -> Any:
         NODE_AUTH,
         _route_after_auth_ai,
         {
+            NODE_PAYMENT: NODE_PAYMENT,
             "research": "research",
             NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,
             "finalize": "finalize",
@@ -2659,6 +2720,16 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         NODE_ELECTRON,
         _route_after_electron_ai,
+        {
+            NODE_PAYMENT: NODE_PAYMENT,
+            "research": "research",
+            NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        NODE_PAYMENT,
+        _route_after_payment_ai,
         {
             "research": "research",
             NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,

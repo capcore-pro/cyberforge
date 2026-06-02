@@ -138,6 +138,23 @@ async def generate_electron_files(body: ElectronFilesRequest) -> dict:
     )
 
 
+class PaymentConfigRequest(BaseModel):
+    project_description: str
+    project_type: str
+    database_schema: dict = {}
+
+
+@app.post("/api/payment-config")
+async def generate_payment_config(body: PaymentConfigRequest) -> dict:
+    from agents import payment_ai
+
+    return await payment_ai.run(
+        project_description=body.project_description,
+        project_type=body.project_type,
+        database_schema=body.database_schema or {},
+    )
+
+
 app.include_router(cockpit_router, prefix="/api/cockpit")
 app.include_router(media_router, prefix="/api/media")
 app.include_router(legal_router, prefix="/api/legal")
