@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 import time
 
+from pydantic import BaseModel
+
 logger = logging.getLogger(__name__)
 _startup_t0 = time.perf_counter()
 
@@ -83,6 +85,25 @@ app = create_app()
 logger.info("[startup] create_app done (%.0f ms)", (time.perf_counter() - _t_create) * 1000)
 
 _t_routers = time.perf_counter()
+
+
+class DatabaseSchemaRequest(BaseModel):
+    project_description: str
+    project_type: str
+    design_system: dict = {}
+
+
+@app.post("/api/database-schema")
+async def generate_database_schema(body: DatabaseSchemaRequest) -> dict:
+    from agents import database_ai
+
+    return await database_ai.run(
+        project_description=body.project_description,
+        project_type=body.project_type,
+        design_system=body.design_system or {},
+    )
+
+
 app.include_router(cockpit_router, prefix="/api/cockpit")
 app.include_router(media_router, prefix="/api/media")
 app.include_router(legal_router, prefix="/api/legal")

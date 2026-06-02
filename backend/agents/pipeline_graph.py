@@ -47,6 +47,7 @@ from agents.demo_quality import preview_html_from_generation
 from agents.visionui_agent import VisionUIAgent
 from agents.testpilot_agent import TestPilotAgent, testpilot_to_bug_report
 from agents.export_agent import ExportAgent
+from agents import database_ai
 from config import Settings, get_settings
 from cockpit_sync import flush_project_costs
 from cost_tracker import set_architect_plan
@@ -84,6 +85,7 @@ DIRECT_COREMIND_MODES = frozenset({"real_app"})
 # Étapes optionnelles : research (settings.research_enabled), stitch (stitch_enabled).
 # Identifiants de nœuds LangGraph (≠ clés du state TypedDict)
 NODE_DESIGN_SYSTEM = "design_system_ai"
+NODE_DATABASE = "database_ai"
 
 VITRINE_PIPELINE_ORDER: tuple[str, ...] = (
     "architect",
@@ -138,6 +140,7 @@ class PipelineState(TypedDict, total=False):
     prompt: str
     inspiration_brief: str | None
     project_id: str | None
+    project_type: str | None
     project_type_hint: ProjectType | None
     # "client_demo" (défaut) → pipeline HTML premium ; "real_app" → React/Next.js
     generation_mode: str | None
@@ -178,6 +181,7 @@ class PipelineState(TypedDict, total=False):
     artifact_download_url: str | None
     result: CoreMindRunResult | None
     error: str | None
+    database_schema: Any
 
 
 def is_vitrine_generation_mode(state: PipelineState) -> bool:
@@ -283,10 +287,67 @@ async def architect_node(
     project_id = state.get("project_id")
     if project_id:
         set_architect_plan(str(project_id), plan)
+    mode = (state.get("generation_mode") or "client_demo").strip().lower()
     return {
         "architect_plan": plan,
         "analysis": coremind_analysis,
+        "project_type": "vitrine_next" if mode == "vitrine_next" else plan.project_type.value,
     }
+
+
+def _should_run_database_ai(state: PipelineState) -> bool:
+    """
+    Exécute DatabaseAI après ArchitectAI sauf:
+    - vitrine_next (mode Next.js)
+    - extension_navigateur
+    """
+    pt = (state.get("project_type") or "").strip().lower()
+    return pt not in ("vitrine_next", "extension_navigateur")
+
+
+async def database_ai_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    await _step(cb, NODE_DATABASE, "start", "Génération du schéma Supabase…")
+    plan = state.get("architect_plan")
+    if not plan:
+        await _step(cb, NODE_DATABASE, "done", "Plan ArchitectAI manquant — étape ignorée.", ok=True)
+        return {}
+
+    project_type = (
+        plan.project_type.value
+        if hasattr(plan.project_type, "value")
+        else str(plan.project_type)
+    )
+    try:
+        schema = await database_ai.run(
+            project_description=state.get("prompt") or "",
+            project_type=project_type,
+            design_system=state.get("design_system")
+            if isinstance(state.get("design_system"), dict)
+            else {},
+        )
+    except Exception as exc:
+        logger.exception("DatabaseAI erreur non bloquante: %s", exc)
+        await _step(
+            cb,
+            NODE_DATABASE,
+            "done",
+            "DatabaseAI indisponible — suite du pipeline.",
+            ok=True,
+            skipped=True,
+        )
+        return {}
+    await _step(
+        cb,
+        NODE_DATABASE,
+        "done",
+        str(schema.get("summary") or "Schéma Supabase généré."),
+        ok=True,
+    )
+    return {"database_schema": schema}
 
 
 def _generation_user_prompt(state: PipelineState) -> str:
@@ -548,6 +609,16 @@ def detect_sector_from_prompt_for_design(prompt: str, plan: ArchitectPlan) -> st
 
 def _route_after_architect(state: PipelineState) -> str:
     """ResearchAI (si activé) juste après Architect — avant loi visuelle."""
+    if state.get("error"):
+        return "finalize"
+    if _should_run_database_ai(state):
+        return NODE_DATABASE
+    if _research_requested(state):
+        return "research"
+    return NODE_DESIGN_SYSTEM
+
+
+def _route_after_database_ai(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
     if _research_requested(state):
@@ -2424,6 +2495,7 @@ def build_pipeline_graph() -> Any:
     """
     graph = StateGraph(PipelineState)
     graph.add_node("architect", architect_node)
+    graph.add_node(NODE_DATABASE, database_ai_node)
     graph.add_node(NODE_DESIGN_SYSTEM, design_system_node)
     graph.add_node("extension_build", extension_build_node)
     graph.add_node("template_ai", template_ai_node)
@@ -2446,6 +2518,16 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         "architect",
         _route_after_architect,
+        {
+            NODE_DATABASE: NODE_DATABASE,
+            "research": "research",
+            NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        NODE_DATABASE,
+        _route_after_database_ai,
         {
             "research": "research",
             NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,
