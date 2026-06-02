@@ -1,0 +1,31 @@
+{
+  "tables_found": [
+    "clients",
+    "demos",
+    "devis",
+    "ecommerce_order_items",
+    "ecommerce_orders",
+    "ecommerce_products",
+    "factures",
+    "generations",
+    "managed_project_auth",
+    "managed_project_runs",
+    "managed_projects",
+    "notifications",
+    "projects",
+    "reservation_availability",
+    "reservation_blocks",
+    "reservation_services",
+    "reservations",
+    "transactions"
+  ],
+  "truncated": {
+    "transactions": 0,
+    "devis": 0,
+    "factures": 0,
+    "notifications": 0
+  },
+  "fake_deleted": {},
+  "skipped": [],
+  "errors": []
+}

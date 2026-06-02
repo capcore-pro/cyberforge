@@ -63,6 +63,9 @@ export interface GeneratorSessionState {
   personalPriceEur: number | null;
   personalCommercialDescription: string;
   personalDraftTitle: string;
+  database_schema: any | null;
+  auth_schema: any | null;
+  payment_config: any | null;
 }
 
 const initialSession = (): GeneratorSessionState => ({
@@ -102,6 +105,9 @@ const initialSession = (): GeneratorSessionState => ({
   personalPriceEur: null,
   personalCommercialDescription: "",
   personalDraftTitle: "",
+  database_schema: null,
+  auth_schema: null,
+  payment_config: null,
 });
 
 interface GeneratorSessionContextValue extends GeneratorSessionState {

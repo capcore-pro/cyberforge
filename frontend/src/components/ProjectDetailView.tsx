@@ -37,6 +37,7 @@ import {
 import { copyTextToClipboard } from "@/lib/generation-export";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
 import { LighthouseScorePanel } from "@/components/LighthouseScorePanel";
+import { DataPaymentPanel } from "@/components/DataPaymentPanel";
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
 
@@ -127,6 +128,12 @@ export function ProjectDetailView({
 
   const playwrightReport = getPlaywrightReport(projectReportKey);
   const lighthouseReport = getLighthouseReport(projectReportKey);
+
+  useEffect(() => {
+    // Debug temporaire : vérifier les champs persistés dans le projet
+    // eslint-disable-next-line no-console
+    console.log("[ProjectDetail] project loaded", project);
+  }, [project]);
 
   useEffect(() => {
     if (!showClientStripe || !project.managedId) {
@@ -613,6 +620,12 @@ export function ProjectDetailView({
           </div>
         ) : null}
       </section>
+
+      <DataPaymentPanel
+        databaseSchema={(project as any).databaseSchema ?? null}
+        authSchema={(project as any).authSchema ?? null}
+        paymentConfig={(project as any).paymentConfig ?? null}
+      />
 
       {duplicateError ? (
         <p className="rounded-card border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-200">

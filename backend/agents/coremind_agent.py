@@ -323,6 +323,18 @@ class CoreMindRunResult(BaseModel):
     demo_token: str | None = Field(default=None)
     demo_password: str | None = Field(default=None)
     unlock_url: str | None = Field(default=None)
+    database_schema: dict[str, Any] | None = Field(
+        default=None,
+        description="Schéma Supabase généré (DatabaseAI).",
+    )
+    auth_schema: dict[str, Any] | None = Field(
+        default=None,
+        description="Schéma Auth/RLS généré (AuthAI).",
+    )
+    payment_config: dict[str, Any] | None = Field(
+        default=None,
+        description="Configuration Stripe générée (PaymentAI).",
+    )
 
 
 class CoreMindAgent(BaseAgent):

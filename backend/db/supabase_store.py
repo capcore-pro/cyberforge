@@ -571,6 +571,16 @@ class SupabaseStore:
                     user_prompt=prompt,
                 )
 
+        analysis_payload: dict[str, Any] = run_result.analysis.model_dump()
+        # Ajoute les schémas générés (DatabaseAI/AuthAI/PaymentAI) dans le JSON analysis
+        # pour qu'ils soient persistés sans migration SQL.
+        if isinstance(getattr(run_result, "database_schema", None), dict):
+            analysis_payload["database_schema"] = getattr(run_result, "database_schema")
+        if isinstance(getattr(run_result, "auth_schema", None), dict):
+            analysis_payload["auth_schema"] = getattr(run_result, "auth_schema")
+        if isinstance(getattr(run_result, "payment_config", None), dict):
+            analysis_payload["payment_config"] = getattr(run_result, "payment_config")
+
         payload = {
             "project_id": project_id,
             "prompt": prompt,
@@ -584,7 +594,7 @@ class SupabaseStore:
             "code": gen.code,
             "files": files,
             "stack": gen.stack,
-            "analysis": run_result.analysis.model_dump(),
+            "analysis": analysis_payload,
             "generation_summary": gen.summary,
             "planned_models": run_result.planned_models,
             "preview_html": preview_html,

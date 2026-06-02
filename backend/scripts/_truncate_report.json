@@ -1,0 +1,86 @@
+{
+  "ecommerce_order_items": {
+    "deleted": 0,
+    "error": null,
+    "target": false,
+    "prerequisite": true
+  },
+  "ecommerce_orders": {
+    "deleted": 0,
+    "error": null,
+    "target": false,
+    "prerequisite": true
+  },
+  "managed_project_runs": {
+    "deleted": 9,
+    "error": null,
+    "target": false,
+    "prerequisite": true
+  },
+  "managed_project_auth": {
+    "deleted": 0,
+    "error": null,
+    "target": false,
+    "prerequisite": true
+  },
+  "reservation_blocks": {
+    "deleted": 0,
+    "error": null,
+    "target": false,
+    "prerequisite": true
+  },
+  "reservations": {
+    "deleted": 0,
+    "error": null,
+    "target": false,
+    "prerequisite": true
+  },
+  "demos": {
+    "deleted": 2,
+    "error": null,
+    "target": true,
+    "prerequisite": false
+  },
+  "generations": {
+    "deleted": 70,
+    "error": null,
+    "target": true,
+    "prerequisite": false
+  },
+  "managed_projects": {
+    "deleted": 9,
+    "error": null,
+    "target": true,
+    "prerequisite": false
+  },
+  "projects": {
+    "deleted": 30,
+    "error": null,
+    "target": true,
+    "prerequisite": false
+  },
+  "ecommerce_products": {
+    "deleted": 0,
+    "error": null,
+    "target": true,
+    "prerequisite": false
+  },
+  "devis": {
+    "deleted": null,
+    "error": null,
+    "target": true,
+    "prerequisite": false
+  },
+  "factures": {
+    "deleted": null,
+    "error": null,
+    "target": true,
+    "prerequisite": false
+  },
+  "transactions": {
+    "deleted": null,
+    "error": null,
+    "target": true,
+    "prerequisite": false
+  }
+}

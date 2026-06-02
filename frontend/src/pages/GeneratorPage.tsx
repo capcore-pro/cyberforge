@@ -31,6 +31,7 @@ import { savePlaywrightReport } from "@/lib/playwright-reports";
 import { saveLighthouseReport } from "@/lib/lighthouse-reports";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
 import { LighthouseScorePanel } from "@/components/LighthouseScorePanel";
+import { DataPaymentPanel } from "@/components/DataPaymentPanel";
 import {
   createClientDemo,
   type CreateDemoResponse,
@@ -210,6 +211,9 @@ export function GeneratorPage({
     personalPriceEur,
     personalCommercialDescription,
     personalDraftTitle,
+    database_schema,
+    auth_schema,
+    payment_config,
     patch,
     applyPipelineStep,
   } = useGeneratorSession();
@@ -1524,6 +1528,12 @@ export function GeneratorPage({
                 />
               </div>
             ) : null}
+
+            <DataPaymentPanel
+              databaseSchema={database_schema}
+              authSchema={auth_schema}
+              paymentConfig={payment_config}
+            />
 
             {result ? (
               <div className="space-y-5">

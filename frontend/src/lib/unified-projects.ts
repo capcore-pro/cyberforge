@@ -62,6 +62,9 @@ export interface UnifiedProject {
   clientId?: string | null;
   projectType?: ProjectType;
   generationMode?: GenerationMode;
+  databaseSchema?: unknown;
+  authSchema?: unknown;
+  paymentConfig?: unknown;
 }
 
 export type UnifiedProjectTypeFilter = "all" | UnifiedProjectType;
@@ -201,6 +204,7 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
 
   const detail = await fetchProjectDetail(project.id);
   const latestGen = detail.ok ? detail.data?.generations?.[0] : undefined;
+  const analysis = latestGen?.analysis as any;
   if (latestGen) {
     generationId = latestGen.id;
     prompt = latestGen.prompt?.trim() || prompt;
@@ -231,6 +235,9 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
     clientId,
     projectType: project.project_type,
     generationMode: status === "demo" ? "client_demo" : "real_app",
+    databaseSchema: analysis?.database_schema ?? null,
+    authSchema: analysis?.auth_schema ?? null,
+    paymentConfig: analysis?.payment_config ?? null,
   };
 }
 

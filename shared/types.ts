@@ -135,6 +135,12 @@ export interface CoreMindResponse {
   complexity_score: number;
   next_steps: string[];
   summary: string;
+  /** Schéma Supabase généré (DatabaseAI) — stocké dans analysis Supabase. */
+  database_schema?: unknown;
+  /** Schéma Auth/RLS généré (AuthAI) — stocké dans analysis Supabase. */
+  auth_schema?: unknown;
+  /** Configuration Stripe générée (PaymentAI) — stocké dans analysis Supabase. */
+  payment_config?: unknown;
 }
 
 /** Fichier généré par CoreMindAI (Claude) */

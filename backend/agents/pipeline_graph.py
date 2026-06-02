@@ -2647,6 +2647,15 @@ async def finalize_node(
         demo_token=demo_token,
         demo_password=demo_password,
         unlock_url=unlock_url,
+        database_schema=state.get("database_schema")
+        if isinstance(state.get("database_schema"), dict)
+        else None,
+        auth_schema=state.get("auth_schema")
+        if isinstance(state.get("auth_schema"), dict)
+        else None,
+        payment_config=state.get("payment_config")
+        if isinstance(state.get("payment_config"), dict)
+        else None,
     )
     await _step(cb, "finalize", "done", "Génération terminée.")
     return {"result": result}

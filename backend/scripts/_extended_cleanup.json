@@ -1,0 +1,11 @@
+{
+  "deleted": {
+    "transactions": "404",
+    "devis": "404",
+    "factures": "404",
+    "notifications": 0,
+    "demos": 60,
+    "projects": 1
+  },
+  "errors": []
+}
