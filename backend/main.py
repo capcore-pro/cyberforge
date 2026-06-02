@@ -121,6 +121,23 @@ async def generate_auth_schema(body: AuthSchemaRequest) -> dict:
     )
 
 
+class ElectronFilesRequest(BaseModel):
+    project_description: str
+    assembled_html: str
+    database_schema: dict = {}
+
+
+@app.post("/api/electron-files")
+async def generate_electron_files(body: ElectronFilesRequest) -> dict:
+    from agents import electron_ai
+
+    return await electron_ai.run(
+        project_description=body.project_description,
+        assembled_html=body.assembled_html,
+        database_schema=body.database_schema or {},
+    )
+
+
 app.include_router(cockpit_router, prefix="/api/cockpit")
 app.include_router(media_router, prefix="/api/media")
 app.include_router(legal_router, prefix="/api/legal")
