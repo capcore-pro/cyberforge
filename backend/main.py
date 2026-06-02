@@ -104,6 +104,23 @@ async def generate_database_schema(body: DatabaseSchemaRequest) -> dict:
     )
 
 
+class AuthSchemaRequest(BaseModel):
+    project_description: str
+    project_type: str
+    database_schema: dict = {}
+
+
+@app.post("/api/auth-schema")
+async def generate_auth_schema(body: AuthSchemaRequest) -> dict:
+    from agents import auth_ai
+
+    return await auth_ai.run(
+        project_description=body.project_description,
+        project_type=body.project_type,
+        database_schema=body.database_schema or {},
+    )
+
+
 app.include_router(cockpit_router, prefix="/api/cockpit")
 app.include_router(media_router, prefix="/api/media")
 app.include_router(legal_router, prefix="/api/legal")

@@ -48,6 +48,7 @@ from agents.visionui_agent import VisionUIAgent
 from agents.testpilot_agent import TestPilotAgent, testpilot_to_bug_report
 from agents.export_agent import ExportAgent
 from agents import database_ai
+from agents import auth_ai
 from config import Settings, get_settings
 from cockpit_sync import flush_project_costs
 from cost_tracker import set_architect_plan
@@ -86,6 +87,7 @@ DIRECT_COREMIND_MODES = frozenset({"real_app"})
 # Identifiants de nœuds LangGraph (≠ clés du state TypedDict)
 NODE_DESIGN_SYSTEM = "design_system_ai"
 NODE_DATABASE = "database_ai"
+NODE_AUTH = "auth_ai"
 
 VITRINE_PIPELINE_ORDER: tuple[str, ...] = (
     "architect",
@@ -182,6 +184,7 @@ class PipelineState(TypedDict, total=False):
     result: CoreMindRunResult | None
     error: str | None
     database_schema: Any
+    auth_schema: Any
 
 
 def is_vitrine_generation_mode(state: PipelineState) -> bool:
@@ -348,6 +351,52 @@ async def database_ai_node(
         ok=True,
     )
     return {"database_schema": schema}
+
+
+def _should_run_auth_ai(state: PipelineState) -> bool:
+    pt = (state.get("project_type") or "").strip().lower()
+    desc = (state.get("prompt") or "").strip()
+    return auth_ai.detect_auth_type(desc, pt) != "public"
+
+
+async def auth_ai_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cb = _callback_from_config(config)
+    await _step(cb, NODE_AUTH, "start", "Génération du schéma Auth/RLS…")
+
+    try:
+        schema = await auth_ai.run(
+            project_description=state.get("prompt") or "",
+            project_type=str(state.get("project_type") or ""),
+            database_schema=state.get("database_schema") if isinstance(state.get("database_schema"), dict) else {},
+        )
+    except Exception as exc:
+        logger.exception("AuthAI erreur non bloquante: %s", exc)
+        await _step(
+            cb,
+            NODE_AUTH,
+            "done",
+            "AuthAI indisponible — suite du pipeline.",
+            ok=True,
+            skipped=True,
+        )
+        return {}
+
+    # Skip si public (contrat demandé)
+    if (schema.get("auth_type") or "").strip().lower() == "public":
+        await _step(cb, NODE_AUTH, "done", "Auth public — étape ignorée.", ok=True, skipped=True)
+        return {}
+
+    await _step(
+        cb,
+        NODE_AUTH,
+        "done",
+        str(schema.get("summary") or "Schéma Auth/RLS généré."),
+        ok=True,
+    )
+    return {"auth_schema": schema}
 
 
 def _generation_user_prompt(state: PipelineState) -> str:
@@ -619,6 +668,16 @@ def _route_after_architect(state: PipelineState) -> str:
 
 
 def _route_after_database_ai(state: PipelineState) -> str:
+    if state.get("error"):
+        return "finalize"
+    if _should_run_auth_ai(state):
+        return NODE_AUTH
+    if _research_requested(state):
+        return "research"
+    return NODE_DESIGN_SYSTEM
+
+
+def _route_after_auth_ai(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
     if _research_requested(state):
@@ -2496,6 +2555,7 @@ def build_pipeline_graph() -> Any:
     graph = StateGraph(PipelineState)
     graph.add_node("architect", architect_node)
     graph.add_node(NODE_DATABASE, database_ai_node)
+    graph.add_node(NODE_AUTH, auth_ai_node)
     graph.add_node(NODE_DESIGN_SYSTEM, design_system_node)
     graph.add_node("extension_build", extension_build_node)
     graph.add_node("template_ai", template_ai_node)
@@ -2528,6 +2588,16 @@ def build_pipeline_graph() -> Any:
     graph.add_conditional_edges(
         NODE_DATABASE,
         _route_after_database_ai,
+        {
+            NODE_AUTH: NODE_AUTH,
+            "research": "research",
+            NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,
+            "finalize": "finalize",
+        },
+    )
+    graph.add_conditional_edges(
+        NODE_AUTH,
+        _route_after_auth_ai,
         {
             "research": "research",
             NODE_DESIGN_SYSTEM: NODE_DESIGN_SYSTEM,
