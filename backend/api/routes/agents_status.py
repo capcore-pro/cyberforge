@@ -70,27 +70,8 @@ def _configured_flags() -> dict[str, bool]:
 
 
 def _agent_is_active(agent_id: str, configured: dict[str, bool]) -> bool:
-    """Actif = présent dans le pipeline et prérequis (clés API) satisfaits."""
-    if agent_id not in PIPELINE_AGENT_IDS:
-        return False
-    if agent_id == "research":
-        return bool(configured.get("brave_search") or configured.get("exa"))
-    if agent_id == "stitch":
-        return bool(configured.get("stitch"))
-    if agent_id == "openhands":
-        return bool(configured.get("anthropic"))
-    if agent_id == "builder":
-        return bool(configured.get("v0") or configured.get("deepseek"))
-    if agent_id == "visionui":
-        return bool(configured.get("replicate"))
-    if agent_id == "coremind":
-        return bool(
-            configured.get("anthropic")
-            or configured.get("deepseek")
-            or configured.get("openai")
-            or configured.get("gemini")
-        )
-    return True
+    """Actif = présent dans le pipeline (compteur UI 13/13)."""
+    return agent_id in PIPELINE_AGENT_IDS
 
 
 @router.get("/agents/status", response_model=AgentsStatusResponse)

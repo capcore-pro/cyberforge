@@ -35,6 +35,11 @@ _IMG_SRC_RE = re.compile(
     r'(<img\b[^>]*\bsrc=["\'])([^"\']+)(["\'][^>]*>)',
     re.IGNORECASE,
 )
+_IMAGE_PLACEHOLDER_RE = re.compile(r"\{\{IMAGE_[A-Z0-9_]+\}\}")
+_BG_URL_PLACEHOLDER_RE = re.compile(
+    r"url\(\s*['\"]?\{\{IMAGE_[A-Z0-9_]+\}\}['\"]?\s*\)",
+    re.IGNORECASE,
+)
 _FEATURE_ICON_RE = re.compile(
     r'(<div\s+class=["\'][^"\']*cf-feature-icon[^"\']*["\']>\s*)([^<]{1,8})(\s*</div>)',
     re.IGNORECASE,
@@ -97,8 +102,16 @@ def _visual_query(plan: ArchitectPlan | None, prompt: str | None) -> tuple[str, 
 
 
 def _is_replaceable_image_url(url: str) -> bool:
-    low = url.lower()
+    low = (url or "").strip().lower()
+    if not low or low in ("#", "about:blank"):
+        return True
+    if "{{" in low or "placeholder" in low:
+        return True
+    if low.startswith("data:") and len(low) < 120:
+        return True
     if _UNSPLASH_HOST in low:
+        return True
+    if "pexels.com" in low or "images.pexels.com" in low:
         return True
     return any(host in low for host in _PLACEHOLDER_HOSTS)
 
@@ -358,21 +371,55 @@ async def _inject_illustrations(
     return out
 
 
-def _inject_photos(html: str, photo_urls: list[str]) -> str:
+def _inject_image_placeholders(html: str, photo_urls: list[str]) -> tuple[str, int]:
+    """Remplace {{IMAGE_HERO}}, {{IMAGE_SECTION_1}}, etc. et url({{IMAGE_*}})."""
     if not photo_urls:
-        return html
+        return html, 0
+    if not (
+        _IMAGE_PLACEHOLDER_RE.search(html) or _BG_URL_PLACEHOLDER_RE.search(html)
+    ):
+        return html, 0
     index = 0
+    injected = 0
+
+    def next_url() -> str:
+        nonlocal index
+        url = photo_urls[index % len(photo_urls)]
+        index += 1
+        return escape(url, quote=True)
+
+    def replace_placeholder(_match: re.Match[str]) -> str:
+        nonlocal injected
+        injected += 1
+        return next_url()
+
+    def replace_bg(_match: re.Match[str]) -> str:
+        nonlocal injected
+        injected += 1
+        return f"url('{next_url()}')"
+
+    out = _BG_URL_PLACEHOLDER_RE.sub(replace_bg, html)
+    out = _IMAGE_PLACEHOLDER_RE.sub(replace_placeholder, out)
+    return out, injected
+
+
+def _inject_photos(html: str, photo_urls: list[str]) -> tuple[str, int]:
+    if not photo_urls:
+        return html, 0
+    index = 0
+    replaced = 0
 
     def replacer(match: re.Match[str]) -> str:
-        nonlocal index
+        nonlocal index, replaced
         src = match.group(2)
         if not _is_replaceable_image_url(src):
             return match.group(0)
         url = photo_urls[index % len(photo_urls)]
         index += 1
+        replaced += 1
         return f"{match.group(1)}{escape(url, quote=True)}{match.group(3)}"
 
-    return _IMG_SRC_RE.sub(replacer, html)
+    return _IMG_SRC_RE.sub(replacer, html), replaced
 
 
 async def enrich_html_with_toolbox(
@@ -398,7 +445,17 @@ async def enrich_html_with_toolbox(
     photo_urls = await _resolve_photo_pool(
         query, secteur, settings=resolved, project_id=project_id, stats=stats
     )
-    out = _inject_photos(trimmed, photo_urls)
+    out, placeholder_count = _inject_image_placeholders(trimmed, photo_urls)
+    out, img_count = _inject_photos(out, photo_urls)
+    injected_total = placeholder_count + img_count
+    if injected_total:
+        logger.info("[VisionUI] %d images injectées", injected_total)
+        logger.debug(
+            "[VisionUI] détail — placeholders=%d img=%d source=%s",
+            placeholder_count,
+            img_count,
+            stats.photo_source or "stock",
+        )
     out = await _inject_icons(out, settings=resolved, project_id=project_id, stats=stats)
     out = await _inject_illustrations(
         out, settings=resolved, project_id=project_id, stats=stats

@@ -35,10 +35,11 @@ def test_inject_photos_replaces_unsplash() -> None:
         '<img src="https://images.unsplash.com/photo-1?w=1200" alt="hero" />'
         '<img src="https://example.com/logo.png" alt="logo" />'
     )
-    out = _inject_photos(
+    out, count = _inject_photos(
         html,
         ["https://media.local/pexels_1.jpg", "https://media.local/pexels_2.jpg"],
     )
+    assert count == 1
     assert "media.local/pexels_1.jpg" in out
     assert "example.com/logo.png" in out
 

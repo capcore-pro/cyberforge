@@ -15,7 +15,11 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agents.base_agent import BaseAgent
-from agents.design_system_ai import DesignSystemJSON, design_system_to_css_variables
+from agents.design_system_ai import (
+    DesignSystemJSON,
+    apply_design_system_to_html,
+)
+from tools.project_title import short_project_name
 from agents.template_ai import fill_template_placeholders
 from core.agent_contract import AgentContractError, AgentResult
 from agents.content_slots import (
@@ -40,6 +44,74 @@ _AGENT_ID = "content_ai"
 _AGENT_NAME = "ContentAI"
 
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
+
+
+def inject_stripe(html: str, payment_config: Any | None) -> str:
+    """
+    Injecte Stripe Checkout dans un HTML si payment_config l'exige.
+
+    - Ajoute <script src="https://js.stripe.com/v3/"></script> dans <head>
+    - Injecte payment_config["frontend_code"] avant </body>
+    - Remplace {{STRIPE_PUBLIC_KEY}} par pk_test_VOTRE_CLE_STRIPE (+ commentaire FR)
+    """
+    if not (html or "").strip():
+        return html
+    if not isinstance(payment_config, dict):
+        return html
+    payment_type = str(payment_config.get("payment_type") or "").strip().lower()
+    if not payment_type or payment_type == "none":
+        return html
+
+    out = html
+    stripe_script = '<script src="https://js.stripe.com/v3/"></script>'
+    if "js.stripe.com/v3" not in out:
+        if "</head>" in out.lower():
+            out = re.sub(
+                r"</head>",
+                f"  {stripe_script}\n</head>",
+                out,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            out = f"{stripe_script}\n{out}"
+
+    if "{{STRIPE_PUBLIC_KEY}}" in out:
+        out = out.replace("{{STRIPE_PUBLIC_KEY}}", "pk_test_VOTRE_CLE_STRIPE")
+        if "cf-stripe-public-key-hint" not in out and "</head>" in out.lower():
+            hint = (
+                '<!-- cf-stripe-public-key-hint: remplacez pk_test_VOTRE_CLE_STRIPE '
+                "par votre clé publique Stripe (pk_...) -->\n"
+            )
+            out = re.sub(r"</head>", f"  {hint}</head>", out, count=1, flags=re.I)
+
+    frontend_code = payment_config.get("frontend_code")
+    if isinstance(frontend_code, str) and frontend_code.strip():
+        if "cf-stripe-frontend-code" not in out:
+            if "<script" in frontend_code.lower():
+                snippet = f"\n<!-- cf-stripe-frontend-code -->\n{frontend_code.strip()}\n"
+            else:
+                snippet = (
+                    "\n<script id=\"cf-stripe-frontend-code\">\n"
+                    f"{frontend_code.strip()}\n"
+                    "</script>\n"
+                )
+            if "</body>" in out.lower():
+                out = re.sub(r"</body>", f"{snippet}</body>", out, count=1, flags=re.I)
+            else:
+                out = f"{out}\n{snippet}"
+
+    js_len = (
+        len(frontend_code.strip())
+        if isinstance(frontend_code, str) and frontend_code.strip()
+        else 0
+    )
+    logger.info(
+        "[PaymentAI] Stripe injecté: type=%s (%d caractères JS)",
+        payment_type,
+        js_len,
+    )
+    return out
 
 _FORBIDDEN_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\blorem\s+ipsum\b", re.I), "lorem_ipsum"),
@@ -252,6 +324,7 @@ def build_content_slots(
     design_system: Any | None = None,
     user_prompt: str = "",
     template_id: str = "vitrine_default",
+    project_name: str = "",
 ) -> dict[str, str]:
     """Construit toutes les valeurs de placeholders pour ContentAI."""
     research = _coerce_research_dict(research_content)
@@ -268,6 +341,12 @@ def build_content_slots(
         city=city_clean if city_clean != "votre ville" else profile.city,
         user_prompt=user_prompt,
     )
+    if (project_name or "").strip():
+        brand = project_name.strip()
+    elif user_prompt:
+        inferred = short_project_name(user_prompt)
+        if inferred and inferred != "Projet":
+            brand = inferred
     sector_label = humanize_sector_label(
         sector or research.get("secteur") or profile.sector,
         profile.keywords,
@@ -357,35 +436,41 @@ def build_content_slots(
 
 def _apply_design_system_css(html: str, design_system: Any | None) -> str:
     """Injecte / renforce les variables CSS de la loi visuelle."""
-    if not design_system:
-        return html
-    try:
-        if isinstance(design_system, dict):
-            doc = DesignSystemJSON.model_validate(design_system)
-        elif isinstance(design_system, DesignSystemJSON):
-            doc = design_system
-        else:
-            return html
-    except Exception:
-        return html
+    return apply_design_system_to_html(html, design_system, log_prefix="ContentAI")
 
-    css_block = design_system_to_css_variables(doc)
-    link = f'<link rel="stylesheet" href="{doc.google_fonts_url}" />\n'
-    style = f'<style id="cf-design-system">{css_block}</style>\n'
-    snippet = link + style
 
-    if "cf-design-system" in html:
-        html = re.sub(
-            r'<style id="cf-design-system">[\s\S]*?</style>',
-            style.strip(),
-            html,
+def _apply_project_name_to_html(html: str, project_name: str) -> str:
+    """Applique le nom court au <title> et au premier <h1> (sidebar / hero)."""
+    name = (project_name or "").strip()
+    if not name or len(name) < 2:
+        return html
+    escaped = html_lib.escape(name)
+    out = html
+    if re.search(r"<title[^>]*>", out, re.I):
+        out = re.sub(
+            r"(<title[^>]*>)[^<]*(</title>)",
+            rf"\1{escaped}\2",
+            out,
             count=1,
+            flags=re.I,
         )
-    elif "</head>" in html.lower():
-        html = re.sub(r"</head>", f"  {snippet}</head>", html, count=1, flags=re.I)
-    else:
-        html = snippet + html
-    return html
+    elif "</head>" in out.lower():
+        out = re.sub(
+            r"</head>",
+            f"  <title>{escaped}</title>\n</head>",
+            out,
+            count=1,
+            flags=re.I,
+        )
+    if re.search(r"<h1[^>]*>", out, re.I):
+        out = re.sub(
+            r"(<h1[^>]*>)[^<]{0,240}(</h1>)",
+            rf"\1{escaped}\2",
+            out,
+            count=1,
+            flags=re.I,
+        )
+    return out
 
 
 def _fix_action_links(html: str) -> str:
@@ -445,8 +530,10 @@ def fill_template_content(
     city: str = "",
     research_content: Any | None = None,
     design_system: Any | None = None,
+    payment_config: Any | None = None,
     user_prompt: str = "",
     template_id: str = "vitrine_default",
+    project_name: str = "",
 ) -> AgentResult[ContentFillResult]:
     """
     Remplit le template et retourne le HTML final.
@@ -480,8 +567,9 @@ def fill_template_content(
         )
 
     try:
+        display_name = (project_name or "").strip() or resolved_name
         slots = build_content_slots(
-            client_name=resolved_name,
+            client_name=display_name,
             sector=sector,
             city=city,
             template_html=template_html,
@@ -489,6 +577,7 @@ def fill_template_content(
             design_system=design_system,
             user_prompt=user_prompt,
             template_id=template_id,
+            project_name=project_name,
         )
         html, filled, missing = fill_template_placeholders(template_html, slots)
         if missing:
@@ -500,6 +589,10 @@ def fill_template_content(
             )
         html = strip_markdown_code_fences(html)
         html = _apply_design_system_css(html, design_system)
+        title_name = (project_name or "").strip()
+        if not title_name and slots.get("CLIENT_NAME"):
+            title_name = html_lib.unescape(str(slots["CLIENT_NAME"]))
+        html = _apply_project_name_to_html(html, title_name)
         html = _fix_action_links(html)
         if (template_id or "").startswith("ecommerce_"):
             from tools.ecommerce_product_images import ensure_ecommerce_product_thumbnails
@@ -512,6 +605,7 @@ def fill_template_content(
         from tools.standalone_demo_html import inject_demo_link_navigation_script
 
         html = inject_demo_link_navigation_script(html)
+        html = inject_stripe(html, payment_config)
         _validate_content_html(html)
 
         brand = slots.get("CLIENT_NAME", html_lib.escape(resolved_name))
@@ -581,8 +675,10 @@ class ContentAgent(BaseAgent):
             city=kwargs.get("city") or "",
             research_content=kwargs.get("research_content"),
             design_system=kwargs.get("design_system"),
+            payment_config=kwargs.get("payment_config"),
             user_prompt=prompt,
             template_id=kwargs.get("template_id") or "vitrine_default",
+            project_name=kwargs.get("project_name") or "",
         )
         if not result.ok or result.data is None:
             err = result.error
@@ -603,8 +699,10 @@ class ContentAgent(BaseAgent):
         city: str = "",
         research_content: Any | None = None,
         design_system: Any | None = None,
+        payment_config: Any | None = None,
         user_prompt: str = "",
         template_id: str = "vitrine_default",
+        project_name: str = "",
     ) -> AgentResult[ContentFillResult]:
         return fill_template_content(
             template_html=template_html,
@@ -613,6 +711,8 @@ class ContentAgent(BaseAgent):
             city=city,
             research_content=research_content,
             design_system=design_system,
+            payment_config=payment_config,
             user_prompt=user_prompt,
             template_id=template_id,
+            project_name=project_name,
         )

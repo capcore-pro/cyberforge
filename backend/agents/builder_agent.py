@@ -30,6 +30,8 @@ from agents.coremind_agent import (
 )
 from agents.demo_quality import code_result_from_html, preview_html_from_generation
 from config import Settings
+from agents.content_ai import inject_stripe
+from agents.design_system_ai import apply_design_system_to_html
 from tools.builder_generators import (
     BuildOutcome,
     DeepSeekBuilderClient,
@@ -219,6 +221,7 @@ class BuilderAgent(BaseAgent):
         design_system: Any | None = None,
         sector_template_html: str | None = None,
         sector_template: dict[str, Any] | None = None,
+        payment_config: Any | None = None,
     ) -> BuilderRunResult:
         """
         Vitrine (vitrine_next / client_demo) : assemblage template + ContentAI.
@@ -256,6 +259,8 @@ class BuilderAgent(BaseAgent):
                 design_system=design_system,
                 sector_template_html=sector_template_html,
                 sector_template=sector_template,
+                payment_config=payment_config,
+                project_id=project_id,
                 forbid_coremind_fallback=True,
             )
 
@@ -268,6 +273,8 @@ class BuilderAgent(BaseAgent):
                 design_system=design_system,
                 sector_template_html=sector_template_html,
                 sector_template=sector_template,
+                payment_config=payment_config,
+                project_id=project_id,
                 forbid_coremind_fallback=False,
             )
 
@@ -291,6 +298,8 @@ class BuilderAgent(BaseAgent):
         design_system: Any | None,
         sector_template_html: str | None,
         sector_template: dict[str, Any] | None,
+        payment_config: Any | None,
+        project_id: str | None = None,
         forbid_coremind_fallback: bool = False,
     ) -> BuilderRunResult:
         mode = (generation_mode or "client_demo").strip().lower()
@@ -347,6 +356,7 @@ class BuilderAgent(BaseAgent):
             city=city,
             research_content=research_brief,
             design_system=design_system,
+            payment_config=payment_config,
             user_prompt=prompt,
             template_id=template_id,
             skip_content_fill=already_filled,
@@ -368,6 +378,7 @@ class BuilderAgent(BaseAgent):
                 city=city,
                 research_content=research_brief,
                 design_system=design_system,
+                payment_config=payment_config,
                 user_prompt=prompt,
                 template_id=template_id,
                 skip_content_fill=already_filled,
@@ -391,6 +402,35 @@ class BuilderAgent(BaseAgent):
             )
 
         data = require_ok(assembly)
+        html_out = data.html
+        if design_system:
+            html_out = apply_design_system_to_html(
+                html_out, design_system, log_prefix="BuilderAI"
+            )
+        if (isinstance(payment_config, dict) and payment_config) or "{{STRIPE" in html_out:
+            html_out = inject_stripe(html_out, payment_config)
+
+        from tools.vision_toolbox_enricher import enrich_html_with_toolbox
+
+        if html_out and "<img" in html_out.lower():
+            html_out, enrich_stats = await enrich_html_with_toolbox(
+                html_out,
+                plan=plan,
+                prompt=prompt,
+                settings=self._settings,
+                project_id=project_id,
+            )
+            img_total = enrich_stats.photos_stock + enrich_stats.photos_replicate
+            if img_total:
+                logger.info("[VisionUI] %d images injectées", img_total)
+
+        generation = data.generation
+        if html_out != data.html and generation is not None:
+            if hasattr(generation, "model_copy"):
+                generation = generation.model_copy(update={"code": html_out})
+            elif hasattr(generation, "code"):
+                generation.code = html_out
+
         logger.info(
             "[BuilderAI] assemblage OK | mode=%s | template=%s | bytes=%s | valid=%s",
             mode,
@@ -408,8 +448,8 @@ class BuilderAgent(BaseAgent):
             ),
             outcome=None,
             fallback_to_coremind=False,
-            generation=data.generation,
-            preview_html=data.html,
+            generation=generation,
+            preview_html=html_out,
         )
 
     async def _build_llm(

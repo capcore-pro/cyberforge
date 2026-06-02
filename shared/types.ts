@@ -69,6 +69,8 @@ export interface CoreMindRequest {
   project_id?: string | null;
   /** Brief Firecrawl (clone-inspiration) transmis à ArchitectAI */
   inspiration_brief?: string | null;
+  /** Palette / couleurs / images Firecrawl pour DesignSystemAI */
+  firecrawl_result?: Record<string, unknown> | null;
   /** Projet perso — déploiement Cloudflare Pages dédié en mode vraie app */
   personal_project?: boolean;
   /** Slug projet Pages (ex. capcore-pro-site) */

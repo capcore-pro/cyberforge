@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from agents.coremind_agent import PROJECT_TYPE_LABELS, CoreMindRunResult, ProjectType
 from config import Settings, get_settings, plain_secret_str
-from tools.project_title import clean_project_title
+from tools.project_title import clean_project_title, short_project_name
 from tools.demo_preview_html import build_demo_preview_html
 
 logger = logging.getLogger(__name__)
@@ -813,7 +813,8 @@ def _hint_for_status(status: int, body: str) -> str:
 
 
 def _title_from_prompt(prompt: str, max_len: int = 50) -> str:
-    return clean_project_title(prompt, max_len=max_len)
+    # Nom court (max 3 mots) — meilleur rendu dans la sidebar / fiche projet.
+    return short_project_name(prompt, max_words=3, max_len=max_len)
 
 
 def _resolve_preview_html(

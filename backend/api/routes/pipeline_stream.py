@@ -52,6 +52,7 @@ async def run_coremind_flow_stream(body: CoreMindRequest) -> StreamingResponse:
                     stitch_enabled=body.stitch_enabled,
                     project_id=body.project_id,
                     inspiration_brief=body.inspiration_brief,
+                    firecrawl_result=body.firecrawl_result,
                     personal_project=body.personal_project,
                     pages_project_slug=body.pages_project_slug,
                     project_title=body.project_title,

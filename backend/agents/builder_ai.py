@@ -207,6 +207,7 @@ def assemble_template_html(
     city: str = "",
     research_content: Any | None = None,
     design_system: Any | None = None,
+    payment_config: Any | None = None,
     user_prompt: str = "",
     template_id: str = "vitrine_default",
     skip_content_fill: bool = False,
@@ -246,6 +247,7 @@ def assemble_template_html(
                 city=city,
                 research_content=research_content,
                 design_system=design_system,
+                payment_config=payment_config,
                 user_prompt=user_prompt,
                 template_id=template_id,
             )

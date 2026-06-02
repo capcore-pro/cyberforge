@@ -30,8 +30,8 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 _RUNNER_PATH = _BACKEND_ROOT / "scripts" / "stitch_runner.mjs"
 _STITCH_SDK_PACKAGE = _BACKEND_ROOT / "node_modules" / "@google" / "stitch-sdk" / "package.json"
 # Plafond strict subprocess + budget total StitchAI (évite coupure SSE).
-STITCH_SUBPROCESS_TIMEOUT_SECONDS = 30.0
-STITCH_PIPELINE_BUDGET_SECONDS = 30.0
+STITCH_SUBPROCESS_TIMEOUT_SECONDS = 120.0
+STITCH_PIPELINE_BUDGET_SECONDS = 120.0
 
 _SCREEN_SPECS: dict[str, list[tuple[str, str]]] = {
     "vitrine_next": [
@@ -101,6 +101,7 @@ class StitchMockup(BaseModel):
     name: str
     html_url: str = ""
     image_url: str = ""
+    html: str = ""
     screen_id: str | None = None
 
 
@@ -112,6 +113,7 @@ class StitchResult(BaseModel):
     success: bool = False
     project_id: str | None = None
     mockups: list[StitchMockup] = Field(default_factory=list)
+    base_html: str = ""
     skipped: bool = False
     skip_reason: str | None = None
     error: str | None = None
@@ -288,10 +290,51 @@ def _sanitize_runner_payload(value: Any) -> Any:
 
 
 def _stitch_subprocess_timeout(configured: float | None = None) -> float:
-    """Timeout effectif du subprocess Node (max 30 s)."""
+    """Timeout effectif du subprocess Node (max 120 s)."""
     if configured is None or configured <= 0:
         return STITCH_SUBPROCESS_TIMEOUT_SECONDS
     return min(float(configured), STITCH_SUBPROCESS_TIMEOUT_SECONDS)
+
+
+async def fetch_stitch_html_from_url(url: str, *, timeout: float = 45.0) -> str:
+    """Télécharge le HTML d'une maquette Stitch (URL signée Google)."""
+    if not (url or "").strip():
+        return ""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+        ) as client:
+            response = await client.get(url.strip())
+            response.raise_for_status()
+            text = (response.text or "").strip()
+            return text
+    except Exception as exc:
+        logger.warning("[StitchAI] téléchargement HTML échoué (%s): %s", url[:80], exc)
+        return ""
+
+
+async def resolve_stitch_base_html(result: StitchResult) -> str:
+    """
+    Retourne le HTML Stitch utilisable comme base du projet.
+    Priorité : HTML inline mockup > premier html_url valide.
+    """
+    for mockup in result.mockups:
+        inline = (mockup.html or "").strip()
+        if len(inline) >= 200:
+            return inline
+
+    for mockup in result.mockups:
+        url = (mockup.html_url or "").strip()
+        if not url:
+            continue
+        fetched = await fetch_stitch_html_from_url(url)
+        if len(fetched) >= 200:
+            mockup.html = fetched
+            return fetched
+    return ""
 
 
 def _stitch_verbose() -> bool:
@@ -590,7 +633,13 @@ class StitchAgent(BaseAgent):
             for index, screen_spec in enumerate(screen_payloads):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    logger.debug("[StitchAI] budget pipeline épuisé — mode dégradé")
+                    if mockups:
+                        logger.warning(
+                            "[StitchAI] budget pipeline épuisé — %d maquette(s) conservée(s)",
+                            len(mockups),
+                        )
+                        break
+                    logger.debug("[StitchAI] budget pipeline épuisé — aucune maquette")
                     return _stitch_degraded_result("timeout")
 
                 if on_progress:
@@ -623,6 +672,13 @@ class StitchAgent(BaseAgent):
                         timeout=run_timeout,
                     )
                 except (asyncio.TimeoutError, subprocess.TimeoutExpired):
+                    if mockups:
+                        logger.warning(
+                            "[StitchAI] timeout subprocess (%.0fs) — %d maquette(s) conservée(s)",
+                            run_timeout,
+                            len(mockups),
+                        )
+                        break
                     logger.debug(
                         "[StitchAI] timeout subprocess (%.0fs) — mode dégradé",
                         run_timeout,
@@ -674,11 +730,16 @@ class StitchAgent(BaseAgent):
             if not mockups:
                 return _stitch_degraded_result("Aucune maquette Stitch générée")
 
-            return StitchResult(
+            partial = StitchResult(
                 success=True,
                 project_id=project_id,
                 mockups=mockups,
             )
+            base_html = await resolve_stitch_base_html(partial)
+            if base_html:
+                logger.info("[StitchAI] Maquette reçue %d chars", len(base_html))
+                partial.base_html = base_html
+            return partial
         except (asyncio.TimeoutError, subprocess.TimeoutExpired):
             logger.debug("[StitchAI] timeout pipeline — mode dégradé")
             return _stitch_degraded_result("timeout")

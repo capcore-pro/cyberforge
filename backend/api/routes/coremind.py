@@ -3,6 +3,7 @@ Route CoreMindAI — analyse, génération et flow complet.
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -59,6 +60,10 @@ class CoreMindRequest(BaseModel):
         default=None,
         max_length=24_000,
         description="Brief enrichi (Firecrawl clone-inspiration) pour ArchitectAI",
+    )
+    firecrawl_result: dict[str, Any] | None = Field(
+        default=None,
+        description="Données structurées Firecrawl (palette, couleurs, images) pour DesignSystemAI",
     )
     personal_project: bool = Field(
         default=False,
@@ -190,6 +195,7 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
             stitch_enabled=body.stitch_enabled,
             project_id=body.project_id,
             inspiration_brief=body.inspiration_brief,
+            firecrawl_result=body.firecrawl_result,
             personal_project=body.personal_project,
             pages_project_slug=body.pages_project_slug,
             project_title=body.project_title,

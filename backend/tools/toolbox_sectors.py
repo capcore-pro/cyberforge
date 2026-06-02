@@ -128,6 +128,18 @@ SECTEURS: dict[str, dict[str, Any]] = {
             "product packaging display",
         ],
     },
+    "automobile": {
+        "palette": {"primary": "#2C3E50", "secondary": "#FFFFFF", "accent": "#E67E22"},
+        "typo": {"heading": "Roboto Condensed", "body": "Roboto"},
+        "composants": ["hero", "services", "pricing", "testimonials", "faq", "contact"],
+        "mots_cles_visuels": [
+            "auto repair workshop",
+            "mechanic tools garage",
+            "car service modern",
+            "industrial showroom",
+            "vehicle maintenance",
+        ],
+    },
 }
 
 _SECTOR_ALIASES: dict[str, str] = {
@@ -183,6 +195,18 @@ _SECTOR_KEYWORDS: dict[str, tuple[str, ...]] = {
     ),
     "commerce": (
         "boutique", "shop", "e-commerce", "ecommerce", "retail", "magasin", "store",
+    ),
+    "automobile": (
+        "automobile",
+        "garage",
+        "mécanique",
+        "mecanique",
+        "carrosserie",
+        "auto",
+        "véhicule",
+        "vehicule",
+        "réparation",
+        "reparation",
     ),
 }
 

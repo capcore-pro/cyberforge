@@ -145,6 +145,7 @@ REAL_APP_STEP_MESSAGES: dict[str, str] = {
 class PipelineState(TypedDict, total=False):
     prompt: str
     inspiration_brief: str | None
+    firecrawl_result: Any
     project_id: str | None
     project_type: str | None
     project_type_hint: ProjectType | None
@@ -178,6 +179,7 @@ class PipelineState(TypedDict, total=False):
     lighthouse_autofix_loops: int
     research_brief: Any
     stitch_result: Any
+    stitch_html: str | None
     validation_status: str | None
     personal_project: bool | None
     pages_project_slug: str | None
@@ -448,6 +450,8 @@ async def payment_ai_node(
         await _step(cb, NODE_PAYMENT, "done", "Paiement non requis — étape ignorée.", ok=True, skipped=True)
         return {}
 
+    payment_type = str(result.get("payment_type") or "").strip().lower()
+    logger.info("[PaymentAI] Stripe configuré: type=%s", payment_type)
     await _step(
         cb,
         NODE_PAYMENT,
@@ -545,12 +549,20 @@ async def design_system_node(
     )
     client_name = profile.company_name or profile.display_name
 
+    firecrawl_data = state.get("firecrawl_result")
+    if isinstance(firecrawl_data, dict) and (
+        firecrawl_data.get("palette") or firecrawl_data.get("couleurs")
+    ):
+        palette_preview = firecrawl_data.get("palette") or firecrawl_data.get("couleurs")
+        logger.info("[Firecrawl] Style extrait — palette=%s", palette_preview)
+
     result = build_design_system(
         sector=sector,
         client_name=client_name,
         palette_preference=plan.palette,
         project_type=plan.project_type,
         user_prompt=base_prompt,
+        firecrawl_data=firecrawl_data,
     )
     if not result.ok or result.data is None:
         err = result.error
@@ -683,6 +695,23 @@ async def content_ai_node(
     if isinstance(research, dict) and research.get("nom_entreprise"):
         client_name = str(research.get("nom_entreprise") or client_name)
 
+    payment_cfg = state.get("payment_config")
+    if isinstance(payment_cfg, dict) and payment_cfg.get("payment_type") not in (
+        None,
+        "",
+        "none",
+    ):
+        logger.info(
+            "[ContentAI] payment_config transmis — payment_type=%s",
+            payment_cfg.get("payment_type"),
+        )
+
+    project_name = (state.get("project_name") or "").strip()
+    if not project_name:
+        from tools.project_title import short_project_name
+
+        project_name = short_project_name(base_prompt)
+
     result = fill_template_content(
         template_html=template_html,
         client_name=client_name,
@@ -690,8 +719,10 @@ async def content_ai_node(
         city=city,
         research_content=research,
         design_system=state.get("design_system"),
+        payment_config=payment_cfg,
         user_prompt=base_prompt,
         template_id=template_id,
+        project_name=project_name,
     )
     if not result.ok or result.data is None:
         err = result.error
@@ -984,10 +1015,19 @@ async def stitch_node(
         )
         return {"stitch_result": result}
 
+    base_html = (result.base_html or "").strip()
+    if not base_html and result.success and result.mockups:
+        from agents.stitch_ai import resolve_stitch_base_html
+
+        base_html = await resolve_stitch_base_html(result)
+        if base_html:
+            result.base_html = base_html
+            logger.info("[StitchAI] Maquette reçue %d chars", len(base_html))
+
     if not result.success or not result.mockups:
         msg = result.error or "Maquettes Stitch non générées — suite sans référence visuelle."
         if (result.error or "").strip().lower() == "timeout":
-            msg = "StitchAI ignoré (délai 30 s) — suite sans maquette."
+            msg = "StitchAI ignoré (délai 120 s) — suite sans maquette."
         await _step(
             cb,
             "stitch",
@@ -998,17 +1038,33 @@ async def stitch_node(
         )
         return {"stitch_result": result}
 
+    out: dict[str, Any] = {"stitch_result": result}
+    if base_html:
+        sector_tpl = state.get("sector_template")
+        if isinstance(sector_tpl, dict):
+            out["sector_template"] = {
+                **sector_tpl,
+                "html_raw": base_html,
+                "html": base_html,
+                "template_source": "stitch",
+            }
+        logger.info(
+            "[StitchAI] HTML utilisé comme base du projet (%d chars)",
+            len(base_html),
+        )
+
     await _step(
         cb,
         "stitch",
         "done",
-        f"{len(result.mockups)} maquette(s) Stitch prête(s).",
+        f"{len(result.mockups)} maquette(s) Stitch"
+        + (f" — base HTML {len(base_html)} car." if base_html else " prête(s)."),
         ok=True,
         stitch_project_id=result.project_id,
         stitch_mockup_count=len(result.mockups),
         stitch_mockups=[m.model_dump() for m in result.mockups],
     )
-    return {"stitch_result": result}
+    return out
 
 
 def _route_after_stitch(state: PipelineState) -> str:
@@ -1055,6 +1111,12 @@ async def research_node(
             research_skipped=True,
         )
         return {"research_brief": brief}
+
+    fc = state.get("firecrawl_result")
+    if isinstance(fc, dict) and (fc.get("palette") or fc.get("couleurs")):
+        logger.info(
+            "[Firecrawl] firecrawl_result présent après ResearchAI — prêt pour DesignSystemAI"
+        )
 
     await _step(
         cb,
@@ -1213,6 +1275,7 @@ async def builder_node(
         sector_template=sector_tpl,
         research_brief=state.get("research_brief"),
         generation_mode=state.get("generation_mode"),
+        payment_config=state.get("payment_config"),
     )
     if result.decision.provider == BuilderProvider.ASSEMBLY:
         provider_label = "Assemblage template"
@@ -1704,11 +1767,32 @@ async def visionui_node(
         vision_preview_source=result.preview_source,
         vision_local_html=result.preview.local_html if result.preview_source == "local" else None,
     )
-    return {
+    enriched_html = (result.preview.local_html or preview_html or "").strip()
+    out: dict[str, Any] = {
         "vision_screenshot_url": result.screenshot_url,
         "vision_preview_source": result.preview_source,
-        "preview_html": result.preview.local_html or preview_html,
     }
+    if enriched_html:
+        out["preview_html"] = enriched_html
+        out["assembled_html"] = enriched_html
+        generation = state.get("generation")
+        if generation is not None:
+            if hasattr(generation, "model_copy"):
+                out["generation"] = generation.model_copy(update={"code": enriched_html})
+            elif hasattr(generation, "code"):
+                generation.code = enriched_html
+                out["generation"] = generation
+        sector_tpl = state.get("sector_template")
+        if isinstance(sector_tpl, dict):
+            out["sector_template"] = {**sector_tpl, "html": enriched_html, "html_raw": enriched_html}
+
+    stats = result.enrich_stats
+    if stats:
+        img_total = stats.photos_stock + stats.photos_replicate
+        if img_total:
+            logger.info("[VisionUI] %d images injectées", img_total)
+
+    return out
 
 
 async def bughunter_node(
@@ -2866,6 +2950,7 @@ async def run_generation_pipeline(
     stitch_enabled: bool | None = None,
     project_id: str | None = None,
     inspiration_brief: str | None = None,
+    firecrawl_result: dict[str, Any] | None = None,
     personal_project: bool = False,
     pages_project_slug: str | None = None,
     project_title: str | None = None,
@@ -2880,9 +2965,11 @@ async def run_generation_pipeline(
     resolved_settings = settings or get_settings()
     pipeline_started = time.perf_counter()
     brief = (inspiration_brief or "").strip() or None
+    fc = firecrawl_result if isinstance(firecrawl_result, dict) else None
     initial: PipelineState = {
         "prompt": prompt.strip(),
         "inspiration_brief": brief,
+        "firecrawl_result": fc,
         "project_id": project_id,
         "project_type_hint": project_type_hint,
         "generation_mode": generation_mode or "client_demo",

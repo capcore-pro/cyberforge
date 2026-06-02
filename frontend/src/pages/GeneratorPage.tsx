@@ -269,6 +269,8 @@ export function GeneratorPage({
     string | null
   >(null);
   const [inspirationBrief, setInspirationBrief] = useState<string | null>(null);
+  const [inspirationFirecrawl, setInspirationFirecrawl] =
+    useState<CloneInspirationResult | null>(null);
   const { dispatchPipelineEvent } = usePipelineActivity();
 
   const kindOption = useMemo(
@@ -592,6 +594,7 @@ export function GeneratorPage({
     const summary = formatStructureSummary(data.sections);
     setInspirationStructureSummary(summary || null);
     setInspirationBrief(data.brief_builder);
+    setInspirationFirecrawl(data);
 
     if (!prompt.trim()) {
       patch({
@@ -741,6 +744,15 @@ export function GeneratorPage({
           generation_mode: synced.generationMode,
           project_id: sessionProjectId,
           inspiration_brief: inspirationBrief?.trim() || null,
+          firecrawl_result: inspirationFirecrawl
+            ? {
+                url: inspirationFirecrawl.url,
+                secteur: inspirationFirecrawl.secteur,
+                palette: inspirationFirecrawl.palette,
+                couleurs: inspirationFirecrawl.palette,
+                images: inspirationFirecrawl.images,
+              }
+            : null,
           personal_project: isPersonalFlow,
           pages_project_slug:
             projectName.trim() ||

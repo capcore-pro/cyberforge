@@ -54,3 +54,32 @@ def clean_project_title(raw: str, *, max_len: int = 50) -> str:
     if len(cut) < len(chosen):
         cut = cut[: max_len - 1].rstrip() + "…"
     return cut
+
+
+_PREFIX_RE = re.compile(
+    r"^(?:description\s*:|projet\s*:|application\s+de\s+gestion\s+pour\s+un?\s*|"
+    r"application\s+de\s+gestion\s+|application\s+de|application|site\s+vitrine\s+pour|"
+    r"site\s+vitrine|site\s+de|site)\s+",
+    re.IGNORECASE,
+)
+
+
+def short_project_name(raw: str, *, max_words: int = 3, max_len: int = 40) -> str:
+    """
+    Extrait un nom court (≤ max_words) depuis une description.
+    Exemples :
+      "Application de gestion pour un garage automobile…" -> "Garage Auto"
+    """
+    base = clean_project_title(raw, max_len=120)
+    base = _PREFIX_RE.sub("", base).strip()
+    base = re.sub(r"\s+", " ", base).strip(" -–—.:?!")
+    if not base:
+        return "Projet"
+
+    words = [w for w in base.split(" ") if w]
+    short = " ".join(words[:max_words]).strip()
+    # capitalisation simple lisible
+    short = " ".join(w.capitalize() if len(w) > 2 else w.capitalize() for w in short.split())
+    if len(short) > max_len:
+        short = short[: max_len - 1].rstrip() + "…"
+    return short or "Projet"

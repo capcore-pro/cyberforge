@@ -441,17 +441,65 @@ def _parse_palette_preference(palette_preference: Any | None) -> dict[str, str] 
     return out or None
 
 
+def _palette_from_firecrawl(firecrawl_data: Any | None) -> dict[str, str] | None:
+    """Extrait primary/secondary/accent depuis firecrawl_result (palette ou couleurs)."""
+    if not isinstance(firecrawl_data, dict):
+        return None
+    raw = firecrawl_data.get("palette") or firecrawl_data.get("couleurs")
+    if not isinstance(raw, dict):
+        return None
+    key_map = {
+        "primary": ("primary", "textPrimary"),
+        "secondary": ("secondary", "background"),
+        "accent": ("accent",),
+    }
+    out: dict[str, str] = {}
+    for target, candidates in key_map.items():
+        for key in candidates:
+            val = raw.get(key)
+            if isinstance(val, str) and val.strip().startswith("#"):
+                out[target] = val.strip()
+                break
+    return out or None
+
+
+def _fonts_from_firecrawl(firecrawl_data: Any | None) -> tuple[str, str] | None:
+    if not isinstance(firecrawl_data, dict):
+        return None
+    fonts = firecrawl_data.get("fonts")
+    if not isinstance(fonts, dict):
+        return None
+    heading = fonts.get("heading") or fonts.get("title")
+    body = fonts.get("body") or fonts.get("text")
+    if isinstance(heading, str) and isinstance(body, str) and heading.strip() and body.strip():
+        return heading.strip(), body.strip()
+    return None
+
+
 def _resolve_palette(
     family: VisualFamily,
     palette_preference: Any | None,
+    *,
+    firecrawl_data: Any | None = None,
 ) -> tuple[dict[str, str], str]:
     base = dict(_FAMILY_PALETTES[family])
     pref = _parse_palette_preference(palette_preference)
-    if not pref:
-        return base, f"sector_family:{family}"
-    merged = {**base, **pref}
-    source = "user_preference" if len(pref) == 3 else f"merged:{family}"
-    return merged, source
+    if pref:
+        base = {**base, **pref}
+        source = "user_preference" if len(pref) == 3 else f"merged:{family}"
+    else:
+        source = f"sector_family:{family}"
+    fc = _palette_from_firecrawl(firecrawl_data)
+    if fc:
+        merged = {**base, **fc}
+        logger.info(
+            "[DesignSystemAI] Couleurs appliquées: %s %s %s",
+            merged.get("primary"),
+            merged.get("secondary"),
+            merged.get("accent"),
+        )
+        return merged, "firecrawl"
+    return base, source
 
 
 def _spacing_for_project(project_type: str) -> DesignSystemSpacing:
@@ -482,6 +530,8 @@ def design_system_to_css_variables(doc: DesignSystemJSON) -> str:
     p_hsl = hex_to_hsl_channels(c.primary)
     s_hsl = hex_to_hsl_channels(c.secondary)
     a_hsl = hex_to_hsl_channels(c.accent)
+    heading_font = doc.fonts.heading.replace("'", "\\'")
+    body_font = doc.fonts.body.replace("'", "\\'")
     return f""":root {{
   --cf-primary: {c.primary};
   --cf-secondary: {c.secondary};
@@ -489,12 +539,19 @@ def design_system_to_css_variables(doc: DesignSystemJSON) -> str:
   --cf-bg: {c.bg};
   --cf-text: {c.text};
   --cf-text-light: {c.text_light};
-  --cf-font-heading: '{doc.fonts.heading}', serif;
-  --cf-font-body: '{doc.fonts.body}', sans-serif;
+  --cf-font-heading: '{heading_font}', serif;
+  --cf-font-body: '{body_font}', sans-serif;
   --cf-section-spacing: {doc.spacing.section};
   --cf-element-spacing: {doc.spacing.element};
   --cf-radius: {doc.border_radius};
   --cf-shadow: {doc.shadows};
+  --color-primary: {c.primary};
+  --color-secondary: {c.secondary};
+  --color-accent: {c.accent};
+  --font-heading: '{heading_font}', serif;
+  --font-body: '{body_font}', sans-serif;
+  --border-radius: {doc.border_radius};
+  --color-border-radius: {doc.border_radius};
   --primary: {p_hsl};
   --secondary: {s_hsl};
   --accent: {a_hsl};
@@ -519,23 +576,82 @@ def design_system_to_stitch_palette(
     }
 
 
-def inject_design_system_into_html(html: str, doc: DesignSystemJSON | dict[str, Any]) -> str:
-    """Injecte la loi visuelle (variables + Google Fonts) dans un document HTML."""
-    if isinstance(doc, dict):
+def _sync_template_css_variables(html: str, doc: DesignSystemJSON) -> str:
+    """Aligne les variables :root existantes sur le design system."""
+    c = doc.colors
+    f = doc.fonts
+    heading_esc = f.heading.replace("'", "\\'")
+    body_esc = f.body.replace("'", "\\'")
+    replacements: tuple[tuple[str, str], ...] = (
+        (r"(--color-primary\s*:\s*)[^;]+", rf"\1{c.primary}"),
+        (r"(--color-secondary\s*:\s*)[^;]+", rf"\1{c.secondary}"),
+        (r"(--color-accent\s*:\s*)[^;]+", rf"\1{c.accent}"),
+        (r"(--font-heading\s*:\s*)[^;]+", rf"\1'{heading_esc}', serif"),
+        (r"(--font-body\s*:\s*)[^;]+", rf"\1'{body_esc}', sans-serif"),
+        (r"(--border-radius\s*:\s*)[^;]+", rf"\1{doc.border_radius}"),
+        (r"(--primary\s*:\s*)[^;]+", rf"\1{c.primary}"),
+        (r"(--secondary\s*:\s*)[^;]+", rf"\1{c.secondary}"),
+        (r"(--accent\s*:\s*)[^;]+", rf"\1{c.accent}"),
+        (r"(--font-h\s*:\s*)[^;]+", rf"\1'{heading_esc}', serif"),
+        (r"(--font-b\s*:\s*)[^;]+", rf"\1'{body_esc}', sans-serif"),
+    )
+    out = html
+    for pattern, repl in replacements:
+        out = re.sub(pattern, repl, out, flags=re.I)
+    return out
+
+
+def apply_design_system_to_html(
+    html: str,
+    design_system: DesignSystemJSON | dict[str, Any] | None,
+    *,
+    log_prefix: str = "BuilderAI",
+) -> str:
+    """Injecte la loi visuelle (variables + Google Fonts) dans le HTML final."""
+    if not (html or "").strip() or design_system is None:
+        return html
+    if isinstance(design_system, dict):
         try:
-            doc = DesignSystemJSON.model_validate(doc)
+            doc = DesignSystemJSON.model_validate(design_system)
         except Exception:
             return html
+    elif isinstance(design_system, DesignSystemJSON):
+        doc = design_system
+    else:
+        return html
+
     css_block = design_system_to_css_variables(doc)
     link = f'<link rel="stylesheet" href="{doc.google_fonts_url}" />\n'
-    style = f"<style id=\"cf-design-system\">{css_block}</style>\n"
+    style = f'<style id="cf-design-system">{css_block}</style>\n'
     snippet = link + style
-    lower = html.lower()
-    if "cf-design-system" in lower:
-        return html
-    if "</head>" in lower:
-        return re.sub(r"</head>", f"  {snippet}</head>", html, count=1, flags=re.I)
-    return snippet + html
+
+    if "cf-design-system" in html:
+        html = re.sub(
+            r'<style id="cf-design-system">[\s\S]*?</style>',
+            style.strip(),
+            html,
+            count=1,
+        )
+    elif "</head>" in html.lower():
+        html = re.sub(r"</head>", f"  {snippet}</head>", html, count=1, flags=re.I)
+    else:
+        html = snippet + html
+
+    html = _sync_template_css_variables(html, doc)
+    logger.info(
+        "[%s] design system injecté: primary=%s font=%s/%s radius=%s",
+        log_prefix,
+        doc.colors.primary,
+        doc.fonts.heading,
+        doc.fonts.body,
+        doc.border_radius,
+    )
+    return html
+
+
+def inject_design_system_into_html(html: str, doc: DesignSystemJSON | dict[str, Any]) -> str:
+    """Injecte la loi visuelle (variables + Google Fonts) dans un document HTML."""
+    return apply_design_system_to_html(html, doc, log_prefix="DesignSystemAI")
 
 
 def _validate_contract(doc: DesignSystemJSON) -> None:
@@ -558,6 +674,7 @@ def build_design_system(
     palette_preference: Any | None = None,
     project_type: str | ProjectType,
     user_prompt: str = "",
+    firecrawl_data: Any | None = None,
 ) -> AgentResult[DesignSystemJSON]:
     """Produit le JSON contractuel ou échoue explicitement."""
     raw_name = (client_name or "").strip()
@@ -585,13 +702,26 @@ def build_design_system(
     try:
         family = resolve_visual_family(sector_key, user_prompt)
         style_keywords = list(_FAMILY_STYLE_KEYWORDS[family])
+        font_style: FontStyle = "moderne"
         if family == "automobile":
+            font_style = "moderne"
             heading, body = ("Roboto Condensed", "Roboto")
         else:
             font_style = resolve_font_style(family, style_keywords)
             heading, body = _FONT_STYLES[font_style]
 
-        palette, palette_source = _resolve_palette(family, palette_preference)
+        fc_fonts = _fonts_from_firecrawl(firecrawl_data)
+        if fc_fonts:
+            heading, body = fc_fonts
+            logger.info(
+                "[DesignSystemAI] polices Firecrawl appliquées: %s / %s",
+                heading,
+                body,
+            )
+
+        palette, palette_source = _resolve_palette(
+            family, palette_preference, firecrawl_data=firecrawl_data
+        )
         colors = _derive_contract_colors(
             palette["primary"],
             palette["secondary"],
@@ -719,6 +849,7 @@ class DesignSystemAgent(BaseAgent):
         palette_preference: Any | None = None,
         project_type: str | ProjectType,
         user_prompt: str = "",
+        firecrawl_data: Any | None = None,
     ) -> AgentResult[DesignSystemJSON]:
         return build_design_system(
             sector=sector,
@@ -726,4 +857,5 @@ class DesignSystemAgent(BaseAgent):
             palette_preference=palette_preference,
             project_type=project_type,
             user_prompt=user_prompt,
+            firecrawl_data=firecrawl_data,
         )
