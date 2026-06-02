@@ -161,6 +161,15 @@ backend/scripts/railway_*.py
 backend/scripts/redeploy_demo_token.py
 vitrines-temp/
 
+# Backup venv + artefacts / rapports scripts
+backend/.venv-py311-backup/
+backend/data/extension_artifacts/
+backend/scripts/_cleanup_report.json
+backend/scripts/_extended_cleanup.json
+backend/scripts/_truncate_report.json
+backend/_pytest_out.txt
+backend/_redeploy_out.txt
+
 # Python
 __pycache__/
 *.py[cod]

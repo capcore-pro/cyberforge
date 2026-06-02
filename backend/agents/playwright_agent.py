@@ -6,11 +6,14 @@ Sert le HTML en local si aucune URL de production n'est disponible.
 
 from __future__ import annotations
 
-import asyncio
 import sys
 
 if sys.platform == "win32":
+    import asyncio
+
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+import asyncio
 
 import logging
 import socket

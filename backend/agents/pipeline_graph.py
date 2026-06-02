@@ -182,6 +182,7 @@ class PipelineState(TypedDict, total=False):
     personal_project: bool | None
     pages_project_slug: str | None
     project_title: str | None
+    project_name: str | None
     export_result: Any
     extension_files: dict[str, str] | None
     artifact_download_url: str | None
@@ -297,10 +298,14 @@ async def architect_node(
     if project_id:
         set_architect_plan(str(project_id), plan)
     mode = (state.get("generation_mode") or "client_demo").strip().lower()
+    from tools.project_title import short_project_name
+    project_name = short_project_name(state.get("prompt") or "", max_words=3, max_len=40)
     return {
         "architect_plan": plan,
         "analysis": coremind_analysis,
         "project_type": "vitrine_next" if mode == "vitrine_next" else plan.project_type.value,
+        "project_name": project_name,
+        "project_title": project_name,
     }
 
 
@@ -2889,6 +2894,7 @@ async def run_generation_pipeline(
         "personal_project": personal_project,
         "pages_project_slug": (pages_project_slug or "").strip() or None,
         "project_title": (project_title or "").strip() or None,
+        "project_name": None,
         "fix_loops": 0,
         "autofix_attempts": 0,
         "testpilot_refix_loops": 0,

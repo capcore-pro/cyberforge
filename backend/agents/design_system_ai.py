@@ -45,6 +45,7 @@ VisualFamily = Literal[
     "tech_digital",
     "beaute_mode",
     "juridique_finance",
+    "automobile",
 ]
 
 FontStyle = Literal["artisanal", "moderne", "elegant"]
@@ -93,6 +94,12 @@ _FAMILY_PALETTES: dict[VisualFamily, dict[str, str]] = {
         "secondary": "#FFFFFF",
         "accent": "#C9A84C",
     },
+    # Automobile — industriel, pro, moderne (gris acier + orange)
+    "automobile": {
+        "primary": "#2C3E50",
+        "secondary": "#FFFFFF",
+        "accent": "#E67E22",
+    },
 }
 
 # Polices Google par style
@@ -111,6 +118,7 @@ _FAMILY_FONT_STYLE: dict[VisualFamily, FontStyle] = {
     "tech_digital": "moderne",
     "beaute_mode": "elegant",
     "juridique_finance": "elegant",
+    "automobile": "moderne",
 }
 
 _FAMILY_STYLE_KEYWORDS: dict[VisualFamily, list[str]] = {
@@ -121,6 +129,7 @@ _FAMILY_STYLE_KEYWORDS: dict[VisualFamily, list[str]] = {
     "tech_digital": ["moderne", "épuré", "innovant", "précis"],
     "beaute_mode": ["élégant", "raffiné", "doux", "premium"],
     "juridique_finance": ["prestige", "confiance", "élégant", "moderne"],
+    "automobile": ["industriel", "professionnel", "moderne", "robuste"],
 }
 
 _SECTOR_TO_FAMILY: dict[str, VisualFamily] = {
@@ -134,6 +143,7 @@ _SECTOR_TO_FAMILY: dict[str, VisualFamily] = {
     "immobilier": "juridique_finance",
     "commerce": "juridique_finance",
     "education": "sante_bien_etre",
+    "automobile": "automobile",
 }
 
 # Mots-clés prompt → famille (priorité haute)
@@ -575,8 +585,11 @@ def build_design_system(
     try:
         family = resolve_visual_family(sector_key, user_prompt)
         style_keywords = list(_FAMILY_STYLE_KEYWORDS[family])
-        font_style = resolve_font_style(family, style_keywords)
-        heading, body = _FONT_STYLES[font_style]
+        if family == "automobile":
+            heading, body = ("Roboto Condensed", "Roboto")
+        else:
+            font_style = resolve_font_style(family, style_keywords)
+            heading, body = _FONT_STYLES[font_style]
 
         palette, palette_source = _resolve_palette(family, palette_preference)
         colors = _derive_contract_colors(
