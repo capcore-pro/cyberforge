@@ -1,5 +1,5 @@
 """
-Statut des agents IA — pipeline LangGraph (13 agents).
+Statut des agents IA — pipeline LangGraph (12 agents).
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ router = APIRouter(tags=["agents"])
 PIPELINE_AGENT_IDS: tuple[str, ...] = (
     "architect",
     "research",
-    "stitch",
     "openhands",
     "builder",
     "coremind",
@@ -29,14 +28,13 @@ PIPELINE_AGENT_IDS: tuple[str, ...] = (
     "export",
 )
 
-TOTAL_AGENTS = 13
+TOTAL_AGENTS = 12
 
 _AGENT_CATALOG: tuple[tuple[str, str, str], ...] = (
     ("architect", "ArchitectAI", "Analyse du prompt et choix du template premium."),
     ("research", "ResearchAI", "Recherche Brave Search + Exa AI (secteur, concurrents)."),
-    ("stitch", "StitchAI", "Maquettes visuelles HTML + screenshots (Google Stitch)."),
     ("openhands", "OpenHands", "Génération de code avancée pour projets complexes."),
-    ("builder", "BuilderAI", "Génération de code v0 / DeepSeek avec référence Stitch."),
+    ("builder", "BuilderAI", "Génération de code v0 / DeepSeek."),
     ("coremind", "CoreMindAI", "Orchestrateur central du pipeline LangGraph."),
     ("visionui", "VisionUI", "Interfaces visuelles et design system cyber."),
     ("bughunter", "BugHunterAI", "Vérification du HTML généré avant livraison."),

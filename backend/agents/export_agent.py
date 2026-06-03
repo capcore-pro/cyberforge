@@ -15,10 +15,12 @@ from agents.base_agent import BaseAgent
 from agents.coremind_agent import CoreMindAnalysis, ProjectType
 from config import Settings, plain_secret_str
 from tools.codegen_service import CodeGenerateResult
+from tools.cloudflare_pages import pages_token_slug
 from tools.deploy_manifest import (
     build_deploy_manifest,
     select_export_provider,
     slugify_project_name,
+    unique_deploy_slug,
 )
 from tools.export_cloudflare import (
     CloudflareExportError,
@@ -181,7 +183,7 @@ class ExportAgent(BaseAgent):
                 message=f"Extension Chrome prête — télécharger le ZIP ({len(zip_bytes)} octets).",
             )
 
-        project_name = slugify_project_name(
+        base_project_name = slugify_project_name(
             pages_project_slug
             or project_title
             or plan.project_type_label
@@ -190,6 +192,16 @@ class ExportAgent(BaseAgent):
         )
         mode = (generation_mode or "client_demo").strip()
         use_dedicated_pages = personal_project and mode == "real_app"
+        explicit_stable_pages_slug = bool(
+            use_dedicated_pages and (pages_project_slug or "").strip()
+        )
+        if explicit_stable_pages_slug:
+            project_name = slugify_project_name((pages_project_slug or "").strip())
+        else:
+            project_name = unique_deploy_slug(
+                base_project_name,
+                project_id=project_id,
+            )
         # Phase 4 vitrines Next.js : on publie le scaffold via GitHub (puis Vercel).
         # (Le CLI Vercel n'est pas requis : l'utilisateur connecte Vercel au repo/branche.)
         provider = (
@@ -231,6 +243,14 @@ class ExportAgent(BaseAgent):
             or "Démo CyberForge"
         )
 
+        def _log_export_deploy(slug: str, html_payload: str) -> None:
+            size = len(html_payload.encode("utf-8"))
+            logger.info(
+                "[ExportAI] Déploiement slug=%s html_size=%s bytes",
+                slug,
+                size,
+            )
+
         async def _deploy_dedicated() -> None:
             nonlocal production_url, provider, message
             deploy_files = dict(files)
@@ -241,6 +261,10 @@ class ExportAgent(BaseAgent):
                 raise CloudflareExportError(
                     "index.html requis pour un déploiement Pages dédié."
                 )
+            _log_export_deploy(
+                project_name,
+                deploy_files.get("index.html", html_candidate),
+            )
             production_url = await deploy_dedicated_pages(
                 project_slug=project_name,
                 files=deploy_files,
@@ -259,6 +283,7 @@ class ExportAgent(BaseAgent):
                 html=html,
                 title=title,
             )
+            _log_export_deploy(pages_token_slug(demo_token or ""), html)
             provider = "cloudflare"
             env["DEMO_TOKEN"] = demo_token or ""
             env["DEMO_PASSWORD"] = demo_password or ""

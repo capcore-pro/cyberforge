@@ -156,12 +156,6 @@ class Settings(BaseSettings):
         default=30.0, alias="RESEARCH_TIMEOUT_SECONDS"
     )
 
-    stitch_enabled: bool = Field(default=True, alias="STITCH_ENABLED")
-    stitch_api_key: SecretStr | None = Field(default=None, alias="STITCH_API_KEY")
-    stitch_timeout_seconds: float = Field(
-        default=120.0, alias="STITCH_TIMEOUT_SECONDS"
-    )
-
     replicate_api_key: SecretStr | None = Field(default=None, alias="REPLICATE_API_KEY")
     replicate_html_model: str | None = Field(
         default=None, alias="REPLICATE_HTML_MODEL"

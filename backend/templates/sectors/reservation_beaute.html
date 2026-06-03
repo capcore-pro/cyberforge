@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{CLIENT_NAME}} — Institut de beauté</title>
+  <title>{{CLIENT_NAME}} — {{SECTOR_LABEL}}</title>
   <link rel="stylesheet" href="{{GOOGLE_FONTS_URL}}" />
   <style>
     :root {
@@ -84,7 +84,7 @@
   <header class="hero">
     <div class="wrap">
       <h1>{{CLIENT_NAME}}</h1>
-      <p>Institut de beauté — soins du visage, du corps et bien-être.</p>
+      <p>{{CLIENT_TAGLINE}}</p>
     </div>
   </header>
 
@@ -144,9 +144,9 @@
     <div class="wrap">
       <h2 class="section-title">L'équipe</h2>
       <div class="team">
-        <div class="team-member"><img src="https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?w=240&q=80" alt="" /><h3>Sophie</h3><p>Esthéticienne</p></div>
-        <div class="team-member"><img src="https://images.unsplash.com/photo-1580618672591-eb180a1b9639?w=240&q=80" alt="" /><h3>Camille</h3><p>Soins visage</p></div>
-        <div class="team-member"><img src="https://images.unsplash.com/photo-1560066984-138d9834c703?w=240&q=80" alt="" /><h3>Léa</h3><p>Massages</p></div>
+        <div class="team-member"><img src="https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?w=240&q=80" alt="{{TEAM_MEMBER_1}}" /><h3>{{TEAM_MEMBER_1}}</h3><p>{{TEAM_ROLE_1}}</p></div>
+        <div class="team-member"><img src="https://images.unsplash.com/photo-1580618672591-eb180a1b9639?w=240&q=80" alt="{{TEAM_MEMBER_2}}" /><h3>{{TEAM_MEMBER_2}}</h3><p>{{TEAM_ROLE_2}}</p></div>
+        <div class="team-member"><img src="https://images.unsplash.com/photo-1560066984-138d9834c703?w=240&q=80" alt="{{TEAM_MEMBER_3}}" /><h3>{{TEAM_MEMBER_3}}</h3><p>{{TEAM_ROLE_3}}</p></div>
       </div>
     </div>
   </section>
@@ -155,7 +155,7 @@
     <div class="wrap">
       <p>{{CLIENT_NAME}}</p>
       <p>{{ADDRESS}}</p>
-      <p>{{PHONE}} · {{EMAIL}}</p>
+      <p>{{PHONE}} · {{CLIENT_EMAIL}}</p>
     </div>
   </footer>
 

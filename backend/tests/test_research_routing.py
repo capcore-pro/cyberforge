@@ -43,13 +43,6 @@ def test_route_after_research_to_design_system() -> None:
     assert _route_after_research(state) == NODE_DESIGN_SYSTEM
 
 
-def test_route_after_template_to_stitch() -> None:
-    state: PipelineState = {"stitch_enabled": True}
-    with patch("agents.pipeline_graph.get_settings") as mock_settings:
-        mock_settings.return_value.stitch_enabled = True
-        assert _route_after_template_ai(state) == "stitch"
-
-
-def test_route_after_template_to_content_when_no_stitch() -> None:
-    state: PipelineState = {"stitch_enabled": False}
+def test_route_after_template_to_content_ai() -> None:
+    state: PipelineState = {}
     assert _route_after_template_ai(state) == "content_ai"

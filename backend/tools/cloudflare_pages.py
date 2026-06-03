@@ -1004,9 +1004,11 @@ async def deploy_demo_to_cyberforge_demos(
         api_base_url=settings.demo_api_base_url,
     )
     asset_path = pages_asset_path_legacy_for_token(token)
+    flat_asset_path = pages_asset_path_for_token(token)
     html_fresh = apply_deploy_cache_bust(html)
     body = html_fresh.encode("utf-8")
     digest = _file_digest(asset_path, body)
+    flat_digest = _file_digest(flat_asset_path, body)
     manifest_path = _manifest_path(asset_path)
     _log_upload_html_snapshot(
         asset_path=asset_path,
@@ -1016,17 +1018,20 @@ async def deploy_demo_to_cyberforge_demos(
     )
     entries = sanitize_manifest_entries(other_manifest_entries)
     entries[asset_path] = digest
+    entries[flat_asset_path] = flat_digest
     manifest = build_pages_manifest(entries, include_root_stub=False)
     _log_deploy_step(
         "0/5 deploy_demo",
-        "ZIP Direct Upload — d/{slug}/index.html (cache-bust actif)",
+        "ZIP Direct Upload — d/{slug}/index.html + u{slug}.html (cache-bust actif)",
         asset_path=asset_path,
+        flat_asset_path=flat_asset_path,
         digest=digest,
         manifest_paths=sorted(manifest.keys()),
         manifest_entry=manifest.get(manifest_path),
     )
     upload_files = {
         asset_path: body,
+        flat_asset_path: body,
         REDIRECTS_ASSET_PATH: _REDIRECTS_BODY,
     }
 
@@ -1160,6 +1165,9 @@ async def deploy_dedicated_pages_site(
         raise CloudflarePagesError(
             "index.html requis pour un déploiement Pages dédié."
         )
+    html_text = upload_files["index.html"].decode("utf-8")
+    upload_files = dict(upload_files)
+    upload_files["index.html"] = apply_deploy_cache_bust(html_text).encode("utf-8")
     manifest = build_manifest_for_files(upload_files)
     _validate_manifest_covers_uploads(manifest, upload_files)
     result = await _deploy_with_manifest(

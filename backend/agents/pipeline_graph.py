@@ -29,11 +29,6 @@ from agents.research_agent import (
     extract_research_context,
     format_research_brief_for_prompt,
 )
-from agents.stitch_ai import (
-    StitchAgent,
-    StitchResult,
-    format_stitch_mockups_for_prompt,
-)
 from agents.auto_fix_agent import AutoFixAgent
 from agents.bug_hunter_agent import BugHunterAgent, BugHuntReport
 from agents.coremind_agent import (
@@ -85,7 +80,7 @@ MAX_LIGHTHOUSE_AUTOFIX_LOOPS = 1
 DIRECT_COREMIND_MODES = frozenset({"real_app"})
 
 # Ordre LangGraph nominal pour vitrine HTML (client_demo, vitrine_next).
-# Étapes optionnelles : research (settings.research_enabled), stitch (stitch_enabled).
+# Étapes optionnelles : research (settings.research_enabled).
 # Identifiants de nœuds LangGraph (≠ clés du state TypedDict)
 NODE_DESIGN_SYSTEM = "design_system_ai"
 NODE_DATABASE = "database_ai"
@@ -98,7 +93,6 @@ VITRINE_PIPELINE_ORDER: tuple[str, ...] = (
     "research",
     NODE_DESIGN_SYSTEM,
     "template_ai",
-    "stitch",
     "content_ai",
     "builder",
     "visionui",
@@ -111,7 +105,7 @@ VITRINE_PIPELINE_ORDER: tuple[str, ...] = (
     "finalize",
 )
 
-VITRINE_OPTIONAL_STEPS: frozenset[str] = frozenset({"research", "stitch"})
+VITRINE_OPTIONAL_STEPS: frozenset[str] = frozenset({"research"})
 
 PipelineEventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -121,7 +115,6 @@ AGENT_LABELS: dict[str, str] = {
     "template_ai": "TemplateAI",
     "content_ai": "ContentAI",
     "research": "ResearchAI",
-    "stitch": "StitchAI",
     "openhands": "OpenHands",
     "builder": "BuilderAI",
     "coremind": "CoreMindAI",
@@ -155,7 +148,6 @@ class PipelineState(TypedDict, total=False):
     playwright_enabled: bool | None
     lighthouse_enabled: bool | None
     research_enabled: bool | None
-    stitch_enabled: bool | None
     architect_plan: ArchitectPlan | None
     design_system: Any
     sector_template: Any
@@ -178,8 +170,6 @@ class PipelineState(TypedDict, total=False):
     lighthouse_report: Any
     lighthouse_autofix_loops: int
     research_brief: Any
-    stitch_result: Any
-    stitch_html: str | None
     validation_status: str | None
     personal_project: bool | None
     pages_project_slug: str | None
@@ -497,7 +487,7 @@ async def electron_ai_node(
 
 
 def _generation_user_prompt(state: PipelineState) -> str:
-    """Prompt enrichi : ResearchAI + maquettes StitchAI + prompt utilisateur."""
+    """Prompt enrichi : ResearchAI + prompt utilisateur."""
     from tools.client_content_profile import (
         build_client_content_profile,
         format_literal_client_directive,
@@ -506,7 +496,6 @@ def _generation_user_prompt(state: PipelineState) -> str:
     base = (state.get("prompt") or "").strip()
     design_block = format_design_system_for_prompt(state.get("design_system"))
     research_block = format_research_brief_for_prompt(state.get("research_brief"))
-    stitch_block = format_stitch_mockups_for_prompt(state.get("stitch_result"))
     literal_block = format_literal_client_directive(
         build_client_content_profile(
             user_prompt=base,
@@ -515,7 +504,7 @@ def _generation_user_prompt(state: PipelineState) -> str:
         ),
         user_prompt=base,
     )
-    prefix = f"{design_block}{research_block}{stitch_block}{literal_block}"
+    prefix = f"{design_block}{research_block}{literal_block}"
     if prefix:
         return f"{prefix}{base}"
     return base
@@ -712,7 +701,7 @@ async def content_ai_node(
 
         project_name = short_project_name(base_prompt)
 
-    result = fill_template_content(
+    result = await fill_template_content(
         template_html=template_html,
         client_name=client_name,
         sector=sector,
@@ -929,15 +918,13 @@ async def extension_build_node(
 def _route_after_template_ai(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
-    if _stitch_requested(state):
-        return "stitch"
     return "content_ai"
 
 
 def _route_after_content_ai(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
-    return _route_post_stitch(state)
+    return _route_after_content_to_builder(state)
 
 
 def _research_requested(state: PipelineState) -> bool:
@@ -946,13 +933,7 @@ def _research_requested(state: PipelineState) -> bool:
     return get_settings().research_enabled
 
 
-def _stitch_requested(state: PipelineState) -> bool:
-    if state.get("stitch_enabled") is False:
-        return False
-    return get_settings().stitch_enabled
-
-
-def _route_post_stitch(state: PipelineState) -> str:
+def _route_after_content_to_builder(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
     plan = state.get("architect_plan")
@@ -962,115 +943,6 @@ def _route_post_stitch(state: PipelineState) -> str:
     if mode in DIRECT_COREMIND_MODES:
         return "coremind"
     return "builder"
-
-
-async def stitch_node(
-    state: PipelineState,
-    config: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    cb = _callback_from_config(config)
-    plan = state.get("architect_plan")
-    if not plan:
-        return {"error": "État pipeline incomplet (architect_plan manquant pour StitchAI)."}
-
-    ctx = extract_research_context(state.get("prompt") or "", plan=plan)
-    await _step(
-        cb,
-        "stitch",
-        "start",
-        f"Maquettes Stitch — {ctx.get('nom_entreprise') or plan.project_type_label}…",
-    )
-    settings = _settings_from_config(config)
-    agent = StitchAgent(settings)
-
-    async def on_progress(message: str) -> None:
-        await _step(cb, "stitch", "start", message)
-
-    try:
-        result = await agent.generate_mockups(
-            architect_plan=plan,
-            generation_mode=state.get("generation_mode"),
-            research_brief=state.get("research_brief"),
-            user_prompt=state.get("prompt") or "",
-            design_system=state.get("design_system"),
-            settings=settings,
-            on_progress=on_progress,
-        )
-    except Exception as exc:
-        logger.exception("StitchAI — erreur non bloquante, suite du pipeline")
-        result = StitchResult(
-            success=False,
-            mockups=[],
-            error=f"timeout ({exc!s})"[:120],
-        )
-
-    if result.skipped:
-        await _step(
-            cb,
-            "stitch",
-            "done",
-            result.skip_reason or "StitchAI ignoré.",
-            ok=True,
-            stitch_skipped=True,
-        )
-        return {"stitch_result": result}
-
-    base_html = (result.base_html or "").strip()
-    if not base_html and result.success and result.mockups:
-        from agents.stitch_ai import resolve_stitch_base_html
-
-        base_html = await resolve_stitch_base_html(result)
-        if base_html:
-            result.base_html = base_html
-            logger.info("[StitchAI] Maquette reçue %d chars", len(base_html))
-
-    if not result.success or not result.mockups:
-        msg = result.error or "Maquettes Stitch non générées — suite sans référence visuelle."
-        if (result.error or "").strip().lower() == "timeout":
-            msg = "StitchAI ignoré (délai 120 s) — suite sans maquette."
-        await _step(
-            cb,
-            "stitch",
-            "done",
-            msg,
-            ok=True,
-            stitch_skipped=True,
-        )
-        return {"stitch_result": result}
-
-    out: dict[str, Any] = {"stitch_result": result}
-    if base_html:
-        sector_tpl = state.get("sector_template")
-        if isinstance(sector_tpl, dict):
-            out["sector_template"] = {
-                **sector_tpl,
-                "html_raw": base_html,
-                "html": base_html,
-                "template_source": "stitch",
-            }
-        logger.info(
-            "[StitchAI] HTML utilisé comme base du projet (%d chars)",
-            len(base_html),
-        )
-
-    await _step(
-        cb,
-        "stitch",
-        "done",
-        f"{len(result.mockups)} maquette(s) Stitch"
-        + (f" — base HTML {len(base_html)} car." if base_html else " prête(s)."),
-        ok=True,
-        stitch_project_id=result.project_id,
-        stitch_mockup_count=len(result.mockups),
-        stitch_mockups=[m.model_dump() for m in result.mockups],
-    )
-    return out
-
-
-def _route_after_stitch(state: PipelineState) -> str:
-    if state.get("error"):
-        return "finalize"
-    return "content_ai"
 
 
 async def research_node(
@@ -2755,7 +2627,7 @@ def build_pipeline_graph() -> Any:
     Compile le graphe LangGraph.
 
     Vitrine (client_demo / vitrine_next) :
-      Architect → [Research] → DesignSystem → Template → [Stitch] → Content
+      Architect → [Research] → DesignSystem → Template → Content
       → Builder → VisionUI → BugHunter → … → Export → Finalisation
 
     real_app : même préambule visuel optionnel, puis Builder (LLM) ou CoreMind si échec.
@@ -2771,7 +2643,6 @@ def build_pipeline_graph() -> Any:
     graph.add_node("template_ai", template_ai_node)
     graph.add_node("content_ai", content_ai_node)
     graph.add_node("research", research_node)
-    graph.add_node("stitch", stitch_node)
     graph.add_node("openhands", openhands_node)
     graph.add_node("builder", builder_node)
     graph.add_node("coremind", coremind_node)
@@ -2856,7 +2727,6 @@ def build_pipeline_graph() -> Any:
         "template_ai",
         _route_after_template_ai,
         {
-            "stitch": "stitch",
             "content_ai": "content_ai",
             "finalize": "finalize",
         },
@@ -2865,18 +2735,9 @@ def build_pipeline_graph() -> Any:
         "content_ai",
         _route_after_content_ai,
         {
-            "stitch": "stitch",
             "openhands": "openhands",
             "coremind": "coremind",
             "builder": "builder",
-            "finalize": "finalize",
-        },
-    )
-    graph.add_conditional_edges(
-        "stitch",
-        _route_after_stitch,
-        {
-            "content_ai": "content_ai",
             "finalize": "finalize",
         },
     )
@@ -2947,7 +2808,6 @@ async def run_generation_pipeline(
     playwright_enabled: bool | None = None,
     lighthouse_enabled: bool | None = None,
     research_enabled: bool | None = None,
-    stitch_enabled: bool | None = None,
     project_id: str | None = None,
     inspiration_brief: str | None = None,
     firecrawl_result: dict[str, Any] | None = None,
@@ -2977,7 +2837,6 @@ async def run_generation_pipeline(
         "playwright_enabled": playwright_enabled,
         "lighthouse_enabled": lighthouse_enabled,
         "research_enabled": research_enabled,
-        "stitch_enabled": stitch_enabled,
         "personal_project": personal_project,
         "pages_project_slug": (pages_project_slug or "").strip() or None,
         "project_title": (project_title or "").strip() or None,

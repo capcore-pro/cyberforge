@@ -20,7 +20,6 @@ const DEFAULT_STEPS: PipelineStepState[] = [
 const FRIENDLY_LABELS: Record<string, string> = {
   architect: "Plan du projet",
   research: "Recherche contenu",
-  stitch: "Maquettes Stitch",
   openhands: "Code avancé OpenHands",
   builder: "Structure des pages",
   extension_build: "Extension Chrome MV3",
@@ -71,7 +70,6 @@ export function applyPipelineStepEvent(
       agent === "export" ||
       agent === "openhands" ||
       agent === "research" ||
-      agent === "stitch" ||
       agent === "playwright" ||
       agent === "lighthouse")
   ) {
@@ -86,9 +84,7 @@ export function applyPipelineStepEvent(
               ? "OpenHands"
               : agent === "research"
                 ? "ResearchAI"
-                : agent === "stitch"
-                  ? "StitchAI"
-                  : agent === "playwright"
+                : agent === "playwright"
                     ? "Playwright"
                     : agent === "lighthouse"
                       ? "Lighthouse"

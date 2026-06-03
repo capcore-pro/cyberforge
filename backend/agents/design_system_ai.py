@@ -260,7 +260,7 @@ _PROMPT_FAMILY_RULES: tuple[tuple[tuple[str, ...], VisualFamily], ...] = (
 
 _VISUAL_LAW_HEADER = (
     "## LOI VISUELLE DU PROJET (DesignSystemAI — non négociable)\n"
-    "Ce JSON est transmis à TOUS les agents (Research, Stitch, Builder, CoreMind, "
+    "Ce JSON est transmis à TOUS les agents (Research, Builder, CoreMind, "
     "Vision, BugHunter, Export). Interdiction de dévier des couleurs, polices et tokens.\n\n"
 )
 
@@ -559,46 +559,36 @@ def design_system_to_css_variables(doc: DesignSystemJSON) -> str:
 """
 
 
-def design_system_to_stitch_palette(
-    doc: DesignSystemJSON | dict[str, Any] | None,
-) -> dict[str, str]:
-    """Palette triple pour StitchAI."""
-    if doc is None:
-        return {}
-    if isinstance(doc, dict):
-        colors = doc.get("colors") or {}
-    else:
-        colors = doc.colors.model_dump()
-    return {
-        "primary": colors.get("primary", ""),
-        "secondary": colors.get("secondary", ""),
-        "accent": colors.get("accent", ""),
-    }
-
-
 def _sync_template_css_variables(html: str, doc: DesignSystemJSON) -> str:
     """Aligne les variables :root existantes sur le design system."""
-    c = doc.colors
-    f = doc.fonts
-    heading_esc = f.heading.replace("'", "\\'")
-    body_esc = f.body.replace("'", "\\'")
-    replacements: tuple[tuple[str, str], ...] = (
-        (r"(--color-primary\s*:\s*)[^;]+", rf"\1{c.primary}"),
-        (r"(--color-secondary\s*:\s*)[^;]+", rf"\1{c.secondary}"),
-        (r"(--color-accent\s*:\s*)[^;]+", rf"\1{c.accent}"),
-        (r"(--font-heading\s*:\s*)[^;]+", rf"\1'{heading_esc}', serif"),
-        (r"(--font-body\s*:\s*)[^;]+", rf"\1'{body_esc}', sans-serif"),
-        (r"(--border-radius\s*:\s*)[^;]+", rf"\1{doc.border_radius}"),
-        (r"(--primary\s*:\s*)[^;]+", rf"\1{c.primary}"),
-        (r"(--secondary\s*:\s*)[^;]+", rf"\1{c.secondary}"),
-        (r"(--accent\s*:\s*)[^;]+", rf"\1{c.accent}"),
-        (r"(--font-h\s*:\s*)[^;]+", rf"\1'{heading_esc}', serif"),
-        (r"(--font-b\s*:\s*)[^;]+", rf"\1'{body_esc}', sans-serif"),
-    )
-    out = html
-    for pattern, repl in replacements:
-        out = re.sub(pattern, repl, out, flags=re.I)
-    return out
+    try:
+        c = doc.colors
+        f = doc.fonts
+        heading_esc = f.heading.replace("'", "\\'")
+        body_esc = f.body.replace("'", "\\'")
+        replacements: tuple[tuple[str, str], ...] = (
+            (r"(--color-primary\s*:\s*)[^;]+", rf"\1{c.primary}"),
+            (r"(--color-secondary\s*:\s*)[^;]+", rf"\1{c.secondary}"),
+            (r"(--color-accent\s*:\s*)[^;]+", rf"\1{c.accent}"),
+            (r"(--font-heading\s*:\s*)[^;]+", rf"\1'{heading_esc}', serif"),
+            (r"(--font-body\s*:\s*)[^;]+", rf"\1'{body_esc}', sans-serif"),
+            (r"(--border-radius\s*:\s*)[^;]+", rf"\1{doc.border_radius}"),
+            (r"(--primary\s*:\s*)[^;]+", rf"\1{c.primary}"),
+            (r"(--secondary\s*:\s*)[^;]+", rf"\1{c.secondary}"),
+            (r"(--accent\s*:\s*)[^;]+", rf"\1{c.accent}"),
+            (r"(--font-h\s*:\s*)[^;]+", rf"\1'{heading_esc}', serif"),
+            (r"(--font-b\s*:\s*)[^;]+", rf"\1'{body_esc}', sans-serif"),
+        )
+        out = html
+        for pattern, repl in replacements:
+            out = re.sub(pattern, repl, out, flags=re.I)
+        return out
+    except Exception as exc:
+        logger.warning(
+            "[DesignSystemAI] sync variables CSS ignorée — HTML conservé: %s",
+            exc,
+        )
+        return html
 
 
 def apply_design_system_to_html(

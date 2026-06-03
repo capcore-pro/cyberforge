@@ -90,12 +90,6 @@ const API_KEYS: ApiKeyDef[] = [
     payloadKey: "exa_api_key",
     placeholder: "exa-…",
   },
-  {
-    id: "stitch",
-    label: "StitchAI (Google Stitch)",
-    payloadKey: "stitch_api_key",
-    placeholder: "Clé Google Stitch",
-  },
 ];
 
 const VAULT_MASK = "••••••••••••";
@@ -208,7 +202,6 @@ export function ApiKeysSettingsPanel() {
     google_generative_ai_api_key: "",
     brave_search_api_key: "",
     exa_api_key: "",
-    stitch_api_key: "",
   });
 
   const [testResults, setTestResults] = useState<

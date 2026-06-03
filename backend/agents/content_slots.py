@@ -100,6 +100,24 @@ _RESERVATION_SERVICE_NAV: dict[str, tuple[str, str, str]] = {
     "reservation_default": ("Services", "Formules", "Express"),
 }
 
+_RESERVATION_TEAM: dict[str, list[tuple[str, str]]] = {
+    "reservation_beaute": [
+        ("Conseillère beauté", "Esthétique & soins du visage"),
+        ("Coloriste", "Colorations & balayages"),
+        ("Praticienne bien-être", "Massages & détente"),
+    ],
+    "reservation_sante": [
+        ("Dr. Martin", "Médecine générale"),
+        ("Dr. Lefebvre", "Spécialiste"),
+        ("Dr. Bernard", "Consultation"),
+    ],
+    "reservation_default": [
+        ("Conseiller", "Accueil & orientation"),
+        ("Spécialiste", "Prestations sur mesure"),
+        ("Référent", "Suivi client"),
+    ],
+}
+
 _BLOCKED_RESERVATION_SERVICE_KEYWORDS: frozenset[str] = frozenset(
     {
         "pack",
@@ -216,9 +234,11 @@ def build_default_contact_slots(
         phone = "À préciser"
 
     email = f"contact@{_contact_email_slug(brand)}.fr"
+    email_esc = html_lib.escape(email)
     return {
         "PHONE": html_lib.escape(phone),
-        "EMAIL": html_lib.escape(email),
+        "EMAIL": email_esc,
+        "CLIENT_EMAIL": email_esc,
         "ADDRESS": html_lib.escape(address),
     }
 
@@ -344,6 +364,9 @@ def build_ecommerce_slots(
 
     slots = {
         "CLIENT_NAME": html_lib.escape(brand),
+        "CLIENT_TAGLINE": html_lib.escape(
+            f"Votre boutique en ligne — {brand}."
+        ),
         "PRIMARY_COLOR": ds.get("PRIMARY_COLOR", "#2563EB"),
         "SECONDARY_COLOR": ds.get("SECONDARY_COLOR", "#F8FAFC"),
         "FONT_HEADING": ds.get("FONT_HEADING", "Inter"),
@@ -363,6 +386,13 @@ def build_ecommerce_slots(
         "PRODUCT_3_NAME": html_lib.escape(products[2][0]),
         "PRODUCT_3_PRICE": html_lib.escape(products[2][1]),
     }
+    if len(products) >= 6:
+        slots["PRODUCT_4_NAME"] = html_lib.escape(products[3][0])
+        slots["PRODUCT_4_PRICE"] = html_lib.escape(products[3][1])
+        slots["PRODUCT_5_NAME"] = html_lib.escape(products[4][0])
+        slots["PRODUCT_5_PRICE"] = html_lib.escape(products[4][1])
+        slots["PRODUCT_6_NAME"] = html_lib.escape(products[5][0])
+        slots["PRODUCT_6_PRICE"] = html_lib.escape(products[5][1])
     return ensure_contact_slots(
         slots,
         brand,
@@ -401,6 +431,55 @@ def _resolve_reservation_services(
     return defaults[0], defaults[1], defaults[2]
 
 
+def _team_placeholder_slots(
+    team: tuple[tuple[str, str], tuple[str, str], tuple[str, str]],
+) -> dict[str, str]:
+    """TEAM_MEMBER_* / TEAM_ROLE_* (+ alias TEAM_N_NAME pour templates existants)."""
+    out: dict[str, str] = {}
+    for i, (name, role) in enumerate(team, start=1):
+        out[f"TEAM_MEMBER_{i}"] = html_lib.escape(name)
+        out[f"TEAM_ROLE_{i}"] = html_lib.escape(role)
+        out[f"TEAM_{i}_NAME"] = html_lib.escape(name)
+        out[f"TEAM_{i}_ROLE"] = html_lib.escape(role)
+    return out
+
+
+def _reservation_client_description(
+    brand: str,
+    sector: str,
+    city: str,
+    *,
+    template_id: str = "",
+    user_prompt: str = "",
+    research: dict[str, Any] | None = None,
+) -> str:
+    profile = build_client_content_profile(
+        user_prompt=user_prompt,
+        research_brief=research,
+    )
+    from tools.client_content_profile import format_client_tagline
+
+    sector_label = humanize_sector_label(
+        sector or profile.sector,
+        profile.keywords,
+        user_prompt=user_prompt,
+    )
+    city_clean = sanitize_city(city)
+    if template_id == "reservation_beaute":
+        if city_clean:
+            return f"{sector_label} — soins & bien-être à {city_clean}"
+        return f"{sector_label} — soins du visage, du corps et bien-être"
+    if template_id == "reservation_sante":
+        if city_clean:
+            return f"Prenez rendez-vous en ligne — {sector_label} à {city_clean}"
+        return "Prenez rendez-vous en ligne — consultations et soins sur mesure"
+    if template_id == "reservation_default":
+        if city_clean:
+            return f"Réservez votre créneau en ligne — {brand} à {city_clean}"
+        return f"Réservez votre créneau en ligne — {brand}"
+    return format_client_tagline(profile, user_prompt=user_prompt)
+
+
 def build_reservation_slots(
     template_id: str,
     brand: str,
@@ -409,16 +488,42 @@ def build_reservation_slots(
     *,
     user_prompt: str = "",
     research: dict[str, Any] | None = None,
+    sector: str = "",
 ) -> dict[str, str]:
-    svc1, svc2, svc3 = _resolve_reservation_services(template_id, research)
+    svc1, svc2, svc3 = _resolve_reservation_services(template_id, research or {})
     contact = build_default_contact_slots(
         brand, city, user_prompt=user_prompt, research=research
     )
     nav = _RESERVATION_SERVICE_NAV.get(
         template_id, _RESERVATION_SERVICE_NAV["reservation_default"]
     )
+    profile = build_client_content_profile(
+        user_prompt=user_prompt,
+        research_brief=research,
+    )
+    sector_label = humanize_sector_label(
+        sector or (research or {}).get("secteur") or profile.sector,
+        profile.keywords,
+        user_prompt=user_prompt,
+    )
+    team = _RESERVATION_TEAM.get(
+        template_id, _RESERVATION_TEAM["reservation_default"]
+    )
+    client_tagline = _reservation_client_description(
+        brand,
+        sector,
+        city,
+        template_id=template_id,
+        user_prompt=user_prompt,
+        research=research,
+    )
+    team_slots = _team_placeholder_slots((team[0], team[1], team[2]))
     return {
         "CLIENT_NAME": html_lib.escape(brand),
+        "CLIENT_TAGLINE": html_lib.escape(client_tagline),
+        "CLIENT_DESCRIPTION": html_lib.escape(client_tagline),
+        "SECTOR_LABEL": html_lib.escape(sector_label),
+        **team_slots,
         "PRIMARY_COLOR": ds.get("PRIMARY_COLOR", "#0D9488"),
         "SECONDARY_COLOR": ds.get("SECONDARY_COLOR", "#F0FDFA"),
         "FONT_HEADING": ds.get("FONT_HEADING", "Inter"),
@@ -494,7 +599,7 @@ def build_app_slots(
     else:
         table_title = "Données"
         col_set = ("Élément", "Statut", "Valeur")
-    return {
+    slots: dict[str, str] = {
         "APP_NAME": html_lib.escape(app_name),
         "CLIENT_NAME": html_lib.escape(brand),
         "PRIMARY_COLOR": ds.get("PRIMARY_COLOR", "#6366F1"),
@@ -518,6 +623,21 @@ def build_app_slots(
         "COL_2": html_lib.escape(col_set[1]),
         "COL_3": html_lib.escape(col_set[2]),
     }
+    if template_id == "app_crm":
+        slots.update(
+            {
+                "DEMO_ROW_1_NAME": html_lib.escape("Jean Dupont"),
+                "DEMO_ROW_1_STATUS": html_lib.escape("Prospect"),
+                "DEMO_ROW_1_AMOUNT": html_lib.escape("15 000 €"),
+                "DEMO_ROW_2_NAME": html_lib.escape("Marie Martin"),
+                "DEMO_ROW_2_STATUS": html_lib.escape("Client"),
+                "DEMO_ROW_2_AMOUNT": html_lib.escape("42 500 €"),
+                "DEMO_ROW_3_NAME": html_lib.escape(f"Société {brand[:20]}"),
+                "DEMO_ROW_3_STATUS": html_lib.escape("Négociation"),
+                "DEMO_ROW_3_AMOUNT": html_lib.escape("88 000 €"),
+            }
+        )
+    return slots
 
 
 def build_desktop_slots(

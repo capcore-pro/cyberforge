@@ -135,22 +135,15 @@ export function ResearchSettingsPanel() {
   const [status, setStatus] = useState<SecretsStatusResponse | null>(null);
   const [braveKey, setBraveKey] = useState("");
   const [exaKey, setExaKey] = useState("");
-  const [stitchKey, setStitchKey] = useState("");
   const [vaultPassword, setVaultPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [testing, setTesting] = useState<"brave_search" | "exa" | "stitch" | null>(
-    null,
-  );
+  const [testing, setTesting] = useState<"brave_search" | "exa" | null>(null);
   const [testBrave, setTestBrave] = useState<{ valid: boolean; message: string } | null>(
     null,
   );
   const [testExa, setTestExa] = useState<{ valid: boolean; message: string } | null>(null);
-  const [testStitch, setTestStitch] = useState<{ valid: boolean; message: string } | null>(
-    null,
-  );
-
   const refresh = useCallback(async () => {
     const res = await fetchSecretsStatus();
     if (res.ok && res.data) setStatus(res.data);
@@ -167,7 +160,7 @@ export function ResearchSettingsPanel() {
     setEnabled(next);
   }, []);
 
-  const runTest = async (provider: "brave_search" | "exa" | "stitch", key: string) => {
+  const runTest = async (provider: "brave_search" | "exa", key: string) => {
     setTesting(provider);
     const res = await testSecretKey(provider, key.trim() || undefined);
     setTesting(null);
@@ -176,8 +169,7 @@ export function ResearchSettingsPanel() {
       message: res.data?.message ?? apiErrorMessage(res, "Échec du test"),
     };
     if (provider === "brave_search") setTestBrave(payload);
-    else if (provider === "exa") setTestExa(payload);
-    else setTestStitch(payload);
+    else setTestExa(payload);
   };
 
   const saveKeys = async () => {
@@ -191,7 +183,6 @@ export function ResearchSettingsPanel() {
     const res = await saveSecrets(vaultPassword, {
       brave_search_api_key: braveKey.trim() || null,
       exa_api_key: exaKey.trim() || null,
-      stitch_api_key: stitchKey.trim() || null,
     });
     setBusy(false);
     if (!res.ok) {
@@ -201,7 +192,6 @@ export function ResearchSettingsPanel() {
     setSuccess("Clés recherche enregistrées.");
     setBraveKey("");
     setExaKey("");
-    setStitchKey("");
     setVaultPassword("");
     notifySecretsSaved();
     await Promise.all([refresh(), refreshAgentsStatus()]);
@@ -245,17 +235,6 @@ export function ResearchSettingsPanel() {
           testing={testing === "exa"}
           testMessage={testExa?.message ?? null}
           testValid={testExa?.valid ?? null}
-        />
-        <KeyField
-          label="StitchAI (Google Stitch)"
-          configured={Boolean(configured?.stitch)}
-          value={stitchKey}
-          placeholder="Clé Google Stitch"
-          onChange={setStitchKey}
-          onTest={() => void runTest("stitch", stitchKey)}
-          testing={testing === "stitch"}
-          testMessage={testStitch?.message ?? null}
-          testValid={testStitch?.valid ?? null}
         />
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1">

@@ -166,14 +166,14 @@ class PlaywrightAgent(BaseAgent):
                 passed=["playwright_unavailable"],
             )
 
-        server: HTTPServer | None = None
-        target = (base_url or "").strip()
-        preview_html = (html or "").strip()
-
-        if prefer_local_preview or vitrine_mode:
-            target = ""
-
         try:
+            server: HTTPServer | None = None
+            target = (base_url or "").strip()
+            preview_html = (html or "").strip()
+
+            if prefer_local_preview or vitrine_mode:
+                target = ""
+
             if not target:
                 if len(preview_html) < 80:
                     return PlaywrightReport(
@@ -209,6 +209,18 @@ class PlaywrightAgent(BaseAgent):
                 timeout=resolved.playwright_timeout_seconds + 15,
             )
             return report
+        except NotImplementedError:
+            logger.warning(
+                "[Playwright] non supporté sur cette plateforme (Windows/asyncio) — ignoré"
+            )
+            return PlaywrightReport(
+                passed=[],
+                failed=[],
+                score=0,
+                ok=True,
+                skipped=True,
+                skip_reason="Playwright non supporté sur Windows (asyncio)",
+            )
         except asyncio.TimeoutError:
             return PlaywrightReport(
                 target_url=target,

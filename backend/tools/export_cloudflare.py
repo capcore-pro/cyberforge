@@ -13,6 +13,7 @@ from tools.cloudflare_pages import (
     CloudflarePagesError,
     deploy_dedicated_pages_site,
     deploy_demo_to_cyberforge_demos,
+    pages_token_slug,
     public_demo_url_for_token,
     public_pages_url_for_project,
 )
@@ -63,6 +64,13 @@ async def deploy_dedicated_pages(
     if "capcore" in slug or "capcore" in title.lower():
         html = upload_files["index.html"].decode("utf-8")
         upload_files["index.html"] = enforce_capcore_theme(html).encode("utf-8")
+
+    index_bytes = upload_files.get("index.html", b"")
+    logger.info(
+        "[ExportAI] Déploiement slug=%s html_size=%s bytes",
+        slug,
+        len(index_bytes),
+    )
 
     try:
         deploy = await deploy_dedicated_pages_site(
@@ -115,6 +123,13 @@ async def deploy_html_demo(
             )
         except Exception as exc:
             logger.warning("Manifest Cloudflare Supabase ignoré : %s", exc)
+
+    slug = pages_token_slug(demo_token)
+    logger.info(
+        "[ExportAI] Déploiement slug=%s html_size=%s bytes",
+        slug,
+        len(gated.encode("utf-8")),
+    )
 
     try:
         deploy = await deploy_demo_to_cyberforge_demos(

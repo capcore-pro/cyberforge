@@ -19,7 +19,7 @@
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  LangGraph pipeline (pipeline_graph.py)                     │
-│  Vitrine : Architect → DesignSystem → Template → Research* → Content → Stitch* → Builder → … │
+│  Vitrine : Architect → DesignSystem → Template → Research* → Content → Builder → … │
 └────────────────────────────┬────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -61,7 +61,6 @@ Utilitaire : `require_ok(result)` lève `AgentContractError`.
 | **DesignSystemAI** | JSON tokens visuels complets avant code | HTML, copy, structure |
 | **ArchitectAI** | Choisir `project_type` + `template_id` du catalogue | Inventer un template hors catalogue |
 | **ResearchAI** | Brief structuré (nom, secteur, ville, mots-clés) | Générer du HTML |
-| **StitchAI** | Maquettes visuelles (optionnel, dégradé 30s) | Bloquer le pipeline |
 | **BuilderAI / TemplateFirst** | Rendre le livrable depuis le template | HTML libre en client_demo |
 | **VisionUI** | Médias / capture | Modifier le contenu métier |
 | **BugHunterAI** | Valider HTML ; réparer identité client | Régénérer tout le site |
@@ -79,9 +78,7 @@ flowchart LR
     A --> D[DesignSystemAI]
     R --> D
     D --> T[TemplateAI]
-    T --> S[StitchAI]
     T --> C[ContentAI]
-    S --> C
     C --> B[BuilderAI]
     B --> V[VisionUI]
     V --> H[BugHunterAI]
@@ -99,10 +96,9 @@ flowchart LR
 | 2 | **ResearchAI** * | `research_brief` | Mots-clés, tendances, contexte marché |
 | 3 | **DesignSystemAI** | `design_system` · nœud `design_system_ai` | JSON loi visuelle (couleurs, polices) |
 | 4 | **TemplateAI** | `sector_template.html_raw` | Fichier sectoriel + `{{placeholders}}` |
-| 5 | **StitchAI** * | `stitch_result` | Maquettes (design_system imposé) |
-| 6 | **ContentAI** | `sector_template.html` | Placeholders → contenu client réel |
-| 7 | **BuilderAI** | `generation`, `preview_html` | Assemblage + optimise HTML |
-| 8+ | VisionUI → BugHunter → TestPilot → Playwright → Lighthouse → Export | — | Qualité, export, livraison |
+| 5 | **ContentAI** | `sector_template.html` | Placeholders → contenu client réel |
+| 6 | **BuilderAI** | `generation`, `preview_html` | Assemblage + optimise HTML |
+| 7+ | VisionUI → BugHunter → TestPilot → Playwright → Lighthouse → Export | — | Qualité, export, livraison |
 
 **Types template-first (HTML assemblé)** : vitrines, `ecommerce_*`, `reservation_*`, `app_*`, `desktop_*` — voir `tools/sector_template_catalog.py`.
 
@@ -113,10 +109,9 @@ flowchart LR
 1. `ResearchAI` enrichit le contexte (si activé)
 2. `DesignSystemAI` fixe la loi visuelle
 3. `TemplateAI` charge `backend/templates/sectors/*.html`
-4. `StitchAI` peut produire des maquettes (optionnel)
-5. `ContentAI` remplit avec `research_brief` + `design_system`
-6. `BuilderAI` valide/minifie le HTML final (`optimize_html`)
-4. Pas de HTML généré from scratch sur ces modes
+4. `ContentAI` remplit avec `research_brief` + `design_system`
+5. `BuilderAI` valide/minifie le HTML final (`optimize_html`)
+6. Pas de HTML généré from scratch sur ces modes
 
 ## Fichiers clés
 

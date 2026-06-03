@@ -27,6 +27,7 @@ from prompts.shared import (
 )
 from prompts.openhands import OPENHANDS_ANTHROPIC_SYSTEM, OPENHANDS_TASK_TEMPLATE
 from prompts.vitrine import VITRINE_CONTENT_SYSTEM
+from prompts.content_ai import CONTENT_AI_SYSTEM_PROMPT
 
 __all__ = [
     "PROMPTS_VERSION",
@@ -42,6 +43,7 @@ __all__ = [
     "DEMO_SEED_SYSTEM_PROMPT",
     "MAX_USER_PROMPT_CHARS",
     "VITRINE_CONTENT_SYSTEM",
+    "CONTENT_AI_SYSTEM_PROMPT",
     "OPENHANDS_ANTHROPIC_SYSTEM",
     "OPENHANDS_TASK_TEMPLATE",
     "build_autofix_prompt",

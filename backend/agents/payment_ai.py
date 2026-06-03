@@ -17,9 +17,12 @@ Retour:
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 import os
-import re
 from typing import Any, Literal
+
+logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 
@@ -29,7 +32,15 @@ import anthropic  # noqa: E402
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
-MAX_TOKENS = 6000
+MAX_TOKENS = 8000
+
+_PARSE_ERROR_PAYLOAD: dict[str, Any] = {
+    "payment_type": "none",
+    "stripe_config": {},
+    "sql": "",
+    "frontend_code": "",
+    "summary": "PaymentAI parse error - skipped",
+}
 
 PaymentType = Literal["none", "one_shot", "subscription", "booking"]
 
@@ -176,8 +187,6 @@ def _fallback_payload(payment_type: PaymentType) -> dict[str, Any]:
 
 
 async def run(project_description: str, project_type: str, database_schema: dict) -> dict:
-    import json as json_module
-
     detected = detect_payment_type(project_description, project_type)
     if detected == "none":
         return _fallback_payload("none")
@@ -190,7 +199,7 @@ async def run(project_description: str, project_type: str, database_schema: dict
         "## project_description\n"
         f"{(project_description or '').strip()}\n\n"
         "## database_schema (JSON)\n"
-        f"{json_module.dumps(database_schema or {}, ensure_ascii=False)[:8000]}"
+        f"{json.dumps(database_schema or {}, ensure_ascii=False)[:8000]}"
     ).strip()
 
     try:
@@ -215,7 +224,14 @@ async def run(project_description: str, project_type: str, database_schema: dict
         if start == -1 or end == -1:
             raise ValueError("Aucun JSON trouvé")
         json_str = cleaned[start : end + 1]
-        parsed = json_module.loads(json_str)
+        try:
+            parsed = json.loads(json_str)
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "[PaymentAI] JSON invalide ou tronqué (max_tokens ?) — paiement ignoré: %s",
+                exc,
+            )
+            return dict(_PARSE_ERROR_PAYLOAD)
         if not isinstance(parsed, dict):
             raise ValueError("JSON racine invalide")
         if not all(k in parsed for k in ["payment_type", "stripe_config", "sql", "frontend_code", "summary"]):
@@ -228,7 +244,7 @@ async def run(project_description: str, project_type: str, database_schema: dict
             "frontend_code": str(parsed.get("frontend_code") or ""),
             "summary": str(parsed.get("summary") or ""),
         }
-    except Exception as _ex:
-        print(f"[PaymentAI PARSE ERROR] {_ex}")
+    except Exception as exc:
+        logger.warning("[PaymentAI] échec génération — repli fallback: %s", exc)
         return _fallback_payload(detected)
 

@@ -8,11 +8,5 @@ def test_research_active_with_brave_or_exa() -> None:
     assert _agent_is_active("research", {"exa": True}) is True
     assert _agent_is_active("research", {}) is False
 
-
-def test_stitch_requires_stitch_key() -> None:
-    assert _agent_is_active("stitch", {"stitch": True}) is True
-    assert _agent_is_active("stitch", {}) is False
-
-
 def test_architect_always_active_in_pipeline() -> None:
     assert _agent_is_active("architect", {}) is True

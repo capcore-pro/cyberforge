@@ -49,8 +49,6 @@ def test_api_key(provider: str, api_key: str) -> tuple[bool, str]:
             return _test_brave_search(token)
         if key == "exa":
             return _test_exa(token)
-        if key == "stitch":
-            return _test_stitch(token)
 
         return False, f"Fournisseur inconnu : {provider}"
     except Exception as exc:
@@ -201,11 +199,3 @@ def _test_exa(token: str) -> tuple[bool, str]:
         headers=headers,
         json={"query": "test", "numResults": 1, "type": "auto"},
     )
-
-
-def _test_stitch(token: str) -> tuple[bool, str]:
-    """Validation légère — la clé Stitch est vérifiée au runtime par stitch_runner.mjs."""
-    cleaned = token.strip()
-    if len(cleaned) < 8:
-        return False, "Clé trop courte"
-    return True, "Format accepté (test complet au pipeline StitchAI)"

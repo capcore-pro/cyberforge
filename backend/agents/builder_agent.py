@@ -349,7 +349,7 @@ class BuilderAgent(BaseAgent):
                     fallback_to_coremind=not forbid_coremind_fallback,
                 )
 
-        assembly = assemble_template_html(
+        assembly = await assemble_template_html(
             template_html=html,
             client_name=client_name,
             sector=sector,
@@ -371,7 +371,7 @@ class BuilderAgent(BaseAgent):
                 err.message if err else assembly,
                 forbid_coremind_fallback,
             )
-            assembly = assemble_template_html(
+            assembly = await assemble_template_html(
                 template_html=html,
                 client_name=client_name,
                 sector=sector,
@@ -504,9 +504,7 @@ class BuilderAgent(BaseAgent):
             f"{vitrine_rules}"
             f"{literal_block}"
             f"Si un brief ResearchAI (Brave / Exa) est présent en tête du prompt, "
-            f"utilise-le pour du contenu réel et localisé — pas de données fictives.\n"
-            f"Si des maquettes StitchAI (URLs HTML / captures) sont listées, "
-            f"aligne la mise en page, les couleurs et la hiérarchie visuelle sur ces références.\n\n"
+            f"utilise-le pour du contenu réel et localisé — pas de données fictives.\n\n"
             f"{CMS_BUILDER_HINT}"
             f"{toolbox_block}"
             f"{research_block}"

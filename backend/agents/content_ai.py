@@ -1,17 +1,23 @@
 """
 ContentAI — Agent 3.
 
-Remplit les placeholders du template HTML avec le contenu client réel
-(research, secteur, design system). Pas de LLM — déterministe et vérifiable.
+Enrichit le template via un bloc CSS premium généré par Claude Sonnet (injection dans <head>),
+puis remplit les placeholders avec le contenu client réel
+(research, secteur, design system) et applique les post-traitements.
 """
 
 from __future__ import annotations
 
 import html as html_lib
+import json
 import logging
+import os
 import re
 from typing import Any
 
+import httpx
+from anthropic import AsyncAnthropic
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from agents.base_agent import BaseAgent
@@ -28,6 +34,8 @@ from agents.content_slots import (
     build_desktop_slots,
     build_ecommerce_slots,
     build_reservation_slots,
+    _RESERVATION_TEAM,
+    _team_placeholder_slots,
     ensure_contact_slots,
 )
 from tools.html_markdown import strip_markdown_code_fences
@@ -37,13 +45,33 @@ from tools.client_content_profile import (
     resolve_client_business_name,
     sanitize_city,
 )
+from config import get_settings
+from prompts import CONTENT_AI_SYSTEM_PROMPT
+from security.llm_secrets import get_effective_llm_key
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 logger = logging.getLogger(__name__)
 
 _AGENT_ID = "content_ai"
 _AGENT_NAME = "ContentAI"
 
+CONTENT_AI_MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
+CONTENT_AI_MAX_TOKENS = 4000
+CONTENT_AI_CLAUDE_TIMEOUT_SECONDS = 120.0
+
+_anthropic_http_client = httpx.AsyncClient(timeout=CONTENT_AI_CLAUDE_TIMEOUT_SECONDS)
+_anthropic_client = AsyncAnthropic(
+    api_key=get_effective_llm_key("ANTHROPIC_API_KEY", get_settings()) or "",
+    http_client=_anthropic_http_client,
+)
+
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
+
+
+def _clean_client_name(text: str) -> str:
+    """Retire les caractères Markdown (# * `) des noms affichés dans les placeholders."""
+    return re.sub(r"[#*`]", "", (text or "")).strip()
 
 
 def inject_stripe(html: str, payment_config: Any | None) -> str:
@@ -329,6 +357,8 @@ def build_content_slots(
     """Construit toutes les valeurs de placeholders pour ContentAI."""
     research = _coerce_research_dict(research_content)
     ds = _design_system_slots(design_system)
+    client_name = _clean_client_name(client_name)
+    project_name = _clean_client_name(project_name)
     profile = build_client_content_profile(
         user_prompt=user_prompt,
         research_brief=research_content,
@@ -341,12 +371,13 @@ def build_content_slots(
         city=city_clean if city_clean != "votre ville" else profile.city,
         user_prompt=user_prompt,
     )
-    if (project_name or "").strip():
-        brand = project_name.strip()
+    if project_name:
+        brand = project_name
     elif user_prompt:
         inferred = short_project_name(user_prompt)
         if inferred and inferred != "Projet":
             brand = inferred
+    brand = _clean_client_name(brand)
     sector_label = humanize_sector_label(
         sector or research.get("secteur") or profile.sector,
         profile.keywords,
@@ -371,6 +402,7 @@ def build_content_slots(
             ds,
             user_prompt=user_prompt,
             research=research,
+            sector=sector or research.get("secteur") or profile.sector,
         )
     if tid.startswith("app_"):
         slots = build_app_slots(
@@ -413,6 +445,7 @@ def build_content_slots(
 
     slots: dict[str, str] = {
         "CLIENT_NAME": html_lib.escape(brand),
+        "CLIENT_TAGLINE": html_lib.escape(hero_subtitle),
         "SECTOR": html_lib.escape(sector_label),
         "CITY": html_lib.escape(city_clean),
         "PRIMARY_COLOR": ds.get("PRIMARY_COLOR", "#1C2833"),
@@ -431,12 +464,38 @@ def build_content_slots(
             "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap",
         ),
     }
+    if tid == "vitrine_sante":
+        health_team = _RESERVATION_TEAM["reservation_sante"]
+        slots.update(_team_placeholder_slots(health_team))
+        slots["TEAM_MEMBER_1_BIO"] = html_lib.escape(
+            f"{sector_label} · 12 ans d'expérience"
+        )
+        slots["TEAM_MEMBER_2_BIO"] = html_lib.escape(
+            "Approche bienveillante et à l'écoute"
+        )
+        slots["TEAM_MEMBER_3_BIO"] = html_lib.escape(f"Accueil · {city_clean}")
+    if tid == "vitrine_nautisme":
+        slots["FLEET_1_NAME"] = html_lib.escape("Voilier 8m")
+        slots["FLEET_1_DESC"] = html_lib.escape(
+            "Jusqu'à 6 personnes · Skipper optionnel"
+        )
+        slots["FLEET_2_NAME"] = html_lib.escape("Catamaran")
+        slots["FLEET_2_DESC"] = html_lib.escape("Sorties journée · Équipement complet")
+        slots["FLEET_3_NAME"] = html_lib.escape("Semi-rigide")
+        slots["FLEET_3_DESC"] = html_lib.escape(f"Découverte côte · {city_clean}")
     return slots
 
 
 def _apply_design_system_css(html: str, design_system: Any | None) -> str:
     """Injecte / renforce les variables CSS de la loi visuelle."""
-    return apply_design_system_to_html(html, design_system, log_prefix="ContentAI")
+    try:
+        return apply_design_system_to_html(html, design_system, log_prefix="ContentAI")
+    except Exception as exc:
+        logger.warning(
+            "[ContentAI] apply design system ignoré — HTML conservé: %s",
+            exc,
+        )
+        return html
 
 
 def _apply_project_name_to_html(html: str, project_name: str) -> str:
@@ -499,6 +558,289 @@ def _fix_action_links(html: str) -> str:
     return html
 
 
+def _anthropic_api_key() -> str | None:
+    key = get_effective_llm_key("ANTHROPIC_API_KEY", get_settings())
+    return (key or "").strip() or None
+
+
+def _serialize_design_system(design_system: Any | None) -> dict[str, Any]:
+    if design_system is None:
+        return {}
+    if isinstance(design_system, DesignSystemJSON):
+        return design_system.to_contract_dict()
+    if isinstance(design_system, dict):
+        return design_system
+    if hasattr(design_system, "model_dump"):
+        return design_system.model_dump(mode="json")
+    return {}
+
+
+_CONTENT_AI_CSS_RULE_HEADER = (
+    "RÈGLE ABSOLUE : génère UNIQUEMENT du CSS pur. "
+    "Zéro Markdown, zéro ##, zéro **, zéro texte explicatif. "
+    "Commence directement par <style> et termine par </style>."
+)
+
+_CONTENT_PREMIUM_IO_SCRIPT = """
+<script id="cf-content-premium-io">
+(function () {
+  var els = document.querySelectorAll(".reveal");
+  if (!els.length || !("IntersectionObserver" in window)) {
+    els.forEach(function (el) { el.classList.add("visible"); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        e.target.classList.add("visible");
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+  els.forEach(function (el) { io.observe(el); });
+})();
+</script>
+""".strip()
+
+
+def _plain_text_for_claude(text: str) -> str:
+    """Retire le Markdown des champs texte envoyés à Claude (pas de ##, **, `)."""
+    t = (text or "").strip()
+    if not t:
+        return ""
+    t = re.sub(r"```[\w]*\n?", "", t)
+    t = t.replace("```", "")
+    t = re.sub(r"^#+\s+", "", t, flags=re.MULTILINE)
+    t = t.replace("**", "").replace("__", "")
+    t = re.sub(r"`([^`]*)`", r"\1", t)
+    t = re.sub(r"^\s*[-*+]\s+", "", t, flags=re.MULTILINE)
+    return t.strip()
+
+
+def _is_markdown_artifact_line(line: str) -> bool:
+    """Ligne Markdown (# titre, * liste, ` code) — pas du CSS."""
+    stripped = line.lstrip()
+    if not stripped:
+        return False
+    return stripped[0] in "#*`"
+
+
+def _strip_markdown_lines_from_css(inner: str) -> str:
+    kept: list[str] = []
+    for line in inner.splitlines():
+        if _is_markdown_artifact_line(line):
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _sanitize_premium_style_block(style_block: str) -> str:
+    """Supprime les lignes Markdown résiduelles dans le bloc <style>."""
+    block = (style_block or "").strip()
+    if not block:
+        return ""
+    match = re.match(
+        r"(<style\b[^>]*>)([\s\S]*?)(</style>)",
+        block,
+        flags=re.I,
+    )
+    if not match:
+        inner_clean = _strip_markdown_lines_from_css(block)
+        if not inner_clean:
+            return ""
+        return f'<style id="cf-content-premium">\n{inner_clean}\n</style>'
+
+    open_tag, inner, close_tag = match.groups()
+    inner_clean = _strip_markdown_lines_from_css(inner)
+    if not inner_clean:
+        return ""
+    return f"{open_tag}\n{inner_clean}\n{close_tag}"
+
+
+def _is_valid_premium_style_block(style_block: str) -> bool:
+    s = (style_block or "").strip()
+    if not s:
+        return False
+    return bool(
+        re.match(r"<style\b", s, re.I) and re.search(r"</style>\s*$", s, re.I)
+    )
+
+
+def _build_content_ai_css_user_prompt(
+    *,
+    design_system: Any | None,
+    user_prompt: str,
+    client_name: str,
+    sector: str,
+    city: str,
+    research_content: Any | None,
+    template_id: str,
+    project_name: str,
+) -> str:
+    research = _coerce_research_dict(research_content)
+    ds_json = json.dumps(
+        _serialize_design_system(design_system),
+        ensure_ascii=False,
+        indent=2,
+    )
+    research_json = json.dumps(research, ensure_ascii=False, indent=2)
+    name = _plain_text_for_claude(client_name)
+    project = re.sub(r"[#*`]", "", (project_name or client_name or "")).strip()
+    sector_plain = _plain_text_for_claude(sector)
+    city_plain = _plain_text_for_claude(city)
+    tid = _plain_text_for_claude(template_id)
+    description = _plain_text_for_claude(user_prompt) or (
+        f"Site vitrine {sector_plain} pour {name} à {city_plain}."
+    )
+    return (
+        f"{_CONTENT_AI_CSS_RULE_HEADER}\n\n"
+        f"template_id: {tid}\n"
+        f"client_name: {name}\n"
+        f"project_name: {project}\n"
+        f"sector: {sector_plain}\n"
+        f"city: {city_plain}\n\n"
+        f"description_projet:\n{description[:12000]}\n\n"
+        f"design_system (JSON):\n{ds_json}\n\n"
+        f"research_brief (JSON):\n{research_json}"
+    )
+
+
+def _extract_style_block(text: str) -> str:
+    """Extrait le bloc <style> de la réponse Claude."""
+    cleaned = strip_markdown_code_fences(text or "").strip()
+    if not cleaned:
+        return ""
+    if re.search(r"<style\b", cleaned, flags=re.I):
+        match = re.search(
+            r"(<style\b[^>]*>[\s\S]*?</style>)",
+            cleaned,
+            flags=re.I,
+        )
+        block = match.group(1).strip() if match else cleaned
+    else:
+        block = f'<style id="cf-content-premium">\n{cleaned}\n</style>'
+    if 'id="cf-content-premium"' not in block.lower():
+        block = re.sub(
+            r"<style\b",
+            '<style id="cf-content-premium"',
+            block,
+            count=1,
+            flags=re.I,
+        )
+    return _sanitize_premium_style_block(block)
+
+
+def _inject_premium_css_into_head(html: str, style_block: str) -> str:
+    """Injecte le CSS premium avant </head> ; le markup existant est inchangé."""
+    style_block = _sanitize_premium_style_block(style_block)
+    if not _is_valid_premium_style_block(style_block):
+        return html
+    out = html
+    if 'id="cf-content-premium"' not in out.lower():
+        if re.search(r"</head>", out, flags=re.I):
+            out = re.sub(
+                r"</head>",
+                f"  {style_block}\n</head>",
+                out,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            out = f"{style_block}\n{out}"
+    if 'id="cf-content-premium-io"' not in out.lower():
+        if re.search(r"</body>", out, flags=re.I):
+            out = re.sub(
+                r"</body>",
+                f"  {_CONTENT_PREMIUM_IO_SCRIPT}\n</body>",
+                out,
+                count=1,
+                flags=re.I,
+            )
+        else:
+            out = f"{out}\n{_CONTENT_PREMIUM_IO_SCRIPT}"
+    return out
+
+
+async def _enrich_template_html_with_claude(
+    *,
+    template_html: str,
+    design_system: Any | None,
+    user_prompt: str,
+    client_name: str,
+    sector: str,
+    city: str,
+    research_content: Any | None,
+    template_id: str,
+    project_name: str,
+) -> str | None:
+    """
+    Génère un bloc CSS premium via Claude et l'injecte dans <head>.
+    Le HTML existant (placeholders inclus) n'est pas réécrit.
+    Retourne None si clé absente ou échec (repli sur template brut).
+    """
+    if os.environ.get("CONTENT_AI_ENRICH_LLM", "1").strip().lower() in (
+        "0",
+        "false",
+        "no",
+        "off",
+    ):
+        return None
+
+    api_key = _anthropic_api_key()
+    if not api_key:
+        logger.debug("[ContentAI] ANTHROPIC_API_KEY absente — enrichissement LLM ignoré")
+        return None
+
+    user_message = _build_content_ai_css_user_prompt(
+        design_system=design_system,
+        user_prompt=user_prompt,
+        client_name=client_name,
+        sector=sector,
+        city=city,
+        research_content=research_content,
+        template_id=template_id,
+        project_name=project_name,
+    )
+    logger.info("[ContentAI] Appel Claude Sonnet (CSS premium)...")
+    try:
+        response = await _anthropic_client.messages.create(
+            model=CONTENT_AI_MODEL,
+            max_tokens=CONTENT_AI_MAX_TOKENS,
+            system=CONTENT_AI_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+    except (TimeoutError, httpx.TimeoutException) as exc:
+        logger.warning(
+            "[ContentAI] Claude Sonnet timeout (%.0fs) — repli template brut: %s",
+            CONTENT_AI_CLAUDE_TIMEOUT_SECONDS,
+            exc,
+        )
+        return None
+    except Exception as exc:
+        logger.warning("[ContentAI] Claude Sonnet échoué — repli template brut: %s", exc)
+        return None
+
+    parts: list[str] = []
+    for block in response.content:
+        text = getattr(block, "text", None)
+        if text:
+            parts.append(text)
+    raw = "".join(parts)
+    style_block = _extract_style_block(raw)
+    if not style_block or len(style_block) < 80:
+        logger.warning(
+            "[ContentAI] Bloc <style> Claude invalide ou trop court (%d car.) — repli template",
+            len(style_block),
+        )
+        return None
+    html_out = _inject_premium_css_into_head(template_html, style_block)
+    logger.info(
+        "[ContentAI] Claude OK - CSS %d caractères injecté(s) dans le template",
+        len(style_block),
+    )
+    return html_out
+
+
 def _validate_content_html(html: str) -> None:
     remaining = sorted(set(_PLACEHOLDER_RE.findall(html)))
     if remaining:
@@ -522,7 +864,7 @@ def _validate_content_html(html: str) -> None:
         )
 
 
-def fill_template_content(
+async def fill_template_content(
     *,
     template_html: str,
     client_name: str,
@@ -552,11 +894,15 @@ def fill_template_content(
     )
     research_dict = _coerce_research_dict(research_content)
     city_hint = city or research_dict.get("ville") or profile.city or ""
-    resolved_name = resolve_client_business_name(
-        client_name or profile.company_name or "",
-        sector=sector or profile.sector or "",
-        city=city_hint,
-        user_prompt=user_prompt,
+    client_name = _clean_client_name(client_name)
+    project_name = _clean_client_name(project_name)
+    resolved_name = _clean_client_name(
+        resolve_client_business_name(
+            client_name or profile.company_name or "",
+            sector=sector or profile.sector or "",
+            city=city_hint,
+            user_prompt=user_prompt,
+        )
     )
     if len(resolved_name.strip()) < 2:
         return AgentResult.failure(
@@ -567,7 +913,7 @@ def fill_template_content(
         )
 
     try:
-        display_name = (project_name or "").strip() or resolved_name
+        display_name = _clean_client_name(project_name or resolved_name)
         slots = build_content_slots(
             client_name=display_name,
             sector=sector,
@@ -579,7 +925,21 @@ def fill_template_content(
             template_id=template_id,
             project_name=project_name,
         )
-        html, filled, missing = fill_template_placeholders(template_html, slots)
+        working_html = template_html
+        enriched = await _enrich_template_html_with_claude(
+            template_html=template_html,
+            design_system=design_system,
+            user_prompt=user_prompt,
+            client_name=display_name,
+            sector=sector or research_dict.get("secteur") or profile.sector or "",
+            city=city_hint,
+            research_content=research_content,
+            template_id=template_id,
+            project_name=project_name,
+        )
+        if enriched:
+            working_html = enriched
+        html, filled, missing = fill_template_placeholders(working_html, slots)
         if missing:
             return AgentResult.failure(
                 agent_id=_AGENT_ID,
@@ -668,7 +1028,7 @@ class ContentAgent(BaseAgent):
         return _AGENT_NAME
 
     async def run(self, prompt: str, **kwargs: Any) -> str:
-        result = fill_template_content(
+        result = await fill_template_content(
             template_html=kwargs.get("template_html") or "",
             client_name=kwargs.get("client_name") or "",
             sector=kwargs.get("sector") or "",
@@ -704,7 +1064,7 @@ class ContentAgent(BaseAgent):
         template_id: str = "vitrine_default",
         project_name: str = "",
     ) -> AgentResult[ContentFillResult]:
-        return fill_template_content(
+        return await fill_template_content(
             template_html=template_html,
             client_name=client_name,
             sector=sector,

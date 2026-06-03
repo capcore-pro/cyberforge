@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from agents.architect_agent import ArchitectPlan, ToolboxPalette
 from agents.builder_ai import assemble_template_html, uses_template_assembly
 from agents.content_ai import build_content_slots
@@ -55,13 +57,15 @@ def test_ecommerce_assembly_fills_placeholders() -> None:
         load_sector_template_raw(sector="alimentaire", user_prompt="boutique bio", plan=plan)
     )
     result = require_ok(
-        assemble_template_html(
-            template_html=loaded.html,
-            client_name="",
-            sector="alimentaire",
-            city="Lyon",
-            user_prompt="ecommerce épicerie Lyon",
-            template_id=loaded.template_id,
+        asyncio.run(
+            assemble_template_html(
+                template_html=loaded.html,
+                client_name="",
+                sector="alimentaire",
+                city="Lyon",
+                user_prompt="ecommerce épicerie Lyon",
+                template_id=loaded.template_id,
+            )
         )
     )
     assert "{{" not in result.html

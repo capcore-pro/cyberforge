@@ -31,7 +31,6 @@ _PROVIDER_ENV: dict[str, tuple[str, str]] = {
     "stripe": ("STRIPE_SECRET_KEY", "stripe_secret_key"),
     "brave_search": ("BRAVE_SEARCH_API_KEY", "brave_search_api_key"),
     "exa": ("EXA_API_KEY", "exa_api_key"),
-    "stitch": ("STITCH_API_KEY", "stitch_api_key"),
 }
 
 
@@ -85,7 +84,6 @@ class SaveSecretsRequest(BaseModel):
     stripe_secret_key: str | None = None
     brave_search_api_key: str | None = None
     exa_api_key: str | None = None
-    stitch_api_key: str | None = None
 
 
 class TestSecretRequest(BaseModel):
@@ -212,7 +210,6 @@ async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
                 "STRIPE_SECRET_KEY": body.stripe_secret_key,
                 "BRAVE_SEARCH_API_KEY": body.brave_search_api_key,
                 "EXA_API_KEY": body.exa_api_key,
-                "STITCH_API_KEY": body.stitch_api_key,
             },
         )
     except VaultInvalidPasswordError as exc:

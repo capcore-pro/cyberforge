@@ -199,7 +199,7 @@ def optimize_html(html: str, *, strict: bool = True) -> tuple[str, HtmlOptimizeR
     return optimized, report
 
 
-def assemble_template_html(
+async def assemble_template_html(
     *,
     template_html: str,
     client_name: str,
@@ -240,7 +240,7 @@ def assemble_template_html(
         if skip_content_fill and not has_placeholders:
             filled_html = raw
         else:
-            content_result = fill_template_content(
+            content_result = await fill_template_content(
                 template_html=raw,
                 client_name=client_name,
                 sector=sector,

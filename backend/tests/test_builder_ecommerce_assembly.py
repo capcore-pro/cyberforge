@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from agents.architect_agent import ArchitectPlan, ToolboxPalette
 from agents.builder_ai import assemble_template_html, resolve_assembly_inputs
 from agents.coremind_agent import ProjectType
@@ -59,14 +61,16 @@ def test_assemble_strips_markdown_fences() -> None:
         sector_template=None,
     )
     assert "```" not in html[:200]
-    result = assemble_template_html(
-        template_html=html,
-        client_name="Maison Dupont",
-        sector="commerce",
-        city="Rouen",
-        user_prompt="boutique pâtisserie",
-        template_id=tid,
-        skip_content_fill=False,
+    result = asyncio.run(
+        assemble_template_html(
+            template_html=html,
+            client_name="Maison Dupont",
+            sector="commerce",
+            city="Rouen",
+            user_prompt="boutique pâtisserie",
+            template_id=tid,
+            skip_content_fill=False,
+        )
     )
     assert result.ok
     assert result.data

@@ -1,6 +1,6 @@
 import { useAgentsStatus } from "@/context/AgentsStatusContext";
 
-const HIGHLIGHT_IDS = new Set(["research", "stitch", "openhands"]);
+const HIGHLIGHT_IDS = new Set(["research", "openhands"]);
 
 /**
  * Statut visuel des agents du pipeline (GET /api/agents/status).

@@ -49,9 +49,9 @@
     </ul></div></section>
   <section id="equipe" class="reveal" style="background:#f8fdf9"><div class="wrap"><h2 class="title">L'équipe</h2>
     <div class="team">
-      <article class="member"><img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200&q=80" alt="Praticien" loading="lazy"/><h3>Dr. Martin</h3><p>{{SECTOR}} · 12 ans d'expérience</p></article>
-      <article class="member"><img src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=200&q=80" alt="Praticienne" loading="lazy"/><h3>Dr. Laurent</h3><p>Approche bienveillante et à l'écoute</p></article>
-      <article class="member"><img src="https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=200&q=80" alt="Assistante" loading="lazy"/><h3>Équipe soignante</h3><p>Accueil · {{CITY}}</p></article>
+      <article class="member"><img src="https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200&q=80" alt="{{TEAM_MEMBER_1}}" loading="lazy"/><h3>{{TEAM_MEMBER_1}}</h3><p>{{TEAM_MEMBER_1_BIO}}</p></article>
+      <article class="member"><img src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=200&q=80" alt="{{TEAM_MEMBER_2}}" loading="lazy"/><h3>{{TEAM_MEMBER_2}}</h3><p>{{TEAM_MEMBER_2_BIO}}</p></article>
+      <article class="member"><img src="https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=200&q=80" alt="{{TEAM_MEMBER_3}}" loading="lazy"/><h3>{{TEAM_MEMBER_3}}</h3><p>{{TEAM_MEMBER_3_BIO}}</p></article>
     </div></div></section>
   <section id="rdv" class="reveal"><div class="wrap"><div class="rdv"><h2 style="color:#fff;margin-bottom:.5rem">Prendre rendez-vous</h2>
     <p style="opacity:.95">Réservez votre créneau en ligne ou par téléphone.</p>
@@ -63,7 +63,7 @@
       <div class="info-card"><h3>Accès</h3><p>{{ADDRESS}}<br>{{CITY}}</p></div>
       <div class="info-card"><h3>Mutuelle</h3><p>Tiers payant · Carte Vitale acceptée</p></div>
     </div>
-    <p style="text-align:center;margin-top:2rem">{{EMAIL}}</p></div></section>
+    <p style="text-align:center;margin-top:2rem">{{CLIENT_EMAIL}}</p></div></section>
   <script>document.querySelectorAll('.reveal').forEach(el=>new IntersectionObserver((e,o)=>e.forEach(en=>{if(en.isIntersecting){en.target.classList.add('visible');o.unobserve(en.target)}}),{threshold:.12}).observe(el));</script>
 </body>
 </html>

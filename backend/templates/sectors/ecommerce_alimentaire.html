@@ -179,7 +179,7 @@
     <div class="wrap">
       <span class="promo-badge">Livraison sous {{SHIPPING_DELAY}}</span>
       <h1>Bienvenue chez {{CLIENT_NAME}}</h1>
-      <p>Produits frais, locaux et sélectionnés avec soin pour votre table.</p>
+      <p>{{CLIENT_TAGLINE}}</p>
       <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
         <a href="#produits" class="btn">Découvrir la boutique</a>
         <a href="#contact" class="btn btn-outline">Nous contacter</a>
@@ -241,27 +241,27 @@
             <button type="button" class="add-cart">Ajouter au panier</button>
           </div>
         </article>
-        <article class="product-card" data-id="p4" data-name="Confiture maison" data-price="8.90">
+        <article class="product-card" data-id="p4" data-name="{{PRODUCT_4_NAME}}" data-price="{{PRODUCT_4_PRICE}}">
           <div class="thumb"></div>
           <div class="body">
-            <h3>Confiture maison</h3>
-            <p class="price">8,90 €</p>
+            <h3>{{PRODUCT_4_NAME}}</h3>
+            <p class="price">{{PRODUCT_4_PRICE}} €</p>
             <button type="button" class="add-cart">Ajouter au panier</button>
           </div>
         </article>
-        <article class="product-card" data-id="p5" data-name="Huile d'olive AOP" data-price="14.50">
+        <article class="product-card" data-id="p5" data-name="{{PRODUCT_5_NAME}}" data-price="{{PRODUCT_5_PRICE}}">
           <div class="thumb"></div>
           <div class="body">
-            <h3>Huile d'olive AOP</h3>
-            <p class="price">14,50 €</p>
+            <h3>{{PRODUCT_5_NAME}}</h3>
+            <p class="price">{{PRODUCT_5_PRICE}} €</p>
             <button type="button" class="add-cart">Ajouter au panier</button>
           </div>
         </article>
-        <article class="product-card" data-id="p6" data-name="Panier découverte" data-price="39.00">
+        <article class="product-card" data-id="p6" data-name="{{PRODUCT_6_NAME}}" data-price="{{PRODUCT_6_PRICE}}">
           <div class="thumb"></div>
           <div class="body">
-            <h3>Panier découverte</h3>
-            <p class="price">39,00 €</p>
+            <h3>{{PRODUCT_6_NAME}}</h3>
+            <p class="price">{{PRODUCT_6_PRICE}} €</p>
             <button type="button" class="add-cart">Ajouter au panier</button>
           </div>
         </article>
@@ -292,7 +292,7 @@
           <p><strong>{{CLIENT_NAME}}</strong></p>
           <p>{{ADDRESS}}</p>
           <p>Tél. <a href="tel:{{PHONE}}">{{PHONE}}</a></p>
-          <p><a href="mailto:{{EMAIL}}">{{EMAIL}}</a></p>
+          <p><a href="mailto:{{CLIENT_EMAIL}}">{{CLIENT_EMAIL}}</a></p>
         </div>
         <form id="cf-contact-form" class="cf-contact-form" action="#contact" method="post" novalidate>
           <label for="cf-name">Nom</label>
@@ -312,7 +312,7 @@
       <div class="footer-grid">
         <div>
           <h3>{{CLIENT_NAME}}</h3>
-          <p>Épicerie fine en ligne — produits frais et locaux.</p>
+          <p>{{CLIENT_TAGLINE}}</p>
           <p class="shipping-note" style="color:rgba(255,255,255,0.85);margin-top:0.5rem">Livraison : {{SHIPPING_DELAY}}</p>
         </div>
         <div>
@@ -325,7 +325,7 @@
           <h3>Coordonnées</h3>
           <p>{{ADDRESS}}</p>
           <p>Tél. <a href="tel:{{PHONE}}">{{PHONE}}</a></p>
-          <p><a href="mailto:{{EMAIL}}">{{EMAIL}}</a></p>
+          <p><a href="mailto:{{CLIENT_EMAIL}}">{{CLIENT_EMAIL}}</a></p>
         </div>
       </div>
       <p class="footer-bottom">© {{CLIENT_NAME}} — Tous droits réservés</p>

@@ -46,7 +46,7 @@
       <button type="button" class="btn-rdv" onclick="document.getElementById('rdv').scrollIntoView({behavior:'smooth'})">{{NAV_RESERVATION}}</button>
     </div>
   </div></nav>
-  <header class="hero"><div class="wrap"><h1>{{CLIENT_NAME}}</h1><p>Réservez votre créneau en ligne</p></div></header>
+  <header class="hero"><div class="wrap"><h1>{{CLIENT_NAME}}</h1><p>{{CLIENT_TAGLINE}}</p></div></header>
   <section id="services"><span id="tarifs" style="display:block;position:relative;top:-4rem"></span><div class="wrap"><h2 style="text-align:center;margin-bottom:0.5rem">{{NAV_SERVICES}} &amp; {{NAV_TARIFS}}</h2>
     <p style="text-align:center;color:#64748b;margin-bottom:1.5rem">{{SERVICE_CAT_1}} · {{SERVICE_CAT_2}} · {{SERVICE_CAT_3}}</p>
     <div class="services">
@@ -71,9 +71,9 @@
     </div>
   </div></section>
   <section id="equipe"><div class="wrap"><h2 style="text-align:center;margin-bottom:1.5rem">Équipe</h2>
-    <div class="team"><div><h3>Membre 1</h3></div><div><h3>Membre 2</h3></div><div><h3>Membre 3</h3></div></div>
+    <div class="team"><div><h3>{{TEAM_MEMBER_1}}</h3><p>{{TEAM_ROLE_1}}</p></div><div><h3>{{TEAM_MEMBER_2}}</h3><p>{{TEAM_ROLE_2}}</p></div><div><h3>{{TEAM_MEMBER_3}}</h3><p>{{TEAM_ROLE_3}}</p></div></div>
   </div></section>
-  <footer id="contact"><div class="wrap"><p>{{CLIENT_NAME}} — {{ADDRESS}}</p><p>{{PHONE}} | {{EMAIL}}</p></div></footer>
+  <footer id="contact"><div class="wrap"><p>{{CLIENT_NAME}} — {{ADDRESS}}</p><p>{{PHONE}} | {{CLIENT_EMAIL}}</p></div></footer>
   <script>
     (function(){
       var days=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'],times=['09:00','10:00','11:00','14:00','15:00','16:00'];

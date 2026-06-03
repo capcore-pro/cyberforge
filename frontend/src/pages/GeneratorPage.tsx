@@ -26,7 +26,6 @@ import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
 import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
 import { isLighthouseEnabled } from "@/lib/lighthouse-preferences";
 import { isResearchEnabled } from "@/lib/research-preferences";
-import { isStitchEnabled } from "@/lib/stitch-preferences";
 import { savePlaywrightReport } from "@/lib/playwright-reports";
 import { saveLighthouseReport } from "@/lib/lighthouse-reports";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
@@ -89,6 +88,7 @@ import {
   computeProjectEstimation,
   formatEur,
 } from "@/lib/generator-estimation";
+import { PromptGeneratorPanel } from "@/components/PromptGeneratorPanel";
 
 type ProjectOwnerMode = "client" | "perso";
 
@@ -766,7 +766,6 @@ export function GeneratorPage({
           playwright_enabled: isPlaywrightEnabled(),
           lighthouse_enabled: isLighthouseEnabled(),
           research_enabled: isResearchEnabled(),
-          stitch_enabled: isStitchEnabled(),
         },
         { onStep },
       );
@@ -1242,6 +1241,17 @@ export function GeneratorPage({
             className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
           />
         </label>
+
+        <PromptGeneratorPanel
+          disabled={isRunning}
+          selectedKind={selectedKind}
+          onSelectKind={(kind) => {
+            selectKind(kind);
+          }}
+          onPromptGenerated={(generated) => {
+            patch({ prompt: generated, error: null });
+          }}
+        />
 
         <label className="block">
           <span className="mb-2 flex items-center justify-between text-xs text-cf-label">

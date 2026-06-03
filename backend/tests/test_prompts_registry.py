@@ -5,6 +5,7 @@ from prompts import (
     BUILDER_V0_SYSTEM,
     CODEGEN_DEMO_HTML_PROMPT,
     CODEGEN_SYSTEM_PROMPT,
+    CONTENT_AI_SYSTEM_PROMPT,
     DEMO_SEED_SYSTEM_PROMPT,
     PERSONALIZED_CONTENT_DIRECTIVE,
     PROMPTS_VERSION,
@@ -25,6 +26,7 @@ def test_personalization_in_all_system_prompts() -> None:
         CODEGEN_DEMO_HTML_PROMPT,
         DEMO_SEED_SYSTEM_PROMPT,
         VITRINE_CONTENT_SYSTEM,
+        CONTENT_AI_SYSTEM_PROMPT,
     ):
         assert "Jean Dupont" in prompt or "fictif" in prompt.lower()
         assert PERSONALIZED_CONTENT_DIRECTIVE.split("\n")[1] in prompt

@@ -31,7 +31,6 @@ const POLL_MS = 15_000;
 const PIPELINE_AGENT_IDS = [
   "architect",
   "research",
-  "stitch",
   "openhands",
   "builder",
   "coremind",
@@ -56,11 +55,6 @@ const AGENT_CATALOG: { id: string; name: string; description: string }[] = [
     description: "Recherche Brave Search + Exa AI (secteur, concurrents).",
   },
   {
-    id: "stitch",
-    name: "StitchAI",
-    description: "Maquettes visuelles HTML + screenshots (Google Stitch).",
-  },
-  {
     id: "openhands",
     name: "OpenHands",
     description: "Génération de code avancée pour projets complexes.",
@@ -68,7 +62,7 @@ const AGENT_CATALOG: { id: string; name: string; description: string }[] = [
   {
     id: "builder",
     name: "BuilderAI",
-    description: "Génération v0 / DeepSeek avec référence Stitch.",
+    description: "Génération v0 / DeepSeek.",
   },
   {
     id: "coremind",

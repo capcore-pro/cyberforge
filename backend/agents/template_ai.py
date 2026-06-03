@@ -248,7 +248,10 @@ def fill_template_placeholders(html: str, slots: dict[str, str]) -> tuple[str, l
     for key in sorted(missing_before):
         token = f"{{{{{key}}}}}"
         if key in slots:
-            out = out.replace(token, slots[key])
+            value = slots[key]
+            if key == "CLIENT_NAME":
+                value = re.sub(r"[#*`]", "", value).strip()
+            out = out.replace(token, value)
             filled.append(key)
     remaining = sorted(set(_PLACEHOLDER_RE.findall(out)))
     return out, filled, remaining

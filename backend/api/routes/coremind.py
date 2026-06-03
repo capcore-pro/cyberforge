@@ -98,12 +98,6 @@ class CoreMindRequest(BaseModel):
         default=None,
         description="Active ResearchAI (Brave + Exa) après ArchitectAI. None = activé par défaut.",
     )
-    stitch_enabled: bool | None = Field(
-        default=None,
-        description="Active StitchAI (maquettes Google) après ResearchAI. None = activé par défaut.",
-    )
-
-
 class CoreMindRunResponse(CoreMindRunResult):
     """Réponse du flow complet, avec persistance Supabase optionnelle."""
 
@@ -192,7 +186,6 @@ async def run_coremind_flow(body: CoreMindRequest) -> CoreMindRunResponse:
             playwright_enabled=body.playwright_enabled,
             lighthouse_enabled=body.lighthouse_enabled,
             research_enabled=body.research_enabled,
-            stitch_enabled=body.stitch_enabled,
             project_id=body.project_id,
             inspiration_brief=body.inspiration_brief,
             firecrawl_result=body.firecrawl_result,

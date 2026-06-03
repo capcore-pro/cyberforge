@@ -63,19 +63,21 @@ def test_fill_complete_html() -> None:
             user_prompt="Boulangerie Rouen",
         )
     )
-    result = fill_template_content(
-        template_html=_raw_alimentaire(),
-        client_name="Aux Délices",
-        sector="restauration",
-        city="Rouen",
-        research_content={
-            "nom_entreprise": "Aux Délices",
-            "ville": "Rouen",
-            "mots_cles": ["pain", "viennoiserie", "sandwichs"],
-        },
-        design_system=ds.to_contract_dict(),
-        template_id="vitrine_alimentaire",
-        user_prompt="Boulangerie artisanale Rouen",
+    result = asyncio.run(
+        fill_template_content(
+            template_html=_raw_alimentaire(),
+            client_name="Aux Délices",
+            sector="restauration",
+            city="Rouen",
+            research_content={
+                "nom_entreprise": "Aux Délices",
+                "ville": "Rouen",
+                "mots_cles": ["pain", "viennoiserie", "sandwichs"],
+            },
+            design_system=ds.to_contract_dict(),
+            template_id="vitrine_alimentaire",
+            user_prompt="Boulangerie artisanale Rouen",
+        )
     )
     data = require_ok(result)
     assert "{{" not in data.html
@@ -91,12 +93,14 @@ def test_forbidden_lorem_fails() -> None:
         "{{HERO_SUBTITLE}}",
         "Lorem ipsum dolor sit amet",
     )
-    result = fill_template_content(
-        template_html=bad_template,
-        client_name="Test Client",
-        sector="commerce",
-        city="Paris",
-        template_id="vitrine_default",
+    result = asyncio.run(
+        fill_template_content(
+            template_html=bad_template,
+            client_name="Test Client",
+            sector="commerce",
+            city="Paris",
+            template_id="vitrine_default",
+        )
     )
     assert not result.ok
 

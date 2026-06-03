@@ -25,7 +25,7 @@ CLIENT_LITERAL_ISSUE_CODES = frozenset(
 
 _PROMPT_LIKE_RE = re.compile(
     r"(?i)\b(vitrine|si tu es|créer un|générer un|je veux|prompt|"
-    r"cette vitrine|site web pour|description du|lorem)\b"
+    r"cette vitrine|site web pour|description du|lorem|loi\s+visuelle)\b"
 )
 _QUOTED_NAME_RE = re.compile(
     r"[«\"']([^»\"']{2,40})[»\"']|"
@@ -124,6 +124,8 @@ def is_plausible_business_name(
     if _GENERIC_BRAND_RE.search(n):
         return False
     if _looks_like_prompt_fragment(n):
+        return False
+    if "loi visuelle" in low or low in ("loi", "visuelle"):
         return False
     city_clean = sanitize_city(city).lower()
     if city_clean and low == city_clean:
@@ -287,6 +289,11 @@ def humanize_sector_label(
         return "Restauration"
     if "coiff" in blob:
         return "Coiffure"
+    if any(
+        x in blob
+        for x in ("beauté", "beaute", "spa", "esthétique", "esthetique", "institut")
+    ):
+        return "Institut de beauté"
     if "immobilier" in blob:
         return "Immobilier"
     s = (sector or "").strip()

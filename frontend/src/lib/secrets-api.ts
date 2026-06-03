@@ -19,7 +19,6 @@ export interface InfraFlags {
   stripe: boolean;
   brave_search: boolean;
   exa: boolean;
-  stitch: boolean;
 }
 
 export type VaultConfiguredFlags = ProviderFlags & InfraFlags;
@@ -47,7 +46,6 @@ export interface VaultKeysPayload {
   stripe_secret_key?: string | null;
   brave_search_api_key?: string | null;
   exa_api_key?: string | null;
-  stitch_api_key?: string | null;
 }
 
 /** @deprecated Utiliser VaultKeysPayload */

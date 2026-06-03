@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from agents.content_ai import build_content_slots, fill_template_content
 from agents.template_ai import load_sector_template_html
 from core.agent_contract import require_ok
@@ -41,13 +43,15 @@ def test_ecommerce_rouen_normandy_defaults() -> None:
 
 
 def test_fill_ecommerce_no_unfilled_placeholders() -> None:
-    result = fill_template_content(
-        template_html=load_sector_template_html("ecommerce_alimentaire.html"),
-        client_name="",
-        sector="boulangerie",
-        city="Rouen",
-        template_id="ecommerce_alimentaire",
-        user_prompt="ecommerce pâtisserie Rouen",
+    result = asyncio.run(
+        fill_template_content(
+            template_html=load_sector_template_html("ecommerce_alimentaire.html"),
+            client_name="",
+            sector="boulangerie",
+            city="Rouen",
+            template_id="ecommerce_alimentaire",
+            user_prompt="ecommerce pâtisserie Rouen",
+        )
     )
     data = require_ok(result)
     assert "{{" not in data.html

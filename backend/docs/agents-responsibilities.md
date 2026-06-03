@@ -24,7 +24,7 @@
 
 ## Ordre pipeline vitrine
 
-`ArchitectAI` → `ResearchAI` (opt.) → `DesignSystemAI` → `TemplateAI` → `StitchAI` (opt.) → `ContentAI` → `BuilderAI` → `VisionUI` → `BugHunterAI` → …
+`ArchitectAI` → `ResearchAI` (opt.) → `DesignSystemAI` → `TemplateAI` → `ContentAI` → `BuilderAI` → `VisionUI` → `BugHunterAI` → …
 
 Constante : `VITRINE_PIPELINE_ORDER` dans `pipeline_graph.py`.
 
@@ -33,7 +33,7 @@ Constante : `VITRINE_PIPELINE_ORDER` dans `pipeline_graph.py`.
 - **Fait** : produit le JSON contractuel (`fonts`, `colors`, `spacing`, `border_radius`, `shadows`, `style_keywords`, `google_fonts_url`) **avant** toute génération de code.
 - **Couleurs** selon famille sectorielle : alimentaire (crème/brun/doré), marin/sport (bleu/blanc), artisan/BTP (ardoise/orange), santé (vert doux), tech (sombre/néon), beauté (rose/noir), juridique/finance (navy/or).
 - **Polices** : artisanal → Playfair+Lato, moderne → Inter+Space Grotesk, élégant → Cormorant+Raleway.
-- **Loi visuelle** : JSON transmis à Template, Stitch, Content, Builder, CoreMind, Vision, BugHunter, Export — aucun agent ne peut dévier.
+- **Loi visuelle** : JSON transmis à Template, Content, Builder, CoreMind, Vision, BugHunter, Export — aucun agent ne peut dévier.
 - **Reçoit** : `sector`, `client_name`, `palette_preference`, `project_type`.
 - **Échoue** : `missing_client_name`, `invalid_color`, `incomplete_json` — pipeline stoppé.
 - **Ne fait pas** : générer du HTML, du copy long, ou appeler v0/DeepSeek.
@@ -49,11 +49,6 @@ Constante : `VITRINE_PIPELINE_ORDER` dans `pipeline_graph.py`.
 - **Fait** : `ResearchBrief` avec `nom_entreprise`, `secteur`, `ville`, `mots_cles`.
 - **Échoue** : `skipped` explicite si clés API absentes (pas de brief vide prétendu enrichi).
 - **Ne fait pas** : écrire du HTML.
-
-## StitchAI
-
-- **Fait** : maquettes sous 30s ou mode dégradé silencieux.
-- **Ne fait pas** : bloquer Builder si échec.
 
 ## BuilderAI (Template-first)
 

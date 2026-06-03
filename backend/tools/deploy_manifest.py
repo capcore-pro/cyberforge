@@ -5,6 +5,7 @@ Manifeste de déploiement universel ExportAI — métadonnées projet + cibles.
 from __future__ import annotations
 
 import re
+import secrets
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
@@ -33,6 +34,27 @@ def slugify_project_name(text: str, *, max_len: int = 48) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower().strip())
     slug = slug.strip("-") or "cyberforge-project"
     return slug[:max_len].rstrip("-")
+
+
+def unique_deploy_slug(
+    text: str,
+    *,
+    project_id: str | None = None,
+    max_len: int = 48,
+) -> str:
+    """
+    Slug Cloudflare/GitHub unique par génération (suffixe horodaté + entropie).
+
+    Évite de réutiliser le même projet Pages quand le titre ou le nom saisi
+    est identique entre deux runs.
+    """
+    base = slugify_project_name(text, max_len=max_len)
+    stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    uniq = re.sub(r"[^a-z0-9]", "", (project_id or secrets.token_hex(4)).lower())[:8]
+    suffix = f"-{stamp}-{uniq}"
+    max_base = max(8, max_len - len(suffix))
+    trimmed = base[:max_base].rstrip("-") or "cf"
+    return f"{trimmed}{suffix}"[:max_len].rstrip("-")
 
 
 def select_export_provider(project_type: ProjectType, prompt: str) -> str:
