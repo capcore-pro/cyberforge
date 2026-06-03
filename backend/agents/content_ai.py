@@ -393,6 +393,7 @@ def build_content_slots(
             ds,
             research,
             user_prompt=user_prompt,
+            sector_label=sector_label,
         )
     if tid.startswith("reservation_"):
         return build_reservation_slots(
@@ -416,7 +417,7 @@ def build_content_slots(
             research=research,
         )
     if tid.startswith("desktop_"):
-        slots = build_desktop_slots(tid, brand, ds)
+        slots = build_desktop_slots(tid, brand, ds, city=city_clean)
         return ensure_contact_slots(
             slots,
             brand,

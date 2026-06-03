@@ -107,9 +107,9 @@ _RESERVATION_TEAM: dict[str, list[tuple[str, str]]] = {
         ("Praticienne bien-être", "Massages & détente"),
     ],
     "reservation_sante": [
-        ("Dr. Martin", "Médecine générale"),
-        ("Dr. Lefebvre", "Spécialiste"),
-        ("Dr. Bernard", "Consultation"),
+        ("Praticien·ne", "Médecine générale"),
+        ("Spécialiste", "Consultations spécialisées"),
+        ("Assistant·e médical·e", "Accueil & suivi"),
     ],
     "reservation_default": [
         ("Conseiller", "Accueil & orientation"),
@@ -358,15 +358,17 @@ def build_ecommerce_slots(
     research: dict[str, Any],
     *,
     user_prompt: str = "",
+    sector_label: str = "",
 ) -> dict[str, str]:
     cats = _resolve_ecommerce_categories(template_id, research)
     products = _ECOMMERCE_PRODUCTS.get(template_id, _ECOMMERCE_PRODUCTS["ecommerce_default"])
 
+    sector_esc = html_lib.escape(sector_label or "Boutique en ligne")
+    tagline = f"{sector_label} — {brand}" if sector_label else f"Votre boutique en ligne — {brand}."
     slots = {
         "CLIENT_NAME": html_lib.escape(brand),
-        "CLIENT_TAGLINE": html_lib.escape(
-            f"Votre boutique en ligne — {brand}."
-        ),
+        "SECTOR_LABEL": sector_esc,
+        "CLIENT_TAGLINE": html_lib.escape(tagline),
         "PRIMARY_COLOR": ds.get("PRIMARY_COLOR", "#2563EB"),
         "SECONDARY_COLOR": ds.get("SECONDARY_COLOR", "#F8FAFC"),
         "FONT_HEADING": ds.get("FONT_HEADING", "Inter"),
@@ -644,12 +646,15 @@ def build_desktop_slots(
     template_id: str,
     brand: str,
     ds: dict[str, str],
+    *,
+    city: str = "",
 ) -> dict[str, str]:
     modules = _DESKTOP_MODULES.get(template_id, _DESKTOP_MODULES["desktop_default"])
     app_name = brand[:40]
+    city_demo = sanitize_city(city) or "votre ville"
     # Libellés modules : texte catalogue (contient « & ») — pas d'escape HTML
     # (sinon &amp; visible dans la sidebar / barre de statut via JS).
-    return {
+    slots: dict[str, str] = {
         "APP_NAME": html_lib.escape(app_name),
         "CLIENT_NAME": html_lib.escape(brand),
         "PRIMARY_COLOR": ds.get("PRIMARY_COLOR", "#0078D4"),
@@ -657,3 +662,21 @@ def build_desktop_slots(
         "MODULE_2": modules[1],
         "MODULE_3": modules[2],
     }
+    if template_id == "desktop_artisan":
+        slots.update(
+            {
+                "DEMO_CLIENT_1_NAME": html_lib.escape("Client particulier"),
+                "DEMO_CLIENT_1_CITY": html_lib.escape(city_demo),
+                "DEMO_CLIENT_1_PHONE": html_lib.escape("04 00 00 00 00"),
+                "DEMO_CLIENT_1_DATE": html_lib.escape("15/03/2026"),
+                "DEMO_CLIENT_2_NAME": html_lib.escape(f"Pro {brand[:24]}"),
+                "DEMO_CLIENT_2_CITY": html_lib.escape(city_demo),
+                "DEMO_CLIENT_2_PHONE": html_lib.escape("04 00 00 00 01"),
+                "DEMO_CLIENT_2_DATE": html_lib.escape("02/04/2026"),
+                "DEMO_CLIENT_3_NAME": html_lib.escape("Client entreprise"),
+                "DEMO_CLIENT_3_CITY": html_lib.escape(city_demo),
+                "DEMO_CLIENT_3_PHONE": html_lib.escape("06 00 00 00 00"),
+                "DEMO_CLIENT_3_DATE": html_lib.escape("28/02/2026"),
+            }
+        )
+    return slots

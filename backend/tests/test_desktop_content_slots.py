@@ -6,7 +6,14 @@ from agents.content_slots import build_desktop_slots
 
 
 def test_desktop_module_labels_keep_ampersand() -> None:
-    slots = build_desktop_slots("desktop_artisan", "Dupont & Fils", {"PRIMARY_COLOR": "#0078D4"})
+    slots = build_desktop_slots(
+        "desktop_artisan",
+        "Dupont & Fils",
+        {"PRIMARY_COLOR": "#0078D4"},
+        city="Lyon",
+    )
     assert slots["MODULE_1"] == "Devis & chantiers"
     assert "&amp;" not in slots["MODULE_1"]
     assert slots["CLIENT_NAME"] == "Dupont &amp; Fils"
+    assert slots["DEMO_CLIENT_1_CITY"] == "Lyon"
+    assert "Durand" not in slots["DEMO_CLIENT_1_NAME"]
