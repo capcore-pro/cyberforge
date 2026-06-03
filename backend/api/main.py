@@ -17,7 +17,7 @@ from db.supabase_store import reset_supabase_store
 APP_VERSION = "0.1.0"
 logger = logging.getLogger(__name__)
 
-REQUIRED_ROUTES = ("/api/health", "/api/projects")
+REQUIRED_ROUTES = ("/api/health", "/api/projects", "/api/generate", "/api/agents/status")
 
 
 def _collect_route_paths(application: FastAPI) -> set[str]:

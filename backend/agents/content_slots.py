@@ -730,8 +730,6 @@ def supplement_dynamic_template_slots(
                 body = hero_subtitle
             elif i <= len(_SECTION_DEFAULTS):
                 _, body = _SECTION_DEFAULTS[i - 1]
-            elif i == 2 and kws:
-                body = f"Expertise : {', '.join(kws[:3])}."
             else:
                 body = f"{brand} — {sector_label}."
             out[content_key] = html_lib.escape(body)

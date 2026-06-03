@@ -60,11 +60,11 @@ def _build_vitrine_body_html(
     sector = html_lib.escape(profile.sector_label_for(user_prompt) or profile.sector or "")
 
     services_html = ""
-    for kw in profile.keywords[:3]:
-        label = html_lib.escape(kw)
+    for label_raw in ("Nos prestations", "Accompagnement", "Qualité de service"):
+        label = html_lib.escape(label_raw)
         services_html += (
             f'<article class="cf-vitrine-card"><h3>{label}</h3>'
-            f"<p>Prestation {label.lower()} — {brand}.</p></article>"
+            f"<p>{tagline}</p></article>"
         )
     if not services_html:
         services_html = (

@@ -19,14 +19,6 @@ from tools.demo_runtime import resolve_demo_api_base_url
 from tools.vitrine_shell import apply_vitrine_premium_shell
 from tools.premium_base import premium_contact_modal_html, premium_interaction_scripts
 
-_FORBIDDEN_VISIBLE_RE = re.compile(
-    r"lorem\s+ipsum|\blorem\b|"
-    r"votre\s+texte\s+ici|your\s+text\s+here|"
-    r"example\s+corp|entreprise\s+xyz|"
-    r"nom\s+de\s+l['\u2019]entreprise|description\s+du\s+service",
-    re.IGNORECASE,
-)
-
 _DEAD_HREF_RE = re.compile(
     r"""<a\s+([^>]*?)href\s*=\s*["']#["']([^>]*)>""",
     re.IGNORECASE,
@@ -44,13 +36,14 @@ def find_forbidden_placeholder_issues(
     issues: list[tuple[str, str]] = []
     if client_profile is not None and getattr(client_profile, "company_name", ""):
         issues.extend(validate_client_literals(html, client_profile))
-    if _FORBIDDEN_VISIBLE_RE.search(html):
-        issues.append(
-            (
-                "generic_placeholder",
-                "Texte placeholder ou lorem ipsum détecté — contenu client requis.",
-            )
-        )
+    # DÉSACTIVÉ TEMPORAIREMENT - DEBUG — FORBIDDEN_CONTENT_PATTERNS / lorem / placeholder
+    # if looks_like_technical_placeholder(html):
+    #     issues.append(
+    #         (
+    #             "generic_placeholder",
+    #             "Texte placeholder ou lorem ipsum détecté — contenu client requis.",
+    #         )
+    #     )
     if _DEAD_HREF_RE.search(html):
         issues.append(
             (

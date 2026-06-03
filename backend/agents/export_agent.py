@@ -261,10 +261,9 @@ class ExportAgent(BaseAgent):
                 raise CloudflareExportError(
                     "index.html requis pour un déploiement Pages dédié."
                 )
-            _log_export_deploy(
-                project_name,
-                deploy_files.get("index.html", html_candidate),
-            )
+            index_html = deploy_files.get("index.html", html_candidate)
+            print(f"[ExportAI] HTML envoyé — premiers 200 chars : {index_html[:200]}")
+            _log_export_deploy(project_name, index_html)
             production_url = await deploy_dedicated_pages(
                 project_slug=project_name,
                 files=deploy_files,
@@ -279,6 +278,7 @@ class ExportAgent(BaseAgent):
             nonlocal production_url, demo_token, demo_password, unlock_url, provider, message
             if not html.strip() or not is_usable_preview_html(html):
                 raise CloudflareExportError("HTML premium requis pour Cloudflare Pages.")
+            print(f"[ExportAI] HTML envoyé — premiers 200 chars : {html[:200]}")
             production_url, demo_token, demo_password, unlock_url = await deploy_html_demo(
                 html=html,
                 title=title,

@@ -9,7 +9,15 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from agents.coremind_agent import PROJECT_TYPE_LABELS, ProjectType
+PROJECT_TYPE_LABELS: dict[str, str] = {
+    "vitrine_next": "Vitrine Next",
+    "ecommerce": "E-commerce",
+    "site_reservation": "Réservation",
+    "application_web": "Application web",
+    "application_desktop": "Application desktop",
+    "extension_navigateur": "Extension navigateur",
+    "real_app": "Application React",
+}
 from db.supabase_store import (
     GenerationRow,
     ProjectDetailResponse,
@@ -102,11 +110,8 @@ async def get_project_demo_seed(project_id: str) -> dict[str, object]:
     if detail is None:
         raise HTTPException(status_code=404, detail="Projet introuvable.")
 
-    try:
-        ptype = ProjectType(detail.project.project_type)
-    except ValueError:
-        ptype = ProjectType.site_web
-    label = PROJECT_TYPE_LABELS.get(ptype, detail.project.project_type)
+    pt_key = (detail.project.project_type or "vitrine_next").strip().lower()
+    label = PROJECT_TYPE_LABELS.get(pt_key, detail.project.project_type)
     seed = heuristic_demo_seed(detail.project.prompt, project_type_label=label)
     return seed_as_dict(seed)
 

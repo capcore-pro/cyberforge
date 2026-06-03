@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agents.template_generator_ai import (
+    MAX_HTML_CHARS,
     TemplateGeneratorResult,
     _extract_html_from_response,
     _validate_generated_html,
@@ -21,8 +22,24 @@ def test_validate_generated_html_accepts_minimal_document() -> None:
 <img class="cf-image" src="{{HERO_IMAGE}}" alt="hero" /></section>
 <section><h2>{{SECTION_1_TITLE}}</h2><p>{{SECTION_1_CONTENT}}</p></section>
 <section><h2>{{SECTION_2_TITLE}}</h2><p>{{SECTION_2_CONTENT}}</p></section>
+<section><h2>{{SECTION_3_TITLE}}</h2><p>{{SECTION_3_CONTENT}}</p></section>
 <footer>f</footer></body></html>"""
     assert _validate_generated_html(html) is None
+
+
+def test_validate_rejects_html_over_max_chars() -> None:
+    base = (
+        "<!DOCTYPE html><html><body><header><nav></nav></header>"
+        '<section class="hero"><h1>{{CLIENT_NAME}}</h1><p>{{CLIENT_TAGLINE}}</p></section>'
+        "<section><h2>{{SECTION_1_TITLE}}</h2><p>{{SECTION_1_CONTENT}}</p></section>"
+        "<section><h2>{{SECTION_2_TITLE}}</h2><p>{{SECTION_2_CONTENT}}</p></section>"
+        "<section><h2>{{SECTION_3_TITLE}}</h2><p>{{SECTION_3_CONTENT}}</p></section>"
+        "<footer></footer></body></html>"
+    )
+    html = base + (" " * (MAX_HTML_CHARS - len(base) + 1))
+    err = _validate_generated_html(html)
+    assert err is not None
+    assert "trop long" in err
 
 
 def test_extract_html_strips_markdown_fence() -> None:

@@ -32,7 +32,7 @@ import anthropic  # noqa: E402
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
-MAX_TOKENS = 8000
+MAX_TOKENS = max(4000, int(os.getenv("PAYMENT_AI_MAX_TOKENS", "8000")))
 
 _PARSE_ERROR_PAYLOAD: dict[str, Any] = {
     "payment_type": "none",
@@ -96,12 +96,67 @@ Retourner UNIQUEMENT un JSON valide sans markdown :
 }
 """.strip()
 
+_MINIMAL_RETRY_SYSTEM_PROMPT = """
+Tu es PaymentAI. Retourne UNIQUEMENT un JSON valide sans markdown, compact :
+{
+  "payment_type": "...",
+  "stripe_config": { "test_mode": true, "products": [], "prices": [], "webhooks": [] },
+  "sql": "",
+  "frontend_code": "",
+  "summary": "une phrase courte"
+}
+Pas de commentaires SQL ni de JS long — stripe_config minimal suffit.
+""".strip()
 
-async def _call_claude(system_prompt: str, user_prompt: str):
+
+def _clean_json_text(raw_text: str) -> str:
+    cleaned = (raw_text or "").strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        cleaned = "\n".join(lines[1:]) if len(lines) > 1 else ""
+    if cleaned.rstrip().endswith("```"):
+        lines = cleaned.splitlines()
+        cleaned = "\n".join(lines[:-1]) if len(lines) > 1 else ""
+    cleaned = cleaned.strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("Aucun JSON trouvé")
+    return cleaned[start : end + 1]
+
+
+def _parse_payment_json(raw_text: str, *, detected: PaymentType) -> dict[str, Any]:
+    json_str = _clean_json_text(raw_text)
+    parsed = json.loads(json_str)
+    if not isinstance(parsed, dict):
+        raise ValueError("JSON racine invalide")
+    if not all(
+        k in parsed for k in ["payment_type", "stripe_config", "sql", "frontend_code", "summary"]
+    ):
+        raise ValueError("JSON incomplet — clés manquantes")
+    return {
+        "payment_type": str(parsed.get("payment_type") or detected),
+        "stripe_config": parsed.get("stripe_config")
+        if isinstance(parsed.get("stripe_config"), dict)
+        else {},
+        "sql": str(parsed.get("sql") or ""),
+        "frontend_code": str(parsed.get("frontend_code") or ""),
+        "summary": str(parsed.get("summary") or ""),
+    }
+
+
+async def _call_claude(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    max_tokens: int | None = None,
+):
+    tokens = max_tokens if max_tokens is not None else MAX_TOKENS
+
     def _do_call():
         return client.messages.create(
             model=MODEL,
-            max_tokens=MAX_TOKENS,
+            max_tokens=tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -208,42 +263,36 @@ async def run(project_description: str, project_type: str, database_schema: dict
         print(
             f"[PaymentAI DEBUG] Réponse brute (300 premiers chars):\n{raw_text[:300]}"
         )
-
-        cleaned = raw_text.strip()
-        # Nettoyage fences markdown sans regex (évite extraction regex JSON)
-        if cleaned.startswith("```"):
-            lines = cleaned.splitlines()
-            cleaned = "\n".join(lines[1:]) if len(lines) > 1 else ""
-        if cleaned.rstrip().endswith("```"):
-            lines = cleaned.splitlines()
-            cleaned = "\n".join(lines[:-1]) if len(lines) > 1 else ""
-        cleaned = cleaned.strip()
-
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start == -1 or end == -1:
-            raise ValueError("Aucun JSON trouvé")
-        json_str = cleaned[start : end + 1]
         try:
-            parsed = json.loads(json_str)
+            return _parse_payment_json(raw_text, detected=detected)
         except json.JSONDecodeError as exc:
             logger.warning(
-                "[PaymentAI] JSON invalide ou tronqué (max_tokens ?) — paiement ignoré: %s",
+                "[PaymentAI] JSON invalide ou tronqué (max_tokens=%s) — retry minimal: %s",
+                MAX_TOKENS,
                 exc,
             )
-            return dict(_PARSE_ERROR_PAYLOAD)
-        if not isinstance(parsed, dict):
-            raise ValueError("JSON racine invalide")
-        if not all(k in parsed for k in ["payment_type", "stripe_config", "sql", "frontend_code", "summary"]):
-            raise ValueError("JSON incomplet — clés manquantes")
-
-        return {
-            "payment_type": str(parsed.get("payment_type") or detected),
-            "stripe_config": parsed.get("stripe_config") if isinstance(parsed.get("stripe_config"), dict) else {},
-            "sql": str(parsed.get("sql") or ""),
-            "frontend_code": str(parsed.get("frontend_code") or ""),
-            "summary": str(parsed.get("summary") or ""),
-        }
+            minimal_prompt = (
+                f"payment_type={detected}\n"
+                f"project_type={(project_type or '').strip()}\n"
+                "Génère uniquement payment_type et stripe_config compacts. "
+                "sql et frontend_code vides. summary en une phrase."
+            )
+            retry = await _call_claude(
+                _MINIMAL_RETRY_SYSTEM_PROMPT,
+                minimal_prompt,
+                max_tokens=2048,
+            )
+            retry_text = retry.content[0].text
+            print(
+                f"[PaymentAI DEBUG] Retry minimal (300 chars):\n{retry_text[:300]}"
+            )
+            return _parse_payment_json(retry_text, detected=detected)
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "[PaymentAI] JSON retry minimal échoué — paiement ignoré: %s",
+            exc,
+        )
+        return dict(_PARSE_ERROR_PAYLOAD)
     except Exception as exc:
         logger.warning("[PaymentAI] échec génération — repli fallback: %s", exc)
         return _fallback_payload(detected)

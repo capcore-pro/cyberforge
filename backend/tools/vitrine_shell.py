@@ -281,12 +281,14 @@ def apply_vitrine_premium_shell(
 """
 
     if 'id="services"' not in body_inner.lower():
-        kw = profile.keywords[:3]
         cards = ""
-        labels = kw or ["Prestation 1", "Prestation 2", "Prestation 3"]
-        for label in labels[:3]:
-            le = html_lib.escape(str(label))
-            cards += f'<article class="cf-vitrine-card"><h3>{le}</h3><p>Découvrez notre expertise {le.lower()} chez {brand}.</p></article>'
+        labels = ("Nos prestations", "Accompagnement", "Qualité de service")
+        for label in labels:
+            le = html_lib.escape(label)
+            cards += (
+                f'<article class="cf-vitrine-card"><h3>{le}</h3>'
+                f"<p>Découvrez {brand} — {tag_esc}.</p></article>"
+            )
         body_inner += f"""
 <section id="services" class="cf-vitrine-section">
   <h2>Nos services</h2>

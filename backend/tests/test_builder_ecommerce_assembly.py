@@ -76,3 +76,27 @@ def test_assemble_strips_markdown_fences() -> None:
     assert result.data
     assert "```" not in (result.data.html or "")[:300]
     assert strip_markdown_code_fences("```html\n") == ""
+
+
+def test_resolve_assembly_keeps_generated_template_id() -> None:
+    plan = _plan("vitrine_next", ProjectType.SITE_WEB)
+    generated_html = (
+        "<!DOCTYPE html><html><head><title>{{CLIENT_NAME}}</title></head>"
+        "<body><h1>{{CLIENT_NAME}}</h1><p>Commerce Rouen</p></body></html>"
+    )
+    generated_id = "generated_vitrine_next_commerce"
+    html, _name, _sector, _city, tid, _filled = resolve_assembly_inputs(
+        user_prompt="vitrine commerce Rouen",
+        plan=plan,
+        research_content=None,
+        design_system=None,
+        template_html=generated_html,
+        sector_template={
+            "template_id": generated_id,
+            "html_raw": generated_html,
+            "generated": True,
+        },
+    )
+    assert tid == generated_id
+    assert "generated_vitrine" in tid
+    assert "{{CLIENT_NAME}}" in html

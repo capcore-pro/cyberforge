@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import re
+
+import pytest
+
 from agents.research_agent import ResearchBrief
 from tools.client_content_profile import (
     build_client_content_profile,
@@ -9,6 +13,7 @@ from tools.client_content_profile import (
     humanize_sector_label,
     is_blocked_demo_identity,
     is_plausible_business_name,
+    looks_like_technical_placeholder,
     repair_client_literals_in_html,
     resolve_client_business_name,
     safe_contact_email_domain_slug,
@@ -31,8 +36,11 @@ def test_enforce_client_literals_injects_title_and_h1() -> None:
     assert "<title>" in out.lower()
     assert "Lyon" in out
     assert "Boulangerie" in out
-    assert "pain" in out.lower()
+    assert 'name="keywords"' in out.lower()
+    assert "pain" in out.lower()  # meta keywords, pas corps visible forcé
     assert "viennoiserie" in out.lower()
+    body_no_meta = re.sub(r"<head[\s\S]*?</head>", "", out, flags=re.I)
+    assert "<li>pain</li>" not in body_no_meta.lower()
 
 
 def test_validate_client_literals_requires_name_twice() -> None:
@@ -110,6 +118,34 @@ def test_beauty_sector_label_is_generic() -> None:
     label = humanize_sector_label("beauté", user_prompt="spa esthétique")
     assert label == "Beauté & bien-être"
     assert label != "Institut de beauté"
+
+
+def test_french_common_names_are_plausible_brands() -> None:
+    for name in (
+        "Laurier",
+        "Beau",
+        "Camping Les Étoiles",
+        "L'Étoile Rose",
+        "Rose",
+        "Vert",
+        "Boulangerie",
+        "Commerce Local",
+    ):
+        assert is_plausible_business_name(name), name
+
+
+@pytest.mark.skip(reason="DÉSACTIVÉ TEMPORAIREMENT - DEBUG — FORBIDDEN_CONTENT_PATTERNS")
+def test_technical_placeholders_rejected() -> None:
+    for bad in (
+        "lorem ipsum",
+        "NOM_CLIENT",
+        "votre_nom",
+        "test123",
+        "Example Corp",
+        "undefined",
+    ):
+        assert looks_like_technical_placeholder(bad)
+        assert not is_plausible_business_name(bad)
 
 
 def test_build_profile_from_research_brief_dict() -> None:

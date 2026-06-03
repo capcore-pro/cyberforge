@@ -1,19 +1,11 @@
-"""Agents IA — orchestration des tâches d'assistance cybersécurité."""
+"""Agents IA — pipeline CyberForge v2."""
 
-from agents.architect_agent import ArchitectAgent, ArchitectPlan
-from agents.auto_fix_agent import AutoFixAgent
-from agents.base_agent import BaseAgent
-from agents.bug_hunter_agent import BugHunterAgent, BugHuntReport, BugIssue
-from agents.coremind_agent import CoreMindAgent, DemoPipelineSummary
+from agents.brief_ai import BriefAI
+from agents.deploy_ai import DeployAI
+from agents.generator_ai import GeneratorAI
 
 __all__ = [
-    "ArchitectAgent",
-    "ArchitectPlan",
-    "AutoFixAgent",
-    "BaseAgent",
-    "BugHunterAgent",
-    "BugHuntReport",
-    "BugIssue",
-    "CoreMindAgent",
-    "DemoPipelineSummary",
+    "BriefAI",
+    "DeployAI",
+    "GeneratorAI",
 ]

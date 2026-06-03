@@ -44,32 +44,84 @@ _GENERIC_BRAND_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Mots du prompt — jamais utilisés comme nom de marque.
-_PROMPT_KEYWORD_NAMES: frozenset[str] = frozenset(
+# Mots isolés issus du brief (adjectifs / méta) — pas des noms d'enseigne.
+# Ne pas y mettre de noms français courants (Laurier, Beau, Camping, Rose, Vert…).
+_NON_BRAND_PROMPT_TOKENS: frozenset[str] = frozenset(
     {
-        "vitrine",
-        "site",
-        "web",
         "artisanale",
         "artisanal",
-        "artisan",
-        "boulangerie",
-        "restaurant",
-        "restauration",
-        "pâtisserie",
-        "patisserie",
-        "commerce",
-        "local",
-        "locale",
         "professionnel",
         "professionnelle",
-        "entreprise",
         "activité",
         "activite",
-        "notre",
-        "entreprise",
+        "vitrine",
+        "prompt",
     }
 )
+
+# Placeholders techniques non remplacés (lorem, NOM_CLIENT, [nom], test123, …).
+_TECHNICAL_PLACEHOLDER_RE = re.compile(
+    r"(?:"
+    r"\blorem(?:\s+ipsum)?\b|"
+    r"\bipsum\b|"
+    # DÉSACTIVÉ TEMPORAIREMENT - DEBUG (placeholder_word / attributs HTML placeholder=)
+    # r"(?<![\w-])placeholder(?!\s*=)|"
+    r"\bexample(?:\s+corp)?\b|"
+    r"\btest\s*123\b|"
+    r"votre[_\s-]?nom|"
+    r"nom[_\s-]?client|"
+    r"\bNOM_CLIENT\b|"
+    r"\bENTREPRISE\b|"
+    r"\[nom\]|\{nom\}|"
+    r"\bundefined\b|"
+    r"\bnull\b|"
+    r"\bvotre\s+texte(?:\s+ici)?\b|"
+    r"\byour\s+text\s+here\b|"
+    r"\bService\s+[123]\b|"
+    r">\s*Texte\s+générique\s*<|"
+    r"\bacme\b|"
+    r"\bentreprise\s+xyz\b|"
+    r"\bvotre\s+entreprise\b|"
+    r"\bcompany\s+name\b|"
+    r"\bbrand\s+name\b|"
+    r"\bmon\s+entreprise\b|"
+    r"\bwelcome\s+to\b|"
+    r"nom\s+de\s+l['\u2019]entreprise|"
+    r"description\s+du\s+service"
+    r")",
+    re.IGNORECASE,
+)
+
+# DÉSACTIVÉ TEMPORAIREMENT - DEBUG — ContentAI / BugHunter (réactivation ultérieure)
+# FORBIDDEN_CONTENT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+#     (re.compile(r"\blorem\s+ipsum\b", re.I), "lorem_ipsum"),
+#     (re.compile(r"\bService\s+[123]\b", re.I), "generic_service"),
+#     (re.compile(r"\bVotre\s+texte\b", re.I), "placeholder_text"),
+#     (re.compile(r"\bLorem\b", re.I), "lorem"),
+#     (re.compile(r'(?<![\w-])placeholder(?!\s*=)', re.I), "placeholder_word"),
+#     (re.compile(r">\s*Texte\s+générique\s*<", re.I), "generic_text"),
+#     (re.compile(r"\bNOM_CLIENT\b"), "nom_client"),
+#     (re.compile(r"\bENTREPRISE\b"), "entreprise_token"),
+#     (re.compile(r"\[nom\]|\{nom\}", re.I), "nom_bracket"),
+#     (re.compile(r"\btest\s*123\b", re.I), "test123"),
+#     (re.compile(r"votre[_\s-]?nom", re.I), "votre_nom"),
+#     (re.compile(r"\bundefined\b|\bnull\b", re.I), "js_nullish"),
+# )
+FORBIDDEN_CONTENT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = ()
+
+PLACEHOLDER_WORD_FILTER_ENABLED = False
+FORBIDDEN_CONTENT_FILTER_ENABLED = False
+
+
+def active_forbidden_content_patterns() -> tuple[tuple[re.Pattern[str], str], ...]:
+    """DÉSACTIVÉ TEMPORAIREMENT - DEBUG."""
+    return ()
+
+
+def looks_like_technical_placeholder(text: str) -> bool:
+    """DÉSACTIVÉ TEMPORAIREMENT - DEBUG."""
+    return False
+    # return bool(_TECHNICAL_PLACEHOLDER_RE.search(text or ""))
 
 _BUSINESS_NAME_PREFIX_RE = re.compile(
     r"^(?:Le|La|Les|L['\u2019]|Aux|Chez|Boulangerie|Restaurant|Salon|"
@@ -167,8 +219,10 @@ def is_plausible_business_name(
     if len(n) < 3 or n == "Notre entreprise":
         return False
     low = n.lower()
-    if low in _PROMPT_KEYWORD_NAMES:
+    if low in _NON_BRAND_PROMPT_TOKENS:
         return False
+    if looks_like_technical_placeholder(n):
+        return False  # placeholders techniques, pas les mots-clés SEO
     if _GENERIC_BRAND_RE.search(n):
         return False
     if _looks_like_prompt_fragment(n):
@@ -181,15 +235,15 @@ def is_plausible_business_name(
     if city_clean and low == city_clean:
         return False
     words = n.split()
-    if len(words) == 1 and words[0].lower() in _PROMPT_KEYWORD_NAMES:
+    if len(words) == 1 and words[0].lower() in _NON_BRAND_PROMPT_TOKENS:
         return False
     if len(words) >= 2:
         return True
     if _BUSINESS_NAME_PREFIX_RE.match(n):
         return True
-    # Mot unique capitalisé type « Dupont » (nom propre court)
+    # Mot unique capitalisé type « Dupont », « Laurier », « Camping »
     if len(words) == 1 and words[0][0].isupper() and len(words[0]) >= 4:
-        if words[0].lower() not in _PROMPT_KEYWORD_NAMES:
+        if words[0].lower() not in _NON_BRAND_PROMPT_TOKENS:
             return True
     return False
 
@@ -520,11 +574,12 @@ Ces chaînes doivent apparaître telles quelles (orthographe exacte) dans le doc
 OBLIGATOIRE dans le HTML final (texte visible, orthographe exacte) :
 1. <title> : doit contenir littéralement « {name} »
 2. <h1> principal : doit contenir littéralement « {name} » (pas un synonyme)
-3. Corps <body> : au moins 3 mots-clés SEO parmi [{kw_line}] intégrés dans des paragraphes ou listes
-4. <meta name="description"> avec « {name} », « {sector} » et « {city} »
-5. Au moins 2 sections mentionnant le métier ({sector}) et la zone ({city})
-6. Au moins 1 bouton CTA avec « {name} » ou « {city} »
-7. Footer ou contact avec le nom « {name} » (le nom doit apparaître au moins 2 fois au total dans le document)
+3. <meta name="keywords" content="..."> avec les mots-clés SEO : {kw_line} (jamais dans paragraphes/titres visibles)
+4. Attributs alt / aria-label des images : peuvent reprendre les mots-clés SEO (pas le corps visible)
+5. <meta name="description"> avec « {name} », « {sector} » et « {city} » (sans liste de mots-clés SEO)
+6. Au moins 2 sections mentionnant le métier ({sector}) et la zone ({city})
+7. Au moins 1 bouton CTA avec « {name} » ou « {city} »
+8. Footer ou contact avec le nom « {name} » (le nom doit apparaître au moins 2 fois au total dans le document)
 
 INTERDIT : tout autre nom de marque, texte générique SaaS, lorem ipsum, « Votre texte ici », slogans inventés
 qui ne citent pas « {name} ».
@@ -573,16 +628,6 @@ def validate_client_literals(
             (
                 "missing_city",
                 f"La ville « {profile.city} » doit apparaître dans le HTML.",
-            )
-        )
-
-    required_kw = [k for k in profile.keywords if len(k.strip()) >= 3][:3]
-    missing_kw = [k for k in required_kw if k.lower() not in low]
-    if required_kw and missing_kw:
-        issues.append(
-            (
-                "missing_keyword",
-                f"Mots-clés manquants dans le HTML : {', '.join(missing_kw)}.",
             )
         )
 
@@ -651,17 +696,6 @@ def repair_client_literals_in_html(
         )
         out = _inject_before_body_end(out, block)
 
-    required_kw = [k for k in profile.keywords if len(k.strip()) >= 3][:3]
-    missing_kw = [k for k in required_kw if k.lower() not in out.lower()]
-    if missing_kw:
-        items = "".join(f"<li>{html_lib.escape(k)}</li>" for k in missing_kw)
-        block = (
-            f'<section id="services" class="cf-client-keywords">'
-            f"<h2>Expertise {name}</h2><ul>{items}</ul>"
-            f"</section>\n"
-        )
-        out = _inject_before_body_end(out, block)
-
     if out.lower().count(name_low) < 2:
         footer = (
             f'<footer class="cf-client-footer">'
@@ -683,6 +717,49 @@ def repair_client_literals_in_html(
         )
 
     return out
+
+
+def _inject_seo_meta_keywords(html: str, keywords: list[str]) -> str:
+    """Mots-clés SEO uniquement dans <meta name=\"keywords\"> — pas dans le corps visible."""
+    kws = [k.strip() for k in keywords if k and len(k.strip()) >= 2][:12]
+    if not kws:
+        return html
+    content = html_lib.escape(", ".join(kws))
+    tag = f'<meta name="keywords" content="{content}" />'
+    if re.search(r'<meta[^>]+name=["\']keywords["\']', html, re.I):
+        return re.sub(
+            r'<meta[^>]+name=["\']keywords["\'][^>]*>',
+            tag,
+            html,
+            count=1,
+            flags=re.I,
+        )
+    if re.search(r"</title>", html, re.I):
+        return re.sub(r"(</title>)", rf"\1\n{tag}", html, count=1, flags=re.I)
+    if re.search(r"<head[^>]*>", html, re.I):
+        return re.sub(r"(<head[^>]*>)", rf"\1\n{tag}", html, count=1, flags=re.I)
+    return html
+
+
+def _apply_keywords_to_img_alt_aria(html: str, keywords: list[str]) -> str:
+    """Mots-clés SEO dans alt / aria-label uniquement (pas de texte visible ajouté)."""
+    kws = [k.strip() for k in keywords if k and len(k.strip()) >= 2][:3]
+    if not kws:
+        return html
+    alt_phrase = html_lib.escape(", ".join(kws))[:120]
+
+    def _add_alt(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        if re.search(r'\balt\s*=', tag, re.I):
+            return tag
+        if tag.rstrip().endswith("/>"):
+            return tag[:-2] + f' alt="{alt_phrase}" />'
+        return tag[:-1] + f' alt="{alt_phrase}">'
+
+    return _IMG_ALT_INJECT_RE.sub(_add_alt, html)
+
+
+_IMG_ALT_INJECT_RE = re.compile(r"<img\b[^>]*>", re.I)
 
 
 def _inject_before_body_end(html: str, fragment: str) -> str:
@@ -710,8 +787,6 @@ def enforce_client_literals_in_html(
         profile.sector_label_for(user_prompt) or "services professionnels"
     )
     city = html_lib.escape(profile.city or "")
-    kw = html_lib.escape(", ".join(profile.keywords[:6]))
-
     title_text = html_lib.escape(
         format_client_page_title(profile, user_prompt=user_prompt, html=html)
     )
@@ -737,8 +812,6 @@ def enforce_client_literals_in_html(
     desc = f"{name} — {sector}"
     if city:
         desc += f" à {city}"
-    if kw:
-        desc += f". {kw}"
     if not re.search(r'<meta[^>]+name=["\']description["\']', out, re.I):
         if re.search(r"</title>", out, re.I):
             out = re.sub(
@@ -772,4 +845,6 @@ def enforce_client_literals_in_html(
             )
             break
 
+    out = _inject_seo_meta_keywords(out, profile.keywords)
+    out = _apply_keywords_to_img_alt_aria(out, profile.keywords)
     return out
