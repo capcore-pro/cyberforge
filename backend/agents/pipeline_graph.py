@@ -87,11 +87,17 @@ NODE_DATABASE = "database_ai"
 NODE_AUTH = "auth_ai"
 NODE_ELECTRON = "electron_ai"
 NODE_PAYMENT = "payment_ai"
+NODE_TEMPLATE_GENERATOR = "template_generator_ai"
+
+GENERATED_TEMPLATE_PRICING_CATEGORIES: frozenset[str] = frozenset(
+    {"vitrine_next", "ecommerce", "site_reservation"}
+)
 
 VITRINE_PIPELINE_ORDER: tuple[str, ...] = (
     "architect",
     "research",
     NODE_DESIGN_SYSTEM,
+    NODE_TEMPLATE_GENERATOR,
     "template_ai",
     "content_ai",
     "builder",
@@ -113,6 +119,7 @@ AGENT_LABELS: dict[str, str] = {
     "architect": "ArchitectAI",
     NODE_DESIGN_SYSTEM: "DesignSystemAI",
     "template_ai": "TemplateAI",
+    NODE_TEMPLATE_GENERATOR: "TemplateGeneratorAI",
     "content_ai": "ContentAI",
     "research": "ResearchAI",
     "openhands": "OpenHands",
@@ -572,18 +579,13 @@ async def design_system_node(
     return {"design_system": doc.to_contract_dict()}
 
 
-async def template_ai_node(
+def _template_context_from_state(
     state: PipelineState,
-    config: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """TemplateAI — charge le HTML sectoriel de base (loi visuelle déjà fixée)."""
-    cb = _callback_from_config(config)
+) -> tuple[Any, str, str, str, str] | None:
+    """(plan, base_prompt, sector, pt_value, pricing_cat) ou None si plan absent."""
     plan = state.get("architect_plan")
     if not plan:
-        return {"error": "Plan architecte manquant pour TemplateAI."}
-
-    await _step(cb, "template_ai", "start", "Chargement du template sectoriel…")
-
+        return None
     from tools.client_content_profile import build_client_content_profile
 
     base_prompt = (state.get("prompt") or "").strip()
@@ -597,48 +599,20 @@ async def template_ai_node(
         or (plan.secteur or "").strip()
         or detect_sector_from_prompt_for_design(base_prompt, plan)
     )
-
     pt_value = (
         plan.project_type.value
         if hasattr(plan.project_type, "value")
         else str(plan.project_type)
     )
     pricing_cat = (getattr(plan, "pricing_category", None) or "").strip().lower()
-    logger.info(
-        "[TemplateAI] entrée | project_type=%s | pricing_category=%s | sector=%s | prompt_len=%d",
-        pt_value,
-        pricing_cat or "?",
-        sector,
-        len(base_prompt),
-    )
+    return plan, base_prompt, sector, pt_value, pricing_cat
 
-    result = load_sector_template_raw(
-        sector=sector,
-        user_prompt=base_prompt,
-        plan=plan,
-    )
-    if not result.ok or result.data is None:
-        err = result.error
-        msg = err.message if err else "Template sectoriel indisponible."
-        await _step(cb, "template_ai", "error", msg)
-        return {"error": f"TemplateAI : {msg}"}
 
-    data = result.data
-    logger.info(
-        "[TemplateAI] choix catalogue | project_type=%s | pricing_category=%s → template_id=%s (%s)",
-        pt_value,
-        pricing_cat or "?",
-        data.template_id,
-        data.template_file,
-    )
-    await _step(
-        cb,
-        "template_ai",
-        "done",
-        f"Template {data.template_id} — {data.sector}",
-        template_id=data.template_id,
-        template_file=data.template_file,
-    )
+def _sector_template_payload_from_catalog(
+    data: Any,
+    *,
+    generated: bool = False,
+) -> dict[str, Any]:
     return {
         "sector_template": {
             "template_id": data.template_id,
@@ -647,8 +621,168 @@ async def template_ai_node(
             "visual_family": data.visual_family,
             "html_raw": data.html,
             "html": data.html,
+            "generated": generated,
         },
     }
+
+
+async def _load_catalog_sector_template(
+    *,
+    plan: Any,
+    base_prompt: str,
+    sector: str,
+    pt_value: str,
+    pricing_cat: str,
+    cb: PipelineEventCallback | None,
+    step_agent: str,
+) -> dict[str, Any] | None:
+    """Charge un template sectoriel du catalogue (fallback)."""
+    result = load_sector_template_raw(
+        sector=sector,
+        user_prompt=base_prompt,
+        plan=plan,
+    )
+    if not result.ok or result.data is None:
+        err = result.error
+        msg = err.message if err else "Template sectoriel indisponible."
+        await _step(cb, step_agent, "error", msg)
+        return {"error": f"{step_agent} : {msg}"}
+
+    data = result.data
+    logger.info(
+        "[%s] catalogue | project_type=%s | pricing_category=%s → %s (%s)",
+        step_agent,
+        pt_value,
+        pricing_cat or "?",
+        data.template_id,
+        data.template_file,
+    )
+    await _step(
+        cb,
+        step_agent,
+        "done",
+        f"Template {data.template_id} — {data.sector}",
+        template_id=data.template_id,
+        template_file=data.template_file,
+        source="catalog",
+    )
+    return _sector_template_payload_from_catalog(data, generated=False)
+
+
+async def template_generator_ai_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """TemplateGeneratorAI — HTML sectoriel généré par Claude ; repli catalogue si échec."""
+    cb = _callback_from_config(config)
+    ctx = _template_context_from_state(state)
+    if ctx is None:
+        return {"error": "Plan architecte manquant pour TemplateGeneratorAI."}
+
+    plan, base_prompt, sector, pt_value, pricing_cat = ctx
+
+    await _step(
+        cb,
+        NODE_TEMPLATE_GENERATOR,
+        "start",
+        "Génération du template HTML (Claude Sonnet)…",
+    )
+
+    from agents.template_generator_ai import run as generate_sector_template
+
+    generated = await generate_sector_template(
+        project_description=base_prompt,
+        project_type=pricing_cat or pt_value,
+        sector=sector,
+        design_system=state.get("design_system"),
+    )
+
+    if generated is not None:
+        import re
+
+        placeholders = len(re.findall(r"\{\{[A-Z0-9_]+\}\}", generated.html))
+        logger.info(
+            "[TemplateGeneratorAI] OK | pricing_category=%s → %s (%d car., %d placeholders)",
+            pricing_cat or "?",
+            generated.template_id,
+            len(generated.html),
+            placeholders,
+        )
+        await _step(
+            cb,
+            NODE_TEMPLATE_GENERATOR,
+            "done",
+            generated.summary or f"Template {generated.template_id}",
+            template_id=generated.template_id,
+            template_file=f"{generated.template_id}.html",
+            source="generated",
+        )
+        return {
+            "sector_template": {
+                "template_id": generated.template_id,
+                "template_file": f"{generated.template_id}.html",
+                "sector": sector,
+                "visual_family": sector,
+                "html_raw": generated.html,
+                "html": generated.html,
+                "generated": True,
+                "summary": generated.summary,
+            },
+        }
+
+    logger.warning(
+        "[TemplateGeneratorAI] échec génération — repli catalogue sectoriel"
+    )
+    await _step(
+        cb,
+        NODE_TEMPLATE_GENERATOR,
+        "start",
+        "Repli sur le template sectoriel du catalogue…",
+    )
+    fallback = await _load_catalog_sector_template(
+        plan=plan,
+        base_prompt=base_prompt,
+        sector=sector,
+        pt_value=pt_value,
+        pricing_cat=pricing_cat,
+        cb=cb,
+        step_agent=NODE_TEMPLATE_GENERATOR,
+    )
+    return fallback if fallback is not None else {"error": "TemplateGeneratorAI : échec."}
+
+
+async def template_ai_node(
+    state: PipelineState,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """TemplateAI — charge le HTML sectoriel de base (loi visuelle déjà fixée)."""
+    cb = _callback_from_config(config)
+    ctx = _template_context_from_state(state)
+    if ctx is None:
+        return {"error": "Plan architecte manquant pour TemplateAI."}
+
+    plan, base_prompt, sector, pt_value, pricing_cat = ctx
+
+    await _step(cb, "template_ai", "start", "Chargement du template sectoriel…")
+
+    logger.info(
+        "[TemplateAI] entrée | project_type=%s | pricing_category=%s | sector=%s | prompt_len=%d",
+        pt_value,
+        pricing_cat or "?",
+        sector,
+        len(base_prompt),
+    )
+
+    fallback = await _load_catalog_sector_template(
+        plan=plan,
+        base_prompt=base_prompt,
+        sector=sector,
+        pt_value=pt_value,
+        pricing_cat=pricing_cat,
+        cb=cb,
+        step_agent="template_ai",
+    )
+    return fallback if fallback is not None else {"error": "TemplateAI : échec."}
 
 
 async def content_ai_node(
@@ -835,11 +969,21 @@ def _is_extension_pipeline(state: PipelineState) -> bool:
     return is_extension_project_type(plan)
 
 
+def _should_use_template_generator(state: PipelineState) -> bool:
+    plan = state.get("architect_plan")
+    if not plan:
+        return False
+    cat = (getattr(plan, "pricing_category", None) or "").strip().lower()
+    return cat in GENERATED_TEMPLATE_PRICING_CATEGORIES
+
+
 def _route_after_design_system(state: PipelineState) -> str:
     if state.get("error"):
         return "finalize"
     if _is_extension_pipeline(state):
         return "extension_build"
+    if _should_use_template_generator(state):
+        return NODE_TEMPLATE_GENERATOR
     return "template_ai"
 
 
@@ -2640,6 +2784,7 @@ def build_pipeline_graph() -> Any:
     graph.add_node(NODE_PAYMENT, payment_ai_node)
     graph.add_node(NODE_DESIGN_SYSTEM, design_system_node)
     graph.add_node("extension_build", extension_build_node)
+    graph.add_node(NODE_TEMPLATE_GENERATOR, template_generator_ai_node)
     graph.add_node("template_ai", template_ai_node)
     graph.add_node("content_ai", content_ai_node)
     graph.add_node("research", research_node)
@@ -2718,11 +2863,20 @@ def build_pipeline_graph() -> Any:
         _route_after_design_system,
         {
             "extension_build": "extension_build",
+            NODE_TEMPLATE_GENERATOR: NODE_TEMPLATE_GENERATOR,
             "template_ai": "template_ai",
             "finalize": "finalize",
         },
     )
     graph.add_edge("extension_build", "export")
+    graph.add_conditional_edges(
+        NODE_TEMPLATE_GENERATOR,
+        _route_after_template_ai,
+        {
+            "content_ai": "content_ai",
+            "finalize": "finalize",
+        },
+    )
     graph.add_conditional_edges(
         "template_ai",
         _route_after_template_ai,

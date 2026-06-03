@@ -98,6 +98,22 @@ _DESKTOP_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("gestion", "stock", "facture", "devis", "erp", "compta"), "desktop_gestion.html"),
 )
 
+# Camping / hébergement touristique — vitrine générique, pas vitrine_alimentaire.
+_VITRINE_HOSPITALITY_HINTS: tuple[str, ...] = (
+    "camping",
+    "hébergement touristique",
+    "hebergement touristique",
+    "gîte",
+    "gite",
+    "chalet",
+    "chalets",
+    "cabane",
+    "cabanes",
+    "tourisme",
+    "hébergement",
+    "hebergement",
+)
+
 # Famille de templates imposée par pricing_category (priorité absolue).
 _CATEGORY_TO_FAMILY: dict[str, str] = {
     "ecommerce": "ecommerce",
@@ -185,8 +201,33 @@ def _resolve_template_family(category: str, pt_value: str) -> str:
     return "vitrine"
 
 
+def _prompt_forces_vitrine_default_hospitality(blob: str) -> bool:
+    """Hébergement outdoor / tourisme → vitrine_default (évite vitrine_alimentaire)."""
+    if any(h in blob for h in _VITRINE_HOSPITALITY_HINTS):
+        return True
+    if "hébergement" in blob or "hebergement" in blob:
+        return any(
+            ctx in blob
+            for ctx in (
+                "camping",
+                "chalet",
+                "gîte",
+                "gite",
+                "cabane",
+                "touristique",
+                "tourisme",
+            )
+        )
+    return False
+
+
 def resolve_vitrine_template_file(sector: str, user_prompt: str = "") -> str:
     blob = _blob(sector, user_prompt)
+    if _prompt_forces_vitrine_default_hospitality(blob):
+        logger.info(
+            "[sector_template_catalog] hébergement/tourisme détecté → vitrine_default.html"
+        )
+        return "vitrine_default.html"
     family = resolve_visual_family(normalize_sector_key(sector), user_prompt)
     return (
         _VITRINE_SECTOR_FILES.get(family)

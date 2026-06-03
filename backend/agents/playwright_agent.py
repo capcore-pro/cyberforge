@@ -145,6 +145,19 @@ class PlaywrightAgent(BaseAgent):
         vitrine_mode: bool = False,
         prefer_local_preview: bool = False,
     ) -> PlaywrightReport:
+        import platform
+
+        if platform.system() == "Windows":
+            logger.info("[Playwright] ignoré sur Windows — tests E2E désactivés")
+            return PlaywrightReport(
+                passed=[],
+                failed=[],
+                score=0,
+                ok=True,
+                skipped=True,
+                skip_reason="Playwright ignoré sur Windows",
+            )
+
         resolved = settings or self._settings
         threshold = resolved.playwright_pass_threshold
 

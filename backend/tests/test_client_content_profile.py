@@ -6,9 +6,12 @@ from agents.research_agent import ResearchBrief
 from tools.client_content_profile import (
     build_client_content_profile,
     generate_fictional_business_name,
+    humanize_sector_label,
+    is_blocked_demo_identity,
     is_plausible_business_name,
     repair_client_literals_in_html,
     resolve_client_business_name,
+    safe_contact_email_domain_slug,
     validate_client_literals,
 )
 
@@ -74,6 +77,39 @@ def test_fictional_bakery_name_for_rouen() -> None:
     )
     assert "artisanale" not in name.lower()
     assert len(name) >= 8
+
+
+def test_blocked_demo_identities_never_used_as_brand() -> None:
+    for blocked in (
+        "Loi Visuelle",
+        "contact@loivisuelle.fr",
+        "Sophie",
+        "Camille",
+        "Léa",
+        "Institut de beauté",
+    ):
+        assert is_blocked_demo_identity(blocked)
+        assert not is_plausible_business_name(blocked)
+
+    profile = build_client_content_profile(
+        user_prompt="Loi Visuelle — institut de beauté avec Sophie et Camille",
+        research_brief={
+            "nom_entreprise": "Loi Visuelle",
+            "secteur": "beauté",
+            "ville": "Lyon",
+        },
+    )
+    assert "loi" not in profile.company_name.lower()
+    assert "visuelle" not in profile.company_name.lower()
+    assert profile.company_name != "Sophie"
+    assert safe_contact_email_domain_slug("Loi Visuelle") == "entreprise"
+    assert "loivisuelle" not in safe_contact_email_domain_slug("Loi Visuelle")
+
+
+def test_beauty_sector_label_is_generic() -> None:
+    label = humanize_sector_label("beauté", user_prompt="spa esthétique")
+    assert label == "Beauté & bien-être"
+    assert label != "Institut de beauté"
 
 
 def test_build_profile_from_research_brief_dict() -> None:

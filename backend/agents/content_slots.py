@@ -12,6 +12,7 @@ from tools.client_content_profile import (
     build_client_content_profile,
     humanize_sector_label,
     resolve_client_business_name,
+    safe_contact_email_domain_slug,
     sanitize_city,
 )
 
@@ -182,8 +183,7 @@ _CITY_CONTACT: dict[str, tuple[str, str]] = {
 
 
 def _contact_email_slug(brand: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "", (brand or "").lower())
-    return slug[:24] or "contact"
+    return safe_contact_email_domain_slug(brand)
 
 
 def _resolve_city_for_contact(
@@ -680,3 +680,63 @@ def build_desktop_slots(
             }
         )
     return slots
+
+
+_PLACEHOLDER_KEY_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
+
+_SECTION_DEFAULTS: tuple[tuple[str, str], ...] = (
+    ("Nos services", "Découvrez notre offre et notre savoir-faire."),
+    ("Pourquoi nous choisir", "Qualité, proximité et accompagnement personnalisé."),
+    ("Galerie", "Un aperçu de notre univers et de nos réalisations."),
+    ("Témoignages", "La satisfaction de nos clients est notre priorité."),
+    ("Contact", "Échangeons sur votre projet — nous vous répondons rapidement."),
+)
+
+_HERO_IMAGE_DEFAULT = (
+    "https://images.unsplash.com/photo-1497366216548-37526070297c?w=1920&q=80"
+)
+
+
+def supplement_dynamic_template_slots(
+    slots: dict[str, str],
+    template_html: str,
+    *,
+    brand: str,
+    sector_label: str,
+    hero_subtitle: str,
+    keywords: list[str] | None = None,
+) -> dict[str, str]:
+    """Remplit SECTION_* / HERO_IMAGE pour templates générés (TemplateGeneratorAI)."""
+    if not (template_html or "").strip():
+        return slots
+    keys = set(_PLACEHOLDER_KEY_RE.findall(template_html))
+    if not any(k.startswith("SECTION_") for k in keys) and "HERO_IMAGE" not in keys:
+        return slots
+
+    out = dict(slots)
+    kws = [str(k).strip() for k in (keywords or []) if str(k).strip()][:5]
+
+    for i in range(1, 6):
+        title_key = f"SECTION_{i}_TITLE"
+        content_key = f"SECTION_{i}_CONTENT"
+        if title_key in keys and title_key not in out:
+            if i <= len(_SECTION_DEFAULTS):
+                title, _body = _SECTION_DEFAULTS[i - 1]
+            else:
+                title = f"Section {i}"
+            out[title_key] = html_lib.escape(title)
+        if content_key in keys and content_key not in out:
+            if i == 1 and hero_subtitle:
+                body = hero_subtitle
+            elif i <= len(_SECTION_DEFAULTS):
+                _, body = _SECTION_DEFAULTS[i - 1]
+            elif i == 2 and kws:
+                body = f"Expertise : {', '.join(kws[:3])}."
+            else:
+                body = f"{brand} — {sector_label}."
+            out[content_key] = html_lib.escape(body)
+
+    if "HERO_IMAGE" in keys and "HERO_IMAGE" not in out:
+        out["HERO_IMAGE"] = _HERO_IMAGE_DEFAULT
+
+    return out

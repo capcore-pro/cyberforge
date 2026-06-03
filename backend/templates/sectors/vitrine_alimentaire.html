@@ -73,6 +73,8 @@
     .social { display: flex; justify-content: center; gap: 1.25rem; margin-top: 1rem; font-size: 1.25rem; }
     .reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s ease, transform .7s ease; }
     .reveal.visible { opacity: 1; transform: none; }
+    /* Hero toujours visible (évite page « vide » sous la navbar si JS/observer inactif). */
+    .hero.reveal { opacity: 1; transform: none; }
     @media (max-width: 768px) {
       .split, .contact-grid { grid-template-columns: 1fr; }
       .nav-links { display: none; }
@@ -169,8 +171,21 @@
     </div>
   </footer>
   <script>
-    const obs = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }), { threshold: 0.12 });
-    document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    (function () {
+      var obs = new IntersectionObserver(function (es) {
+        es.forEach(function (e) {
+          if (e.isIntersecting) e.target.classList.add('visible');
+        });
+      }, { threshold: 0.12 });
+      document.querySelectorAll('.reveal').forEach(function (el) { obs.observe(el); });
+      /* Filet de sécurité : sections visibles si l'observer ne se déclenche pas (export, iframe). */
+      setTimeout(function () {
+        document.querySelectorAll('.reveal:not(.visible)').forEach(function (el) {
+          el.classList.add('visible');
+        });
+      }, 1200);
+    })();
   </script>
+  <noscript><style>.reveal{opacity:1!important;transform:none!important}</style></noscript>
 </body>
 </html>

@@ -77,6 +77,31 @@ _BUSINESS_NAME_PREFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Identités démo / artefacts pipeline — jamais injectées comme nom client.
+_BLOCKED_BRAND_EXACT: frozenset[str] = frozenset(
+    {
+        "loi visuelle",
+        "loivisuelle",
+        "institut de beauté",
+        "institut de beaute",
+        "sophie",
+        "camille",
+        "léa",
+        "lea",
+    }
+)
+
+_BLOCKED_BRAND_SUBSTRINGS: tuple[str, ...] = (
+    "loi visuelle",
+    "loivisuelle",
+    "contact@loivisuelle",
+)
+
+_DEMO_FIRST_NAMES_RE = re.compile(
+    r"^(?:sophie|camille|léa|lea)$",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class ClientContentProfile:
@@ -95,6 +120,29 @@ class ClientContentProfile:
 
     def sector_label_for(self, user_prompt: str = "") -> str:
         return humanize_sector_label(self.sector, self.keywords, user_prompt=user_prompt)
+
+
+def is_blocked_demo_identity(name: str) -> bool:
+    """True si le texte est une identité démo interdite (nom, e-mail, marque figée)."""
+    n = (name or "").strip()
+    if not n:
+        return False
+    low = n.lower()
+    if low in _BLOCKED_BRAND_EXACT:
+        return True
+    if _DEMO_FIRST_NAMES_RE.match(low):
+        return True
+    return any(sub in low for sub in _BLOCKED_BRAND_SUBSTRINGS)
+
+
+def safe_contact_email_domain_slug(brand: str) -> str:
+    """Domaine e-mail générique — évite loivisuelle.fr et prénoms démo."""
+    if is_blocked_demo_identity(brand):
+        return "entreprise"
+    slug = re.sub(r"[^a-z0-9]+", "", (brand or "").lower())
+    if not slug or "loivisuelle" in slug or _DEMO_FIRST_NAMES_RE.match(slug):
+        return "entreprise"
+    return slug[:24]
 
 
 def _looks_like_prompt_fragment(text: str) -> bool:
@@ -124,6 +172,8 @@ def is_plausible_business_name(
     if _GENERIC_BRAND_RE.search(n):
         return False
     if _looks_like_prompt_fragment(n):
+        return False
+    if is_blocked_demo_identity(n):
         return False
     if "loi visuelle" in low or low in ("loi", "visuelle"):
         return False
@@ -216,6 +266,8 @@ def resolve_client_business_name(
 def sanitize_brand_name(raw: str, *, user_prompt: str = "", html: str = "") -> str:
     """Nom court de marque — jamais le prompt complet."""
     s = (raw or "").strip()
+    if is_blocked_demo_identity(s):
+        return ""
     if (
         s
         and not _looks_like_prompt_fragment(s)
@@ -293,7 +345,7 @@ def humanize_sector_label(
         x in blob
         for x in ("beauté", "beaute", "spa", "esthétique", "esthetique", "institut")
     ):
-        return "Institut de beauté"
+        return "Beauté & bien-être"
     if "immobilier" in blob:
         return "Immobilier"
     s = (sector or "").strip()
@@ -410,6 +462,8 @@ def build_client_content_profile(
     brief = _coerce_research_brief(research_brief)
     if brief is not None:
         name = (brief.nom_entreprise or "").strip()
+        if is_blocked_demo_identity(name):
+            name = ""
         sector = (brief.secteur or "").strip()
         city = (brief.ville or "").strip()
         keywords = [str(k).strip() for k in (brief.mots_cles or []) if str(k).strip()]
@@ -417,6 +471,8 @@ def build_client_content_profile(
     ctx = extract_research_context(user_prompt, plan=plan)
     if not name:
         name = (ctx.get("nom_entreprise") or "").strip()
+        if is_blocked_demo_identity(name):
+            name = ""
     if not sector:
         sector = (ctx.get("secteur") or "").strip()
     if plan and getattr(plan, "secteur", None):

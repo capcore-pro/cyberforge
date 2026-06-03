@@ -8,6 +8,7 @@ from agents.architect_pricing import (
     build_complexity_pricing,
     complexity_label_from_score,
     resolve_pricing_category,
+    _prompt_forces_vitrine_hospitality,
     _prompt_triggers_site_reservation,
 )
 from agents.coremind_agent import ProjectType
@@ -50,6 +51,21 @@ def test_site_reservation_triggered_when_primary_subject() -> None:
     prompt = "Application de réservation de tables pour restaurant italien"
     assert _prompt_triggers_site_reservation(prompt) is True
     assert resolve_pricing_category(ProjectType.SITE_WEB, prompt) == "site_reservation"
+
+
+def test_camping_hospitality_forces_vitrine_next_not_reservation() -> None:
+    prompts = (
+        "Site vitrine camping Les Érables — hébergement en chalets et mobil-homes, "
+        "réservation par formulaire de contact",
+        "Gîte et chalets en montagne, hébergement touristique avec cabanes",
+        "Camping familial, cabanes dans les arbres et hébergement",
+    )
+    for prompt in prompts:
+        assert _prompt_forces_vitrine_hospitality(prompt.lower()) is True
+        assert _prompt_triggers_site_reservation(prompt.lower()) is False
+        assert (
+            resolve_pricing_category(ProjectType.SITE_WEB, prompt) == "vitrine_next"
+        )
 
 
 def test_vitrine_generation_mode() -> None:

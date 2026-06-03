@@ -123,6 +123,18 @@ def test_vitrine_fallback() -> None:
     assert fname == "vitrine_alimentaire.html"
 
 
+def test_commerce_camping_forces_vitrine_default_not_alimentaire() -> None:
+    plan = _plan("vitrine_next", ProjectType.SITE_WEB)
+    prompt = (
+        "Site vitrine camping Les Pins — hébergement en chalets et gîtes, "
+        "tourisme en montagne, formulaire de contact"
+    )
+    tid, fname = resolve_sector_template_from_plan(plan, "commerce", prompt)
+    assert tid == "vitrine_default"
+    assert fname == "vitrine_default.html"
+    assert tid != "vitrine_alimentaire"
+
+
 def test_ecommerce_patisserie_rouen_not_app_dashboard() -> None:
     """E-commerce + prompt pâtisserie → ecommerce_alimentaire, jamais app_*."""
     plan = _plan("ecommerce", ProjectType.SAAS_DASHBOARD)

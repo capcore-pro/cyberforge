@@ -34,6 +34,7 @@ from agents.content_slots import (
     build_desktop_slots,
     build_ecommerce_slots,
     build_reservation_slots,
+    supplement_dynamic_template_slots,
     _RESERVATION_TEAM,
     _team_placeholder_slots,
     ensure_contact_slots,
@@ -484,7 +485,14 @@ def build_content_slots(
         slots["FLEET_2_DESC"] = html_lib.escape("Sorties journée · Équipement complet")
         slots["FLEET_3_NAME"] = html_lib.escape("Semi-rigide")
         slots["FLEET_3_DESC"] = html_lib.escape(f"Découverte côte · {city_clean}")
-    return slots
+    return supplement_dynamic_template_slots(
+        slots,
+        template_html,
+        brand=brand,
+        sector_label=sector_label,
+        hero_subtitle=hero_subtitle,
+        keywords=keywords,
+    )
 
 
 def _apply_design_system_css(html: str, design_system: Any | None) -> str:
@@ -925,6 +933,20 @@ async def fill_template_content(
             user_prompt=user_prompt,
             template_id=template_id,
             project_name=project_name,
+        )
+        sector_plain = sector or research_dict.get("secteur") or profile.sector or ""
+        sector_label = humanize_sector_label(
+            sector_plain,
+            profile.keywords,
+            user_prompt=user_prompt,
+        )
+        slots = supplement_dynamic_template_slots(
+            slots,
+            template_html,
+            brand=display_name,
+            sector_label=sector_label,
+            hero_subtitle=slots.get("CLIENT_TAGLINE", ""),
+            keywords=profile.keywords,
         )
         working_html = template_html
         enriched = await _enrich_template_html_with_claude(

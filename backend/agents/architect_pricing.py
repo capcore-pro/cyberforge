@@ -147,6 +147,34 @@ _RESERVATION_BUSINESS_HINTS = (
 
 _RESERVATION_PRIMARY_WORDS = ("réservation", "reservation", "booking", "rendez-vous", "rendez vous", "rdv")
 
+# Hébergement touristique / outdoor — vitrine multi-pages, pas module réservation SaaS.
+_VITRINE_HOSPITALITY_HINTS: tuple[str, ...] = (
+    "camping",
+    "hébergement touristique",
+    "hebergement touristique",
+    "gîte",
+    "gite",
+    "chalet",
+    "chalets",
+    "cabane",
+    "cabanes",
+)
+
+_VITRINE_HOSPITALITY_HEBERGEMENT_CONTEXT: tuple[str, ...] = (
+    "camping",
+    "chalet",
+    "chalets",
+    "gîte",
+    "gite",
+    "cabane",
+    "cabanes",
+    "touristique",
+    "mobil-home",
+    "mobil home",
+    "bungalow",
+    "yourte",
+)
+
 _SERVICE_CATALOG_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bnous\s+proposons\b", re.I),
     re.compile(r"\bon\s+proposons\b", re.I),
@@ -180,8 +208,22 @@ def _is_service_catalog_context(text: str) -> bool:
     return any(pattern.search(text) for pattern in _SERVICE_CATALOG_PATTERNS)
 
 
+def _prompt_forces_vitrine_hospitality(text: str) -> bool:
+    """
+    Camping, gîtes, chalets, etc. → vitrine_next (présentation + contact),
+    même si le brief mentionne « réservation » pour les séjours.
+    """
+    if any(h in text for h in _VITRINE_HOSPITALITY_HINTS):
+        return True
+    if "hébergement" in text or "hebergement" in text:
+        return any(ctx in text for ctx in _VITRINE_HOSPITALITY_HEBERGEMENT_CONTEXT)
+    return False
+
+
 def _prompt_triggers_site_reservation(text: str) -> bool:
     """True si le prompt décrit un projet de réservation (pas une simple mention en liste de services)."""
+    if _prompt_forces_vitrine_hospitality(text):
+        return False
     if any(h in text for h in _RESERVATION_STRONG_HINTS):
         return True
     if any(h in text for h in _RESERVATION_BUSINESS_HINTS):
@@ -279,6 +321,8 @@ def resolve_pricing_category(
     mode = (generation_mode or "").strip().lower()
 
     if mode == "vitrine_next":
+        return "vitrine_next"
+    if _prompt_forces_vitrine_hospitality(text):
         return "vitrine_next"
     if _prompt_triggers_site_reservation(text):
         return "site_reservation"
