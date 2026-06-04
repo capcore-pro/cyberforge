@@ -30,9 +30,6 @@ const PersoPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
-const CockpitPage = lazy(() =>
-  import("./pages/CockpitPage").then((m) => ({ default: m.CockpitPage })),
-);
 const MediaLibraryPage = lazy(() =>
   import("./pages/MediaLibraryPage").then((m) => ({ default: m.MediaLibraryPage })),
 );
@@ -170,8 +167,6 @@ function AppWithNotifications({
         return <PersoPage onOpenGenerator={openGeneratorFromPerso} />;
       case "settings":
         return <SettingsPage />;
-      case "cockpit":
-        return <CockpitPage />;
       case "media_library":
         return <MediaLibraryPage />;
       case "toolbox":

@@ -133,7 +133,7 @@ function defaultAgentsStatus(): AgentsStatusResponse {
     };
   });
   return {
-    total_agents: AGENT_CATALOG.length,
+    total_agents: agents.length,
     active_count,
     pipeline_agent_ids: [...PIPELINE_AGENT_IDS],
     agents,

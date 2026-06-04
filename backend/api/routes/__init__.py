@@ -12,6 +12,7 @@ from api.routes import (
     managed_extensions,
     managed_site_reservation,
     managed_vitrines,
+    notifications,
     projects,
 )
 
@@ -20,6 +21,7 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
     (agents_status.router, "/api"),
     (generate.router, "/api"),
     (projects.router, "/api"),
+    (notifications.router, "/api"),
     (demos.router, "/api"),
     (managed_vitrines.router, "/api"),
     (managed_application_web.router, "/api"),
@@ -39,5 +41,6 @@ __all__ = [
     "managed_extensions",
     "managed_site_reservation",
     "managed_vitrines",
+    "notifications",
     "projects",
 ]

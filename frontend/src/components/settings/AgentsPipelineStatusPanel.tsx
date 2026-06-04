@@ -8,6 +8,8 @@ const HIGHLIGHT_IDS = new Set(["research", "openhands"]);
 export function AgentsPipelineStatusPanel() {
   const { status, loading } = useAgentsStatus();
   const agents = status?.agents ?? [];
+  const activeCount = agents.filter((a) => a.status === "active").length;
+  const totalAgents = agents.length;
 
   const highlighted = agents.filter((a) => HIGHLIGHT_IDS.has(a.id));
   const others = agents.filter((a) => !HIGHLIGHT_IDS.has(a.id));
@@ -16,9 +18,9 @@ export function AgentsPipelineStatusPanel() {
     <div className="mb-6 rounded-card border border-cf-border-input bg-cf-secondary/30 p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-medium text-cf-text">Statut des agents</p>
-        {status ? (
+        {agents.length > 0 ? (
           <p className="text-[11px] text-cf-muted">
-            {status.active_count} / {status.total_agents} actifs
+            {activeCount} / {totalAgents} actifs
           </p>
         ) : null}
       </div>

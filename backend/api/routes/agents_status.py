@@ -13,17 +13,6 @@ from security.secret_vault import get_secret_vault
 
 router = APIRouter(tags=["agents"])
 
-PIPELINE_AGENT_IDS: tuple[str, ...] = (
-    "brief",
-    "database",
-    "auth",
-    "payment",
-    "generator",
-    "deploy",
-)
-
-TOTAL_AGENTS = len(PIPELINE_AGENT_IDS)
-
 _AGENT_CATALOG: tuple[tuple[str, str, str], ...] = (
     ("brief", "BriefAI", "Brief structuré + Firecrawl (concurrents)."),
     ("database", "DatabaseAI", "Schéma Supabase si app / ecommerce / réservation."),
@@ -31,7 +20,11 @@ _AGENT_CATALOG: tuple[tuple[str, str, str], ...] = (
     ("payment", "PaymentAI", "Stripe si ecommerce / réservation."),
     ("generator", "GeneratorAI", "HTML complet en un appel Claude."),
     ("deploy", "DeployAI", "Images Pexels + déploiement Cloudflare Pages."),
+    ("supervisor", "SupervisorAI", "Validation binaire à chaque étape du pipeline."),
+    ("electron", "ElectronAI", "Empaquetage application desktop (.exe)."),
 )
+
+PIPELINE_AGENT_IDS: tuple[str, ...] = tuple(agent_id for agent_id, _, _ in _AGENT_CATALOG)
 
 
 class AgentStatusItem(BaseModel):
@@ -60,14 +53,11 @@ async def get_agents_status() -> AgentsStatusResponse:
     pipeline_set = set(PIPELINE_AGENT_IDS)
     configured = _configured_flags()
     agents: list[AgentStatusItem] = []
-    active_count = 0
     for agent_id, name, description in _AGENT_CATALOG:
         in_pipeline = agent_id in pipeline_set
         is_active = in_pipeline and (
             agent_id != "brief" or configured.get("anthropic", True)
         )
-        if is_active:
-            active_count += 1
         agents.append(
             AgentStatusItem(
                 id=agent_id,
@@ -78,8 +68,8 @@ async def get_agents_status() -> AgentsStatusResponse:
             )
         )
     return AgentsStatusResponse(
-        total_agents=TOTAL_AGENTS,
-        active_count=active_count,
+        total_agents=len(agents),
+        active_count=sum(1 for a in agents if a.status == "active"),
         pipeline_agent_ids=list(PIPELINE_AGENT_IDS),
         agents=agents,
     )

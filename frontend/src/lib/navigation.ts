@@ -6,7 +6,6 @@ export type AppPage =
   | "clients"
   | "accounting"
   | "newsletter"
-  | "cockpit"
   | "media_library"
   | "toolbox"
   | "settings"
@@ -46,7 +45,6 @@ export const MAIN_NAV_GROUP: NavGroup = {
 export const SECONDARY_NAV_GROUP: NavGroup = {
   id: "secondary",
   items: [
-    { id: "cockpit", label: "Cockpit", icon: "◐", enabled: true },
     { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
     { id: "toolbox", label: "Toolbox", icon: "◆", enabled: true },
   ],

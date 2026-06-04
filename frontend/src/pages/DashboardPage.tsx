@@ -5,13 +5,7 @@ import { useAgentsStatus } from "@/context/AgentsStatusContext";
 import { useBackendHealth } from "@/context/BackendHealthContext";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import { apiRequest } from "@/lib/api-client";
-import {
-  fetchCockpitAlerts,
-  fetchCockpitDashboard,
-  type CockpitAlert,
-} from "@/lib/cockpit-api";
 import { fetchLegalClients } from "@/lib/legal-api";
-import { fetchStripeDashboard } from "@/lib/stripe-api";
 import {
   GENERATOR_KINDS,
   resolveGenerationMode,
@@ -57,12 +51,6 @@ function formatRelativeDate(iso: string): string {
   }
 }
 
-function alertTone(level: CockpitAlert["level"]): string {
-  if (level === "urgent") return "border-red-500/40 bg-red-950/30 text-red-200";
-  if (level === "critical") return "border-cf-alert/40 bg-cf-alert/10 text-cf-alert";
-  return "border-cf-info/30 bg-cf-info/10 text-cf-info";
-}
-
 function MetricCard({
   label,
   value,
@@ -106,36 +94,16 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [apiCostMonth, setApiCostMonth] = useState<number | null>(null);
   const [clientCount, setClientCount] = useState<number | null>(null);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
-  const [alerts, setAlerts] = useState<CockpitAlert[]>([]);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
-    const [stripeRes, cockpitRes, clientsRes, projectsRes, alertsRes] =
-      await Promise.all([
-        fetchStripeDashboard(),
-        fetchCockpitDashboard(),
-        fetchLegalClients(),
-        apiRequest<ProjectRecord[]>({ method: "GET", path: `${API_PREFIX}/projects` }),
-        fetchCockpitAlerts(20),
-      ]);
+    const [clientsRes, projectsRes] = await Promise.all([
+      fetchLegalClients(),
+      apiRequest<ProjectRecord[]>({ method: "GET", path: `${API_PREFIX}/projects` }),
+    ]);
 
-    if (stripeRes.ok && stripeRes.data) {
-      setRevenueMonth(stripeRes.data.revenue_this_month_eur ?? 0);
-    } else {
-      setRevenueMonth(0);
-    }
-
-    if (cockpitRes.ok && cockpitRes.data) {
-      const dash = cockpitRes.data;
-      setApiCostMonth(
-        dash.spent_month_eur ??
-          dash.expenses?.month_eur ??
-          dash.month_total_eur ??
-          0,
-      );
-    } else {
-      setApiCostMonth(0);
-    }
+    setRevenueMonth(0);
+    setApiCostMonth(0);
 
     if (clientsRes.ok && Array.isArray(clientsRes.data)) {
       setClientCount(clientsRes.data.length);
@@ -147,12 +115,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setProjects(projectsRes.data);
     } else {
       setProjects([]);
-    }
-
-    if (alertsRes.ok && Array.isArray(alertsRes.data)) {
-      setAlerts(alertsRes.data);
-    } else {
-      setAlerts([]);
     }
 
     setLoading(false);
@@ -282,8 +244,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </div>
       </section>
 
-      {/* Deux colonnes */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6">
         <section className="rounded-card border border-cf-border-input bg-cf-card p-5 shadow-card">
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="cf-section-label">Projets récents</h2>
@@ -320,38 +281,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                       ? `${project.generation_count} gen.`
                       : "Nouveau"}
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="rounded-card border border-cf-border-input bg-cf-card p-5 shadow-card">
-          <div className="mb-4 flex items-center justify-between gap-2">
-            <h2 className="cf-section-label">Alertes</h2>
-            <button
-              type="button"
-              className="text-[11px] text-cf-gold hover:text-cf-gold-hover"
-              onClick={() => onNavigate("cockpit")}
-            >
-              Cockpit
-            </button>
-          </div>
-          {loading ? (
-            <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
-          ) : alerts.length === 0 ? (
-            <p className="text-sm text-cf-muted">Aucune alerte non lue.</p>
-          ) : (
-            <ul className="space-y-2">
-              {alerts.map((alert) => (
-                <li
-                  key={alert.id}
-                  className={`rounded-control border px-3 py-2.5 text-xs ${alertTone(alert.level)}`}
-                >
-                  <p className="font-medium">{alert.message}</p>
-                  <p className="mt-1 text-[10px] opacity-80">
-                    {formatRelativeDate(alert.created_at)}
-                  </p>
                 </li>
               ))}
             </ul>

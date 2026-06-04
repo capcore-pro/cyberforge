@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BackButton } from "@/components/BackButton";
-import { MediaPicker } from "@/components/MediaPicker";
 import { PasswordRevealField } from "@/components/PasswordRevealField";
 import {
   ProjectClientStripeSection,
@@ -9,12 +8,6 @@ import {
 import { apiErrorMessage } from "@/lib/api-errors";
 import { listClients, type ClientRecord } from "@/lib/clients-api";
 import { fetchClientStripe } from "@/lib/stripe-api";
-import {
-  clearProjectCover,
-  fetchProjectCover,
-  getAssetThumbnailUrl,
-  type MediaAsset,
-} from "@/lib/media-api";
 import {
   affiliateUnifiedProjectClient,
   duplicateUnifiedProject,
@@ -110,18 +103,11 @@ export function ProjectDetailView({
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const [coverAsset, setCoverAsset] = useState<MediaAsset | null>(null);
-  const [coverLoading, setCoverLoading] = useState(true);
-  const [coverPickerOpen, setCoverPickerOpen] = useState(false);
-
   const [clientStripeConfigured, setClientStripeConfigured] = useState<boolean | null>(
     null,
   );
 
   const showClientStripe = projectSupportsClientStripe(project);
-
-  const projectRefId =
-    project.supabaseProjectId ?? project.managedId ?? undefined;
 
   const projectReportKey =
     project.supabaseProjectId ?? project.managedId ?? project.key;
@@ -154,19 +140,6 @@ export function ProjectDetailView({
     setName(project.name);
     setClientId(project.clientId ?? "");
   }, [project.key, project.name, project.clientId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setCoverLoading(true);
-    void fetchProjectCover(project.key).then((res) => {
-      if (cancelled) return;
-      setCoverAsset(res.ok ? res.data?.asset ?? null : null);
-      setCoverLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [project.key]);
 
   useEffect(() => {
     let cancelled = false;
@@ -379,48 +352,6 @@ export function ProjectDetailView({
         ) : null}
         {lighthouseReport ? <LighthouseScorePanel report={lighthouseReport} /> : null}
       </header>
-
-      <section className="overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
-        <div className="relative aspect-[21/9] w-full bg-cf-secondary/60">
-          {coverLoading ? (
-            <div className="flex h-full items-center justify-center text-xs text-cf-muted animate-pulse">
-              Chargement de la couverture…
-            </div>
-          ) : coverAsset ? (
-            <img
-              src={getAssetThumbnailUrl(coverAsset)}
-              alt={`Couverture — ${project.name}`}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-cf-muted">
-              <span>Aucune image de couverture</span>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2 border-t border-cf-border-input px-4 py-3">
-          <button
-            type="button"
-            onClick={() => setCoverPickerOpen(true)}
-            className="rounded-control border border-cf-gold/40 bg-cf-active px-3 py-1.5 text-xs text-cf-gold hover:border-cf-gold"
-          >
-            Choisir une image de couverture
-          </button>
-          {coverAsset ? (
-            <button
-              type="button"
-              onClick={() => {
-                void clearProjectCover(project.key).then((res) => {
-                  if (res.ok) setCoverAsset(null);
-                });
-              }}
-              className="rounded-control border border-cf-border-input px-3 py-1.5 text-xs text-cf-muted hover:text-cf-text"
-            >
-              Retirer
-            </button>
-          ) : null}
-        </div>
-      </section>
 
       <section className="space-y-5 rounded-card border border-cf-border-input bg-cf-card p-5 shadow-card">
         <div>
@@ -658,15 +589,6 @@ export function ProjectDetailView({
           Ouvrir
         </button>
       </footer>
-
-      <MediaPicker
-        open={coverPickerOpen}
-        title="Choisir une image de couverture"
-        projectKey={project.key}
-        projectRefId={projectRefId}
-        onClose={() => setCoverPickerOpen(false)}
-        onSelect={(asset) => setCoverAsset(asset)}
-      />
     </div>
   );
 }
