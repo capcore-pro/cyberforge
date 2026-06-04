@@ -97,10 +97,38 @@ SITE_RESERVATION_APPENDIX = """
 MODE SITE RÉSERVATION (project_type ou generation_mode == site_reservation) :
 Page 100 % autonome — ZÉRO fetch, ZÉRO API externe. Tout en HTML + CSS + JavaScript inline.
 
-Structure obligatoire (dans cet ordre après le hero) :
-1) Section hébergements (#hebergements) AVANT le calendrier
-2) Section calendrier intégrée (#calendrier ou .calendar-wrap)
-3) Section formulaire réservation (#reservation-form)
+Structure obligatoire (dans cet ordre) :
+0) Hero slider plein écran (voir ci-dessous)
+1) Section Bienvenue (#bienvenue) juste après le hero
+2) Section hébergements (#hebergements) AVANT le calendrier
+3) Section calendrier intégrée (#calendrier ou .calendar-wrap)
+4) Section formulaire réservation (#reservation-form)
+
+EXCEPTION MODE RÉSERVATION : le hero est un slider (pas le hero statique CSS du prompt
+général). Les règles slider ci-dessous remplacent la consigne « une seule background-image ».
+
+### Hero slider automatique (CSS + JS pur, min-height 100vh)
+- 4 à 5 slides (.hero-slide) qui défilent automatiquement toutes les 4 secondes
+- Chaque slide : fond visuel distinct via <img class="pexels-inject"> en position absolute
+  couvrant le slide (object-fit: cover) OU background-image sur .hero-slide + img.pexels-inject
+- Chaque slide a un sous-titre unique adapté au secteur du brief (camping ex. :
+  « Séjour nature en famille », « Détente au bord de la piscine », « Aventure et découverte »,
+  « Souvenirs inoubliables » — adapter pour hôtel, gîte, spa, etc.)
+- Transition fondu entre slides (opacity 0 → 1, pas de slide brutal)
+- Points de navigation (dots) en bas du hero, cliquables pour aller à une slide
+- Le titre principal (nom_client du brief) reste visible en overlay sur TOUTES les slides
+  (h1 fixe au-dessus du carrousel, z-index élevé)
+- JS : setInterval 4000 ms pour passer à la slide suivante + gestion des dots + pause optionnelle
+  au survol si souhaité
+
+### Section « Bienvenue » (#bienvenue)
+- Placée immédiatement après le hero slider
+- Titre en Playfair Display : « Bienvenue au [nom_client] » (nom exact du brief)
+- Texte chaleureux de 3 à 4 phrases généré à partir de la description du brief
+  (ton accueillant, activités, cadre, promesse de séjour)
+- Mise en page : texte à gauche, photo à droite (<img class="pexels-inject">)
+- Fond blanc (#ffffff ou var blanc), typo titres Playfair Display, corps Inter
+- Responsive : colonnes empilées sur mobile (photo sous le texte)
 
 ### Section hébergements (minimum 3 cards premium)
 - Chaque card : <img class="pexels-inject">, nom, type (mobil-home / chalet / tente / caravane),
@@ -110,16 +138,28 @@ Structure obligatoire (dans cet ordre après le hero) :
 - Bouton « Réserver » par card : au clic, remplit le champ hébergement du formulaire
   et scroll vers le formulaire
 
-### Calendrier interactif (JavaScript pur, visible dans la page — pas de popup)
-- Deux grilles côte à côte : mois courant + mois suivant
-- Boutons prev/next pour changer de mois
-- Cases :
-  - disponible : fond #22c55e, cliquable
-  - passé ou indisponible : fond #9ca3af, non cliquable
-  - sélectionné (arrivée/départ) : fond #3b82f6
+### Calendrier interactif (section « Disponibilités & Calendrier » — pas de popup)
+- HTML : titre + boutons prev/next + légende (vert / gris / bleu) + DEUX conteneurs vides
+  (ex. id="calendar-month-0" et id="calendar-month-1") que le JS remplit — ne pas laisser
+  les grilles vides sans script d'initialisation
+- Deux grilles côte à côte : mois courant + mois suivant (noms de mois affichés au-dessus)
 - Clic 1 = date arrivée, clic 2 = date départ (si avant arrivée, réinitialiser)
-- Simuler l'indisponibilité : les 8 premiers jours du mois suivant sont blocked
 - Synchroniser les champs date du formulaire (input type="date" ou texte readonly)
+
+Le JavaScript du calendrier DOIT (obligatoire — grilles visibles dès l'ouverture) :
+- Définir une fonction renderCalendars() qui construit les deux grilles en DOM
+  (innerHTML ou createElement) à chaque rendu
+- Appeler renderCalendars() immédiatement au chargement :
+  document.addEventListener('DOMContentLoaded', renderCalendars) OU window.onload = renderCalendars
+  (les deux grilles doivent être remplies sans clic utilisateur)
+- Chaque grille affiche une ligne d'en-têtes : Lu Ma Me Je Ve Sa Di
+- Remplir les cases avec les numéros de jours 1 … 28/29/30/31 (cases vides en début de mois
+  si le 1er ne tombe pas un lundi)
+- Colorier en #22c55e (vert) les jours disponibles (futurs, cliquables)
+- Colorier en #9ca3af (gris) les jours passés (avant aujourd'hui) — non cliquables
+- Colorier en #9ca3af les 8 premiers jours du mois suivant (simulation indisponible)
+- Colorier en #3b82f6 (bleu) les jours sélectionnés (arrivée / départ)
+- Les boutons prev/next rappellent renderCalendars() après changement de mois de référence
 
 ### Formulaire réservation
 - Prénom, Nom, Email, Téléphone
@@ -132,7 +172,9 @@ Structure obligatoire (dans cet ordre après le hero) :
   pas d'envoi réseau
 
 ### JavaScript obligatoire (un seul <script> avant </body>)
-- État calendrier + sélection dates + blocked days
+- Hero slider : initialisation au chargement (slide active, autoplay 4 s, dots cliquables)
+- renderCalendars() + DOMContentLoaded/window.onload comme ci-dessus (priorité absolue)
+- État calendrier (mois affichés, sélection arrivée/départ) + recalcul après clic jour
 - Recalcul automatique nuits et montant quand dates ou hébergement changent
 - Formule affichée : « {n} nuits × {prix}€ = {total}€ »
 

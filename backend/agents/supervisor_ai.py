@@ -80,7 +80,6 @@ _SCRIPT_STYLE_RE = re.compile(
 )
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
-_SCRIPT_BODY_RE = re.compile(r"<script\b[^>]*>(.*?)</script>", re.I | re.DOTALL)
 _CALENDAR_MARKUP_RE = re.compile(
     r"""(?:id|class)=["'][^"']*(?:calendar|calendrier)[^"']*["']""",
     re.I,
@@ -90,6 +89,8 @@ _HEBERGEMENT_CARD_RE = re.compile(
     re.I,
 )
 _DATA_HEBERGEMENT_RE = re.compile(r"data-(?:hebergement|accommodation|lodging)-", re.I)
+_FORM_BLOCK_RE = re.compile(r"<form\b[^>]*>(.*?)</form>", re.I | re.DOTALL)
+_INPUT_TAG_RE = re.compile(r"<input\b[^>]*>", re.I)
 
 
 def _has_footer_markup(html: str, low: str) -> bool:
@@ -121,6 +122,32 @@ def _is_site_reservation_brief(brief: dict) -> bool:
     return False
 
 
+def _input_is_text_or_email(tag: str) -> bool:
+    type_m = re.search(r'\btype=["\']([^"\']*)["\']', tag, re.I)
+    if not type_m:
+        return True
+    return type_m.group(1).strip().lower() in ("text", "email")
+
+
+def _form_text_email_input_count(body: str) -> int:
+    """Nombre d'<input> text/email dans le premier bloc <form>."""
+    form_m = _FORM_BLOCK_RE.search(body)
+    if not form_m:
+        return 0
+    return sum(
+        1 for tag in _INPUT_TAG_RE.findall(form_m.group(1)) if _input_is_text_or_email(tag)
+    )
+
+
+def _has_page_javascript(body: str, low: str) -> bool:
+    """JS présent : bloc <script>, onclick= ou addEventListener."""
+    if re.search(r"<script\b", body, re.I):
+        return True
+    if re.search(r"\bonclick\s*=", body, re.I):
+        return True
+    return "addeventlistener" in low
+
+
 def _site_reservation_html_errors(body: str, low: str) -> list[str]:
     """Règles HTML démo camping / hébergements (site_reservation)."""
     errors: list[str] = []
@@ -141,27 +168,25 @@ def _site_reservation_html_errors(body: str, low: str) -> list[str]:
 
     if not re.search(r"<form\b", body, re.I):
         errors.append("site_reservation : formulaire de réservation <form> manquant")
-    else:
-        for token, label in (
-            ("prenom", "champ Prénom"),
-            ("nom", "champ Nom"),
-            ("email", "champ Email"),
-            ("tel", "champ Téléphone"),
-        ):
-            if token not in low and token.replace("tel", "phone") not in low:
-                errors.append(f"site_reservation : {label} manquant dans le formulaire")
+    elif _form_text_email_input_count(body) < 3:
+        errors.append(
+            "site_reservation : formulaire incomplet "
+            "(au moins 3 champs <input type=\"text\"> ou type=\"email\">)"
+        )
 
-    scripts = " ".join(_SCRIPT_BODY_RE.findall(body)).lower()
-    if not scripts.strip():
-        errors.append("site_reservation : balise <script> JavaScript manquante")
+    if not _has_page_javascript(body, low):
+        errors.append(
+            "site_reservation : JavaScript manquant "
+            "(balise <script>, onclick= ou addEventListener)"
+        )
     else:
-        if not any(k in scripts for k in ("nuit", "nuits", "night", "montant", "total", "prix")):
+        if not any(k in low for k in ("nuit", "nuits", "night", "montant", "total", "prix")):
             errors.append(
                 "site_reservation : JavaScript de calcul prix/nuits manquant "
                 "(mots-clés nuit, montant, total ou prix)"
             )
         if not any(
-            k in scripts
+            k in low
             for k in ("calendar", "calendrier", "arriv", "depart", "checkin", "checkout")
         ):
             errors.append(
