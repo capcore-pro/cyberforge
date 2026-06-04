@@ -83,11 +83,19 @@ import {
   formatEur,
 } from "@/lib/generator-estimation";
 import { PromptGeneratorPanel } from "@/components/PromptGeneratorPanel";
+import {
+  buildGeneratorDetailsPrompt,
+  detailsFromPreset,
+  EMPTY_GENERATOR_DETAILS,
+  getSectorPreset,
+  listSectorsForKind,
+  type GeneratorDetailsForm,
+  type SectorPreset,
+  type SectorPresetId,
+} from "@/lib/sector-presets";
 
 type ProjectOwnerMode = "client" | "perso";
-
-const DESCRIPTION_PLACEHOLDER =
-  "Décrivez votre projet… (ex : site vitrine pour une boulangerie artisanale à Nantes, ton chaleureux, couleurs chaudes)";
+type WizardStep = "type" | "sector" | "details";
 
 const SECTION_TYPE_LABELS: Record<string, string> = {
   hero: "hero",
@@ -155,6 +163,72 @@ function StepHeading({ step, title }: { step: number; title: string }) {
       <h2 className="text-lg font-medium text-cf-text">{title}</h2>
     </div>
   );
+}
+
+function WizardBreadcrumb({ active }: { active: WizardStep }) {
+  const steps: { id: WizardStep; label: string }[] = [
+    { id: "type", label: "Type" },
+    { id: "sector", label: "Secteur" },
+    { id: "details", label: "Détails" },
+  ];
+  const activeIndex = steps.findIndex((s) => s.id === active);
+  return (
+    <nav
+      className="mb-6 flex flex-wrap items-center gap-2 text-sm"
+      aria-label="Étapes du formulaire"
+    >
+      {steps.map((step, index) => {
+        const done = index < activeIndex;
+        const current = step.id === active;
+        return (
+          <span key={step.id} className="inline-flex items-center gap-2">
+            {index > 0 ? (
+              <span className="text-cf-muted" aria-hidden>
+                →
+              </span>
+            ) : null}
+            <span
+              className={
+                current
+                  ? "font-medium text-cf-gold"
+                  : done
+                    ? "text-cf-text"
+                    : "text-cf-muted"
+              }
+            >
+              {step.label}
+            </span>
+          </span>
+        );
+      })}
+    </nav>
+  );
+}
+
+function FieldLabel({
+  children,
+  showSuggestion,
+}: {
+  children: React.ReactNode;
+  showSuggestion?: boolean;
+}) {
+  return (
+    <span className="mb-2 flex flex-wrap items-center gap-2 text-xs text-cf-label">
+      {children}
+      {showSuggestion ? (
+        <span className="rounded bg-cf-secondary/80 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-cf-muted">
+          Suggestion
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function parseServicesLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -234,6 +308,12 @@ export function GeneratorPage({
   const [selectedKind, setSelectedKind] = useState<GeneratorKindId>(() =>
     inferKindFromSession(projectType, generationMode, prompt),
   );
+  const [wizardStep, setWizardStep] = useState<WizardStep>("type");
+  const [selectedSectorId, setSelectedSectorId] = useState<SectorPresetId | null>(null);
+  const [detailsForm, setDetailsForm] =
+    useState<GeneratorDetailsForm>(EMPTY_GENERATOR_DETAILS);
+  const [touchedFields, setTouchedFields] = useState<Set<string>>(() => new Set());
+  const [servicesText, setServicesText] = useState("");
   const [deployMode, setDeployMode] = useState<DeployMode>(() =>
     inferDeployModeFromSession(generationMode),
   );
@@ -270,6 +350,27 @@ export function GeneratorPage({
     [selectedKind],
   );
 
+  const sectorPreset = useMemo(
+    () => getSectorPreset(selectedSectorId),
+    [selectedSectorId],
+  );
+
+  const sectorOptions = useMemo(
+    () => listSectorsForKind(selectedKind),
+    [selectedKind],
+  );
+
+  const builtPipelinePrompt = useMemo(
+    () =>
+      buildGeneratorDetailsPrompt(
+        selectedKind,
+        detailsForm,
+        projectName,
+        sectorPreset?.label ?? "",
+      ),
+    [selectedKind, detailsForm, projectName, sectorPreset],
+  );
+
   const isExtensionPreview = useMemo(() => {
     if (selectedKind === "extension") return true;
     if (projectType === "extension_navigateur") return true;
@@ -277,9 +378,69 @@ export function GeneratorPage({
   }, [selectedKind, projectType, result?.analysis?.project_type]);
 
   const estimation = useMemo(
-    () => computeProjectEstimation(selectedKind, prompt),
-    [selectedKind, prompt],
+    () =>
+      computeProjectEstimation(
+        selectedKind,
+        wizardStep === "details" ? builtPipelinePrompt : prompt,
+      ),
+    [selectedKind, wizardStep, builtPipelinePrompt, prompt],
   );
+
+  const canGenerate =
+    projectName.trim().length > 0 &&
+    (wizardStep === "details" ? builtPipelinePrompt.trim().length >= 3 : prompt.trim().length >= 3);
+
+  const syncPromptFromDetails = useCallback(
+    (
+      nextDetails: GeneratorDetailsForm,
+      sectorId: SectorPresetId | null,
+      clientName: string,
+    ) => {
+      const preset = getSectorPreset(sectorId);
+      patch({
+        prompt: buildGeneratorDetailsPrompt(
+          selectedKind,
+          nextDetails,
+          clientName,
+          preset?.label ?? "",
+        ),
+        error: null,
+      });
+    },
+    [selectedKind, patch],
+  );
+
+  function markTouched(field: string) {
+    setTouchedFields((prev) => {
+      if (prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.add(field);
+      return next;
+    });
+  }
+
+  function updateDetails(
+    partial: Partial<GeneratorDetailsForm>,
+    touchedKey?: string,
+  ) {
+    if (touchedKey) markTouched(touchedKey);
+    setDetailsForm((prev) => {
+      const next = { ...prev, ...partial };
+      syncPromptFromDetails(next, selectedSectorId, projectName);
+      return next;
+    });
+  }
+
+  function applySectorPreset(preset: SectorPreset) {
+    const next = detailsFromPreset(preset);
+    setSelectedSectorId(preset.id);
+    setDetailsForm(next);
+    setServicesText(next.services.join("\n"));
+    setTouchedFields(new Set());
+    setWizardStep("details");
+    syncPromptFromDetails(next, preset.id, projectName);
+    setInspirationSecteur(preset.sector.split("/")[0]?.trim() || inspirationSecteur);
+  }
 
   const loadClientOptions = useCallback(() => {
     if (clientOptions.length > 0 || clientsLoading) return;
@@ -521,10 +682,24 @@ export function GeneratorPage({
   function selectKind(kind: GeneratorKindId) {
     if (isRunning) return;
     setSelectedKind(kind);
+    setSelectedSectorId(null);
+    setDetailsForm(EMPTY_GENERATOR_DETAILS);
+    setServicesText("");
+    setTouchedFields(new Set());
     setInspirationSecteur(kindToToolboxSecteur(kind));
-    const option = getGeneratorKind(kind);
-    if (!prompt.trim() && option.defaultDescription) {
-      patch({ prompt: option.defaultDescription });
+    setWizardStep("sector");
+    patch({ prompt: "", error: null });
+  }
+
+  function wizardBack() {
+    if (isRunning) return;
+    if (wizardStep === "details") {
+      setWizardStep("sector");
+      return;
+    }
+    if (wizardStep === "sector") {
+      setWizardStep("type");
+      setSelectedSectorId(null);
     }
   }
 
@@ -581,11 +756,22 @@ export function GeneratorPage({
 
   async function handleGenerate(event?: React.SyntheticEvent) {
     event?.preventDefault();
-    const trimmed = buildGeneratorPipelinePrompt(selectedKind, prompt.trim());
-    if (trimmed.length < 3) {
-      patch({ error: "Décrivez votre projet en au moins 3 caractères." });
+    if (!projectName.trim()) {
+      patch({ error: "Indiquez le nom du client pour lancer la génération." });
       return;
     }
+    const trimmed =
+      wizardStep === "details"
+        ? builtPipelinePrompt.trim()
+        : buildGeneratorPipelinePrompt(selectedKind, prompt.trim());
+    if (trimmed.length < 3) {
+      patch({
+        error:
+          "Complétez la description du projet (au moins quelques caractères utiles).",
+      });
+      return;
+    }
+    patch({ prompt: trimmed });
 
     patch({
       phase: "running",
@@ -986,8 +1172,36 @@ export function GeneratorPage({
         ) : null}
       </header>
 
+      {wizardStep !== "type" ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={isRunning}
+            onClick={wizardBack}
+            className="rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2 text-sm text-cf-text transition hover:border-cf-gold/40 disabled:opacity-60"
+          >
+            ← Retour
+          </button>
+          {wizardStep === "sector" && kindOption ? (
+            <p className="text-sm text-cf-muted">
+              Type : <span className="text-cf-text">{kindOption.title}</span>
+            </p>
+          ) : null}
+          {wizardStep === "details" && sectorPreset ? (
+            <p className="text-sm text-cf-muted">
+              {kindOption.title} ·{" "}
+              <span className="text-cf-text">
+                {sectorPreset.emoji} {sectorPreset.label}
+              </span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Étape 1 — Type */}
+      {wizardStep === "type" ? (
       <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
+        <WizardBreadcrumb active="type" />
         <StepHeading step={1} title="Choix du type de projet" />
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2">
@@ -1159,22 +1373,204 @@ export function GeneratorPage({
           })}
         </div>
       </section>
+      ) : null}
 
-      {/* Étape 2 — Description */}
+      {/* Étape 2 — Secteur */}
+      {wizardStep === "sector" ? (
+        <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
+          <WizardBreadcrumb active="sector" />
+          <StepHeading step={2} title="Choix du secteur" />
+          <p className="mb-5 text-sm text-cf-muted">
+            Projet « {kindOption.title} » — sélectionnez un secteur pour pré-remplir le
+            formulaire (modifiable à l&apos;étape suivante).
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {sectorOptions.map((preset) => {
+              const selected = selectedSectorId === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  disabled={isRunning}
+                  onClick={() => applySectorPreset(preset)}
+                  className={`flex min-h-[120px] flex-col items-start rounded-card border p-5 text-left transition ${
+                    selected
+                      ? "border-cf-gold bg-cf-active shadow-gold"
+                      : "border-cf-border-input bg-cf-secondary hover:border-cf-gold/40"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <span className="mb-2 text-2xl" aria-hidden>
+                    {preset.emoji}
+                  </span>
+                  <span className="text-base font-medium text-cf-text">{preset.label}</span>
+                  <span className="mt-2 line-clamp-2 text-sm leading-relaxed text-cf-muted">
+                    {preset.sector}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Étape 3 — Détails */}
+      {wizardStep === "details" ? (
       <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
-        <StepHeading step={2} title="Description du projet" />
+        <WizardBreadcrumb active="details" />
+        <StepHeading step={3} title="Détails du projet" />
 
         <label className="mb-4 block">
-          <span className="mb-2 block text-xs text-cf-label">Nom du projet</span>
+          <FieldLabel>Nom du client</FieldLabel>
           <input
             type="text"
             value={projectName}
-            onChange={(e) => patch({ projectName: e.target.value })}
+            onChange={(e) => {
+              const name = e.target.value;
+              patch({ projectName: name, error: null });
+              syncPromptFromDetails(detailsForm, selectedSectorId, name);
+            }}
             disabled={isRunning}
-            placeholder="Ex : Site boulangerie Dupont"
+            placeholder="Ex : Camping Les Pins"
             className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
           />
         </label>
+
+        <label className="mb-4 block">
+          <FieldLabel showSuggestion={!touchedFields.has("description")}>
+            Description
+          </FieldLabel>
+          <textarea
+            value={detailsForm.description}
+            onChange={(e) => updateDetails({ description: e.target.value }, "description")}
+            rows={4}
+            disabled={isRunning}
+            className="w-full resize-y rounded-control border border-cf-border-input bg-cf-secondary px-4 py-3 text-sm leading-relaxed text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+          />
+        </label>
+
+        <label className="mb-4 block">
+          <FieldLabel showSuggestion={!touchedFields.has("services")}>
+            Services (un par ligne)
+          </FieldLabel>
+          <textarea
+            value={servicesText}
+            onChange={(e) => {
+              const text = e.target.value;
+              setServicesText(text);
+              updateDetails({ services: parseServicesLines(text) }, "services");
+            }}
+            rows={5}
+            disabled={isRunning}
+            placeholder={"Mobil-homes\nChalets\nPiscine"}
+            className="w-full resize-y rounded-control border border-cf-border-input bg-cf-secondary px-4 py-3 text-sm leading-relaxed text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+          />
+        </label>
+
+        <div className="mb-4 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <FieldLabel showSuggestion={!touchedFields.has("couleur_primaire")}>
+              Couleur primaire
+            </FieldLabel>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={detailsForm.couleur_primaire}
+                onChange={(e) =>
+                  updateDetails({ couleur_primaire: e.target.value }, "couleur_primaire")
+                }
+                disabled={isRunning}
+                className="h-10 w-14 cursor-pointer rounded border border-cf-border-input bg-cf-main"
+              />
+              <input
+                type="text"
+                value={detailsForm.couleur_primaire}
+                onChange={(e) =>
+                  updateDetails({ couleur_primaire: e.target.value }, "couleur_primaire")
+                }
+                disabled={isRunning}
+                className="min-w-0 flex-1 rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm font-mono text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+              />
+            </div>
+          </label>
+          <label className="block">
+            <FieldLabel showSuggestion={!touchedFields.has("couleur_secondaire")}>
+              Couleur secondaire
+            </FieldLabel>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={detailsForm.couleur_secondaire}
+                onChange={(e) =>
+                  updateDetails(
+                    { couleur_secondaire: e.target.value },
+                    "couleur_secondaire",
+                  )
+                }
+                disabled={isRunning}
+                className="h-10 w-14 cursor-pointer rounded border border-cf-border-input bg-cf-main"
+              />
+              <input
+                type="text"
+                value={detailsForm.couleur_secondaire}
+                onChange={(e) =>
+                  updateDetails(
+                    { couleur_secondaire: e.target.value },
+                    "couleur_secondaire",
+                  )
+                }
+                disabled={isRunning}
+                className="min-w-0 flex-1 rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm font-mono text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+              />
+            </div>
+          </label>
+        </div>
+
+        <div className="mb-4 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <FieldLabel>Ville</FieldLabel>
+            <input
+              type="text"
+              value={detailsForm.ville}
+              onChange={(e) => updateDetails({ ville: e.target.value }, "ville")}
+              disabled={isRunning}
+              placeholder="Ex : Annecy"
+              className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+            />
+          </label>
+          <label className="block">
+            <FieldLabel>Téléphone</FieldLabel>
+            <input
+              type="tel"
+              value={detailsForm.phone}
+              onChange={(e) => updateDetails({ phone: e.target.value }, "phone")}
+              disabled={isRunning}
+              placeholder="06 …"
+              className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <FieldLabel>Email</FieldLabel>
+            <input
+              type="email"
+              value={detailsForm.email}
+              onChange={(e) => updateDetails({ email: e.target.value }, "email")}
+              disabled={isRunning}
+              placeholder="contact@…"
+              className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <FieldLabel>Adresse</FieldLabel>
+            <input
+              type="text"
+              value={detailsForm.address}
+              onChange={(e) => updateDetails({ address: e.target.value }, "address")}
+              disabled={isRunning}
+              placeholder="Rue, code postal…"
+              className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+            />
+          </label>
+        </div>
 
         <PromptGeneratorPanel
           disabled={isRunning}
@@ -1184,23 +1580,18 @@ export function GeneratorPage({
           }}
           onPromptGenerated={(generated) => {
             patch({ prompt: generated, error: null });
+            markTouched("description");
           }}
         />
 
-        <label className="block">
-          <span className="mb-2 flex items-center justify-between text-xs text-cf-label">
-            <span>Votre description</span>
-            <span className="tabular-nums text-cf-muted">{prompt.trim().length} car.</span>
-          </span>
-          <textarea
-            value={prompt}
-            onChange={(e) => patch({ prompt: e.target.value, error: null })}
-            rows={7}
-            placeholder={DESCRIPTION_PLACEHOLDER}
-            disabled={isRunning}
-            className="w-full resize-y rounded-control border border-cf-border-input bg-cf-secondary px-4 py-3 text-sm leading-relaxed text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
-          />
-        </label>
+        <details className="mt-4 rounded-control border border-cf-border-input bg-cf-secondary/40 p-3">
+          <summary className="cursor-pointer text-xs font-medium text-cf-muted">
+            Aperçu du prompt envoyé ({builtPipelinePrompt.trim().length} car.)
+          </summary>
+          <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-cf-body">
+            {builtPipelinePrompt.trim() || "—"}
+          </pre>
+        </details>
 
         <div className="mt-5 rounded-control border border-cf-gold/25 bg-cf-active/40 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-cf-gold">
@@ -1389,15 +1780,17 @@ export function GeneratorPage({
           </div>
         </div>
       </section>
+      ) : null}
 
-      {/* Étape 3 — Génération */}
+      {/* Génération */}
+      {wizardStep === "details" || showGenerationBlock ? (
       <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
-        <StepHeading step={3} title="Génération" />
+        <StepHeading step={4} title="Génération" />
 
         <form onSubmit={(e) => void handleGenerate(e)} noValidate>
           <button
             type="submit"
-            disabled={isRunning || prompt.trim().length < 3}
+            disabled={isRunning || !canGenerate}
             className={`inline-flex min-w-[240px] items-center justify-center gap-2 rounded-control border border-cf-gold bg-cf-gold px-10 py-4 text-base font-semibold text-cf-main transition hover:bg-cf-gold-hover disabled:cursor-not-allowed disabled:opacity-50 ${
               isRunning ? "opacity-80" : ""
             }`}
@@ -1418,6 +1811,11 @@ export function GeneratorPage({
           {error ? (
             <p className="mt-4 rounded-control border border-red-500/40 bg-red-950/30 px-4 py-3 text-sm text-red-200">
               {error}
+            </p>
+          ) : null}
+          {!projectName.trim() && wizardStep === "details" ? (
+            <p className="mt-3 text-xs text-cf-muted">
+              Renseignez le nom du client pour activer la génération.
             </p>
           ) : null}
         </form>
@@ -1640,6 +2038,7 @@ export function GeneratorPage({
           </div>
         ) : null}
       </section>
+      ) : null}
 
       {previewHtml ? (
         <GeneratorPreviewModal

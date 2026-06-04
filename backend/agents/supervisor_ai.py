@@ -80,6 +80,16 @@ _SCRIPT_STYLE_RE = re.compile(
 )
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+_SCRIPT_BODY_RE = re.compile(r"<script\b[^>]*>(.*?)</script>", re.I | re.DOTALL)
+_CALENDAR_MARKUP_RE = re.compile(
+    r"""(?:id|class)=["'][^"']*(?:calendar|calendrier)[^"']*["']""",
+    re.I,
+)
+_HEBERGEMENT_CARD_RE = re.compile(
+    r"""<(?:article|div)\b[^>]*class=["'][^"']*(?:hebergement|hebergement-card|lodging|accommodation)[^"']*["']""",
+    re.I,
+)
+_DATA_HEBERGEMENT_RE = re.compile(r"data-(?:hebergement|accommodation|lodging)-", re.I)
 
 
 def _has_footer_markup(html: str, low: str) -> bool:
@@ -100,6 +110,71 @@ def _has_footer_markup(html: str, low: str) -> bool:
 def _html_closes_document(low: str) -> bool:
     trimmed = low.rstrip()
     return trimmed.endswith("</html>") or trimmed.endswith("</body></html>")
+
+
+def _is_site_reservation_brief(brief: dict) -> bool:
+    b = brief or {}
+    for key in ("project_type", "generation_mode"):
+        val = str(b.get(key) or "").strip().lower().replace("-", "_")
+        if val == "site_reservation":
+            return True
+    return False
+
+
+def _site_reservation_html_errors(body: str, low: str) -> list[str]:
+    """Règles HTML démo camping / hébergements (site_reservation)."""
+    errors: list[str] = []
+
+    if not _CALENDAR_MARKUP_RE.search(body):
+        errors.append(
+            "site_reservation : calendrier manquant (id ou class contenant calendar/calendrier)"
+        )
+
+    card_count = len(_HEBERGEMENT_CARD_RE.findall(body))
+    data_cards = len(_DATA_HEBERGEMENT_RE.findall(body))
+    priced_cards = len(re.findall(r"data-price-per-night\s*=", body, re.I))
+    if max(card_count, data_cards, priced_cards) < 2:
+        errors.append(
+            "site_reservation : moins de 2 cards hébergements "
+            "(classes hebergement/lodging ou data-hebergement / data-price-per-night)"
+        )
+
+    if not re.search(r"<form\b", body, re.I):
+        errors.append("site_reservation : formulaire de réservation <form> manquant")
+    else:
+        for token, label in (
+            ("prenom", "champ Prénom"),
+            ("nom", "champ Nom"),
+            ("email", "champ Email"),
+            ("tel", "champ Téléphone"),
+        ):
+            if token not in low and token.replace("tel", "phone") not in low:
+                errors.append(f"site_reservation : {label} manquant dans le formulaire")
+
+    scripts = " ".join(_SCRIPT_BODY_RE.findall(body)).lower()
+    if not scripts.strip():
+        errors.append("site_reservation : balise <script> JavaScript manquante")
+    else:
+        if not any(k in scripts for k in ("nuit", "nuits", "night", "montant", "total", "prix")):
+            errors.append(
+                "site_reservation : JavaScript de calcul prix/nuits manquant "
+                "(mots-clés nuit, montant, total ou prix)"
+            )
+        if not any(
+            k in scripts
+            for k in ("calendar", "calendrier", "arriv", "depart", "checkin", "checkout")
+        ):
+            errors.append(
+                "site_reservation : JavaScript calendrier manquant "
+                "(sélection dates arrivée/départ)"
+            )
+
+    if "confirmer" not in low and "réservation" not in low and "reservation" not in low:
+        errors.append(
+            "site_reservation : bouton ou libellé « Confirmer la réservation » manquant"
+        )
+
+    return errors
 
 
 def _visible_text_from_html(html: str) -> str:
@@ -208,6 +283,8 @@ def _html_correction_instructions(errors: list[str], brief: dict) -> str:
                 "CORRECTION OBLIGATOIRE : N'utilise pas src='http://127.0.0.1' "
                 "sur les images"
             )
+        elif err.startswith("site_reservation :"):
+            add(f"CORRECTION SITE RÉSERVATION : {err.removeprefix('site_reservation : ')}")
 
     if client_name and any("client_name" in e for e in errors):
         if not any(client_name in ln for ln in lines):
@@ -425,6 +502,9 @@ class SupervisorAI:
 
         if 'src="http://127.0.0.1' in low or "src='http://127.0.0.1" in low:
             errors.append('src local http://127.0.0.1 interdit')
+
+        if _is_site_reservation_brief(b):
+            errors.extend(_site_reservation_html_errors(body, low))
 
         if errors:
             corrected_prompt = _html_correction_instructions(errors, b)

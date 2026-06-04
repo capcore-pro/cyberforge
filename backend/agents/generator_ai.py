@@ -93,7 +93,72 @@ ABSOLUMENT OBLIGATOIRE : Termine TOUJOURS par ces balises dans cet ordre exact :
 </html>
 Ne jamais arrêter la génération avant ces balises."""
 
+SITE_RESERVATION_APPENDIX = """
+MODE SITE RÉSERVATION (project_type ou generation_mode == site_reservation) :
+Page 100 % autonome — ZÉRO fetch, ZÉRO API externe. Tout en HTML + CSS + JavaScript inline.
+
+Structure obligatoire (dans cet ordre après le hero) :
+1) Section hébergements (#hebergements) AVANT le calendrier
+2) Section calendrier intégrée (#calendrier ou .calendar-wrap)
+3) Section formulaire réservation (#reservation-form)
+
+### Section hébergements (minimum 3 cards premium)
+- Chaque card : <img class="pexels-inject">, nom, type (mobil-home / chalet / tente / caravane),
+  capacité « X personnes », prix/nuit en € adapté au secteur du brief
+- Attributs data sur chaque card : data-hebergement-id, data-hebergement-name,
+  data-price-per-night (nombre entier euros)
+- Bouton « Réserver » par card : au clic, remplit le champ hébergement du formulaire
+  et scroll vers le formulaire
+
+### Calendrier interactif (JavaScript pur, visible dans la page — pas de popup)
+- Deux grilles côte à côte : mois courant + mois suivant
+- Boutons prev/next pour changer de mois
+- Cases :
+  - disponible : fond #22c55e, cliquable
+  - passé ou indisponible : fond #9ca3af, non cliquable
+  - sélectionné (arrivée/départ) : fond #3b82f6
+- Clic 1 = date arrivée, clic 2 = date départ (si avant arrivée, réinitialiser)
+- Simuler l'indisponibilité : les 8 premiers jours du mois suivant sont blocked
+- Synchroniser les champs date du formulaire (input type="date" ou texte readonly)
+
+### Formulaire réservation
+- Prénom, Nom, Email, Téléphone
+- Hébergement sélectionné (select ou input readonly, id reservation-lodging)
+- Date arrivée / Date départ (ids reservation-checkin, reservation-checkout)
+- Nombre de nuits (readonly, calculé)
+- Montant total (readonly, calculé)
+- Ligne récap : « 3 nuits × 85€ = 255€ » (id price-breakdown)
+- Bouton « Confirmer la réservation » : affiche un message succès stylé (#booking-success),
+  pas d'envoi réseau
+
+### JavaScript obligatoire (un seul <script> avant </body>)
+- État calendrier + sélection dates + blocked days
+- Recalcul automatique nuits et montant quand dates ou hébergement changent
+- Formule affichée : « {n} nuits × {prix}€ = {total}€ »
+
+### Design
+- Google Fonts : Playfair Display + Inter (liens <link> dans <head>)
+- couleur_primaire du brief pour navbar, boutons, accents calendrier
+- Animations .reveal au scroll (IntersectionObserver)
+- Responsive @media (max-width: 768px) : calendriers empilés verticalement
+"""
+
 _HTML_START_RE = re.compile(r"<!DOCTYPE\s+html|<html\b", re.I)
+
+
+def _is_site_reservation_brief(brief: dict[str, Any]) -> bool:
+    b = brief or {}
+    for key in ("project_type", "generation_mode"):
+        val = str(b.get(key) or "").strip().lower().replace("-", "_")
+        if val == "site_reservation":
+            return True
+    return False
+
+
+def _build_system_prompt(brief: dict[str, Any]) -> str:
+    if _is_site_reservation_brief(brief):
+        return SYSTEM_PROMPT + "\n" + SITE_RESERVATION_APPENDIX
+    return SYSTEM_PROMPT
 
 
 def _extract_html(raw: str) -> str:
@@ -153,12 +218,13 @@ class GeneratorAI:
 
         client = anthropic.Anthropic(api_key=api_key)
         user_message = _build_user_message(brief, corrections=corrections)
+        system_prompt = _build_system_prompt(brief)
 
         def _call() -> str:
             response = client.messages.create(
                 model=MODEL,
                 max_tokens=MAX_TOKENS,
-                system=SYSTEM_PROMPT,
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             )
             parts: list[str] = []
@@ -180,7 +246,8 @@ class GeneratorAI:
                     html += "\n</html>"
             if not _HTML_START_RE.search(html):
                 raise ValueError("HTML invalide")
-            logger.info("[GeneratorAI] OK — %d caractères", len(html))
+            mode = "site_reservation" if _is_site_reservation_brief(brief) else "standard"
+            logger.info("[GeneratorAI] OK (%s) — %d caractères", mode, len(html))
             return {"html": html, "success": True}
         except Exception as exc:
             logger.exception("[GeneratorAI] échec: %s", exc)

@@ -48,7 +48,7 @@ Règles obligatoires :
 Types de projets → tables typiques :
 - vitrine : contact_messages (id, name, email, message, read, created_at)
 - ecommerce : products, categories, orders, order_items, customers
-- site_reservation : services, appointments, customers, time_slots
+- site_reservation : accommodations (hébergements), customers, bookings (séjour), blocked_dates
 - application_web : selon description métier (garage → vehicles/repairs/invoices, CRM → leads/contacts/deals)
 - application_desktop : même logique que application_web
 
@@ -123,36 +123,50 @@ def _default_schema(project_type: str) -> dict[str, Any]:
     elif pt == "site_reservation":
         tables = [
             {
-                "name": "services",
-                "columns": ["name text", "duration_minutes integer", "price_cents integer", "status text"],
-                "description": "Services réservables.",
+                "name": "accommodations",
+                "columns": [
+                    "name text not null",
+                    "type text not null",
+                    "capacity integer not null",
+                    "price_per_night_cents integer not null",
+                    "description text",
+                    "image_url text",
+                    "status text default 'active'",
+                ],
+                "description": "Hébergements (mobil-home, chalet, tente, caravane).",
             },
             {
                 "name": "customers",
-                "columns": ["name text", "email text", "phone text"],
-                "description": "Clients.",
-            },
-            {
-                "name": "time_slots",
                 "columns": [
-                    "service_id uuid references public.services(id)",
-                    "starts_at timestamptz",
-                    "ends_at timestamptz",
-                    "status text",
+                    "first_name text",
+                    "last_name text",
+                    "email text",
+                    "phone text",
                 ],
-                "description": "Créneaux disponibles.",
+                "description": "Clients voyageurs.",
             },
             {
-                "name": "appointments",
+                "name": "bookings",
                 "columns": [
-                    "service_id uuid references public.services(id)",
+                    "accommodation_id uuid references public.accommodations(id)",
                     "customer_id uuid references public.customers(id)",
-                    "time_slot_id uuid references public.time_slots(id)",
-                    "starts_at timestamptz",
-                    "status text",
+                    "check_in date not null",
+                    "check_out date not null",
+                    "nights integer not null",
+                    "total_cents integer not null",
+                    "status text default 'pending'",
                     "notes text",
                 ],
-                "description": "Rendez-vous.",
+                "description": "Réservations séjour (arrivée, départ, montant).",
+            },
+            {
+                "name": "blocked_dates",
+                "columns": [
+                    "accommodation_id uuid references public.accommodations(id)",
+                    "blocked_date date not null",
+                    "reason text",
+                ],
+                "description": "Dates indisponibles au calendrier.",
             },
         ]
     elif pt == "application_desktop":
@@ -275,6 +289,17 @@ async def run(project_description: str, project_type: str, design_system: dict) 
     pt = (project_type or "").strip()
     ds = design_system if isinstance(design_system, dict) else {}
 
+    reservation_hint = ""
+    if pt.replace("-", "_") == "site_reservation":
+        reservation_hint = (
+            "\n\n## Schéma attendu (site_reservation / hébergements)\n"
+            "Tables obligatoires : accommodations, customers, bookings, blocked_dates.\n"
+            "accommodations : type (mobil_home, chalet, tente, caravane), capacity, "
+            "price_per_night_cents.\n"
+            "bookings : check_in, check_out, nights, total_cents, accommodation_id, customer_id.\n"
+            "blocked_dates : accommodation_id, blocked_date pour indisponibilités calendrier.\n"
+        )
+
     user_prompt = (
         "## Description du projet\n"
         f"{desc}\n\n"
@@ -282,6 +307,7 @@ async def run(project_description: str, project_type: str, design_system: dict) 
         f"{pt}\n\n"
         "## Design system (contexte)\n"
         f"{json_module.dumps(ds, ensure_ascii=False)[:6000]}"
+        f"{reservation_hint}"
     ).strip()
 
     try:

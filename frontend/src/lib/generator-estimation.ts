@@ -1,6 +1,14 @@
 import type { GeneratorKindId } from "@/lib/generator-kinds";
 
-export type ComplexityTier = "simple" | "medium" | "complex";
+export type ComplexityTier = "simple" | "medium" | "complex" | "advanced";
+
+export type EstimationProfileId =
+  | "vitrine_next"
+  | "site_reservation"
+  | "ecommerce"
+  | "application_web"
+  | "application_desktop"
+  | "extension_navigateur";
 
 export interface HostingRecommendation {
   providers: string[];
@@ -9,6 +17,7 @@ export interface HostingRecommendation {
 }
 
 export interface ProjectEstimation {
+  profileId: EstimationProfileId;
   complexityTier: ComplexityTier;
   complexityLabel: string;
   apiCostEur: number;
@@ -17,104 +26,100 @@ export interface ProjectEstimation {
   marketPriceMax: number;
 }
 
-const ECOMMERCE_KEYWORDS = [
-  "e-commerce",
-  "ecommerce",
-  "boutique",
-  "panier",
-  "checkout",
-  "stripe",
-  "paiement",
-  "catalogue produit",
-  "marketplace",
-];
+const PROFILE_CONFIG: Record<
+  EstimationProfileId,
+  { tier: ComplexityTier; label: string; apiCostEur: number }
+> = {
+  vitrine_next: {
+    tier: "simple",
+    label: "Simple (vitrine)",
+    apiCostEur: 0.1,
+  },
+  site_reservation: {
+    tier: "complex",
+    label: "Complexe (réservation)",
+    apiCostEur: 0.5,
+  },
+  ecommerce: {
+    tier: "complex",
+    label: "Complexe (e-commerce)",
+    apiCostEur: 0.5,
+  },
+  application_web: {
+    tier: "advanced",
+    label: "Avancé (app web)",
+    apiCostEur: 0.8,
+  },
+  application_desktop: {
+    tier: "advanced",
+    label: "Avancé (app desktop)",
+    apiCostEur: 0.8,
+  },
+  extension_navigateur: {
+    tier: "medium",
+    label: "Moyen (extension)",
+    apiCostEur: 0.3,
+  },
+};
 
-const APP_KEYWORDS = [
-  "crm",
-  "dashboard",
-  "tableau de bord",
-  "authentification",
-  "base de données",
-  "api",
-  "portail",
-  "gestion",
-  "stock",
-  "back-office",
-  "saas",
-];
+const TYPE_PREFIX_PROFILE: Record<string, EstimationProfileId> = {
+  site_reservation: "site_reservation",
+  ecommerce: "ecommerce",
+  extension_navigateur: "extension_navigateur",
+  application_web: "application_web",
+  application_desktop: "application_desktop",
+  vitrine_next: "vitrine_next",
+};
 
-const VITRINE_KEYWORDS = [
-  "vitrine",
-  "présenter",
-  "boulangerie",
-  "restaurant",
-  "cabinet",
-  "portfolio",
-  "landing",
-  "site web",
-  "multi-pages",
-];
-
-function kindBaseTier(kind: GeneratorKindId): ComplexityTier {
+function kindToProfile(kind: GeneratorKindId): EstimationProfileId {
   switch (kind) {
     case "vitrine":
+      return "vitrine_next";
     case "reservation":
-      return "simple";
-    case "extension":
-    case "desktop":
-      return "medium";
-    case "app_web":
-      return "medium";
+      return "site_reservation";
     case "ecommerce":
-      return "complex";
+      return "ecommerce";
+    case "app_web":
+      return "application_web";
+    case "desktop":
+      return "application_desktop";
+    case "extension":
+      return "extension_navigateur";
     default:
-      return "simple";
+      return "vitrine_next";
   }
 }
 
-function promptTier(prompt: string): ComplexityTier | null {
-  const lower = prompt.toLowerCase();
-  if (ECOMMERCE_KEYWORDS.some((kw) => lower.includes(kw))) return "complex";
-  if (APP_KEYWORDS.some((kw) => lower.includes(kw))) return "medium";
-  if (VITRINE_KEYWORDS.some((kw) => lower.includes(kw))) return "simple";
-  return null;
+/** Détecte `TYPE: …` en tête de prompt (pipeline GeneratorAI). */
+export function profileFromPrompt(prompt: string): EstimationProfileId | null {
+  const match = prompt.trim().match(/^TYPE:\s*([^\s\n]+)/im);
+  if (!match) return null;
+  const key = match[1].toLowerCase().replace(/-/g, "_");
+  return TYPE_PREFIX_PROFILE[key] ?? null;
 }
 
-function maxTier(a: ComplexityTier, b: ComplexityTier): ComplexityTier {
-  const order: ComplexityTier[] = ["simple", "medium", "complex"];
-  return order[Math.max(order.indexOf(a), order.indexOf(b))];
+export function resolveEstimationProfile(
+  kind: GeneratorKindId,
+  prompt: string,
+): EstimationProfileId {
+  return profileFromPrompt(prompt) ?? kindToProfile(kind);
 }
 
+/** @deprecated Préférer resolveEstimationProfile — conservé pour compatibilité. */
 export function detectComplexityTier(
   kind: GeneratorKindId,
   prompt: string,
 ): ComplexityTier {
-  const base = kindBaseTier(kind);
-  const fromPrompt = promptTier(prompt.trim());
-  if (!fromPrompt) return base;
-  return maxTier(base, fromPrompt);
+  const profile = resolveEstimationProfile(kind, prompt);
+  return PROFILE_CONFIG[profile].tier;
 }
 
-export function complexityLabel(tier: ComplexityTier): string {
-  switch (tier) {
-    case "simple":
-      return "Simple (vitrine)";
-    case "medium":
-      return "Moyen (app web)";
-    case "complex":
-      return "Complexe (e-commerce)";
-  }
+export function complexityLabelForProfile(profileId: EstimationProfileId): string {
+  return PROFILE_CONFIG[profileId].label;
 }
 
-export function estimateApiCostEur(tier: ComplexityTier): number {
-  switch (tier) {
-    case "simple":
-      return 0.1;
-    case "medium":
-      return 0.3;
-    case "complex":
-      return 0.5;
-  }
+export function apiCostForProfile(profileId: EstimationProfileId): number {
+  return PROFILE_CONFIG[profileId].apiCostEur;
 }
 
 export function getHostingRecommendation(kind: GeneratorKindId): HostingRecommendation {
@@ -172,12 +177,14 @@ export function computeProjectEstimation(
   kind: GeneratorKindId,
   prompt: string,
 ): ProjectEstimation {
-  const complexityTier = detectComplexityTier(kind, prompt);
+  const profileId = resolveEstimationProfile(kind, prompt);
+  const { tier, label, apiCostEur } = PROFILE_CONFIG[profileId];
   const [marketPriceMin, marketPriceMax] = MARKET_RANGES[kind];
   return {
-    complexityTier,
-    complexityLabel: complexityLabel(complexityTier),
-    apiCostEur: estimateApiCostEur(complexityTier),
+    profileId,
+    complexityTier: tier,
+    complexityLabel: label,
+    apiCostEur,
     hosting: getHostingRecommendation(kind),
     marketPriceMin,
     marketPriceMax,
