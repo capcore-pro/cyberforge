@@ -199,7 +199,7 @@ export function MediaPicker({
 
       <MediaAddPanel
         open={addOpen}
-        initialTab="search"
+        initialTab="import"
         projectId={projectRefId}
         onClose={() => setAddOpen(false)}
         onAdded={(asset) => {

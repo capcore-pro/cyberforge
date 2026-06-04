@@ -66,6 +66,7 @@ import {
   getGeneratorKind,
   inferDeployModeFromSession,
   inferKindFromSession,
+  INSPIRATION_SECTOR_OPTIONS,
   kindToToolboxSecteur,
   resolveGenerationMode,
   syncSessionFromKind,
@@ -79,7 +80,6 @@ import {
   type InspirationSectionOut,
   type ScrapeInspirationResult,
 } from "@/lib/inspiration-api";
-import { fetchToolboxSecteurs, type SectorData } from "@/lib/toolbox-api";
 import {
   computeProjectEstimation,
   formatEur,
@@ -109,19 +109,6 @@ const SECTION_TYPE_LABELS: Record<string, string> = {
   testimonials: "témoignages",
   faq: "FAQ",
   other: "autre",
-};
-
-const SECTOR_LABELS: Record<string, string> = {
-  restauration: "Restauration",
-  nautisme: "Nautisme",
-  immobilier: "Immobilier",
-  sante: "Santé",
-  artisanat: "Artisanat",
-  beaute: "Beauté",
-  sport: "Sport",
-  technologie: "Technologie",
-  education: "Éducation",
-  commerce: "Commerce",
 };
 
 function formatStructureSummary(sections: InspirationSectionOut[]): string {
@@ -324,7 +311,6 @@ export function GeneratorPage({
   const [inspirationSecteur, setInspirationSecteur] = useState(() =>
     kindToToolboxSecteur(selectedKind),
   );
-  const [toolboxSecteurs, setToolboxSecteurs] = useState<SectorData[]>([]);
   const [inspirationAnalyzing, setInspirationAnalyzing] = useState(false);
   const [cloneInspirationBusy, setCloneInspirationBusy] = useState(false);
   const [cloneStatusMessage, setCloneStatusMessage] = useState<string | null>(null);
@@ -540,15 +526,6 @@ export function GeneratorPage({
     const synced = syncSessionFromKind(selectedKind, deployMode);
     patch(synced);
   }, [selectedKind, deployMode, patch]);
-
-  const loadToolboxSecteurs = useCallback(() => {
-    if (toolboxSecteurs.length > 0) return;
-    void fetchToolboxSecteurs().then((res) => {
-      if (res.ok && res.data?.secteurs.length) {
-        setToolboxSecteurs(res.data.secteurs);
-      }
-    });
-  }, [toolboxSecteurs.length]);
 
   useEffect(() => {
     if (backendStatus === "offline" && phase === "running") {
@@ -1747,29 +1724,26 @@ export function GeneratorPage({
                   setInspirationUrl(e.target.value);
                   setInspirationError(null);
                 }}
-                onFocus={loadToolboxSecteurs}
                 placeholder="https://site-inspiration.fr"
                 disabled={isRunning || inspirationAnalyzing || cloneInspirationBusy}
                 className="w-full rounded-control border border-cf-border-input bg-cf-main px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
               />
             </label>
-            {toolboxSecteurs.length > 0 ? (
-              <label className="block shrink-0">
-                <span className="mb-1 block text-[10px] text-cf-muted">Secteur</span>
-                <select
-                  value={inspirationSecteur}
-                  onChange={(e) => setInspirationSecteur(e.target.value)}
-                  disabled={isRunning || inspirationAnalyzing || cloneInspirationBusy}
-                  className="rounded-control border border-cf-border-input bg-cf-main px-3 py-2.5 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
-                >
-                  {toolboxSecteurs.map((s) => (
-                    <option key={s.nom} value={s.nom}>
-                      {SECTOR_LABELS[s.nom] ?? s.nom}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
+            <label className="block shrink-0">
+              <span className="mb-1 block text-[10px] text-cf-muted">Secteur</span>
+              <select
+                value={inspirationSecteur}
+                onChange={(e) => setInspirationSecteur(e.target.value)}
+                disabled={isRunning || inspirationAnalyzing || cloneInspirationBusy}
+                className="rounded-control border border-cf-border-input bg-cf-main px-3 py-2.5 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
+              >
+                {INSPIRATION_SECTOR_OPTIONS.map((s) => (
+                  <option key={s.nom} value={s.nom}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               disabled={

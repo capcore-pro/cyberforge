@@ -28,7 +28,7 @@ export function MediaLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [addInitialTab, setAddInitialTab] = useState<"search" | "generate" | "import">("search");
+  const [addInitialTab, setAddInitialTab] = useState<"generate" | "import">("import");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [detailAsset, setDetailAsset] = useState<MediaAsset | null>(null);
@@ -60,7 +60,7 @@ export function MediaLibraryPage() {
     void load();
   }, [load]);
 
-  function openAdd(tab: "search" | "generate" | "import" = "search") {
+  function openAdd(tab: "generate" | "import" = "import") {
     setAddInitialTab(tab);
     setAddOpen(true);
   }
@@ -108,7 +108,7 @@ export function MediaLibraryPage() {
           type="button"
           aria-label="Ajouter une image"
           className="flex h-11 w-11 items-center justify-center rounded-full border border-cf-gold/50 bg-cf-active text-xl font-light text-cf-gold transition hover:border-cf-gold hover:bg-cf-gold-subtle"
-          onClick={() => openAdd("search")}
+          onClick={() => openAdd("import")}
         >
           +
         </button>
@@ -157,7 +157,7 @@ export function MediaLibraryPage() {
           <button
             type="button"
             className="cyber-generate-btn px-5 py-2.5 text-xs"
-            onClick={() => openAdd("search")}
+            onClick={() => openAdd("import")}
           >
             Rechercher des photos
           </button>

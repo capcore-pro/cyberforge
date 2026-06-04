@@ -85,6 +85,7 @@ def create_app() -> FastAPI:
     for api_router, prefix in API_ROUTERS:
         application.include_router(api_router, prefix=prefix)
 
+    # Module Toolbox UI retiré — pas de routes /api/toolbox.
     application.include_router(meta.router, prefix="/api")
 
     missing = [r for r in REQUIRED_ROUTES if r not in _collect_route_paths(application)]

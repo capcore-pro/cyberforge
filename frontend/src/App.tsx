@@ -39,10 +39,6 @@ const AccountingPage = lazy(() =>
 const NewsletterPage = lazy(() =>
   import("./pages/NewsletterPage").then((m) => ({ default: m.NewsletterPage })),
 );
-const ToolboxPage = lazy(() =>
-  import("./pages/ToolboxPage").then((m) => ({ default: m.ToolboxPage })),
-);
-
 /**
  * Composant racine — navigation entre les pages principales.
  */
@@ -169,8 +165,6 @@ function AppWithNotifications({
         return <SettingsPage />;
       case "media_library":
         return <MediaLibraryPage />;
-      case "toolbox":
-        return <ToolboxPage />;
       case "accounting":
         return <AccountingPage />;
       case "newsletter":

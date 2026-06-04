@@ -3,13 +3,11 @@ import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   generateMediaImage,
-  importMediaFromUrl,
   uploadMediaAsset,
   type MediaAsset,
 } from "@/lib/media-api";
-import { searchToolboxPhotos, type ToolboxPhoto } from "@/lib/toolbox-api";
 
-type AddTab = "search" | "generate" | "import";
+type AddTab = "generate" | "import";
 
 export interface MediaAddPanelProps {
   open: boolean;
@@ -24,74 +22,25 @@ export function MediaAddPanel({
   open,
   onClose,
   onAdded,
-  initialTab = "search",
+  initialTab = "import",
   projectId,
 }: MediaAddPanelProps) {
-  const [tab, setTab] = useState<AddTab>(initialTab);
+  const [tab, setTab] = useState<AddTab>(initialTab === "generate" ? "generate" : "import");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [photos, setPhotos] = useState<ToolboxPhoto[]>([]);
-  const [photosLoading, setPhotosLoading] = useState(false);
 
   const [generatePrompt, setGeneratePrompt] = useState("");
   const [importDrag, setImportDrag] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setTab(initialTab);
+      setTab(initialTab === "generate" ? "generate" : "import");
       setError(null);
       setBusy(false);
     }
   }, [open, initialTab]);
 
   if (!open) return null;
-
-  async function runPhotoSearch() {
-    const q = searchQuery.trim();
-    if (!q) {
-      setError("Saisissez un mot-clé pour rechercher des photos.");
-      return;
-    }
-    setPhotosLoading(true);
-    setError(null);
-    const res = await searchToolboxPhotos({ query: q, per_page: 20 });
-    setPhotosLoading(false);
-    if (!res.ok) {
-      setError(
-        apiErrorMessage(
-          res,
-          "Recherche impossible — vérifiez PEXELS_API_KEY et UNSPLASH_ACCESS_KEY.",
-        ),
-      );
-      setPhotos([]);
-      return;
-    }
-    const rows = res.data?.photos ?? [];
-    if (!rows.length) {
-      setError("Aucun résultat Pexels/Unsplash pour cette recherche.");
-    }
-    setPhotos(rows);
-  }
-
-  async function importPhoto(photo: ToolboxPhoto) {
-    setBusy(true);
-    setError(null);
-    const res = await importMediaFromUrl({
-      url: photo.url_full,
-      filename: `photo-${photo.source}-${photo.id}.jpg`,
-      tags: ["photo", photo.source, "pexels_unsplash"],
-      project_id: projectId,
-    });
-    setBusy(false);
-    if (!res.ok || !res.data) {
-      setError(apiErrorMessage(res, "Import de la photo échoué."));
-      return;
-    }
-    onAdded(res.data);
-    onClose();
-  }
 
   async function handleGenerate() {
     const prompt = generatePrompt.trim();
@@ -117,7 +66,9 @@ export function MediaAddPanel({
   }
 
   async function handleFiles(files: FileList | File[]) {
-    const list = Array.from(files).filter((f) => f.type.startsWith("image/") || f.type === "application/pdf");
+    const list = Array.from(files).filter(
+      (f) => f.type.startsWith("image/") || f.type === "application/pdf",
+    );
     if (!list.length) {
       setError("Sélectionnez une image (JPEG, PNG, WebP, GIF).");
       return;
@@ -161,7 +112,6 @@ export function MediaAddPanel({
         <div className="mb-4 flex gap-2 border-b border-cyber-border pb-2">
           {(
             [
-              ["search", "Rechercher"],
               ["generate", "Générer"],
               ["import", "Importer"],
             ] as const
@@ -191,57 +141,6 @@ export function MediaAddPanel({
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {tab === "search" ? (
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void runPhotoSearch();
-                  }}
-                  placeholder="Mot-clé (ex : boulangerie, restaurant…)"
-                  className="cyber-prompt-field min-h-0 flex-1 text-sm"
-                  disabled={busy || photosLoading}
-                />
-                <button
-                  type="button"
-                  disabled={busy || photosLoading}
-                  onClick={() => void runPhotoSearch()}
-                  className="cyber-action-btn cyber-action-btn-primary shrink-0 text-xs"
-                >
-                  {photosLoading ? "Recherche…" : "Rechercher"}
-                </button>
-              </div>
-              <p className="text-xs text-cyber-muted">
-                Sources : Pexels puis complément Unsplash si besoin.
-              </p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {photos.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void importPhoto(p)}
-                    className="group overflow-hidden rounded border border-cyber-border text-left transition hover:border-cyber-neon/50"
-                  >
-                    <img
-                      src={p.url_thumb}
-                      alt=""
-                      className="aspect-[4/3] w-full object-cover"
-                      loading="lazy"
-                    />
-                    <p className="truncate px-2 py-1 text-[10px] uppercase text-cyber-muted">
-                      {p.source}
-                      {p.author ? ` · ${p.author}` : ""}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
           {tab === "generate" ? (
             <div className="space-y-4">
               <label className="block space-y-2">

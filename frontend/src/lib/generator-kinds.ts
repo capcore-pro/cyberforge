@@ -178,7 +178,21 @@ export function syncSessionFromKind(
   };
 }
 
-/** Secteur toolbox par défaut pour Firecrawl (clone / analyse). */
+/** Secteurs proposés pour l’URL d’inspiration (clone / analyse). */
+export const INSPIRATION_SECTOR_OPTIONS: { nom: string; label: string }[] = [
+  { nom: "restauration", label: "Restauration" },
+  { nom: "nautisme", label: "Nautisme" },
+  { nom: "immobilier", label: "Immobilier" },
+  { nom: "sante", label: "Santé" },
+  { nom: "artisanat", label: "Artisanat" },
+  { nom: "beaute", label: "Beauté" },
+  { nom: "sport", label: "Sport" },
+  { nom: "technologie", label: "Technologie" },
+  { nom: "education", label: "Éducation" },
+  { nom: "commerce", label: "Commerce" },
+];
+
+/** Secteur par défaut pour Firecrawl (clone / analyse). */
 export function kindToToolboxSecteur(kind: GeneratorKindId): string {
   switch (kind) {
     case "reservation":
