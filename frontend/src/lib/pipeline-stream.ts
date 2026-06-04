@@ -166,6 +166,9 @@ export async function streamCoremindRun(
         prompt: body.prompt,
         project_type: resolveApiProjectType(body),
         client_name: resolveClientName(body),
+        generation_mode: body.generation_mode ?? null,
+        inspiration_brief: body.inspiration_brief ?? null,
+        firecrawl_result: body.firecrawl_result ?? null,
       }),
       signal: controller.signal,
     });

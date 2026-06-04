@@ -23,8 +23,11 @@ logger = logging.getLogger(__name__)
 
 MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = 10000
+MAX_TOKENS_SITE_RESERVATION_CLONE = 4096
 MAX_HTML_CHARS = 15000
 MAX_HTML_CHARS_SITE_RESERVATION = 20000
+MAX_HTML_CHARS_SITE_RESERVATION_CLONE = 32000
+GENERATOR_MAX_ATTEMPTS = 3
 
 SYSTEM_PROMPT = """CRITIQUE : Tu DOIS inclure dans ta réponse :
 - La balise <html> complète avec <head> et <body>
@@ -201,13 +204,51 @@ def _is_site_reservation_brief(brief: dict[str, Any]) -> bool:
         val = str(b.get(key) or "").strip().lower().replace("-", "_")
         if val == "site_reservation":
             return True
+    prompt = str(b.get("prompt") or "")
+    if re.search(r"(?m)^TYPE:\s*site_reservation\b", prompt, re.I):
+        return True
     return False
 
 
+def _is_inspiration_clone_brief(brief: dict[str, Any]) -> bool:
+    """Clone & Améliore : brief Firecrawl ou marqueurs dans le prompt."""
+    b = brief or {}
+    if b.get("inspiration_brief") or b.get("firecrawl_result"):
+        return True
+    low = str(b.get("prompt") or "").lower()
+    markers = (
+        "brief cyberforge",
+        "inspiration",
+        "clone",
+        "palette :",
+        "structure cible",
+        "couleur primaire :",
+        "couleur secondaire :",
+    )
+    return any(m in low for m in markers)
+
+
+def _is_site_reservation_clone(brief: dict[str, Any]) -> bool:
+    return _is_site_reservation_brief(brief) and _is_inspiration_clone_brief(brief)
+
+
+def _max_tokens(brief: dict[str, Any]) -> int:
+    if _is_site_reservation_clone(brief):
+        return MAX_TOKENS_SITE_RESERVATION_CLONE
+    return MAX_TOKENS
+
+
 def _max_html_chars(brief: dict[str, Any]) -> int:
+    if _is_site_reservation_clone(brief):
+        return MAX_HTML_CHARS_SITE_RESERVATION_CLONE
     if _is_site_reservation_brief(brief):
         return MAX_HTML_CHARS_SITE_RESERVATION
     return MAX_HTML_CHARS
+
+
+def _html_document_complete(html: str) -> bool:
+    low = (html or "").lower().rstrip()
+    return low.endswith("</html>") or low.endswith("</body></html>")
 
 
 def _build_system_prompt(brief: dict[str, Any]) -> str:
@@ -231,6 +272,23 @@ def _extract_html(raw: str) -> str:
     if close != -1:
         text = text[: close + len("</html>")]
     return text.strip()
+
+
+def _apply_html_size_limit(html: str, max_chars: int) -> str:
+    """Tronque sans couper un document déjà complet ; évite page blanche après hero."""
+    if len(html) <= max_chars:
+        return html
+    if _html_document_complete(html[:max_chars]):
+        return html[:max_chars]
+    for marker in ("</html>", "</body>", "</footer>", "</section>"):
+        pos = html.lower().rfind(marker, 0, max_chars)
+        if pos > int(max_chars * 0.55):
+            end = pos + len(marker)
+            chunk = html[:end]
+            if marker != "</html>" and "</html>" not in chunk.lower():
+                chunk = chunk.rstrip() + "\n</body>\n</html>"
+            return chunk
+    return html[:max_chars]
 
 
 def _build_user_message(
@@ -272,39 +330,82 @@ class GeneratorAI:
             return {"html": "", "success": False}
 
         client = anthropic.Anthropic(api_key=api_key)
-        user_message = _build_user_message(brief, corrections=corrections)
         system_prompt = _build_system_prompt(brief)
+        max_tokens = _max_tokens(brief)
+        max_chars = _max_html_chars(brief)
+        reservation_clone = _is_site_reservation_clone(brief)
+        extra_fix = (corrections or "").strip()
+        last_error: str | None = None
 
-        def _call() -> str:
-            response = client.messages.create(
-                model=MODEL,
-                max_tokens=MAX_TOKENS,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}],
-            )
-            parts: list[str] = []
-            for block in response.content:
-                text = getattr(block, "text", None)
-                if text:
-                    parts.append(text)
-            return "".join(parts)
+        for attempt in range(1, GENERATOR_MAX_ATTEMPTS + 1):
+            attempt_fix = extra_fix
+            if attempt > 1 and last_error:
+                attempt_fix = (
+                    f"{extra_fix}\n\n{last_error}".strip()
+                    if extra_fix
+                    else last_error
+                )
+            user_message = _build_user_message(brief, corrections=attempt_fix or None)
 
-        try:
-            raw = await asyncio.to_thread(_call)
-            html = _extract_html(raw)
-            max_chars = _max_html_chars(brief)
-            if len(html) > max_chars:
-                html = html[:max_chars]
-                close = html.lower().rfind("</body>")
-                if close != -1:
-                    html = html[: close + len("</body>")] + "\n</html>"
-                elif "</html>" not in html.lower():
-                    html += "\n</html>"
-            if not _HTML_START_RE.search(html):
-                raise ValueError("HTML invalide")
-            mode = "site_reservation" if _is_site_reservation_brief(brief) else "standard"
-            logger.info("[GeneratorAI] OK (%s) — %d caractères", mode, len(html))
-            return {"html": html, "success": True}
-        except Exception as exc:
-            logger.exception("[GeneratorAI] échec: %s", exc)
-            return {"html": "", "success": False}
+            def _call() -> str:
+                response = client.messages.create(
+                    model=MODEL,
+                    max_tokens=max_tokens,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_message}],
+                )
+                parts: list[str] = []
+                for block in response.content:
+                    text = getattr(block, "text", None)
+                    if text:
+                        parts.append(text)
+                return "".join(parts)
+
+            try:
+                raw = await asyncio.to_thread(_call)
+                html = _extract_html(raw)
+                html = _apply_html_size_limit(html, max_chars)
+                if not _HTML_START_RE.search(html):
+                    raise ValueError("HTML invalide (pas de balise html)")
+
+                if not _html_document_complete(html):
+                    last_error = (
+                        "CORRECTION OBLIGATOIRE : la réponse précédente était tronquée. "
+                        "Génère TOUT le document : hero slider, bienvenue, hébergements, "
+                        "calendrier, formulaire réservation, footer. "
+                        "Termine impérativement par </footer></body></html>."
+                    )
+                    logger.warning(
+                        "[GeneratorAI] HTML incomplet (tentative %d/%d, %d car.)",
+                        attempt,
+                        GENERATOR_MAX_ATTEMPTS,
+                        len(html),
+                    )
+                    if attempt < GENERATOR_MAX_ATTEMPTS:
+                        continue
+                    raise ValueError("HTML incomplet : </html> manquant")
+
+                mode = "site_reservation_clone" if reservation_clone else (
+                    "site_reservation" if _is_site_reservation_brief(brief) else "standard"
+                )
+                logger.info(
+                    "[GeneratorAI] OK (%s) — %d caractères (tentative %d, max_tokens=%d)",
+                    mode,
+                    len(html),
+                    attempt,
+                    max_tokens,
+                )
+                return {"html": html, "success": True}
+            except Exception as exc:
+                last_error = str(exc)
+                logger.warning(
+                    "[GeneratorAI] tentative %d/%d échouée: %s",
+                    attempt,
+                    GENERATOR_MAX_ATTEMPTS,
+                    exc,
+                )
+                if attempt >= GENERATOR_MAX_ATTEMPTS:
+                    logger.exception("[GeneratorAI] échec final: %s", exc)
+                    return {"html": "", "success": False}
+
+        return {"html": "", "success": False}

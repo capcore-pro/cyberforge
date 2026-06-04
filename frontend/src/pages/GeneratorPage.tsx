@@ -73,10 +73,12 @@ import {
   type GeneratorKindId,
 } from "@/lib/generator-kinds";
 import {
-  cloneFirecrawlInspiration,
+  cloneInspiration,
+  scrapeInspiration,
   type CloneInspirationResult,
-  type ScrapeSectionOut,
-} from "@/lib/firecrawl-api";
+  type InspirationSectionOut,
+  type ScrapeInspirationResult,
+} from "@/lib/inspiration-api";
 import { fetchToolboxSecteurs, type SectorData } from "@/lib/toolbox-api";
 import {
   computeProjectEstimation,
@@ -87,6 +89,7 @@ import {
   buildGeneratorDetailsPrompt,
   detailsFromPreset,
   EMPTY_GENERATOR_DETAILS,
+  findSectorPresetForHint,
   getSectorPreset,
   listSectorsForKind,
   type GeneratorDetailsForm,
@@ -121,30 +124,17 @@ const SECTOR_LABELS: Record<string, string> = {
   commerce: "Commerce",
 };
 
-function formatStructureSummary(sections: ScrapeSectionOut[]): string {
+function formatStructureSummary(sections: InspirationSectionOut[]): string {
   const labels = sections.map(
     (s) => SECTION_TYPE_LABELS[s.type] ?? s.type,
   );
   return [...new Set(labels)].join(" + ");
 }
 
-function buildPromptFromInspiration(
-  result: CloneInspirationResult,
-  structureSummary: string,
-): string {
-  const colors = Object.entries(result.palette)
-    .slice(0, 3)
-    .map(([key, value]) => `${key} ${value}`)
-    .join(", ");
-  return [
-    `Projet inspiré de ${result.url} pour ${result.nom_client}.`,
-    structureSummary ? `Structure cible : ${structureSummary}.` : "",
-    colors ? `Palette : ${colors}.` : "",
-    "Reproduire le rythme visuel et l'ordre des sections avec une exécution premium CapCore.",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
+type GenerateLaunchOverrides = {
+  prompt?: string;
+  projectName?: string;
+};
 
 interface GeneratorPageProps {
   onOpenProjects?: () => void;
@@ -336,6 +326,10 @@ export function GeneratorPage({
   );
   const [toolboxSecteurs, setToolboxSecteurs] = useState<SectorData[]>([]);
   const [inspirationAnalyzing, setInspirationAnalyzing] = useState(false);
+  const [cloneInspirationBusy, setCloneInspirationBusy] = useState(false);
+  const [cloneStatusMessage, setCloneStatusMessage] = useState<string | null>(null);
+  const [inspirationScrapeMeta, setInspirationScrapeMeta] =
+    useState<ScrapeInspirationResult | null>(null);
   const [inspirationError, setInspirationError] = useState<string | null>(null);
   const [inspirationStructureSummary, setInspirationStructureSummary] = useState<
     string | null
@@ -711,18 +705,10 @@ export function GeneratorPage({
     }
     setInspirationAnalyzing(true);
     setInspirationError(null);
-    setInspirationStructureSummary(null);
+    setInspirationScrapeMeta(null);
+    setCloneStatusMessage(null);
 
-    const nomClient =
-      linkedClientLabel?.trim() ||
-      projectTitleFromPrompt(prompt) ||
-      "Mon projet";
-
-    const response = await cloneFirecrawlInspiration({
-      url: trimmedUrl,
-      secteur: inspirationSecteur,
-      nom_client: nomClient,
-    });
+    const response = await scrapeInspiration({ url: trimmedUrl });
     setInspirationAnalyzing(false);
 
     if (!response.ok || !response.data) {
@@ -733,19 +719,125 @@ export function GeneratorPage({
     }
 
     const data = response.data;
+    setInspirationScrapeMeta(data);
+
+    const partial: Partial<GeneratorDetailsForm> = {};
+    if (!detailsForm.description.trim() && data.description?.trim()) {
+      partial.description = data.description.trim();
+    }
+    if (!detailsForm.couleur_primaire.trim() && data.primary_color?.trim()) {
+      partial.couleur_primaire = data.primary_color.trim();
+    }
+    if (Object.keys(partial).length > 0) {
+      updateDetails(partial);
+    }
+    if (wizardStep !== "details") {
+      setWizardStep("details");
+    }
+  }
+
+  function applyCloneToForm(data: CloneInspirationResult) {
+    const preset = findSectorPresetForHint(
+      data.sector_label || data.secteur,
+      selectedKind,
+    );
+    if (preset) {
+      setSelectedSectorId(preset.id);
+      setInspirationSecteur(preset.sector.split("/")[0]?.trim() || data.secteur);
+    } else {
+      setInspirationSecteur(data.secteur);
+    }
+
+    const nextDetails: GeneratorDetailsForm = {
+      description: data.description,
+      services: data.services.length > 0 ? data.services : [],
+      couleur_primaire: data.couleur_primaire,
+      couleur_secondaire: data.couleur_secondaire,
+      ville: data.ville,
+      phone: data.phone,
+      email: data.email,
+      address: data.address,
+    };
+    setDetailsForm(nextDetails);
+    setServicesText(nextDetails.services.join("\n"));
+    setTouchedFields(new Set());
+    setWizardStep("details");
+
+    const clientName = data.company_name.trim() || data.client_name.trim();
+    if (clientName) {
+      patch({ projectName: clientName, error: null });
+    }
+    syncPromptFromDetails(nextDetails, preset?.id ?? selectedSectorId, clientName || projectName);
+
     const summary = formatStructureSummary(data.sections);
     setInspirationStructureSummary(summary || null);
     setInspirationBrief(data.brief_builder);
     setInspirationFirecrawl(data);
+  }
 
-    if (!prompt.trim()) {
-      patch({
-        prompt: buildPromptFromInspiration(
-          data,
-          summary ? summary : "sections détectées",
-        ),
-      });
+  async function handleCloneInspiration() {
+    const trimmedUrl = inspirationUrl.trim();
+    if (!trimmedUrl) {
+      setInspirationError("Indiquez l'URL du site à cloner.");
+      return;
     }
+    const clientName = projectName.trim();
+    if (!clientName) {
+      setInspirationError("Indiquez le nom du client avant de cloner le site.");
+      return;
+    }
+
+    setCloneInspirationBusy(true);
+    setInspirationAnalyzing(false);
+    setInspirationError(null);
+    setCloneStatusMessage(
+      "Analyse en cours… CyberForge va recréer ce site en mieux.",
+    );
+
+    const response = await cloneInspiration({
+      url: trimmedUrl,
+      project_type: selectedKind,
+      client_name: clientName,
+    });
+    setCloneInspirationBusy(false);
+
+    if (!response.ok || !response.data) {
+      setCloneStatusMessage(null);
+      setInspirationError(
+        apiErrorMessage(response, "Clone du site d'inspiration impossible."),
+      );
+      return;
+    }
+
+    applyCloneToForm(response.data);
+    setCloneStatusMessage(null);
+
+    const preset = findSectorPresetForHint(
+      response.data.sector_label || response.data.secteur,
+      selectedKind,
+    );
+    const launchDetails: GeneratorDetailsForm = {
+      description: response.data.description,
+      services:
+        response.data.services.length > 0 ? response.data.services : [],
+      couleur_primaire: response.data.couleur_primaire,
+      couleur_secondaire: response.data.couleur_secondaire,
+      ville: response.data.ville,
+      phone: response.data.phone,
+      email: response.data.email,
+      address: response.data.address,
+    };
+    const launchPrompt = buildGeneratorDetailsPrompt(
+      selectedKind,
+      launchDetails,
+      response.data.company_name.trim() || clientName,
+      preset?.label ?? response.data.secteur,
+    );
+
+    void handleGenerate(undefined, {
+      prompt: launchPrompt,
+      projectName: response.data.company_name.trim() || clientName,
+    });
   }
 
   function selectDeployMode(mode: DeployMode) {
@@ -754,16 +846,21 @@ export function GeneratorPage({
     patch({ generationMode: resolveGenerationMode(selectedKind, mode) });
   }
 
-  async function handleGenerate(event?: React.SyntheticEvent) {
+  async function handleGenerate(
+    event?: React.SyntheticEvent,
+    overrides?: GenerateLaunchOverrides,
+  ) {
     event?.preventDefault();
-    if (!projectName.trim()) {
+    const effectiveProjectName = overrides?.projectName?.trim() || projectName.trim();
+    if (!effectiveProjectName) {
       patch({ error: "Indiquez le nom du client pour lancer la génération." });
       return;
     }
     const trimmed =
-      wizardStep === "details"
+      overrides?.prompt?.trim() ||
+      (wizardStep === "details"
         ? builtPipelinePrompt.trim()
-        : buildGeneratorPipelinePrompt(selectedKind, prompt.trim());
+        : buildGeneratorPipelinePrompt(selectedKind, prompt.trim()));
     if (trimmed.length < 3) {
       patch({
         error:
@@ -886,16 +983,15 @@ export function GeneratorPage({
                 secteur: inspirationFirecrawl.secteur,
                 palette: inspirationFirecrawl.palette,
                 couleurs: inspirationFirecrawl.palette,
-                images: inspirationFirecrawl.images,
               }
             : null,
           personal_project: isPersonalFlow,
           pages_project_slug:
-            projectName.trim() ||
+            effectiveProjectName ||
             personalDraftTitle.trim() ||
             null,
           project_title:
-            projectName.trim() ||
+            effectiveProjectName ||
             personalDraftTitle.trim() ||
             projectTitleFromPrompt(trimmed),
           openhands_enabled: isOpenHandsEnabled(),
@@ -938,9 +1034,8 @@ export function GeneratorPage({
       );
       const persistedId = normalized.persistence?.project_id;
       if (persistedId) {
-        const customTitle = projectName.trim();
-        if (customTitle) {
-          void updateProject(persistedId, { title: customTitle });
+        if (effectiveProjectName) {
+          void updateProject(persistedId, { title: effectiveProjectName });
         }
       }
 
@@ -1654,7 +1749,7 @@ export function GeneratorPage({
                 }}
                 onFocus={loadToolboxSecteurs}
                 placeholder="https://site-inspiration.fr"
-                disabled={isRunning || inspirationAnalyzing}
+                disabled={isRunning || inspirationAnalyzing || cloneInspirationBusy}
                 className="w-full rounded-control border border-cf-border-input bg-cf-main px-4 py-2.5 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
               />
             </label>
@@ -1664,7 +1759,7 @@ export function GeneratorPage({
                 <select
                   value={inspirationSecteur}
                   onChange={(e) => setInspirationSecteur(e.target.value)}
-                  disabled={isRunning || inspirationAnalyzing}
+                  disabled={isRunning || inspirationAnalyzing || cloneInspirationBusy}
                   className="rounded-control border border-cf-border-input bg-cf-main px-3 py-2.5 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
                 >
                   {toolboxSecteurs.map((s) => (
@@ -1677,15 +1772,39 @@ export function GeneratorPage({
             ) : null}
             <button
               type="button"
-              disabled={isRunning || inspirationAnalyzing || !inspirationUrl.trim()}
+              disabled={
+                isRunning ||
+                inspirationAnalyzing ||
+                cloneInspirationBusy ||
+                !inspirationUrl.trim()
+              }
               onClick={() => void handleAnalyzeInspiration()}
               className="shrink-0 whitespace-nowrap rounded-control border border-cf-gold/50 bg-cf-secondary px-4 py-2.5 text-sm font-medium text-cf-gold transition hover:border-cf-gold hover:bg-cf-active disabled:cursor-not-allowed disabled:opacity-60"
             >
               {inspirationAnalyzing ? "Analyse…" : "Analyser"}
             </button>
+            <button
+              type="button"
+              disabled={
+                isRunning ||
+                inspirationAnalyzing ||
+                cloneInspirationBusy ||
+                !inspirationUrl.trim() ||
+                !projectName.trim()
+              }
+              title={
+                !projectName.trim()
+                  ? "Renseignez le nom du client pour cloner"
+                  : undefined
+              }
+              onClick={() => void handleCloneInspiration()}
+              className="shrink-0 whitespace-nowrap rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm font-medium text-cf-text transition hover:border-cf-gold/40 hover:text-cf-gold disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {cloneInspirationBusy ? "Clone…" : "🔄 Cloner ce site"}
+            </button>
           </div>
 
-          {inspirationAnalyzing ? (
+          {inspirationAnalyzing || cloneInspirationBusy ? (
             <div
               className="mt-4 flex items-center gap-3 rounded-control border border-cf-gold/25 bg-cf-active px-3 py-3"
               role="status"
@@ -1695,8 +1814,34 @@ export function GeneratorPage({
                 aria-hidden
               />
               <p className="text-sm text-cf-muted">
-                Scraping Firecrawl et préparation du brief…
+                {cloneStatusMessage ??
+                  "Scraping Firecrawl et extraction des couleurs…"}
               </p>
+            </div>
+          ) : null}
+
+          {inspirationScrapeMeta ? (
+            <div className="mt-3 rounded-control border border-cf-border-input bg-cf-main/50 px-3 py-2 text-sm text-cf-text">
+              {inspirationScrapeMeta.title ? (
+                <p>
+                  <span className="font-medium text-cf-gold">Titre :</span>{" "}
+                  {inspirationScrapeMeta.title}
+                </p>
+              ) : null}
+              {inspirationScrapeMeta.description ? (
+                <p className="mt-1 text-cf-muted">{inspirationScrapeMeta.description}</p>
+              ) : null}
+              {inspirationScrapeMeta.primary_color ? (
+                <p className="mt-1 flex items-center gap-2">
+                  <span className="font-medium text-cf-gold">Couleur :</span>
+                  <span
+                    className="inline-block h-4 w-4 rounded border border-cf-border-input"
+                    style={{ backgroundColor: inspirationScrapeMeta.primary_color }}
+                    aria-hidden
+                  />
+                  {inspirationScrapeMeta.primary_color}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

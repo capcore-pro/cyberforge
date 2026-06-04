@@ -494,6 +494,27 @@ export function getSectorPreset(id: SectorPresetId | null | undefined): SectorPr
   return SECTOR_PRESETS[id] ?? null;
 }
 
+/** Associe un libellé/secteur détecté (API clone) à un preset du wizard. */
+export function findSectorPresetForHint(
+  hint: string,
+  kind: GeneratorKindId,
+): SectorPreset | null {
+  const low = hint.trim().toLowerCase();
+  if (!low) return null;
+  const options = listSectorsForKind(kind);
+  for (const preset of options) {
+    if (preset.id.toLowerCase() === low) return preset;
+    if (preset.label.toLowerCase() === low) return preset;
+    const sectorLow = preset.sector.toLowerCase();
+    if (sectorLow.includes(low) || low.includes(sectorLow)) return preset;
+    const firstToken = sectorLow.split("/")[0]?.trim() ?? "";
+    if (firstToken && (low.includes(firstToken) || firstToken.includes(low))) {
+      return preset;
+    }
+  }
+  return null;
+}
+
 export function detailsFromPreset(preset: SectorPreset): GeneratorDetailsForm {
   return {
     description: preset.description,

@@ -119,6 +119,7 @@ class ScrapeResult(BaseModel):
     descriptions: list[str] = Field(default_factory=list)
     temoignages: list[str] = Field(default_factory=list)
     markdown: str | None = None
+    html: str | None = None
     raw_json: dict[str, Any] | None = None
 
 
@@ -371,6 +372,7 @@ def _parse_firecrawl_payload(url: str, payload: dict[str, Any]) -> ScrapeResult:
         descriptions=descriptions[:20],
         temoignages=temoignages[:12],
         markdown=markdown[:50_000] if markdown else None,
+        html=html[:120_000] if html else None,
         raw_json=extracted or None,
     )
 

@@ -99,6 +99,16 @@ def test_site_reservation_relaxed_form_and_js() -> None:
 
 
 @pytest.mark.asyncio
+async def test_validate_html_rejects_missing_closing_html() -> None:
+    supervisor = SupervisorAI()
+    brief = {"project_type": "vitrine", "client_name": "Test Client"}
+    html = "<html><head><title>Test Client</title><style></style></head><body><nav></nav>"
+    result = await supervisor.validate_html(html, brief)
+    assert result.get("valid") is False
+    assert any("document HTML incomplet" in e for e in (result.get("errors") or []))
+
+
+@pytest.mark.asyncio
 async def test_validate_html_adds_site_reservation_rules() -> None:
     """Sans calendrier, validate_html signale une erreur site_reservation."""
     supervisor = SupervisorAI()

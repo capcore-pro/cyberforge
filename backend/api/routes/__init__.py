@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from api.routes import (
     agents_status,
+    clone_inspiration,
     clients,
     demos,
     generate,
@@ -15,6 +16,7 @@ from api.routes import (
     managed_vitrines,
     notifications,
     projects,
+    scrape_inspiration,
 )
 
 API_ROUTERS: list[tuple[APIRouter, str]] = [
@@ -25,6 +27,8 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
     (clients.router, "/api"),
     (notifications.router, "/api"),
     (demos.router, "/api"),
+    (scrape_inspiration.router, "/api"),
+    (clone_inspiration.router, "/api"),
     (managed_vitrines.router, "/api"),
     (managed_application_web.router, "/api"),
     (managed_ecommerce.router, "/api"),
@@ -35,6 +39,7 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
 __all__ = [
     "API_ROUTERS",
     "agents_status",
+    "clone_inspiration",
     "clients",
     "demos",
     "generate",
@@ -46,4 +51,5 @@ __all__ = [
     "managed_vitrines",
     "notifications",
     "projects",
+    "scrape_inspiration",
 ]

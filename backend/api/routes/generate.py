@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import Any
 
 import anthropic
 from dotenv import load_dotenv
@@ -39,6 +40,9 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=3)
     project_type: str = "vitrine_next"
     client_name: str = ""
+    generation_mode: str | None = None
+    inspiration_brief: str | None = None
+    firecrawl_result: dict[str, Any] | None = None
 
 
 class GenerateResponse(BaseModel):
@@ -124,6 +128,9 @@ async def generate_site(body: GenerateRequest) -> GenerateResponse:
                 prompt=body.prompt,
                 project_type=body.project_type,
                 client_name=body.client_name,
+                generation_mode=body.generation_mode,
+                inspiration_brief=body.inspiration_brief,
+                firecrawl_result=body.firecrawl_result,
             )
         )
     except Exception as exc:

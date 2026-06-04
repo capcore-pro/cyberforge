@@ -27,6 +27,9 @@ class PipelineRequest(BaseModel):
     prompt: str = Field(min_length=3)
     project_type: str = "vitrine_next"
     client_name: str = ""
+    generation_mode: str | None = None
+    inspiration_brief: str | None = None
+    firecrawl_result: dict[str, Any] | None = None
 
 
 def _print_supervisor_fail(agent_name: str, errors: list[str]) -> None:
@@ -106,6 +109,12 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
         success_log=lambda b: f"client: {b.get('client_name', '?')}",
     )
     brief["prompt"] = req.prompt
+    if req.generation_mode:
+        brief["generation_mode"] = req.generation_mode.strip()
+    if req.inspiration_brief:
+        brief["inspiration_brief"] = req.inspiration_brief.strip()
+    if req.firecrawl_result:
+        brief["firecrawl_result"] = req.firecrawl_result
 
     pt = (brief.get("project_type") or req.project_type or "").strip().lower()
 

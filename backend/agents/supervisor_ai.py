@@ -234,6 +234,12 @@ def _html_correction_instructions(errors: list[str], brief: dict) -> str:
             add(
                 "CORRECTION OBLIGATOIRE : Génère un HTML complet (minimum 3000 caractères)"
             )
+        elif err.startswith("document HTML incomplet"):
+            add(
+                "CORRECTION OBLIGATOIRE : Le HTML a été coupé — termine par "
+                "</footer></body></html> avec toutes les sections "
+                "(pas d'arrêt après le hero)"
+            )
         elif err.startswith("balise manquante :"):
             continue
         elif err.startswith("client_name «") and "absent du HTML" in err:
@@ -454,6 +460,9 @@ class SupervisorAI:
 
         if len(body) < 3000:
             errors.append(f"HTML trop court ({len(body)} car., minimum 3000)")
+
+        if not _html_closes_document(low):
+            errors.append("document HTML incomplet : balise </html> manquante")
 
         for tag in ("<html", "<head", "<body"):
             if tag not in low:
