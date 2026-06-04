@@ -21,11 +21,23 @@ from security.llm_secrets import get_effective_llm_key
 
 logger = logging.getLogger(__name__)
 
-MODEL = os.getenv("COREMIND_HAIKU_MODEL", "claude-haiku-4-5-20251001")
+MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = 8000
 MAX_HTML_CHARS = 15000
 
-SYSTEM_PROMPT = """Tu es un expert développeur web. Génère un site HTML complet,
+SYSTEM_PROMPT = """CRITIQUE : Tu DOIS inclure dans ta réponse :
+- La balise <html> complète avec <head> et <body>
+- Le nom exact du client dans <title> et dans <h1>
+- Une balise <nav> ou <header>
+- Au moins 3 balises <section>
+- Un <footer>
+- Au moins 3 balises <img class='pexels-inject'>
+- Zéro mot 'placeholder' dans le contenu visible
+
+Le <footer> est OBLIGATOIRE. Place-le toujours en dernier élément
+du <body>. Ne jamais terminer le HTML sans </footer></body></html>
+
+Tu es un expert développeur web. Génère un site HTML complet,
 visuellement premium, pour ce client.
 RÈGLES STRICTES :
 - HTML complet avec <head> et <body>
@@ -62,7 +74,11 @@ def _extract_html(raw: str) -> str:
     return text.strip()
 
 
-def _build_user_message(brief: dict[str, Any]) -> str:
+def _build_user_message(
+    brief: dict[str, Any],
+    *,
+    corrections: str | None = None,
+) -> str:
     payload = {k: brief.get(k) for k in brief if not str(k).startswith("_")}
     extra = ""
     if brief.get("payment_config"):
@@ -73,22 +89,31 @@ def _build_user_message(brief: dict[str, Any]) -> str:
         extra += "\n\n## database_schema\n" + json.dumps(
             brief["database_schema"], ensure_ascii=False, indent=2
         )[:4000]
-    return (
+    body = (
         "## Brief client (JSON)\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)[:12000]
         + extra
     )
+    fix = (corrections or "").strip()
+    if fix:
+        return f"## CORRECTIONS\n{fix}\n\n{body}"
+    return body
 
 
 class GeneratorAI:
-    async def run(self, brief: dict[str, Any]) -> dict[str, Any]:
+    async def run(
+        self,
+        brief: dict[str, Any],
+        *,
+        corrections: str | None = None,
+    ) -> dict[str, Any]:
         api_key = get_effective_llm_key("ANTHROPIC_API_KEY", get_settings())
         if not api_key:
             logger.error("[GeneratorAI] ANTHROPIC_API_KEY absente")
             return {"html": "", "success": False}
 
         client = anthropic.Anthropic(api_key=api_key)
-        user_message = _build_user_message(brief)
+        user_message = _build_user_message(brief, corrections=corrections)
 
         def _call() -> str:
             response = client.messages.create(

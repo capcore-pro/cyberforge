@@ -9,7 +9,6 @@ import {
   markSystemNotificationRead,
   type SystemNotification,
 } from "@/lib/system-notifications-api";
-import { connectSystemNotificationsStream } from "@/lib/system-notifications-stream";
 
 function levelIcon(level: string): string {
   switch (level) {
@@ -79,61 +78,11 @@ export function NotificationBell() {
     void loadNotifications();
   }, [open, loadNotifications]);
 
-  const streamRef = useRef<{ abort: () => void } | null>(null);
-
-  const ensureStream = useCallback(() => {
-    if (streamRef.current || backendStatus !== "online") return;
-
-    const controller = new AbortController();
-    let reconnectTimer: number | undefined;
-
-    const connect = () => {
-      void connectSystemNotificationsStream(
-        {
-          onEvent: (event) => {
-            if (event.type === "notification" && !event.data.read) {
-              setUnreadCount((prev) => prev + 1);
-              setItems((prev) => {
-                const exists = prev.some((item) => item.id === event.data.id);
-                if (exists) {
-                  return prev.map((item) =>
-                    item.id === event.data.id ? event.data : item,
-                  );
-                }
-                return [event.data, ...prev].slice(0, 50);
-              });
-            }
-          },
-        },
-        controller.signal,
-      ).catch(() => {
-        if (!controller.signal.aborted) {
-          reconnectTimer = window.setTimeout(connect, 5000);
-        }
-      });
-    };
-
-    connect();
-    streamRef.current = {
-      abort: () => {
-        controller.abort();
-        if (reconnectTimer !== undefined) {
-          window.clearTimeout(reconnectTimer);
-        }
-        streamRef.current = null;
-      },
-    };
-  }, [backendStatus]);
-
   useEffect(() => {
     if (backendStatus !== "online") return;
-
-    const deferTimer = window.setTimeout(() => ensureStream(), 3000);
-    return () => {
-      window.clearTimeout(deferTimer);
-      streamRef.current?.abort();
-    };
-  }, [backendStatus, ensureStream]);
+    const pollId = window.setInterval(() => void refreshUnreadCount(), 30_000);
+    return () => window.clearInterval(pollId);
+  }, [backendStatus, refreshUnreadCount]);
 
   useEffect(() => {
     if (!open) return;
@@ -192,10 +141,7 @@ export function NotificationBell() {
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        onClick={() => {
-          ensureStream();
-          setOpen((value) => !value);
-        }}
+        onClick={() => setOpen((value) => !value)}
         className="relative flex h-9 w-9 items-center justify-center rounded-control border border-cf-border-input bg-cf-secondary text-cf-gold transition hover:border-cf-gold/50 hover:bg-cf-active focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-gold/50"
         aria-label={
           unreadCount > 0

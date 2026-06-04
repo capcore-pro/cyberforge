@@ -1,37 +1,17 @@
-import { API_PREFIX } from "@shared/constants";
-import { apiRequest } from "@/lib/api-client";
+/**
+ * Types notifications contacts — routes /api/notifications/contacts retirées.
+ */
 
 export interface ContactNotificationItem {
-  demo_id: string;
-  token: string;
+  id: string;
   title: string;
-  interested_at: string;
-  client_name: string | null;
-  client_email: string | null;
+  message?: string | null;
+  created_at: string;
+  read?: boolean;
+  project_id?: string | null;
 }
 
 export interface ContactNotificationsResponse {
   unread_count: number;
   items: ContactNotificationItem[];
-}
-
-export async function fetchContactNotifications() {
-  return apiRequest<ContactNotificationsResponse>({
-    method: "GET",
-    path: `${API_PREFIX}/notifications/contacts`,
-  });
-}
-
-export async function fetchContactUnreadCount() {
-  return apiRequest<{ unread_count: number }>({
-    method: "GET",
-    path: `${API_PREFIX}/notifications/contacts/unread-count`,
-  });
-}
-
-export async function markContactNotificationsSeen() {
-  return apiRequest<{ marked: number }>({
-    method: "POST",
-    path: `${API_PREFIX}/notifications/contacts/mark-seen`,
-  });
 }

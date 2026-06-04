@@ -63,7 +63,7 @@ async def inject_pexels_images(html: str, *, sector: str | None = None) -> str:
         return f"<img{attrs}{closing}>"
 
     out = html
-    for m in list(_IMG_TAG_RE.finditer(html)):
+    for m in list(_IMG_PEXELS_RE.finditer(html)):
         replacement = await _replace(m)
         out = out.replace(m.group(0), replacement, 1)
     if index:

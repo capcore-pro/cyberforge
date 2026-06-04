@@ -21,10 +21,6 @@ import { createReservationSite } from "@/lib/site-reservation-api";
 import { createExtension, updateExtension } from "@/lib/extensions-api";
 import { buildModificationPipelinePrompt } from "@/lib/project-modification";
 import { streamCoremindRun } from "@/lib/pipeline-stream";
-import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
-import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
-import { isLighthouseEnabled } from "@/lib/lighthouse-preferences";
-import { isResearchEnabled } from "@/lib/research-preferences";
 import { hardDeleteReservationSite, listReservationSites } from "@/lib/site-reservation-api";
 import { hardDeleteVitrine, listVitrines } from "@/lib/vitrines-api";
 
@@ -505,15 +501,15 @@ export async function modifyUnifiedProject(
       : { ok: false, error: "Échec de la modification du projet géré." };
   }
 
+  const composedPrompt = inspirationBrief
+    ? `${inspirationBrief}\n\nPrompt utilisateur :\n${prompt}`
+    : prompt;
+
   const res = await streamCoremindRun({
-    prompt,
+    prompt: composedPrompt,
     project_type: project.projectType ?? "site_web",
     generation_mode: project.generationMode ?? "client_demo",
-    inspiration_brief: inspirationBrief,
-    openhands_enabled: isOpenHandsEnabled(),
-    playwright_enabled: isPlaywrightEnabled(),
-    lighthouse_enabled: isLighthouseEnabled(),
-    research_enabled: isResearchEnabled(),
+    project_title: projectName.trim() || project.name,
   });
 
   if (!res.ok) {

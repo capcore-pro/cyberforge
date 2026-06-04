@@ -8,7 +8,7 @@ _COST_PER_MILLION: dict[tuple[str, str], float] = {
     ("deepseek", "deepseek-chat"): 0.21,
     ("gemini", "gemini-2.0-flash"): 0.15,
     ("gemini", "gemini-1.5-flash"): 0.15,
-    ("anthropic", "claude-3-5-haiku-20241022"): 0.85,
+    ("anthropic", "claude-haiku-4-5-20251001"): 0.85,
     ("anthropic", "claude-sonnet-4-20250514"): 9.0,
 }
 

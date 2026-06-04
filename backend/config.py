@@ -79,7 +79,7 @@ class Settings(BaseSettings):
         default="gemini-2.0-flash", alias="COREMIND_GEMINI_MODEL"
     )
     coremind_haiku_model: str = Field(
-        default="claude-3-5-haiku-20241022", alias="COREMIND_HAIKU_MODEL"
+        default="claude-haiku-4-5-20251001", alias="COREMIND_HAIKU_MODEL"
     )
     coremind_sonnet_model: str = Field(
         default="claude-sonnet-4-20250514", alias="COREMIND_SONNET_MODEL"

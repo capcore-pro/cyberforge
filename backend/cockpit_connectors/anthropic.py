@@ -18,7 +18,7 @@ from cockpit_connectors.base import BaseConnector
 logger = logging.getLogger(__name__)
 
 _API_BASE = "https://api.anthropic.com"
-_HAIKU_MODEL = "claude-3-5-haiku-20241022"
+_HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 
 class AnthropicConnector(BaseConnector):

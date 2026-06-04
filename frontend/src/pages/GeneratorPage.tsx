@@ -10,10 +10,6 @@ import { BackButton } from "@/components/BackButton";
 import { CreateDemoModal } from "@/components/CreateDemoModal";
 import { GeneratorPreviewModal } from "@/components/GeneratorPreviewModal";
 import { PipelineProgress, initialPipelineSteps } from "@/components/PipelineProgress";
-import {
-  PricingWidget,
-  type PricingLiveData,
-} from "@/components/PricingWidget";
 import { VisionUIPreview } from "@/components/VisionUIPreview";
 import { TestPilotValidationBadge } from "@/components/TestPilotValidationBadge";
 import { ExportProductionCard } from "@/components/ExportProductionCard";
@@ -62,10 +58,8 @@ import {
   getSelectedClientId,
   setSelectedClientId,
 } from "@/lib/selected-client";
-import { fetchProjectCosts } from "@/lib/costs-api";
 import { createPersonalProject, USAGE_LABELS, type PersonalUsage } from "@/lib/personal-projects-api";
 import { PersoBadge } from "@/components/PersoBadge";
-import { architectPlanFromPipelineEvent } from "@/lib/pricing-sse";
 import {
   buildGeneratorPipelinePrompt,
   GENERATOR_KINDS,
@@ -256,8 +250,6 @@ export function GeneratorPage({
   const [linkedClientPerso, setLinkedClientPerso] = useState(false);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [customizeSaveBusy, setCustomizeSaveBusy] = useState(false);
-  const [runProjectId, setRunProjectId] = useState<string | null>(null);
-  const [pricingLive, setPricingLive] = useState<PricingLiveData | null>(null);
   const [inspirationUrl, setInspirationUrl] = useState("");
   const [inspirationSecteur, setInspirationSecteur] = useState(() =>
     kindToToolboxSecteur(selectedKind),
@@ -402,31 +394,6 @@ export function GeneratorPage({
       }
     });
   }, [toolboxSecteurs.length]);
-
-  useEffect(() => {
-    if (phase !== "running" || !runProjectId) return;
-    let cancelled = false;
-
-    const poll = async () => {
-      const response = await fetchProjectCosts(runProjectId);
-      if (cancelled || !response.ok || !response.data) return;
-      const d = response.data;
-      setPricingLive((prev) => ({
-        architectPlan: d.architect_plan ?? prev?.architectPlan ?? null,
-        totalEur: d.total_eur,
-        byService: d.by_service,
-        marginMultiplier: d.margin_multiplier,
-        updatedAt: d.updated_at,
-      }));
-    };
-
-    void poll();
-    const intervalId = window.setInterval(() => void poll(), 1500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [phase, runProjectId]);
 
   useEffect(() => {
     if (backendStatus === "offline" && phase === "running") {
@@ -620,10 +587,6 @@ export function GeneratorPage({
       return;
     }
 
-    const sessionProjectId = crypto.randomUUID();
-    setRunProjectId(sessionProjectId);
-    setPricingLive(null);
-
     patch({
       phase: "running",
       error: null,
@@ -653,18 +616,6 @@ export function GeneratorPage({
     const onStep = (event: PipelineStepEvent) => {
       applyPipelineStep(event);
       dispatchPipelineEvent(event);
-      if (event.type === "step_done" && event.agent === "architect") {
-        const plan = architectPlanFromPipelineEvent(event);
-        if (plan) {
-          setPricingLive((prev) => ({
-            architectPlan: plan,
-            totalEur: prev?.totalEur ?? 0,
-            byService: prev?.byService ?? {},
-            marginMultiplier: prev?.marginMultiplier ?? null,
-            updatedAt: prev?.updatedAt ?? null,
-          }));
-        }
-      }
       if (event.type === "step_done" && event.agent === "playwright") {
         patch({
           playwrightReport: {
@@ -742,7 +693,6 @@ export function GeneratorPage({
           prompt: trimmed,
           project_type: synced.projectType,
           generation_mode: synced.generationMode,
-          project_id: sessionProjectId,
           inspiration_brief: inspirationBrief?.trim() || null,
           firecrawl_result: inspirationFirecrawl
             ? {
@@ -802,25 +752,11 @@ export function GeneratorPage({
       );
       const persistedId = normalized.persistence?.project_id;
       if (persistedId) {
-        setRunProjectId(persistedId);
         const customTitle = projectName.trim();
         if (customTitle) {
           void updateProject(persistedId, { title: customTitle });
         }
       }
-
-      void fetchProjectCosts(persistedId ?? sessionProjectId).then((costsResp) => {
-        if (costsResp.ok && costsResp.data) {
-          const d = costsResp.data;
-          setPricingLive((prev) => ({
-            architectPlan: d.architect_plan ?? prev?.architectPlan ?? null,
-            totalEur: d.total_eur,
-            byService: d.by_service,
-            marginMultiplier: d.margin_multiplier,
-            updatedAt: d.updated_at,
-          }));
-        }
-      });
 
       patch({
         lastSavedId: entry.id,
@@ -851,7 +787,7 @@ export function GeneratorPage({
       });
 
       const pwReport = normalized.playwright_report;
-      const reportKey = persistedId ?? sessionProjectId;
+      const reportKey = persistedId ?? entry.id;
       if (pwReport && reportKey) {
         savePlaywrightReport(reportKey, pwReport);
       }
@@ -1001,8 +937,6 @@ export function GeneratorPage({
       customization: null,
     });
     setShowSourceCode(false);
-    setPricingLive(null);
-    setRunProjectId(null);
   }
 
   return (
@@ -1495,14 +1429,6 @@ export function GeneratorPage({
                 <p className="mb-3 text-sm text-cf-muted">Progression en temps réel</p>
                 <PipelineProgress steps={pipelineSteps} friendly />
               </div>
-            ) : null}
-
-            {runProjectId && (isRunning || pricingLive) ? (
-              <PricingWidget
-                mode="live"
-                projectId={runProjectId}
-                liveData={pricingLive}
-              />
             ) : null}
 
             {isRunning && (productionUrl || artifactDownloadUrl) ? (
