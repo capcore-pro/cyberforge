@@ -8,6 +8,7 @@ Routes principales :
   DELETE /api/projects/{id}
   GET  /api/agents/status
   GET  /api/health
+  GET  /api/legal/clients
 
 Usage :
     uvicorn main:app --reload --host 127.0.0.1 --port 8002
@@ -43,6 +44,20 @@ logger.info("[startup] init_db done (%.0f ms)", (time.perf_counter() - _t_init_d
 
 _t_create = time.perf_counter()
 app = create_app()
+
+from api.routes.legal import router as legal_router
+
+app.include_router(legal_router, prefix="/api/legal")
+
+_legal_paths = {getattr(r, "path", "") for r in app.routes}
+if "/api/legal/clients" not in _legal_paths:
+    logger.error(
+        "Route manquante après enregistrement legal : /api/legal/clients (paths=%s)",
+        sorted(p for p in _legal_paths if p.startswith("/api/legal")),
+    )
+else:
+    logger.info("[startup] Route OK : /api/legal/clients")
+
 logger.info("[startup] create_app done (%.0f ms)", (time.perf_counter() - _t_create) * 1000)
 
 logger.info(

@@ -6,6 +6,7 @@ import {
   Puzzle,
   ShoppingBag,
 } from "lucide-react";
+import { ProjectPreviewThumbnail } from "@/components/ProjectPreviewThumbnail";
 import {
   STATUS_LABELS,
   TYPE_LABELS,
@@ -52,26 +53,21 @@ function projectTypeIcon(type: UnifiedProjectType): ReactNode {
   }
 }
 
-function ProjectPreviewThumbnail({ project }: { project: UnifiedProject }) {
+function ProjectCardPreview({ project }: { project: UnifiedProject }) {
   const demoUrl = project.url?.trim();
 
   if (demoUrl) {
     return (
       <div
-        className="relative h-[200px] w-full shrink-0 overflow-hidden border-b border-cf-border-input bg-[#0b0f1a]"
+        className="h-[200px] w-full shrink-0 overflow-hidden border-b border-cf-border-input"
         aria-hidden
       >
-        <iframe
-          src={demoUrl}
-          title={`Aperçu ${project.name}`}
-          loading="lazy"
-          className="pointer-events-none border-0"
-          style={{
-            width: "200%",
-            height: "400px",
-            transform: "scale(0.5)",
-            transformOrigin: "top left",
-          }}
+        <ProjectPreviewThumbnail
+          previewUrl={demoUrl}
+          title={project.name}
+          height={200}
+          fill
+          className="h-full rounded-none border-0"
         />
       </div>
     );
@@ -126,7 +122,7 @@ export const ProjectCard = memo(function ProjectCard({
         onClick={handleCardClick}
         className="flex w-full flex-1 flex-col text-left transition hover:bg-cf-secondary/20"
       >
-        <ProjectPreviewThumbnail project={project} />
+        <ProjectCardPreview project={project} />
 
         <div className="flex flex-1 flex-col p-4">
           <div className="flex items-start justify-between gap-2">
