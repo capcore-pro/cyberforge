@@ -89,8 +89,6 @@ _HEBERGEMENT_CARD_RE = re.compile(
     re.I,
 )
 _DATA_HEBERGEMENT_RE = re.compile(r"data-(?:hebergement|accommodation|lodging)-", re.I)
-_FORM_BLOCK_RE = re.compile(r"<form\b[^>]*>(.*?)</form>", re.I | re.DOTALL)
-_INPUT_TAG_RE = re.compile(r"<input\b[^>]*>", re.I)
 
 
 def _has_footer_markup(html: str, low: str) -> bool:
@@ -122,21 +120,13 @@ def _is_site_reservation_brief(brief: dict) -> bool:
     return False
 
 
-def _input_is_text_or_email(tag: str) -> bool:
-    type_m = re.search(r'\btype=["\']([^"\']*)["\']', tag, re.I)
-    if not type_m:
-        return True
-    return type_m.group(1).strip().lower() in ("text", "email")
-
-
-def _form_text_email_input_count(body: str) -> int:
-    """Nombre d'<input> text/email dans le premier bloc <form>."""
-    form_m = _FORM_BLOCK_RE.search(body)
-    if not form_m:
-        return 0
-    return sum(
-        1 for tag in _INPUT_TAG_RE.findall(form_m.group(1)) if _input_is_text_or_email(tag)
+def _has_reservation_form_markup(body: str, low: str) -> bool:
+    """Formulaire réservation : mot-clé + au moins un champ input."""
+    has_keyword = any(
+        token in low for token in ("formulaire", "reservation", "réservation")
     )
+    has_input = bool(re.search(r"<input\b", body, re.I))
+    return has_keyword and has_input
 
 
 def _has_page_javascript(body: str, low: str) -> bool:
@@ -166,12 +156,10 @@ def _site_reservation_html_errors(body: str, low: str) -> list[str]:
             "(classes hebergement/lodging ou data-hebergement / data-price-per-night)"
         )
 
-    if not re.search(r"<form\b", body, re.I):
-        errors.append("site_reservation : formulaire de réservation <form> manquant")
-    elif _form_text_email_input_count(body) < 3:
+    if not _has_reservation_form_markup(body, low):
         errors.append(
-            "site_reservation : formulaire incomplet "
-            "(au moins 3 champs <input type=\"text\"> ou type=\"email\">)"
+            "site_reservation : formulaire de réservation manquant "
+            "(mot formulaire/réservation/reservation + au moins une balise <input>)"
         )
 
     if not _has_page_javascript(body, low):

@@ -1,12 +1,17 @@
-import { useCallback, useRef, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
 import { openProjectUrl } from "@/lib/unified-projects";
+
+export type PreviewFullscreenMode = "native" | "fixed";
 
 interface PreviewFullscreenToolbarProps {
   html?: string | null;
   externalUrl?: string | null;
   fullscreenTargetRef: React.RefObject<HTMLElement | null>;
   className?: string;
+  /** fixed = iframe 100vw×100vh en overlay (z-index 9999), sans limite du conteneur parent */
+  fullscreenMode?: PreviewFullscreenMode;
 }
 
 /** Barre d'actions Plein écran / nouvel onglet pour les aperçus iframe. */
@@ -15,7 +20,11 @@ export function PreviewFullscreenToolbar({
   externalUrl,
   fullscreenTargetRef,
   className = "",
+  fullscreenMode = "native",
 }: PreviewFullscreenToolbarProps) {
+  const [fixedOverlayOpen, setFixedOverlayOpen] = useState(false);
+  const previewDoc = html?.trim() ? prepareInternalPreviewSrcDoc(html) : "";
+
   const openInNewTab = useCallback(() => {
     const url = externalUrl?.trim();
     if (url) {
@@ -33,6 +42,10 @@ export function PreviewFullscreenToolbar({
   }, [externalUrl, html]);
 
   const toggleFullscreen = useCallback(async () => {
+    if (fullscreenMode === "fixed" && previewDoc) {
+      setFixedOverlayOpen(true);
+      return;
+    }
     const el = fullscreenTargetRef.current;
     if (!el) {
       openInNewTab();
@@ -47,28 +60,68 @@ export function PreviewFullscreenToolbar({
     } catch {
       openInNewTab();
     }
-  }, [fullscreenTargetRef, openInNewTab]);
+  }, [fullscreenMode, previewDoc, fullscreenTargetRef, openInNewTab]);
 
   const canOpenTab = Boolean(externalUrl?.trim() || html?.trim());
 
+  const fixedOverlay =
+    fixedOverlayOpen && previewDoc && fullscreenMode === "fixed"
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[9999]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Aperçu plein écran"
+          >
+            <iframe
+              title="Aperçu plein écran"
+              srcDoc={previewDoc}
+              sandbox="allow-scripts allow-same-origin allow-forms"
+              className="border-0"
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100vw",
+                height: "100vh",
+                maxWidth: "none",
+                maxHeight: "none",
+                zIndex: 9999,
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setFixedOverlayOpen(false)}
+              className="fixed right-4 top-4 z-[10000] rounded border border-cyber-border bg-cf-card/95 px-3 py-1.5 text-xs text-cyber-text shadow-lg hover:border-cyber-violet"
+            >
+              Fermer
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-      <button
-        type="button"
-        onClick={() => void toggleFullscreen()}
-        className="rounded border border-cyber-border px-2.5 py-1 text-[10px] text-cyber-muted hover:border-cyber-violet hover:text-cyber-text"
-      >
-        Plein écran
-      </button>
-      <button
-        type="button"
-        onClick={openInNewTab}
-        disabled={!canOpenTab}
-        className="rounded border border-cyber-border px-2.5 py-1 text-[10px] text-cyber-muted hover:border-cyber-violet hover:text-cyber-text disabled:opacity-40"
-      >
-        Ouvrir dans un onglet
-      </button>
-    </div>
+    <>
+      <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+        <button
+          type="button"
+          onClick={() => void toggleFullscreen()}
+          className="rounded border border-cyber-border px-2.5 py-1 text-[10px] text-cyber-muted hover:border-cyber-violet hover:text-cyber-text"
+        >
+          Plein écran
+        </button>
+        <button
+          type="button"
+          onClick={openInNewTab}
+          disabled={!canOpenTab}
+          className="rounded border border-cyber-border px-2.5 py-1 text-[10px] text-cyber-muted hover:border-cyber-violet hover:text-cyber-text disabled:opacity-40"
+        >
+          Ouvrir dans un onglet
+        </button>
+      </div>
+      {fixedOverlay}
+    </>
   );
 }
 
@@ -120,11 +173,13 @@ export function PreviewFullscreenHost({
   html,
   externalUrl,
   className = "",
+  fullscreenMode = "native",
 }: {
   children: ReactNode;
   html?: string | null;
   externalUrl?: string | null;
   className?: string;
+  fullscreenMode?: PreviewFullscreenMode;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   return (
@@ -133,6 +188,7 @@ export function PreviewFullscreenHost({
         html={html}
         externalUrl={externalUrl}
         fullscreenTargetRef={hostRef}
+        fullscreenMode={fullscreenMode}
         className="mb-2"
       />
       <div ref={hostRef} className="min-h-0 flex-1">
@@ -141,3 +197,8 @@ export function PreviewFullscreenHost({
     </div>
   );
 }
+
+/** Dimensions iframe « desktop » + scale pour l’aperçu dans la modal. */
+export const GENERATOR_PREVIEW_IFRAME_W = 800;
+export const GENERATOR_PREVIEW_IFRAME_H = 600;
+export const GENERATOR_PREVIEW_SCALE = 0.5;

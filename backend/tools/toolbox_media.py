@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, Literal
+
+PexelsImageRole = Literal["hero", "card", "default"]
 
 import httpx
 from pydantic import BaseModel, Field
@@ -102,11 +104,39 @@ def relevant_photos(
     return picked[: max(min_count, len(picked))]
 
 
+def pexels_pick_src_url(src: dict[str, Any], *, role: PexelsImageRole = "default") -> str:
+    """
+    Choisit une URL Pexels haute résolution selon l'usage.
+    hero → large2x (≥1920px) ; card → large (940px) ; défaut → large2x/original.
+    """
+    if role == "hero":
+        order = ("large2x", "original", "large", "landscape")
+    elif role == "card":
+        order = ("large", "large2x", "original", "landscape")
+    else:
+        order = ("large2x", "original", "large", "landscape")
+    for key in order:
+        url = src.get(key)
+        if url:
+            return str(url)
+    return ""
+
+
+def pexels_pick_thumb_url(src: dict[str, Any]) -> str:
+    """Vignette toolbox uniquement — jamais tiny/small pour l'URL injectée en démo."""
+    for key in ("medium", "small", "tiny", "landscape"):
+        url = src.get(key)
+        if url:
+            return str(url)
+    return pexels_pick_src_url(src, role="default")
+
+
 async def search_toolbox_photos(
     query: str,
     *,
     secteur: str | None = None,
     per_page: int = 6,
+    pexels_image_role: PexelsImageRole = "default",
     settings: Settings | None = None,
 ) -> tuple[str, list[ToolboxPhoto]]:
     resolved = settings or get_settings()
@@ -117,7 +147,13 @@ async def search_toolbox_photos(
     photos: list[ToolboxPhoto] = []
     timeout = toolbox_http_timeout(resolved)
     async with httpx.AsyncClient(timeout=timeout) as client:
-        photos = await _fetch_pexels_photos(client, effective_query, per_page, resolved)
+        photos = await _fetch_pexels_photos(
+            client,
+            effective_query,
+            per_page,
+            resolved,
+            image_role=pexels_image_role,
+        )
         if len(photos) < PEXELS_UNSPLASH_THRESHOLD and resolved.unsplash_configured:
             remaining = per_page - len(photos)
             if remaining > 0:
@@ -208,6 +244,8 @@ async def _fetch_pexels_photos(
     query: str,
     per_page: int,
     settings: Settings,
+    *,
+    image_role: PexelsImageRole = "default",
 ) -> list[ToolboxPhoto]:
     api_key = plain_secret_str(settings.pexels_api_key)
     if not api_key:
@@ -227,9 +265,13 @@ async def _fetch_pexels_photos(
     for photo in payload.get("photos") or []:
         pid = photo.get("id")
         src = photo.get("src") or {}
-        thumb = src.get("tiny") or src.get("small") or ""
-        full = src.get("large") or src.get("large2x") or src.get("original") or ""
-        download = src.get("original") or full
+        thumb = pexels_pick_thumb_url(src)
+        full = pexels_pick_src_url(src, role=image_role)
+        download = (
+            src.get("original")
+            or pexels_pick_src_url(src, role="hero")
+            or full
+        )
         if pid is None or not thumb or not full:
             continue
         items.append(

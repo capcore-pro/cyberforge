@@ -81,21 +81,19 @@ def test_site_reservation_errors_minimal_ok() -> None:
 
 
 def test_site_reservation_relaxed_form_and_js() -> None:
-    """Champs sans libellé prénom/nom + JS via onclick (pas de <script>)."""
+    """Un seul input + mot réservation + JS via onclick (pas de <script>)."""
     html = """
     <section id="calendrier"><div class="calendar"></div></section>
     <article class="hebergement-card" data-hebergement-id="1" data-price-per-night="80"></article>
     <article class="hebergement-card" data-hebergement-id="2" data-price-per-night="90"></article>
-    <form>
-      <input type="text" name="a">
-      <input type="text" name="b">
-      <input type="email" name="c">
-      <button onclick="calcNuits(); updateTotal prix montant">Confirmer la réservation</button>
-    </form>
+    <section id="formulaire-reservation">
+      <input type="date" name="arriv">
+      <button onclick="calcNuits(); updateTotal prix montant calendrier depart">Réserver</button>
+    </section>
     """
     low = html.lower()
     errs = _site_reservation_html_errors(html, low)
-    assert not any("prénom" in e.lower() or "prenom" in e for e in errs)
+    assert not any("incomplet" in e for e in errs)
     assert not any("balise <script>" in e for e in errs)
     assert errs == []
 

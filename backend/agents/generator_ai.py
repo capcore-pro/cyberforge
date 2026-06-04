@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = 10000
 MAX_HTML_CHARS = 15000
+MAX_HTML_CHARS_SITE_RESERVATION = 20000
 
 SYSTEM_PROMPT = """CRITIQUE : Tu DOIS inclure dans ta réponse :
 - La balise <html> complète avec <head> et <body>
@@ -96,6 +97,7 @@ Ne jamais arrêter la génération avant ces balises."""
 SITE_RESERVATION_APPENDIX = """
 MODE SITE RÉSERVATION (project_type ou generation_mode == site_reservation) :
 Page 100 % autonome — ZÉRO fetch, ZÉRO API externe. Tout en HTML + CSS + JavaScript inline.
+Maximum 20000 caractères pour ce mode (slider + bienvenue + hébergements + calendrier + formulaire).
 
 Structure obligatoire (dans cet ordre) :
 0) Hero slider plein écran (voir ci-dessous)
@@ -147,11 +149,16 @@ général). Les règles slider ci-dessous remplacent la consigne « une seule ba
 - Synchroniser les champs date du formulaire (input type="date" ou texte readonly)
 
 Le JavaScript du calendrier DOIT (obligatoire — grilles visibles dès l'ouverture) :
-- Définir une fonction renderCalendars() qui construit les deux grilles en DOM
-  (innerHTML ou createElement) à chaque rendu
-- Appeler renderCalendars() immédiatement au chargement :
-  document.addEventListener('DOMContentLoaded', renderCalendars) OU window.onload = renderCalendars
-  (les deux grilles doivent être remplies sans clic utilisateur)
+- Le JavaScript DOIT contenir exactement ce pattern d'initialisation (copier la structure) :
+  document.addEventListener('DOMContentLoaded', function() {
+    renderCalendars(); // ou initCalendar() — appeler la fonction définie dans le script
+  });
+- La fonction renderCalendars() (ou initCalendar()) DOIT créer chaque jour avec
+  document.createElement (ex. div ou button), leur assigner le numéro du jour en textContent,
+  les classes de couleur, puis appendChild dans les conteneurs #calendar-month-0 et
+  #calendar-month-1 (ou équivalent) — INTERDIT de laisser ces conteneurs vides après chargement
+- Définir renderCalendars() qui reconstruit les deux grilles à chaque rendu
+- Les deux grilles doivent être remplies sans aucun clic utilisateur
 - Chaque grille affiche une ligne d'en-têtes : Lu Ma Me Je Ve Sa Di
 - Remplir les cases avec les numéros de jours 1 … 28/29/30/31 (cases vides en début de mois
   si le 1er ne tombe pas un lundi)
@@ -195,6 +202,12 @@ def _is_site_reservation_brief(brief: dict[str, Any]) -> bool:
         if val == "site_reservation":
             return True
     return False
+
+
+def _max_html_chars(brief: dict[str, Any]) -> int:
+    if _is_site_reservation_brief(brief):
+        return MAX_HTML_CHARS_SITE_RESERVATION
+    return MAX_HTML_CHARS
 
 
 def _build_system_prompt(brief: dict[str, Any]) -> str:
@@ -279,8 +292,9 @@ class GeneratorAI:
         try:
             raw = await asyncio.to_thread(_call)
             html = _extract_html(raw)
-            if len(html) > MAX_HTML_CHARS:
-                html = html[:MAX_HTML_CHARS]
+            max_chars = _max_html_chars(brief)
+            if len(html) > max_chars:
+                html = html[:max_chars]
                 close = html.lower().rfind("</body>")
                 if close != -1:
                     html = html[: close + len("</body>")] + "\n</html>"
