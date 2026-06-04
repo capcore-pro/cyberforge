@@ -191,7 +191,10 @@ async function fetchProjectDetail(projectId: string) {
 async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProject> {
   const type = supabaseProjectType(project.project_type);
   let status: UnifiedProjectStatus = "offline";
-  let url: string | null = null;
+  let url: string | null = project.demo_url?.trim() || null;
+  if (url) {
+    status = "online";
+  }
   let demoId: string | undefined;
   let generationId: string | undefined;
   let clientId: string | null | undefined;
@@ -207,11 +210,13 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
     if (demoLookup.ok && demoLookup.data?.demo_id) {
       demoId = demoLookup.data.demo_id;
       clientId = demoLookup.data.client_id ?? null;
-      status = "demo";
-      url =
-        demoLookup.data.url?.trim() ||
-        demoLookup.data.unlock_url?.trim() ||
-        null;
+      if (!url) {
+        url =
+          demoLookup.data.url?.trim() ||
+          demoLookup.data.unlock_url?.trim() ||
+          null;
+        status = url ? "online" : "demo";
+      }
     }
   }
 
@@ -229,7 +234,8 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
     generationId,
     clientId,
     projectType: project.project_type,
-    generationMode: status === "demo" ? "client_demo" : "real_app",
+    generationMode:
+      status === "online" || status === "demo" ? "client_demo" : "real_app",
     databaseSchema: analysis?.database_schema ?? null,
     authSchema: analysis?.auth_schema ?? null,
     paymentConfig: analysis?.payment_config ?? null,

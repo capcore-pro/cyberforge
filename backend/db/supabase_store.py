@@ -20,7 +20,7 @@ from tools.demo_preview_html import build_demo_preview_html
 logger = logging.getLogger(__name__)
 
 PROJECT_LIST_SELECT = (
-    "id,title,prompt,project_type,summary,created_at,updated_at"
+    "id,title,prompt,project_type,summary,created_at,updated_at,demo_url"
 )
 
 
@@ -76,6 +76,7 @@ class ProjectRow(BaseModel):
     summary: str | None = None
     created_at: str
     updated_at: str
+    demo_url: str | None = None
     generation_count: int = 0
     latest_model: str | None = None
     latest_estimated_cost_usd: float | None = None
@@ -193,6 +194,127 @@ class SupabaseStore:
         await self._touch_project(project_id)
         return PersistenceResult(project_id=project_id, generation_id=generation_id)
 
+    async def save_pipeline_v2_deploy(
+        self,
+        *,
+        prompt: str,
+        project_type: str,
+        client_name: str,
+        demo_url: str,
+        html: str,
+    ) -> PersistenceResult | None:
+        """Enregistre un run pipeline v2 (brief → generate → deploy) dans Supabase."""
+        if not self.is_configured():
+            return None
+
+        trimmed = prompt.strip()
+        pt = (project_type or "vitrine_next").strip()
+        title = clean_project_title(client_name.strip()) or _title_from_prompt(trimmed)
+        url = (demo_url or "").strip() or None
+        code = (html or "").strip()
+        files = [{"path": "index.html", "content": code[:15000]}] if code else []
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            find_resp = await client.get(
+                f"{self._rest_url()}/projects",
+                headers=self._headers(),
+                params={
+                    "prompt": f"eq.{trimmed}",
+                    "project_type": f"eq.{pt}",
+                    "select": "id",
+                    "limit": "1",
+                },
+            )
+            _raise_for_status(
+                find_resp,
+                "find_project_v2",
+                "GET",
+                f"{self._rest_url()}/projects",
+                self,
+            )
+            existing = find_resp.json()
+            if isinstance(existing, list) and existing:
+                project_id = str(existing[0]["id"])
+                patch: dict[str, Any] = {
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+                if url:
+                    patch["demo_url"] = url
+                if title:
+                    patch["title"] = title
+                await client.patch(
+                    f"{self._rest_url()}/projects",
+                    headers=self._headers(),
+                    params={"id": f"eq.{project_id}"},
+                    json=patch,
+                )
+            else:
+                create_resp = await client.post(
+                    f"{self._rest_url()}/projects",
+                    headers=self._headers("return=representation"),
+                    json={
+                        "title": title,
+                        "prompt": trimmed,
+                        "project_type": pt,
+                        "summary": "Pipeline CyberForge v2",
+                        "demo_url": url,
+                    },
+                )
+                _raise_for_status(
+                    create_resp,
+                    "create_project_v2",
+                    "POST",
+                    f"{self._rest_url()}/projects",
+                    self,
+                )
+                created = create_resp.json()
+                if isinstance(created, list) and created:
+                    project_id = str(created[0]["id"])
+                elif isinstance(created, dict) and created.get("id"):
+                    project_id = str(created["id"])
+                else:
+                    raise SupabaseStoreError("Création projet v2 sans identifiant.")
+
+            gen_payload = {
+                "project_id": project_id,
+                "prompt": trimmed,
+                "project_type": pt,
+                "model": "cyberforge-v2",
+                "provider": "cyberforge",
+                "complexity": "moyenne",
+                "complexity_score": 5,
+                "duration_ms": 0,
+                "estimated_cost_usd": 0,
+                "code": code[:50000],
+                "files": files,
+                "stack": ["html"],
+                "analysis": {"summary": "Pipeline v2", "agent_id": "cyberforge"},
+                "generation_summary": "Génération HTML pipeline v2",
+                "planned_models": ["brief-ai", "generator-ai", "deploy-ai"],
+                "preview_html": code[:50000] if code else None,
+            }
+            gen_resp = await client.post(
+                f"{self._rest_url()}/generations",
+                headers=self._headers("return=representation"),
+                json=gen_payload,
+            )
+            _raise_for_status(
+                gen_resp,
+                "insert_generation_v2",
+                "POST",
+                f"{self._rest_url()}/generations",
+                self,
+            )
+            gen_data = gen_resp.json()
+            if isinstance(gen_data, list) and gen_data:
+                generation_id = str(gen_data[0]["id"])
+            elif isinstance(gen_data, dict) and gen_data.get("id"):
+                generation_id = str(gen_data["id"])
+            else:
+                raise SupabaseStoreError("Insertion génération v2 sans identifiant.")
+
+        return PersistenceResult(project_id=project_id, generation_id=generation_id)
+
     async def list_projects(self, limit: int = 50) -> list[ProjectRow]:
         if not self.is_configured():
             return []
@@ -224,6 +346,11 @@ class SupabaseStore:
                 count, latest_model, latest_cost, preview_html = (
                     await self._project_card_stats(client, project_id, title)
                 )
+                demo_url = (row.get("demo_url") or "").strip() or None
+                if not demo_url:
+                    demo_url = await self._resolve_demo_url_for_project(
+                        client, project_id
+                    )
                 result.append(
                     ProjectRow(
                         id=project_id,
@@ -233,6 +360,7 @@ class SupabaseStore:
                         summary=row.get("summary"),
                         created_at=str(row["created_at"]),
                         updated_at=str(row["updated_at"]),
+                        demo_url=demo_url,
                         generation_count=count,
                         latest_model=latest_model,
                         latest_estimated_cost_usd=latest_cost,
@@ -267,6 +395,11 @@ class SupabaseStore:
             count, latest_model, latest_cost, preview_html = (
                 await self._project_card_stats(client, project_id, title)
             )
+            demo_url = (row.get("demo_url") or "").strip() or None
+            if not demo_url:
+                demo_url = await self._resolve_demo_url_for_project(
+                    client, project_id
+                )
             project = ProjectRow(
                 id=str(row["id"]),
                 title=title,
@@ -275,6 +408,7 @@ class SupabaseStore:
                 summary=row.get("summary"),
                 created_at=str(row["created_at"]),
                 updated_at=str(row["updated_at"]),
+                demo_url=demo_url,
                 generation_count=count,
                 latest_model=latest_model,
                 latest_estimated_cost_usd=latest_cost,
@@ -377,6 +511,7 @@ class SupabaseStore:
                 summary=row.get("summary"),
                 created_at=str(row["created_at"]),
                 updated_at=str(row["updated_at"]),
+                demo_url=(row.get("demo_url") or "").strip() or None,
             )
 
     async def duplicate_project(self, project_id: str) -> ProjectDetailResponse | None:
@@ -619,6 +754,42 @@ class SupabaseStore:
             if isinstance(data, dict) and data.get("id"):
                 return str(data["id"])
             raise SupabaseStoreError("Insertion génération sans identifiant.")
+
+    async def _resolve_demo_url_for_project(
+        self,
+        client: httpx.AsyncClient,
+        project_id: str,
+    ) -> str | None:
+        """URL Cloudflare depuis la dernière génération liée à une démo (fallback)."""
+        latest_resp = await client.get(
+            f"{self._rest_url()}/generations",
+            headers=self._headers(),
+            params={
+                "project_id": f"eq.{project_id}",
+                "select": "id",
+                "order": "created_at.desc",
+                "limit": "1",
+            },
+        )
+        if latest_resp.status_code >= 400:
+            return None
+        rows = latest_resp.json()
+        if not isinstance(rows, list) or not rows:
+            return None
+        generation_id = str(rows[0].get("id") or "")
+        if not generation_id:
+            return None
+
+        from db.demos_store import get_demos_store
+
+        demo_store = get_demos_store()
+        if not demo_store.is_configured():
+            return None
+        demo = await demo_store.find_by_generation_id(generation_id)
+        if demo is None:
+            return None
+        url = (demo.payload.cloudflare_url or "").strip()
+        return url or None
 
     async def _touch_project(self, project_id: str) -> None:
         async with httpx.AsyncClient(timeout=30.0) as client:

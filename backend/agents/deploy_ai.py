@@ -78,6 +78,7 @@ class DeployAI:
         *,
         title: str = "",
         sector: str | None = None,
+        project_type: str | None = None,
     ) -> dict[str, Any]:
         raw = (html or "").strip()
         if not raw:
@@ -90,6 +91,7 @@ class DeployAI:
             production_url, demo_token, demo_password, unlock_url = await deploy_html_demo(
                 html=enriched,
                 title=demo_title,
+                project_type=(project_type or "vitrine_next").strip(),
             )
             return {
                 "url": production_url,

@@ -16,6 +16,7 @@ from agents.brief_ai import BriefAI
 from agents.deploy_ai import DeployAI
 from agents.generator_ai import GeneratorAI
 from agents.supervisor_ai import SupervisorAI
+from db.supabase_store import SupabaseStoreError, get_supabase_store
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,7 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
             html_in,
             title=client_name,
             sector=sector,
+            project_type=str(brief.get("project_type") or req.project_type or "vitrine_next"),
         )
 
     async def _validate_deploy(deployed: dict[str, Any]) -> dict[str, Any]:
@@ -233,6 +235,23 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
         initial_prompt="",
         success_log=lambda d: f"URL: {d.get('url', '')}",
     )
+
+    deploy_url = str(deployed.get("url") or "")
+    if deployed.get("success") and deploy_url:
+        store = get_supabase_store()
+        if store.is_configured():
+            try:
+                await store.save_pipeline_v2_deploy(
+                    prompt=req.prompt,
+                    project_type=str(
+                        brief.get("project_type") or req.project_type or "vitrine_next"
+                    ),
+                    client_name=client_name,
+                    demo_url=deploy_url,
+                    html=str(deployed.get("html") or result.get("html") or ""),
+                )
+            except SupabaseStoreError as exc:
+                logger.warning("[pipeline] persistance Supabase ignorée: %s", exc)
 
     return {
         "url": deployed.get("url", ""),

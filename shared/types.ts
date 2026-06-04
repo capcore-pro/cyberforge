@@ -344,6 +344,8 @@ export interface ProjectRecord {
   summary: string | null;
   created_at: string;
   updated_at: string;
+  /** URL publique Cloudflare (liste projets) */
+  demo_url?: string | null;
   generation_count: number;
   latest_model: string | null;
   latest_estimated_cost_usd: number | null;

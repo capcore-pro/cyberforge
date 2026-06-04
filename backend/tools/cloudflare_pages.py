@@ -986,6 +986,7 @@ async def deploy_demo_to_cyberforge_demos(
     token: str,
     html: str,
     other_manifest_entries: dict[str, str],
+    password_gated: bool = True,
 ) -> CloudflareDeployResult:
     """
     Publie la démo sous d/{slug}/index.html sur le projet fixe cyberforge-demos.
@@ -1035,21 +1036,23 @@ async def deploy_demo_to_cyberforge_demos(
         REDIRECTS_ASSET_PATH: _REDIRECTS_BODY,
     }
 
-    if "cf-password-toggle" not in html_fresh:
-        raise CloudflarePagesError(
-            "HTML de démo sans cf-password-toggle avant déploiement Cloudflare."
-        )
+    if password_gated:
+        if "cf-password-toggle" not in html_fresh:
+            raise CloudflarePagesError(
+                "HTML de démo sans cf-password-toggle avant déploiement Cloudflare."
+            )
 
     pre_zip = build_deploy_zip(upload_files)
-    if not zip_contains_marker(pre_zip, "cf-password-toggle"):
+    if password_gated and not zip_contains_marker(pre_zip, "cf-password-toggle"):
         raise CloudflarePagesError(
             "ZIP pré-upload sans cf-password-toggle — vérifiez wrap_with_password_gate."
         )
     logger.info(
-        "[Cloudflare Pages] deploy_demo ZIP validé | token=%s | path=%s | zip_bytes=%s | toggle=True",
+        "[Cloudflare Pages] deploy_demo ZIP validé | token=%s | path=%s | zip_bytes=%s | gated=%s",
         token,
         asset_path,
         len(pre_zip),
+        password_gated,
     )
 
     _validate_manifest_covers_uploads(manifest, upload_files)
@@ -1068,9 +1071,10 @@ async def deploy_demo_to_cyberforge_demos(
         project_name=CYBERFORGE_DEMOS_PROJECT,
         manifest=manifest,
         upload_files=upload_files,
+        demo_gated=password_gated,
     )
     live_url = public_demo_url_for_token(token)
-    await _verify_deployed_demo_live(live_url)
+    await _verify_deployed_demo_live(live_url, require_password_gate=password_gated)
     return CloudflareDeployResult(
         project_name=result.project_name,
         deployment_id=result.deployment_id,
@@ -1080,7 +1084,11 @@ async def deploy_demo_to_cyberforge_demos(
     )
 
 
-async def _verify_deployed_demo_live(url: str) -> None:
+async def _verify_deployed_demo_live(
+    url: str,
+    *,
+    require_password_gate: bool = True,
+) -> None:
     """
     Vérifie que Pages sert bien le HTML démo (pas le stub index.html).
 
@@ -1121,10 +1129,17 @@ async def _verify_deployed_demo_live(url: str) -> None:
             url,
         )
         return
-    if is_stub or not has_toggle:
+    if is_stub or (require_password_gate and not has_toggle):
         msg = (
             f"Cloudflare sert le stub ou un HTML incomplet ({url}, {size} octets). "
             "Recréez la démo après redémarrage du backend."
+        )
+        logger.error("[Cloudflare Pages] verify_live: %s", msg)
+        raise CloudflarePagesError(msg)
+    if not require_password_gate and size < 800:
+        msg = (
+            f"Cloudflare sert un contenu trop court ({url}, {size} octets). "
+            "Vérifiez le déploiement."
         )
         logger.error("[Cloudflare Pages] verify_live: %s", msg)
         raise CloudflarePagesError(msg)

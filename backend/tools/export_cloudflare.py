@@ -24,6 +24,23 @@ from tools.theme_enforce import enforce_capcore_theme
 
 logger = logging.getLogger(__name__)
 
+_UNGATED_PROJECT_TYPES = frozenset(
+    {"vitrine_next", "ecommerce", "site_reservation"},
+)
+_GATED_PROJECT_TYPES = frozenset(
+    {"application_web", "application_desktop", "real_app"},
+)
+
+
+def deploy_uses_password_gate(project_type: str | None) -> bool:
+    """Vitrine / e-commerce / réservation : HTML public ; apps : gate mot de passe."""
+    pt = (project_type or "").strip().lower()
+    if pt in _UNGATED_PROJECT_TYPES:
+        return False
+    if pt in _GATED_PROJECT_TYPES:
+        return True
+    return True
+
 
 class CloudflareExportError(Exception):
     """Échec export Cloudflare."""
@@ -96,6 +113,7 @@ async def deploy_html_demo(
     *,
     html: str,
     title: str,
+    project_type: str = "vitrine_next",
 ) -> tuple[str, str, str, str]:
     """
     Déploie le HTML sur Cloudflare Pages (cyberforge-demos, démo temporaire).
@@ -109,10 +127,16 @@ async def deploy_html_demo(
         raise CloudflareExportError("HTML non déployable sur Cloudflare.")
 
     demo_token = DemosStore._new_token()
-    demo_password = generate_demo_password()
-    gated = wrap_with_password_gate(html.strip(), demo_password, title=title)
-    if "cf-password-toggle" not in gated:
-        raise CloudflareExportError("Gate mot de passe invalide (cf-password-toggle manquant).")
+    use_gate = deploy_uses_password_gate(project_type)
+    demo_password = ""
+    upload_html = html.strip()
+    if use_gate:
+        demo_password = generate_demo_password()
+        upload_html = wrap_with_password_gate(upload_html, demo_password, title=title)
+        if "cf-password-toggle" not in upload_html:
+            raise CloudflareExportError(
+                "Gate mot de passe invalide (cf-password-toggle manquant)."
+            )
 
     other_entries: dict[str, str] = {}
     store = get_demos_store()
@@ -126,9 +150,10 @@ async def deploy_html_demo(
 
     slug = pages_token_slug(demo_token)
     logger.info(
-        "[ExportAI] Déploiement slug=%s html_size=%s bytes",
+        "[ExportAI] Déploiement slug=%s gated=%s html_size=%s bytes",
         slug,
-        len(gated.encode("utf-8")),
+        use_gate,
+        len(upload_html.encode("utf-8")),
     )
 
     try:
@@ -136,8 +161,9 @@ async def deploy_html_demo(
             account_id=credentials.account_id,
             api_token=credentials.api_token,
             token=demo_token,
-            html=gated,
+            html=upload_html,
             other_manifest_entries=other_entries,
+            password_gated=use_gate,
         )
     except CloudflarePagesError as exc:
         raise CloudflareExportError(str(exc)) from exc
@@ -146,5 +172,5 @@ async def deploy_html_demo(
     if not production_url.startswith("http"):
         production_url = public_demo_url_for_token(demo_token).rstrip("/")
 
-    unlock = unlock_demo_url(demo_token)
+    unlock = unlock_demo_url(demo_token) if use_gate else production_url
     return production_url, demo_token, demo_password, unlock
