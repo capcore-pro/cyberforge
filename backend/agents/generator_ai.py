@@ -22,7 +22,7 @@ from security.llm_secrets import get_effective_llm_key
 logger = logging.getLogger(__name__)
 
 MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
-MAX_TOKENS = 8000
+MAX_TOKENS = 10000
 MAX_HTML_CHARS = 15000
 
 SYSTEM_PROMPT = """CRITIQUE : Tu DOIS inclure dans ta réponse :
@@ -31,28 +31,67 @@ SYSTEM_PROMPT = """CRITIQUE : Tu DOIS inclure dans ta réponse :
 - Une balise <nav> ou <header>
 - Au moins 3 balises <section>
 - Un <footer>
-- Au moins 3 balises <img class='pexels-inject'>
+- Au moins 3 balises <img class='pexels-inject'> (galerie / sections, PAS dans le hero)
 - Zéro mot 'placeholder' dans le contenu visible
 
 Le <footer> est OBLIGATOIRE. Place-le toujours en dernier élément
 du <body>. Ne jamais terminer le HTML sans </footer></body></html>
 
+VISUEL PREMIUM OBLIGATOIRE :
+- Google Fonts : charger 2 fonts via <link> dans <head>
+  (ex: Playfair Display pour titres + Inter pour corps de texte)
+- Palette cohérente : utiliser les couleurs du brief partout
+  (couleur_primaire pour CTAs, navbar, accents)
+- Hero plein écran : PAS de <img> dans le hero — image en background-image CSS :
+  .hero {
+    background-image: url('...');
+    background-size: cover;
+    background-position: center;
+    min-height: 100vh;
+  }
+  + overlay gradient semi-transparent, titre centré en blanc
+- Animations reveal (progressive enhancement — visibles sans JS) :
+  .reveal { opacity: 1; transform: none; transition: 0.6s; }
+  Dans le JS au chargement : document.body.classList.add('js-loaded')
+  .js-loaded .reveal { opacity: 0; transform: translateY(30px); }
+  .js-loaded .reveal.visible { opacity: 1; transform: translateY(0); }
+  + IntersectionObserver pour ajouter .visible au scroll si JS disponible
+- Cards avec glassmorphism :
+  background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 16px;
+- Navbar fixe en haut avec blur :
+  position: fixed; backdrop-filter: blur(20px);
+  background: rgba(couleur_primaire, 0.9);
+- Boutons premium : border-radius: 50px; padding: 14px 32px;
+  transition: transform 0.2s; hover: transform: scale(1.05)
+- Sections alternées : fond blanc puis fond couleur_primaire très clair
+- Footer sombre avec couleur_primaire
+- Responsive : media query max-width 768px obligatoire
+
 Tu es un expert développeur web. Génère un site HTML complet,
 visuellement premium, pour ce client.
 RÈGLES STRICTES :
 - HTML complet avec <head> et <body>
-- CSS intégré dans <style> : Google Fonts, animations scroll,
-  glassmorphism, gradients, responsive mobile-first
-- Couleurs depuis le brief : --color-primary, --color-secondary
+- CSS intégré dans <style> + variables --color-primary, --color-secondary
+  depuis couleur_primaire et couleur_secondaire du brief
 - Structure : navbar + hero plein écran + 3 sections contenu +
   galerie + contact + footer
 - Tout le texte doit utiliser les vraies informations du brief
-- Balises images : <img class='pexels-inject' alt='description precise'>
+- Images contenu : <img class='pexels-inject'> (galerie, services — jamais le hero)
 - Maximum 15000 caractères
 - Zéro placeholder comme 'votre ville' ou 'à préciser'
 - Zéro commentaire HTML
 
-Réponds UNIQUEMENT avec le document HTML complet, sans texte avant ou après."""
+Réponds UNIQUEMENT avec le document HTML complet, sans texte avant ou après.
+
+ABSOLUMENT OBLIGATOIRE : Termine TOUJOURS par ces balises dans cet ordre exact :
+</section>
+<footer>
+<p>© {client_name}</p>
+</footer>
+</body>
+</html>
+Ne jamais arrêter la génération avant ces balises."""
 
 _HTML_START_RE = re.compile(r"<!DOCTYPE\s+html|<html\b", re.I)
 

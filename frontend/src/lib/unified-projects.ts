@@ -12,7 +12,13 @@ import { hardDeleteApplicationWeb, listApplicationWeb } from "@/lib/application-
 import { deleteClientDemo, findDemoIdByGeneration } from "@/lib/demos-api";
 import { hardDeleteEcommerce, listEcommerce } from "@/lib/ecommerce-api";
 import { hardDeleteExtension, listExtensions } from "@/lib/extensions-api";
-import { deleteProject, duplicateSupabaseProject, updateManagedProjectTitle, updateProject } from "@/lib/projects-api";
+import {
+  deleteProject,
+  duplicateSupabaseProject,
+  listSupabaseProjects,
+  updateManagedProjectTitle,
+  updateProject,
+} from "@/lib/projects-api";
 import { updateDemoClient } from "@/lib/demos-api";
 import { createVitrine, updateVitrine } from "@/lib/vitrines-api";
 import { createApplicationWeb, updateApplicationWeb } from "@/lib/application-web-api";
@@ -188,7 +194,10 @@ async function fetchProjectDetail(projectId: string) {
   });
 }
 
-async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProject> {
+async function mapSupabaseProject(
+  project: ProjectRecord,
+  options?: { listMode?: boolean },
+): Promise<UnifiedProject> {
   const type = supabaseProjectType(project.project_type);
   let status: UnifiedProjectStatus = "offline";
   let url: string | null = project.demo_url?.trim() || null;
@@ -199,23 +208,37 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
   let generationId: string | undefined;
   let clientId: string | null | undefined;
   let prompt = project.prompt?.trim() || "";
+  let analysis: unknown = null;
 
-  const detail = await fetchProjectDetail(project.id);
-  const latestGen = detail.ok ? detail.data?.generations?.[0] : undefined;
-  const analysis = latestGen?.analysis as any;
-  if (latestGen) {
-    generationId = latestGen.id;
-    prompt = latestGen.prompt?.trim() || prompt;
-    const demoLookup = await findDemoIdByGeneration(latestGen.id);
-    if (demoLookup.ok && demoLookup.data?.demo_id) {
-      demoId = demoLookup.data.demo_id;
-      clientId = demoLookup.data.client_id ?? null;
+  const skipDetail = options?.listMode === true && Boolean(url);
+
+  if (!skipDetail) {
+    const detail = await fetchProjectDetail(project.id);
+    const latestGen = detail.ok ? detail.data?.generations?.[0] : undefined;
+    analysis = latestGen?.analysis;
+    if (latestGen) {
+      generationId = latestGen.id;
+      prompt = latestGen.prompt?.trim() || prompt;
       if (!url) {
-        url =
-          demoLookup.data.url?.trim() ||
-          demoLookup.data.unlock_url?.trim() ||
-          null;
-        status = url ? "online" : "demo";
+        const demoLookup = await findDemoIdByGeneration(latestGen.id);
+        if (demoLookup.ok && demoLookup.data?.demo_id) {
+          demoId = demoLookup.data.demo_id;
+          clientId = demoLookup.data.client_id ?? null;
+          url =
+            demoLookup.data.url?.trim() ||
+            demoLookup.data.unlock_url?.trim() ||
+            null;
+          status = url ? "online" : "demo";
+        } else if (demoLookup.ok) {
+          const fallbackUrl =
+            demoLookup.data?.url?.trim() ||
+            demoLookup.data?.unlock_url?.trim() ||
+            null;
+          if (fallbackUrl) {
+            url = fallbackUrl;
+            status = "online";
+          }
+        }
       }
     }
   }
@@ -236,9 +259,13 @@ async function mapSupabaseProject(project: ProjectRecord): Promise<UnifiedProjec
     projectType: project.project_type,
     generationMode:
       status === "online" || status === "demo" ? "client_demo" : "real_app",
-    databaseSchema: analysis?.database_schema ?? null,
-    authSchema: analysis?.auth_schema ?? null,
-    paymentConfig: analysis?.payment_config ?? null,
+    databaseSchema:
+      (analysis as { database_schema?: unknown } | null)?.database_schema ??
+      null,
+    authSchema:
+      (analysis as { auth_schema?: unknown } | null)?.auth_schema ?? null,
+    paymentConfig:
+      (analysis as { payment_config?: unknown } | null)?.payment_config ?? null,
   };
 }
 
@@ -256,8 +283,10 @@ export async function loadAllUnifiedProjects(): Promise<UnifiedProject[]> {
     listEcommerce(),
     listReservationSites(),
     listExtensions(),
-    apiRequest<ProjectRecord[]>({ method: "GET", path: `${API_PREFIX}/projects` }),
+    listSupabaseProjects(),
   ]);
+
+  console.log("[ProjectsPage] GET /api/projects", supabaseRes);
 
   const managed: UnifiedProject[] = [];
   if (vitrinesRes.ok && Array.isArray(vitrinesRes.data)) {
@@ -294,7 +323,7 @@ export async function loadAllUnifiedProjects(): Promise<UnifiedProject[]> {
   const supabaseProjects =
     supabaseRes.ok && Array.isArray(supabaseRes.data) ? supabaseRes.data : [];
   const supabaseMapped = await Promise.all(
-    supabaseProjects.map((p) => mapSupabaseProject(p)),
+    supabaseProjects.map((p) => mapSupabaseProject(p, { listMode: true })),
   );
 
   const managedSlugs = new Set(
@@ -302,15 +331,30 @@ export async function loadAllUnifiedProjects(): Promise<UnifiedProject[]> {
   );
 
   const dedupedSupabase = supabaseMapped.filter((p) => {
-    if (p.status !== "demo" && managedSlugs.has(p.name.toLowerCase())) {
-      return false;
-    }
+    if (p.url?.trim()) return true;
+    if (managedSlugs.has(p.name.toLowerCase())) return false;
     return true;
   });
 
-  return [...managed, ...dedupedSupabase].sort(
+  const merged = [...managed, ...dedupedSupabase].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
+
+  console.log("[ProjectsPage] unified list", {
+    managed: managed.length,
+    supabaseRaw: supabaseProjects.length,
+    supabaseMapped: supabaseMapped.length,
+    supabaseAfterDedup: dedupedSupabase.length,
+    total: merged.length,
+    sample: merged.slice(0, 5).map((p) => ({
+      key: p.key,
+      name: p.name,
+      status: p.status,
+      url: p.url,
+    })),
+  });
+
+  return merged;
 }
 
 export function filterUnifiedProjects(

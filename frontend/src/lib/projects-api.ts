@@ -2,6 +2,14 @@ import { API_PREFIX } from "@shared/constants";
 import type { ProjectDetailResponse, ProjectRecord } from "@shared/types";
 import { apiRequest } from "@/lib/api-client";
 
+/** GET /api/projects — liste projets Supabase. */
+export async function listSupabaseProjects() {
+  return apiRequest<ProjectRecord[]>({
+    method: "GET",
+    path: `${API_PREFIX}/projects`,
+  });
+}
+
 export async function fetchProjectDemoSeed(projectId: string) {
   return apiRequest<import("@shared/types").DemoSeedPayload>({
     method: "GET",

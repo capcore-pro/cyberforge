@@ -1,4 +1,5 @@
 import type { VisionPreviewSource } from "@shared/types";
+import { CyberForgePreviewFrame } from "@/components/PreviewFullscreenActions";
 import {
   isUsablePreviewHtml,
   prepareInternalPreviewSrcDoc,
@@ -69,26 +70,23 @@ export function VisionUIPreview({
         </div>
       ) : null}
       {showIframe ? (
-        <div
-          className={
+        <CyberForgePreviewFrame
+          srcDoc={previewDoc}
+          rawHtml={html}
+          title={
+            extensionPopup ? "Aperçu popup extension Chrome" : "Aperçu HTML VisionUI"
+          }
+          wrapperClassName={
             extensionPopup
               ? "flex justify-center rounded-md border border-cyber-border bg-slate-900/40 p-4"
               : "overflow-hidden rounded-md border border-cyber-border bg-white"
           }
-        >
-          <iframe
-            title={
-              extensionPopup ? "Aperçu popup extension Chrome" : "Aperçu HTML VisionUI"
-            }
-            srcDoc={previewDoc}
-            sandbox="allow-scripts allow-same-origin"
-            className={
-              extensionPopup
-                ? "h-[500px] w-[380px] max-w-full shrink-0 rounded-lg border border-slate-700 bg-white shadow-lg"
-                : "h-[min(70vh,520px)] w-full bg-white"
-            }
-          />
-        </div>
+          iframeClassName={
+            extensionPopup
+              ? "h-[500px] w-[380px] max-w-full shrink-0 rounded-lg border border-slate-700 bg-white shadow-lg"
+              : "h-[min(70vh,520px)] w-full bg-white"
+          }
+        />
       ) : null}
       <p className="mt-2 text-[10px] text-cyber-muted">
         {extensionPopup

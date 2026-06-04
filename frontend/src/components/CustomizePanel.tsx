@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { PreviewFullscreenHost } from "@/components/PreviewFullscreenActions";
 import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
 import {
   CUSTOMIZATION_TITLE_MAX,
@@ -369,12 +370,17 @@ export function CustomizePanel({
             {previewLoading ? " · mise à jour…" : ""}
           </div>
           {previewHtml ? (
-            <iframe
-              title="Aperçu personnalisation"
-              className="min-h-0 flex-1 bg-[#0b0f1a]"
-              sandbox="allow-scripts allow-same-origin allow-forms"
-              srcDoc={prepareInternalPreviewSrcDoc(previewHtml)}
-            />
+            <PreviewFullscreenHost
+              html={previewHtml}
+              className="flex min-h-0 flex-1 flex-col px-2 pb-2"
+            >
+              <iframe
+                title="Aperçu personnalisation"
+                className="min-h-0 flex-1 bg-[#0b0f1a]"
+                sandbox="allow-scripts allow-same-origin allow-forms"
+                srcDoc={prepareInternalPreviewSrcDoc(previewHtml)}
+              />
+            </PreviewFullscreenHost>
           ) : (
             <div className="flex flex-1 items-center justify-center p-4 text-center text-xs text-cyber-muted">
               Aperçu en cours de chargement…

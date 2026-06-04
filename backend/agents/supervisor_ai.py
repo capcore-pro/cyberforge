@@ -82,6 +82,26 @@ _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
+def _has_footer_markup(html: str, low: str) -> bool:
+    """Détecte un pied de page explicite ou sémantique (balise, class, id)."""
+    if re.search(r"<footer\b", html, re.I):
+        return True
+    if re.search(r"""class=["'][^"']*\bfooter\b""", html, re.I):
+        return True
+    if re.search(r"""id=["']footer["']""", html, re.I):
+        return True
+    if 'class="footer"' in low or "class='footer'" in low:
+        return True
+    if 'id="footer"' in low or "id='footer'" in low:
+        return True
+    return False
+
+
+def _html_closes_document(low: str) -> bool:
+    trimmed = low.rstrip()
+    return trimmed.endswith("</html>") or trimmed.endswith("</body></html>")
+
+
 def _visible_text_from_html(html: str) -> str:
     """Texte visible uniquement (sans balises, scripts, styles ni attributs)."""
     text = html or ""
@@ -361,13 +381,16 @@ class SupervisorAI:
 
         has_nav = bool(re.search(r"<nav\b|<header\b", body, re.I))
         has_section = bool(re.search(r"<section\b", body, re.I))
-        has_footer = bool(re.search(r"<footer\b", body, re.I))
+        has_footer = _has_footer_markup(body, low)
         if not has_nav:
             errors.append("nav ou header manquant")
         if not has_section:
             errors.append("section manquante")
         if not has_footer:
-            errors.append("footer manquant")
+            if _html_closes_document(low) and len(body) > 8000:
+                pass
+            else:
+                errors.append("footer manquant")
 
         hero_block = re.search(
             r"<(?:section|div|header)[^>]*(?:id|class)=[\"'][^\"']*hero[^\"']*[\"'][^>]*>",

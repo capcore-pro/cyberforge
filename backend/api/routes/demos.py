@@ -18,6 +18,7 @@ from db.demos_store import (
     SupabaseStoreError,
     get_demos_store,
 )
+from db.supabase_store import get_supabase_store
 from tools.capcore_notify import send_capcore_contact_email
 from tools.demo_password_vault import decrypt_demo_password, encrypt_demo_password
 from tools.demo_urls import unlock_demo_url
@@ -434,24 +435,34 @@ class DemoIdResponse(BaseModel):
     response_model=DemoIdResponse,
 )
 async def demo_id_for_generation(generation_id: str) -> DemoIdResponse:
-    """Identifiant de la démo client liée à une génération, si elle existe."""
-    store = get_demos_store()
-    if not store.is_configured():
+    """Démo liée à une génération ou URL depuis projects.demo_url (generation/project id)."""
+    demos_store = get_demos_store()
+    if not demos_store.is_configured():
         raise HTTPException(status_code=503, detail={"message": "Supabase non configuré."})
 
     try:
-        row = await store.find_by_generation_id(generation_id)
+        row = await demos_store.find_by_generation_id(generation_id)
     except SupabaseStoreError as exc:
         raise _http_error_from_supabase(exc, "GET /demos/by-generation/{id}") from exc
 
-    if row is None:
-        return DemoIdResponse()
-    return DemoIdResponse(
-        demo_id=row.id,
-        url=public_demo_url_for_token(row.token).rstrip("/"),
-        unlock_url=unlock_demo_url(row.token),
-        client_id=row.client_id,
-    )
+    if row is not None:
+        return DemoIdResponse(
+            demo_id=row.id,
+            url=public_demo_url_for_token(row.token).rstrip("/"),
+            unlock_url=unlock_demo_url(row.token),
+            client_id=row.client_id,
+        )
+
+    supabase = get_supabase_store()
+    if supabase.is_configured():
+        try:
+            demo_url = await supabase.resolve_public_demo_url(generation_id)
+        except SupabaseStoreError as exc:
+            raise _http_error_from_supabase(exc, "GET /demos/by-generation/{id}") from exc
+        if demo_url:
+            return DemoIdResponse(url=demo_url, unlock_url=demo_url)
+
+    return DemoIdResponse()
 
 
 class UpdateDemoStatusRequest(BaseModel):

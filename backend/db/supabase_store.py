@@ -755,6 +755,44 @@ class SupabaseStore:
                 return str(data["id"])
             raise SupabaseStoreError("Insertion génération sans identifiant.")
 
+    async def resolve_public_demo_url(self, generation_or_project_id: str) -> str | None:
+        """URL publique depuis projects.demo_url (id = project ou generation)."""
+        if not self.is_configured():
+            return None
+        needle = (generation_or_project_id or "").strip()
+        if not needle:
+            return None
+
+        detail = await self.get_project(needle)
+        if detail:
+            url = (detail.project.demo_url or "").strip()
+            if url:
+                return url
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            gen_resp = await client.get(
+                f"{self._rest_url()}/generations",
+                headers=self._headers(),
+                params={
+                    "id": f"eq.{needle}",
+                    "select": "project_id",
+                    "limit": "1",
+                },
+            )
+            if gen_resp.status_code >= 400:
+                return None
+            rows = gen_resp.json()
+            if not isinstance(rows, list) or not rows:
+                return None
+            project_id = str(rows[0].get("project_id") or "").strip()
+            if not project_id:
+                return None
+
+        project_detail = await self.get_project(project_id)
+        if not project_detail:
+            return None
+        return (project_detail.project.demo_url or "").strip() or None
+
     async def _resolve_demo_url_for_project(
         self,
         client: httpx.AsyncClient,

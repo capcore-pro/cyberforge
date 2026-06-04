@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from db.demo_types import DemoStatusSlug
 
@@ -19,13 +19,22 @@ from db.demo_password import generate_demo_password
 from tools.demo_preview_html import build_demo_preview_html
 from tools.generation_sources import is_usable_preview_html, normalize_generation_sources
 from tools.standalone_demo_html import is_fresh_task_preview_html
-from db.supabase_store import (
-    SupabaseStore,
-    SupabaseStoreError,
-    _raise_for_status,
-    _raise_transport_error,
-    get_supabase_store,
-)
+
+if TYPE_CHECKING:
+    from db.supabase_store import SupabaseStore
+
+
+def _supabase():
+    """Import tardif — évite le cycle supabase_store ↔ demos_store (via agents)."""
+    import db.supabase_store as store
+
+    return store
+
+
+def __getattr__(name: str) -> Any:
+    if name == "SupabaseStoreError":
+        return _supabase().SupabaseStoreError
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +122,7 @@ class DemosStore:
     """CRUD PostgREST pour la table public.demos."""
 
     def __init__(self, supabase: SupabaseStore | None = None) -> None:
-        self._supabase = supabase or get_supabase_store()
+        self._supabase = supabase or _supabase().get_supabase_store()
 
     def is_configured(self) -> bool:
         return self._supabase.is_configured()
@@ -153,7 +162,7 @@ class DemosStore:
         password: str | None = None,
     ) -> DemoCreated:
         if not self.is_configured():
-            raise SupabaseStoreError(
+            raise _supabase().SupabaseStoreError(
                 "Supabase non configuré : impossible de créer une démo."
             )
 
@@ -184,13 +193,13 @@ class DemosStore:
                     json=body,
                 )
             except httpx.HTTPError as exc:
-                _raise_transport_error(exc, "create_demo", "POST", url, self._supabase)
+                _supabase()._raise_transport_error(exc, "create_demo", "POST", url, self._supabase)
 
-            _raise_for_status(resp, "create_demo", "POST", url, self._supabase)
+            _supabase()._raise_for_status(resp, "create_demo", "POST", url, self._supabase)
             data = resp.json()
             row = data[0] if isinstance(data, list) and data else data
             if not isinstance(row, dict):
-                raise SupabaseStoreError("Création démo sans identifiant retourné.")
+                raise _supabase().SupabaseStoreError("Création démo sans identifiant retourné.")
 
             return DemoCreated(
                 id=str(row["id"]),
@@ -221,7 +230,7 @@ class DemosStore:
                     "select": "token,payload",
                 },
             )
-            _raise_for_status(resp, "list_demos_manifest", "GET", url, self._supabase)
+            _supabase()._raise_for_status(resp, "list_demos_manifest", "GET", url, self._supabase)
             rows = resp.json()
 
         entries: dict[str, str] = {}
@@ -259,7 +268,7 @@ class DemosStore:
                     "limit": "1",
                 },
             )
-            _raise_for_status(
+            _supabase()._raise_for_status(
                 resp, "find_demo_by_generation", "GET", url, self._supabase
             )
             rows = resp.json()
@@ -278,7 +287,7 @@ class DemosStore:
                 headers=self._supabase._headers(),
                 params={"id": f"eq.{demo_id}", "select": "*"},
             )
-            _raise_for_status(resp, "get_demo_by_id", "GET", url, self._supabase)
+            _supabase()._raise_for_status(resp, "get_demo_by_id", "GET", url, self._supabase)
             rows = resp.json()
             if not isinstance(rows, list) or not rows:
                 return None
@@ -286,7 +295,7 @@ class DemosStore:
 
     async def delete_demo(self, demo_id: str) -> bool:
         if not self.is_configured():
-            raise SupabaseStoreError("Supabase non configuré.")
+            raise _supabase().SupabaseStoreError("Supabase non configuré.")
 
         url = f"{self._rest_url()}/demos"
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -295,7 +304,7 @@ class DemosStore:
                 headers=self._supabase._headers("return=minimal"),
                 params={"id": f"eq.{demo_id}"},
             )
-            _raise_for_status(resp, "delete_demo", "DELETE", url, self._supabase)
+            _supabase()._raise_for_status(resp, "delete_demo", "DELETE", url, self._supabase)
         return True
 
     async def get_by_token(self, token: str) -> DemoRow | None:
@@ -309,7 +318,7 @@ class DemosStore:
                 headers=self._supabase._headers(),
                 params={"token": f"eq.{token}", "select": "*"},
             )
-            _raise_for_status(resp, "get_demo", "GET", url, self._supabase)
+            _supabase()._raise_for_status(resp, "get_demo", "GET", url, self._supabase)
             rows = resp.json()
             if not isinstance(rows, list) or not rows:
                 return None
@@ -358,7 +367,7 @@ class DemosStore:
                     "select": "code,files",
                 },
             )
-            _raise_for_status(resp, "get_generation_for_demo", "GET", url, self._supabase)
+            _supabase()._raise_for_status(resp, "get_generation_for_demo", "GET", url, self._supabase)
             rows = resp.json()
             if not isinstance(rows, list) or not rows:
                 return row
@@ -425,7 +434,7 @@ class DemosStore:
                 params={"token": f"eq.{token.strip()}"},
                 json=patch,
             )
-            _raise_for_status(resp, "record_demo_interested", "PATCH", url, self._supabase)
+            _supabase()._raise_for_status(resp, "record_demo_interested", "PATCH", url, self._supabase)
             rows = resp.json()
             if isinstance(rows, list) and rows:
                 return _demo_from_row(rows[0])
@@ -455,7 +464,7 @@ class DemosStore:
                     "order": "interested_at.desc",
                 },
             )
-            _raise_for_status(
+            _supabase()._raise_for_status(
                 resp, "list_unread_contact_notifications", "GET", url, self._supabase
             )
             rows = resp.json()
@@ -501,7 +510,7 @@ class DemosStore:
                 },
                 json={"interest_seen_at": seen_at},
             )
-            _raise_for_status(
+            _supabase()._raise_for_status(
                 resp, "mark_contact_notifications_seen", "PATCH", url, self._supabase
             )
             rows = resp.json()
@@ -528,7 +537,7 @@ class DemosStore:
                 params={"token": f"eq.{token.strip()}"},
                 json={"status": "ouverte", "opened_at": opened_at},
             )
-            _raise_for_status(resp, "record_demo_open", "PATCH", url, self._supabase)
+            _supabase()._raise_for_status(resp, "record_demo_open", "PATCH", url, self._supabase)
             rows = resp.json()
             if isinstance(rows, list) and rows:
                 return _demo_from_row(rows[0])
@@ -540,7 +549,7 @@ class DemosStore:
         status: DemoStatusSlug,
     ) -> DemoRow | None:
         if not self.is_configured():
-            raise SupabaseStoreError("Supabase non configuré.")
+            raise _supabase().SupabaseStoreError("Supabase non configuré.")
 
         url = f"{self._rest_url()}/demos"
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -550,7 +559,7 @@ class DemosStore:
                 params={"id": f"eq.{demo_id}"},
                 json={"status": status},
             )
-            _raise_for_status(resp, "update_demo_status", "PATCH", url, self._supabase)
+            _supabase()._raise_for_status(resp, "update_demo_status", "PATCH", url, self._supabase)
             rows = resp.json()
             if not isinstance(rows, list) or not rows:
                 return None
@@ -563,7 +572,7 @@ class DemosStore:
     ) -> DemoRow | None:
         """Associe ou dissocie un client à une démo."""
         if not self.is_configured():
-            raise SupabaseStoreError("Supabase non configuré.")
+            raise _supabase().SupabaseStoreError("Supabase non configuré.")
 
         url = f"{self._rest_url()}/demos"
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -573,7 +582,7 @@ class DemosStore:
                 params={"id": f"eq.{demo_id.strip()}"},
                 json={"client_id": client_id.strip() if client_id else None},
             )
-            _raise_for_status(resp, "update_demo_client", "PATCH", url, self._supabase)
+            _supabase()._raise_for_status(resp, "update_demo_client", "PATCH", url, self._supabase)
             rows = resp.json()
             if not isinstance(rows, list) or not rows:
                 return None
@@ -587,7 +596,7 @@ class DemosStore:
                 headers=self._supabase._headers(),
                 params={"token": f"eq.{token}", "select": "password_hash"},
             )
-            _raise_for_status(resp, "get_demo_hash", "GET", url, self._supabase)
+            _supabase()._raise_for_status(resp, "get_demo_hash", "GET", url, self._supabase)
             rows = resp.json()
             if not isinstance(rows, list) or not rows:
                 return None

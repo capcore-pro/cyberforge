@@ -54,6 +54,10 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
     setError(null);
     try {
       const items = await loadAllUnifiedProjects();
+      console.log("[ProjectsPage] données reçues pour l'UI", {
+        count: items.length,
+        items,
+      });
       setProjects(items);
     } catch (err) {
       setError(
@@ -108,8 +112,9 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
   }
 
   const handleView = useCallback((project: UnifiedProject) => {
-    if (!project.url) return;
-    openProjectUrl(project.url);
+    const target = project.url?.trim();
+    if (!target) return;
+    openProjectUrl(target);
   }, []);
 
   const handleConvert = useCallback(
@@ -303,7 +308,7 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="min-h-[300px] animate-pulse rounded-card border border-cf-border-input bg-cf-card"
+              className="min-h-[420px] animate-pulse rounded-card border border-cf-border-input bg-cf-card"
             />
           ))}
         </div>

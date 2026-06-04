@@ -1,3 +1,4 @@
+import { PreviewFullscreenHost } from "@/components/PreviewFullscreenActions";
 import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
 
 interface GeneratorPreviewModalProps {
@@ -36,12 +37,17 @@ export function GeneratorPreviewModal({
             Fermer
           </button>
         </div>
-        <iframe
-          title="Prévisualisation CyberForge"
-          className="min-h-0 flex-1 bg-[#0a0a0f]"
-          sandbox="allow-scripts allow-same-origin allow-forms"
-          srcDoc={previewDoc}
-        />
+        <PreviewFullscreenHost
+          html={html}
+          className="flex min-h-0 flex-1 flex-col px-4 pb-4"
+        >
+          <iframe
+            title="Prévisualisation CyberForge"
+            className="min-h-0 flex-1 bg-[#0a0a0f]"
+            sandbox="allow-scripts allow-same-origin allow-forms"
+            srcDoc={previewDoc}
+          />
+        </PreviewFullscreenHost>
       </div>
     </div>
   );
