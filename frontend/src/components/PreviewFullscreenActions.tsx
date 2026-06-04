@@ -68,31 +68,48 @@ export function PreviewFullscreenToolbar({
     fixedOverlayOpen && previewDoc && fullscreenMode === "fixed"
       ? createPortal(
           <div
-            className="fixed inset-0 z-[9999]"
             role="dialog"
             aria-modal="true"
             aria-label="Aperçu plein écran"
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              height: "100vh",
+              zIndex: 9999,
+              margin: 0,
+              padding: 0,
+              overflow: "hidden",
+              boxSizing: "border-box",
+              isolation: "isolate",
+            }}
           >
             <iframe
               title="Aperçu plein écran"
               srcDoc={previewDoc}
               sandbox="allow-scripts allow-same-origin allow-forms"
-              className="border-0"
               style={{
                 position: "fixed",
                 top: 0,
                 left: 0,
                 width: "100vw",
                 height: "100vh",
-                maxWidth: "none",
-                maxHeight: "none",
+                border: "none",
+                display: "block",
                 zIndex: 9999,
               }}
             />
             <button
               type="button"
               onClick={() => setFixedOverlayOpen(false)}
-              className="fixed right-4 top-4 z-[10000] rounded border border-cyber-border bg-cf-card/95 px-3 py-1.5 text-xs text-cyber-text shadow-lg hover:border-cyber-violet"
+              style={{
+                position: "absolute",
+                top: 16,
+                right: 16,
+                zIndex: 10000,
+              }}
+              className="rounded border border-cyber-border bg-cf-card/95 px-3 py-1.5 text-xs text-cyber-text shadow-lg hover:border-cyber-violet"
             >
               Fermer
             </button>
@@ -153,6 +170,7 @@ export function CyberForgePreviewFrame({
         html={rawHtml ?? srcDoc}
         externalUrl={externalUrl}
         fullscreenTargetRef={hostRef}
+        fullscreenMode={rawHtml ?? srcDoc ? "fixed" : "native"}
         className={toolbarClassName}
       />
       <div ref={hostRef} className={wrapperClassName}>
@@ -199,6 +217,6 @@ export function PreviewFullscreenHost({
 }
 
 /** Dimensions iframe « desktop » + scale pour l’aperçu dans la modal. */
-export const GENERATOR_PREVIEW_IFRAME_W = 800;
-export const GENERATOR_PREVIEW_IFRAME_H = 600;
-export const GENERATOR_PREVIEW_SCALE = 0.5;
+export const GENERATOR_PREVIEW_IFRAME_W = 1280;
+export const GENERATOR_PREVIEW_IFRAME_H = 720;
+export const GENERATOR_PREVIEW_SCALE = 0.6;

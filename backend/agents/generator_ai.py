@@ -23,11 +23,15 @@ logger = logging.getLogger(__name__)
 
 MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = 10000
-MAX_TOKENS_SITE_RESERVATION_CLONE = 4096
+MAX_TOKENS_SITE_RESERVATION_CLONE = 8192
 MAX_HTML_CHARS = 15000
 MAX_HTML_CHARS_SITE_RESERVATION = 20000
-MAX_HTML_CHARS_SITE_RESERVATION_CLONE = 32000
+MAX_HTML_CHARS_SITE_RESERVATION_CLONE = 15000
 GENERATOR_MAX_ATTEMPTS = 3
+
+HTML_CLOSING_RULE = """RÈGLE ABSOLUE : termine TOUJOURS par </body></html>.
+Si tu manques de place, coupe du contenu au milieu mais termine par </body></html>.
+"""
 
 SYSTEM_PROMPT = """CRITIQUE : Tu DOIS inclure dans ta réponse :
 - La balise <html> complète avec <head> et <body>
@@ -195,6 +199,43 @@ Le JavaScript du calendrier DOIT (obligatoire — grilles visibles dès l'ouvert
 - Responsive @media (max-width: 768px) : calendriers empilés verticalement
 """
 
+SITE_RESERVATION_CLONE_APPENDIX = """
+MODE SITE RÉSERVATION — CLONE (version compacte, HTML 12000-15000 caractères max) :
+Page autonome HTML + CSS + JS inline. ZÉRO fetch/API.
+
+Structure (ordre strict) :
+0) Hero slider 2 slides seulement (pas 5)
+1) Bienvenue (#bienvenue) — 2 phrases + 1 img.pexels-inject
+2) Hébergements (#hebergements) — 2 cards seulement (data-hebergement-id, data-price-per-night)
+3) Calendrier (#calendrier) — 1 seul mois (conteneur #calendar-month-0 uniquement)
+4) Formulaire (#reservation-form) simplifié
+
+Hero slider : 2 .hero-slide, autoplay 4s, dots, h1 nom_client en overlay, img.pexels-inject par slide.
+
+Calendrier (1 mois) :
+- Conteneur vide #calendar-month-0 rempli par JS au DOMContentLoaded
+- renderCalendars() avec createElement + appendChild (jours 1-28/31, Lu-Di)
+- Vert dispo, gris passé, bleu sélection — prev/next optionnel si léger
+
+Formulaire simplifié : prénom, nom, email, hébergement (select), dates arrivée/départ,
+nuits + total readonly, bouton « Confirmer la réservation », message succès local.
+
+JS unique <script> : slider + renderCalendars() + calcul nuits × prix + sync formulaire.
+
+Design minimal : Playfair + Inter, couleur_primaire navbar/boutons, responsive 768px.
+Priorité absolue : document COMPLET terminé par </footer></body></html>.
+"""
+
+SYSTEM_PROMPT_RESERVATION_CLONE = """Tu génères UNIQUEMENT le HTML complet (aucun texte avant/après).
+- <html><head><body>, CSS dans <style>, un <script> avant </body>
+- Nom client exact dans <title> et <h1>
+- --color-primary / --color-secondary depuis le brief
+- <nav> ou <header>, sections, <footer> puis </body></html>
+- 2+ <img class="pexels-inject"> (pas dans le hero slider)
+- Maximum 15000 caractères — si trop long, raccourcis le CSS/JS mais garde toutes les sections
+- Zéro placeholder, zéro commentaire HTML
+"""
+
 _HTML_START_RE = re.compile(r"<!DOCTYPE\s+html|<html\b", re.I)
 
 
@@ -252,9 +293,19 @@ def _html_document_complete(html: str) -> bool:
 
 
 def _build_system_prompt(brief: dict[str, Any]) -> str:
-    if _is_site_reservation_brief(brief):
-        return SYSTEM_PROMPT + "\n" + SITE_RESERVATION_APPENDIX
-    return SYSTEM_PROMPT
+    parts = [HTML_CLOSING_RULE]
+    if _is_site_reservation_clone(brief):
+        parts.extend(
+            [
+                SYSTEM_PROMPT_RESERVATION_CLONE,
+                SITE_RESERVATION_CLONE_APPENDIX,
+            ]
+        )
+    elif _is_site_reservation_brief(brief):
+        parts.extend([SYSTEM_PROMPT, SITE_RESERVATION_APPENDIX])
+    else:
+        parts.append(SYSTEM_PROMPT)
+    return "\n\n".join(parts)
 
 
 def _extract_html(raw: str) -> str:
@@ -298,17 +349,19 @@ def _build_user_message(
 ) -> str:
     payload = {k: brief.get(k) for k in brief if not str(k).startswith("_")}
     extra = ""
+    extra_limit = 2000 if _is_site_reservation_clone(brief) else 4000
     if brief.get("payment_config"):
         extra += "\n\n## payment_config\n" + json.dumps(
             brief["payment_config"], ensure_ascii=False, indent=2
-        )[:4000]
+        )[:extra_limit]
     if brief.get("database_schema"):
         extra += "\n\n## database_schema\n" + json.dumps(
             brief["database_schema"], ensure_ascii=False, indent=2
-        )[:4000]
+        )[:extra_limit]
+    brief_limit = 6000 if _is_site_reservation_clone(brief) else 12000
     body = (
         "## Brief client (JSON)\n"
-        + json.dumps(payload, ensure_ascii=False, indent=2)[:12000]
+        + json.dumps(payload, ensure_ascii=False, indent=2)[:brief_limit]
         + extra
     )
     fix = (corrections or "").strip()
@@ -330,10 +383,11 @@ class GeneratorAI:
             return {"html": "", "success": False}
 
         client = anthropic.Anthropic(api_key=api_key)
+        reservation_clone = _is_site_reservation_clone(brief)
         system_prompt = _build_system_prompt(brief)
         max_tokens = _max_tokens(brief)
         max_chars = _max_html_chars(brief)
-        reservation_clone = _is_site_reservation_clone(brief)
+        model = MODEL
         extra_fix = (corrections or "").strip()
         last_error: str | None = None
 
@@ -349,7 +403,7 @@ class GeneratorAI:
 
             def _call() -> str:
                 response = client.messages.create(
-                    model=MODEL,
+                    model=model,
                     max_tokens=max_tokens,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_message}],
@@ -389,10 +443,12 @@ class GeneratorAI:
                     "site_reservation" if _is_site_reservation_brief(brief) else "standard"
                 )
                 logger.info(
-                    "[GeneratorAI] OK (%s) — %d caractères (tentative %d, max_tokens=%d)",
+                    "[GeneratorAI] OK (%s) — %d caractères "
+                    "(tentative %d, model=%s, max_tokens=%d)",
                     mode,
                     len(html),
                     attempt,
+                    model,
                     max_tokens,
                 )
                 return {"html": html, "success": True}

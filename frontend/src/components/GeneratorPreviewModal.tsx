@@ -27,7 +27,7 @@ export function GeneratorPreviewModal({
       aria-modal="true"
       aria-label="Prévisualisation du code généré"
     >
-      <div className="flex max-h-[95vh] w-full max-w-[min(96vw,920px)] flex-col overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
+      <div className="flex max-h-[95vh] w-full min-w-0 max-w-4xl flex-col overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyber-border px-4 py-3">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-neon">
@@ -35,7 +35,7 @@ export function GeneratorPreviewModal({
             </h2>
             <p className="text-[10px] text-cyber-muted">
               Desktop simulé {GENERATOR_PREVIEW_IFRAME_W}×{GENERATOR_PREVIEW_IFRAME_H}px (×
-              {GENERATOR_PREVIEW_SCALE})
+              {GENERATOR_PREVIEW_SCALE}) — affichage {VIEWPORT_W}×{VIEWPORT_H}px
             </p>
           </div>
           <button
@@ -49,12 +49,9 @@ export function GeneratorPreviewModal({
         <PreviewFullscreenHost
           html={html}
           fullscreenMode="fixed"
-          className="flex min-h-0 flex-1 flex-col px-4 pb-4"
+          className="flex flex-col px-4 pb-4 pt-2"
         >
-          <div
-            className="mx-auto flex min-h-0 flex-1 items-start justify-center overflow-auto rounded-md border border-cyber-border bg-[#0a0a0f] py-3"
-            style={{ minWidth: VIEWPORT_W, minHeight: VIEWPORT_H }}
-          >
+          <div className="flex justify-center overflow-auto rounded-md border border-cyber-border bg-[#0a0a0f] py-4">
             <div
               className="relative shrink-0 overflow-hidden"
               style={{ width: VIEWPORT_W, height: VIEWPORT_H }}
