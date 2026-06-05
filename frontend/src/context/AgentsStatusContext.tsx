@@ -28,95 +28,67 @@ const AgentsStatusContext = createContext<AgentsStatusContextValue | null>(null)
 
 const POLL_MS = 15_000;
 
+/** Pipeline v2 — aligné sur GET /api/agents/status (8 agents). */
 const PIPELINE_AGENT_IDS = [
-  "architect",
-  "research",
-  "openhands",
-  "builder",
-  "coremind",
-  "visionui",
-  "bughunter",
-  "autofix",
-  "testpilot",
-  "playwright",
-  "lighthouse",
-  "export",
+  "brief",
+  "supervisor",
+  "generator",
+  "deploy",
+  "database",
+  "auth",
+  "payment",
+  "electron",
 ] as const;
 
 const AGENT_CATALOG: { id: string; name: string; description: string }[] = [
   {
-    id: "architect",
-    name: "ArchitectAI",
-    description: "Analyse du prompt et choix du template premium.",
+    id: "brief",
+    name: "BriefAI",
+    description: "Brief structuré + Firecrawl (concurrents).",
   },
   {
-    id: "research",
-    name: "ResearchAI",
-    description: "Recherche Brave Search + Exa AI (secteur, concurrents).",
+    id: "supervisor",
+    name: "SupervisorAI",
+    description: "Validation binaire à chaque étape du pipeline.",
   },
   {
-    id: "openhands",
-    name: "OpenHands",
-    description: "Génération de code avancée pour projets complexes.",
+    id: "generator",
+    name: "GeneratorAI",
+    description: "HTML complet en un appel Claude.",
   },
   {
-    id: "builder",
-    name: "BuilderAI",
-    description: "Génération v0 / DeepSeek.",
+    id: "deploy",
+    name: "DeployAI",
+    description: "Images Pexels + déploiement Cloudflare Pages.",
   },
   {
-    id: "coremind",
-    name: "CoreMindAI",
-    description: "Orchestrateur central du pipeline LangGraph.",
+    id: "database",
+    name: "DatabaseAI",
+    description: "Schéma Supabase si app / ecommerce / réservation.",
   },
   {
-    id: "visionui",
-    name: "VisionUI",
-    description: "Interfaces visuelles et design system cyber.",
+    id: "auth",
+    name: "AuthAI",
+    description: "Auth Supabase si application web.",
   },
   {
-    id: "bughunter",
-    name: "BugHunterAI",
-    description: "Vérification du HTML généré avant livraison.",
+    id: "payment",
+    name: "PaymentAI",
+    description: "Stripe si ecommerce / réservation.",
   },
   {
-    id: "autofix",
-    name: "AutoFixAI",
-    description: "Correction automatique des livrables défectueux.",
-  },
-  {
-    id: "testpilot",
-    name: "TestPilotAI",
-    description: "Tests automatisés et validation de régression.",
-  },
-  {
-    id: "playwright",
-    name: "Playwright",
-    description: "Tests E2E Chromium headless.",
-  },
-  {
-    id: "lighthouse",
-    name: "Lighthouse",
-    description: "Audit Performance, SEO, accessibilité.",
-  },
-  {
-    id: "export",
-    name: "ExportAI",
-    description: "Export et déploiement Cloudflare / Railway.",
+    id: "electron",
+    name: "ElectronAI",
+    description: "Empaquetage application desktop (.exe).",
   },
 ];
 
 const KEYLESS_PIPELINE_AGENTS = new Set([
-  "architect",
-  "bughunter",
-  "autofix",
-  "testpilot",
-  "playwright",
-  "lighthouse",
-  "export",
+  "supervisor",
+  "deploy",
+  "electron",
 ]);
 
-/** 13 agents — aligné sur GET /api/agents/status (repli hors ligne) */
 function defaultAgentsStatus(): AgentsStatusResponse {
   const pipelineSet = new Set<string>(PIPELINE_AGENT_IDS);
   let active_count = 0;
@@ -133,7 +105,7 @@ function defaultAgentsStatus(): AgentsStatusResponse {
     };
   });
   return {
-    total_agents: agents.length,
+    total_agents: PIPELINE_AGENT_IDS.length,
     active_count,
     pipeline_agent_ids: [...PIPELINE_AGENT_IDS],
     agents,

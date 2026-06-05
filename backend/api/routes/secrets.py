@@ -4,6 +4,8 @@ Routes secrets — coffre local chiffré pour les clés API.
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -35,6 +37,15 @@ _PROVIDER_ENV: dict[str, tuple[str, str]] = {
 }
 
 
+def _env_nonempty(env_name: str) -> bool:
+    return bool((os.environ.get(env_name) or "").strip())
+
+
+def _settings_field_nonempty(settings: Settings, field_name: str) -> bool:
+    raw = getattr(settings, field_name, None)
+    return bool(plain_secret_str(raw))
+
+
 def _resolve_api_key(provider: str, override: str | None, settings: Settings) -> str | None:
     key = (provider or "").strip().lower()
     if override and override.strip():
@@ -46,26 +57,61 @@ def _resolve_api_key(provider: str, override: str | None, settings: Settings) ->
     vault_val = get_secret_vault().peek(env_name)
     if vault_val:
         return vault_val
+    env_val = (os.environ.get(env_name) or "").strip()
+    if env_val:
+        return env_val
+    if key == "railway":
+        railway_token = (os.environ.get("RAILWAY_TOKEN") or "").strip()
+        if railway_token:
+            return railway_token
     raw = getattr(settings, field_name, None)
     text = plain_secret_str(raw)
     return text or None
+
+
+def _provider_configured(
+    provider: str,
+    vault_configured: dict[str, bool],
+    settings: Settings,
+) -> bool:
+    if vault_configured.get(provider):
+        return True
+
+    if provider == "cloudflare":
+        return settings.cloudflare_configured() or (
+            _env_nonempty("CLOUDFLARE_ACCOUNT_ID")
+            and _env_nonempty("CLOUDFLARE_API_TOKEN")
+        )
+    if provider == "pexels":
+        return settings.pexels_configured() or _env_nonempty("PEXELS_API_KEY")
+    if provider == "firecrawl":
+        return settings.firecrawl_configured() or _env_nonempty("FIRECRAWL_API_KEY")
+
+    mapping = _PROVIDER_ENV.get(provider)
+    if not mapping:
+        return bool(vault_configured.get(provider))
+
+    env_name, field_name = mapping
+    if _env_nonempty(env_name):
+        return True
+    if provider == "railway" and _env_nonempty("RAILWAY_TOKEN"):
+        return True
+    return _settings_field_nonempty(settings, field_name)
 
 
 def _merge_configured_flags(
     vault_configured: dict[str, bool],
     settings: Settings,
 ) -> dict[str, bool]:
-    merged = dict(vault_configured)
-    for provider, (_, field_name) in _PROVIDER_ENV.items():
-        if merged.get(provider):
-            continue
-        raw = getattr(settings, field_name, None)
-        if plain_secret_str(raw):
-            merged[provider] = True
-    merged["cloudflare"] = settings.cloudflare_configured()
-    merged["pexels"] = settings.pexels_configured()
-    merged["firecrawl"] = settings.firecrawl_configured()
-    return merged
+    providers = set(vault_configured.keys()) | set(_PROVIDER_ENV.keys()) | {
+        "cloudflare",
+        "pexels",
+        "firecrawl",
+    }
+    return {
+        provider: _provider_configured(provider, vault_configured, settings)
+        for provider in providers
+    }
 
 
 class UnlockRequest(BaseModel):
