@@ -13,7 +13,7 @@ import { useAgentsStatus } from "@/context/AgentsStatusContext";
 import { useBackendHealth } from "@/context/BackendHealthContext";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import { apiRequest } from "@/lib/api-client";
-import { fetchLegalClients } from "@/lib/legal-api";
+import { fetchLegalClients, type LegalClient } from "@/lib/legal-api";
 import {
   GENERATOR_KINDS,
   resolveGenerationMode,
@@ -31,6 +31,8 @@ interface DashboardPageProps {
 }
 
 type DashboardProjectKind = GeneratorKindId;
+
+const AVG_PROJECT_REVENUE_EUR = 2500;
 
 const eurFmt = new Intl.NumberFormat("fr-FR", {
   style: "currency",
@@ -99,6 +101,30 @@ function isThisMonth(iso: string): boolean {
   const d = new Date(iso);
   const start = startOfThisMonth().getTime();
   return Number.isFinite(d.getTime()) && d.getTime() >= start;
+}
+
+function isLastMonth(iso: string): boolean {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return false;
+  const now = new Date();
+  const startLast = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+  const startThis = startOfThisMonth().getTime();
+  const t = d.getTime();
+  return t >= startLast && t < startThis;
+}
+
+function countBeforeThisMonth(items: { created_at: string }[]): number {
+  const start = startOfThisMonth().getTime();
+  return items.filter((item) => {
+    const t = new Date(item.created_at).getTime();
+    return Number.isFinite(t) && t < start;
+  }).length;
+}
+
+/** Tendance mois courant vs mois précédent — null si pas de base de comparaison. */
+function calcTrendPct(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
 }
 
 function safeNumber(value: unknown): number {
@@ -239,7 +265,7 @@ function KpiCard({
   label: string;
   value: string;
   valueSuffix?: string;
-  trendPct: number;
+  trendPct?: number | null;
   loading?: boolean;
   delayMs?: number;
 }) {
@@ -281,7 +307,7 @@ function KpiCard({
             </p>
           </div>
         </div>
-        <TrendChip valuePct={trendPct} />
+        {trendPct != null ? <TrendChip valuePct={trendPct} /> : null}
       </div>
     </GlassCard>
   );
@@ -311,7 +337,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [loading, setLoading] = useState(true);
   const [revenueMonth, setRevenueMonth] = useState<number | null>(null);
   const [apiCostMonth, setApiCostMonth] = useState<number | null>(null);
-  const [clientCount, setClientCount] = useState<number | null>(null);
+  const [clients, setClients] = useState<LegalClient[]>([]);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
 
@@ -324,9 +350,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     ]);
 
     if (clientsRes.ok && Array.isArray(clientsRes.data)) {
-      setClientCount(clientsRes.data.length);
+      setClients(clientsRes.data);
     } else {
-      setClientCount(0);
+      setClients([]);
     }
 
     if (projectsRes.ok && Array.isArray(projectsRes.data)) {
@@ -358,22 +384,74 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   }, [projects]);
 
   const activeProjectsCount = projects.length;
+  const clientCount = clients.length;
   const backendOnline = backendStatus === "online";
 
-  const projectsThisMonth = useMemo(() => {
-    return projects.filter((p) => isThisMonth(p.created_at));
-  }, [projects]);
+  const projectsThisMonth = useMemo(
+    () => projects.filter((p) => isThisMonth(p.created_at)),
+    [projects],
+  );
+  const projectsLastMonth = useMemo(
+    () => projects.filter((p) => isLastMonth(p.created_at)),
+    [projects],
+  );
 
   const estApiCostMonth = useMemo(() => {
     return projects
       .filter((p) => isThisMonth(p.updated_at))
-      .reduce((sum, p) => sum + safeNumber((p as any).latest_estimated_cost_usd), 0);
+      .reduce((sum, p) => sum + safeNumber(p.latest_estimated_cost_usd), 0);
   }, [projects]);
 
-  const estRevenueMonth = useMemo(() => {
-    const AVG_PROJECT_REVENUE_EUR = 2500;
-    return projectsThisMonth.length * AVG_PROJECT_REVENUE_EUR;
-  }, [projectsThisMonth.length]);
+  const estApiCostLastMonth = useMemo(() => {
+    return projects
+      .filter((p) => isLastMonth(p.updated_at))
+      .reduce((sum, p) => sum + safeNumber(p.latest_estimated_cost_usd), 0);
+  }, [projects]);
+
+  const estRevenueMonth = useMemo(
+    () => projectsThisMonth.length * AVG_PROJECT_REVENUE_EUR,
+    [projectsThisMonth.length],
+  );
+  const estRevenueLastMonth = useMemo(
+    () => projectsLastMonth.length * AVG_PROJECT_REVENUE_EUR,
+    [projectsLastMonth.length],
+  );
+
+  const hasKpiData =
+    estRevenueMonth > 0 ||
+    activeProjectsCount > 0 ||
+    clientCount > 0 ||
+    estApiCostMonth > 0;
+
+  const kpiTrends = useMemo(() => {
+    if (!hasKpiData) {
+      return {
+        revenue: null,
+        projects: null,
+        clients: null,
+        apiCost: null,
+      } as const;
+    }
+    return {
+      revenue: calcTrendPct(estRevenueMonth, estRevenueLastMonth),
+      projects: calcTrendPct(
+        activeProjectsCount,
+        countBeforeThisMonth(projects),
+      ),
+      clients: calcTrendPct(clientCount, countBeforeThisMonth(clients)),
+      apiCost: calcTrendPct(estApiCostMonth, estApiCostLastMonth),
+    } as const;
+  }, [
+    activeProjectsCount,
+    clientCount,
+    clients,
+    estApiCostLastMonth,
+    estApiCostMonth,
+    estRevenueLastMonth,
+    estRevenueMonth,
+    hasKpiData,
+    projects,
+  ]);
 
   useEffect(() => {
     setRevenueMonth(estRevenueMonth);
@@ -481,7 +559,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           iconClassName="text-cf-gold"
           label="CA ce mois"
           value={formatEur(kpiRevenue)}
-          trendPct={12}
+          trendPct={kpiTrends.revenue}
           loading={loading && revenueMonth === null}
           delayMs={60}
         />
@@ -490,7 +568,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           iconClassName="text-sky-200"
           label="Projets actifs"
           value={String(Math.round(kpiProjects))}
-          trendPct={-3}
+          trendPct={kpiTrends.projects}
           loading={loading && projects.length === 0}
           delayMs={120}
         />
@@ -499,8 +577,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           iconClassName="text-violet-200"
           label="Clients"
           value={String(Math.round(kpiClients))}
-          trendPct={8}
-          loading={loading && clientCount === null}
+          trendPct={kpiTrends.clients}
+          loading={loading}
           delayMs={180}
         />
         <KpiCard
@@ -508,7 +586,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           iconClassName="text-orange-200"
           label="Coût API ce mois"
           value={formatEur(kpiApiCost)}
-          trendPct={6}
+          trendPct={kpiTrends.apiCost}
           loading={loading && apiCostMonth === null}
           delayMs={240}
         />

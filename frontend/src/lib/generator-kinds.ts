@@ -20,6 +20,54 @@ export interface GeneratorKindOption {
   examples: string[];
 }
 
+/** Icônes et couleurs premium — étape 1 du générateur. */
+export const GENERATOR_KIND_VISUAL: Record<
+  GeneratorKindId,
+  {
+    emoji: string;
+    colorClass: string;
+    ringClass: string;
+    shortDescription: string;
+  }
+> = {
+  vitrine: {
+    emoji: "🏪",
+    colorClass: "text-amber-300",
+    ringClass: "ring-amber-400/30",
+    shortDescription: "Site vitrine multi-pages pour présenter une activité.",
+  },
+  app_web: {
+    emoji: "💻",
+    colorClass: "text-blue-300",
+    ringClass: "ring-blue-400/30",
+    shortDescription: "Application web avec logique métier et données.",
+  },
+  ecommerce: {
+    emoji: "🛒",
+    colorClass: "text-emerald-300",
+    ringClass: "ring-emerald-400/30",
+    shortDescription: "Boutique en ligne, panier et paiement.",
+  },
+  reservation: {
+    emoji: "📅",
+    colorClass: "text-violet-300",
+    ringClass: "ring-violet-400/30",
+    shortDescription: "Agenda en ligne, créneaux et confirmations.",
+  },
+  extension: {
+    emoji: "🔌",
+    colorClass: "text-cyan-300",
+    ringClass: "ring-cyan-400/30",
+    shortDescription: "Extension Chrome ou Firefox.",
+  },
+  desktop: {
+    emoji: "🖥️",
+    colorClass: "text-orange-300",
+    ringClass: "ring-orange-400/30",
+    shortDescription: "Logiciel Windows (.exe) pour artisans.",
+  },
+};
+
 export const GENERATOR_KINDS: GeneratorKindOption[] = [
   {
     id: "vitrine",

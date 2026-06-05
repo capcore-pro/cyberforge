@@ -51,6 +51,7 @@ import {
 } from "@/lib/cyberforge-preview";
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { projectTitleFromPrompt } from "@/lib/project-title";
+import { ClientPickerDropdown } from "@/components/generator/ClientPickerDropdown";
 import { fetchClientBranding, listClients, type ClientRecord } from "@/lib/clients-api";
 import { updateProject } from "@/lib/projects-api";
 import {
@@ -63,6 +64,7 @@ import { PersoBadge } from "@/components/PersoBadge";
 import {
   buildGeneratorPipelinePrompt,
   GENERATOR_KINDS,
+  GENERATOR_KIND_VISUAL,
   getGeneratorKind,
   inferDeployModeFromSession,
   inferKindFromSession,
@@ -100,6 +102,12 @@ import {
 type ProjectOwnerMode = "client" | "perso";
 type WizardStep = "type" | "sector" | "details";
 
+const GLASS_CARD =
+  "rounded-card border border-white/10 bg-white/5 backdrop-blur-xl transition-all duration-200";
+const GLASS_CARD_INTERACTIVE = `${GLASS_CARD} hover:border-[#d4a843] hover:shadow-[0_0_24px_rgba(212,168,67,0.12)] hover:scale-[1.02] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#d4a843]/40 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100`;
+const GLASS_CARD_SELECTED =
+  "border-[#d4a843] bg-[#d4a843]/10 shadow-[0_0_24px_rgba(212,168,67,0.15)] ring-1 ring-[#d4a843]/25";
+
 const SECTION_TYPE_LABELS: Record<string, string> = {
   hero: "hero",
   about: "à propos",
@@ -133,7 +141,7 @@ interface GeneratorPageProps {
 
 function StepHeading({ step, title }: { step: number; title: string }) {
   return (
-    <div className="mb-5 flex items-center gap-3">
+    <div className="mb-4 flex items-center gap-3">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-cf-gold/50 bg-cf-active text-sm font-semibold text-cf-gold">
         {step}
       </span>
@@ -151,7 +159,7 @@ function WizardBreadcrumb({ active }: { active: WizardStep }) {
   const activeIndex = steps.findIndex((s) => s.id === active);
   return (
     <nav
-      className="mb-6 flex flex-wrap items-center gap-2 text-sm"
+      className="mb-4 flex flex-wrap items-center gap-2 text-sm"
       aria-label="Étapes du formulaire"
     >
       {steps.map((step, index) => {
@@ -423,13 +431,23 @@ export function GeneratorPage({
   }
 
   const loadClientOptions = useCallback(() => {
-    if (clientOptions.length > 0 || clientsLoading) return;
+    if (clientsLoading) return;
     setClientsLoading(true);
     void listClients("client").then((res) => {
       setClientsLoading(false);
       if (res.ok && res.data) setClientOptions(res.data);
     });
-  }, [clientOptions.length, clientsLoading]);
+  }, [clientsLoading]);
+
+  const handleClientCreated = useCallback((client: ClientRecord) => {
+    setClientOptions((prev) => {
+      if (prev.some((c) => c.id === client.id)) return prev;
+      return [client, ...prev];
+    });
+    const label = client.company?.trim() || client.name;
+    setLinkedClientLabel(label);
+    setLinkedClientPerso(client.kind === "perso");
+  }, []);
 
   function selectProjectOwner(mode: ProjectOwnerMode) {
     if (isRunning) return;
@@ -1272,68 +1290,56 @@ export function GeneratorPage({
 
       {/* Étape 1 — Type */}
       {wizardStep === "type" ? (
-      <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
+      <section className={`${GLASS_CARD} p-5`}>
         <WizardBreadcrumb active="type" />
         <StepHeading step={1} title="Choix du type de projet" />
 
-        <div className="mb-6 grid gap-4 sm:grid-cols-2">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
             disabled={isRunning}
             onClick={() => selectProjectOwner("client")}
-            className={`flex min-h-[120px] flex-col items-start rounded-card border p-5 text-left transition ${
-              projectOwnerMode === "client"
-                ? "border-cf-gold bg-cf-active shadow-gold"
-                : "border-cf-border-input bg-cf-secondary hover:border-cf-gold/40"
-            } disabled:cursor-not-allowed disabled:opacity-60`}
+            className={`flex min-h-[104px] flex-col items-start p-4 text-left ${GLASS_CARD_INTERACTIVE} ${
+              projectOwnerMode === "client" ? GLASS_CARD_SELECTED : ""
+            }`}
           >
-            <span className="text-base font-medium text-cf-text">Projet Client</span>
-            <span className="mt-2 text-sm leading-relaxed text-cf-muted">
-              Je crée pour un client, je facture — client affilié et estimation prix marché.
+            <span className="text-base font-semibold text-cf-text">Projet Client</span>
+            <span className="mt-1.5 text-sm leading-snug text-cf-muted">
+              Pour un client à facturer — affiliation et estimation marché.
             </span>
           </button>
           <button
             type="button"
             disabled={isRunning}
             onClick={() => selectProjectOwner("perso")}
-            className={`flex min-h-[120px] flex-col items-start rounded-card border p-5 text-left transition ${
-              projectOwnerMode === "perso"
-                ? "border-fuchsia-400/60 bg-fuchsia-500/10 shadow-gold"
-                : "border-cf-border-input bg-cf-secondary hover:border-fuchsia-400/30"
-            } disabled:cursor-not-allowed disabled:opacity-60`}
+            className={`flex min-h-[104px] flex-col items-start p-4 text-left ${GLASS_CARD_INTERACTIVE} ${
+              projectOwnerMode === "perso" ? GLASS_CARD_SELECTED : ""
+            }`}
           >
-            <span className="text-base font-medium text-cf-text">Projet Perso</span>
-            <span className="mt-2 text-sm leading-relaxed text-cf-muted">
-              Je crée pour moi — usage interne, vente one-shot ou abonnement.
+            <span className="text-base font-semibold text-cf-text">Projet Perso</span>
+            <span className="mt-1.5 text-sm leading-snug text-cf-muted">
+              Pour vous — usage interne ou commercialisation.
             </span>
           </button>
         </div>
 
         {projectOwnerMode === "client" ? (
-          <div className="mb-6 rounded-control border border-cf-border-input bg-cf-secondary/60 p-4">
-            <label className="block space-y-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
+          <div className={`mb-4 space-y-3 ${GLASS_CARD} p-4`}>
+            <label className="block space-y-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-label">
                 Client affilié
               </span>
-              <select
-                value={linkedClientId ?? ""}
-                onFocus={loadClientOptions}
-                onChange={(e) => handleClientSelect(e.target.value)}
+              <ClientPickerDropdown
+                clients={clientOptions}
+                loading={clientsLoading}
+                value={linkedClientId}
                 disabled={isRunning}
-                className="w-full rounded-control border border-cf-border-input bg-cf-main px-3 py-2.5 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none disabled:opacity-60"
-              >
-                <option value="">— Sélectionner un client —</option>
-                {clientOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.company?.trim() || c.name}
-                  </option>
-                ))}
-              </select>
+                onOpen={loadClientOptions}
+                onSelect={handleClientSelect}
+                onClientCreated={handleClientCreated}
+              />
             </label>
-            {clientsLoading ? (
-              <p className="mt-2 text-xs text-cf-muted">Chargement des clients…</p>
-            ) : null}
-            <p className="mt-3 text-xs text-cf-muted">
+            <p className="text-xs text-cf-muted">
               Estimation prix marché ({kindOption.title}) :{" "}
               <strong className="text-cf-gold">
                 {formatEur(estimation.marketPriceMin)} –{" "}
@@ -1342,7 +1348,7 @@ export function GeneratorPage({
             </p>
           </div>
         ) : (
-          <div className="mb-6 space-y-4 rounded-control border border-fuchsia-400/25 bg-fuchsia-500/5 p-4">
+          <div className={`mb-4 space-y-3 ${GLASS_CARD} p-4`}>
             <fieldset className="space-y-2">
               <legend className="text-[10px] font-medium uppercase tracking-wider text-cf-label">
                 Usage
@@ -1412,33 +1418,32 @@ export function GeneratorPage({
           </div>
         )}
 
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-cf-label">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-label">
           Type technique
         </p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {GENERATOR_KINDS.map((kind) => {
             const selected = selectedKind === kind.id;
+            const visual = GENERATOR_KIND_VISUAL[kind.id];
             return (
               <button
                 key={kind.id}
                 type="button"
                 disabled={isRunning}
                 onClick={() => selectKind(kind.id)}
-                className={`flex min-h-[140px] flex-col items-start rounded-card border p-5 text-left transition ${
-                  selected
-                    ? "border-cf-gold bg-cf-active shadow-gold"
-                    : "border-cf-border-input bg-cf-secondary hover:border-cf-gold/40"
-                } disabled:cursor-not-allowed disabled:opacity-60`}
+                className={`flex min-h-[128px] flex-col items-start p-4 text-left ${GLASS_CARD_INTERACTIVE} ${
+                  selected ? `${GLASS_CARD_SELECTED} ring-2 ${visual.ringClass}` : ""
+                }`}
               >
                 <span
-                  className={`mb-3 text-2xl ${selected ? "text-cf-gold" : "text-cf-muted"}`}
+                  className={`mb-2 text-2xl ${selected ? visual.colorClass : "text-cf-muted"}`}
                   aria-hidden
                 >
-                  {kind.icon}
+                  {visual.emoji}
                 </span>
-                <span className="text-base font-medium text-cf-text">{kind.title}</span>
-                <span className="mt-2 text-sm leading-relaxed text-cf-muted">
-                  {kind.description}
+                <span className="text-base font-semibold text-cf-text">{kind.title}</span>
+                <span className="mt-1.5 text-sm leading-snug text-cf-muted">
+                  {visual.shortDescription}
                 </span>
               </button>
             );
