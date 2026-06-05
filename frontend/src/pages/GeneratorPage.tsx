@@ -51,6 +51,7 @@ import {
   getGeneratorKind,
   inferDeployModeFromSession,
   inferKindFromSession,
+  persistGeneratorKind,
   INSPIRATION_SECTOR_OPTIONS,
   kindToToolboxSecteur,
   resolveGenerationMode,
@@ -384,6 +385,15 @@ export function GeneratorPage({
     [selectedKind],
   );
 
+  useEffect(() => {
+    if (
+      selectedSectorId &&
+      !sectorOptions.some((preset) => preset.id === selectedSectorId)
+    ) {
+      setSelectedSectorId(null);
+    }
+  }, [selectedSectorId, sectorOptions]);
+
   const builtPipelinePrompt = useMemo(
     () =>
       buildGeneratorDetailsPrompt(
@@ -714,6 +724,7 @@ export function GeneratorPage({
 
   function selectKind(kind: GeneratorKindId) {
     if (isRunning) return;
+    persistGeneratorKind(kind);
     setSelectedKind(kind);
     setSelectedSectorId(null);
     setDetailsForm(EMPTY_GENERATOR_DETAILS);
@@ -721,7 +732,8 @@ export function GeneratorPage({
     setTouchedFields(new Set());
     setInspirationSecteur(kindToToolboxSecteur(kind));
     setWizardStep("sector");
-    patch({ prompt: "", error: null });
+    const synced = syncSessionFromKind(kind, deployMode);
+    patch({ ...synced, prompt: "", error: null });
   }
 
   function wizardBack() {
@@ -1438,14 +1450,14 @@ export function GeneratorPage({
 
       {/* Étape 2 — Secteur */}
       {wizardStep === "sector" ? (
-        <section className={`${GLASS_CARD} p-5`}>
+        <section key={`sector-step-${selectedKind}`} className={`${GLASS_CARD} p-5`}>
           <WizardBreadcrumb active="sector" />
           <StepHeading step={2} title="Choix du secteur" />
           <p className="mb-4 text-sm text-cf-muted">
             Projet « {kindOption.title} » — pré-remplit le formulaire (modifiable ensuite).
           </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {sectorOptions.map((preset) => {
+            {listSectorsForKind(selectedKind).map((preset) => {
               const selected = selectedSectorId === preset.id;
               return (
                 <button

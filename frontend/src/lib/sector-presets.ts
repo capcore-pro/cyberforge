@@ -485,6 +485,18 @@ export const SECTOR_PRESETS: Record<SectorPresetId, SectorPreset> = Object.fromE
   SECTOR_PRESET_LIST.map((p) => [p.id, p]),
 ) as Record<SectorPresetId, SectorPreset>;
 
+/** Libellés obligatoires — type Vitrine (étape secteur du générateur). */
+export const REQUIRED_VITRINE_SECTOR_LABELS = [
+  "Artisan & BTP",
+  "Restaurant & Café",
+  "Santé & Bien-être",
+  "Nautique & Marine",
+  "Immobilier & Architecture",
+  "Beauté & Coiffure",
+  "Formation & Coaching",
+  "Garage & Auto",
+] as const;
+
 /** Libellés obligatoires — type Réservation (étape secteur du générateur). */
 export const REQUIRED_RESERVATION_SECTOR_LABELS = [
   "Camping & Plein air",
@@ -496,24 +508,59 @@ export const REQUIRED_RESERVATION_SECTOR_LABELS = [
   "Location nautique",
 ] as const;
 
-function buildReservationSectorPresets(): SectorPreset[] {
-  return REQUIRED_RESERVATION_SECTOR_LABELS.map((label) => {
+/** Libellés obligatoires — type E-commerce (étape secteur du générateur). */
+export const REQUIRED_ECOMMERCE_SECTOR_LABELS = [
+  "Mode & Vêtements",
+  "Artisan & Créateur",
+  "Bio & Alimentation",
+  "High-tech & Électronique",
+  "Maison & Déco",
+  "Fleurs & Cadeaux",
+] as const;
+
+function buildOrderedSectorPresets(
+  kind: GeneratorKindId,
+  labels: readonly string[],
+): SectorPreset[] {
+  return labels.map((label) => {
     const preset = SECTOR_PRESET_LIST.find(
-      (p) => p.kinds.includes("reservation") && p.label === label,
+      (p) => p.kinds.includes(kind) && p.label === label,
     );
     if (!preset) {
-      throw new Error(`Preset réservation manquant : ${label}`);
+      throw new Error(`Preset ${kind} manquant : ${label}`);
     }
     return preset;
   });
 }
 
+/** 8 secteurs vitrine avec couleurs, descriptions et services complets. */
+export const VITRINE_SECTOR_PRESETS: SectorPreset[] = buildOrderedSectorPresets(
+  "vitrine",
+  REQUIRED_VITRINE_SECTOR_LABELS,
+);
+
 /** 7 secteurs réservation avec couleurs, descriptions et services complets. */
-export const RESERVATION_SECTOR_PRESETS: SectorPreset[] = buildReservationSectorPresets();
+export const RESERVATION_SECTOR_PRESETS: SectorPreset[] = buildOrderedSectorPresets(
+  "reservation",
+  REQUIRED_RESERVATION_SECTOR_LABELS,
+);
+
+/** 6 secteurs e-commerce avec couleurs, descriptions et services complets. */
+export const ECOMMERCE_SECTOR_PRESETS: SectorPreset[] = buildOrderedSectorPresets(
+  "ecommerce",
+  REQUIRED_ECOMMERCE_SECTOR_LABELS,
+);
+
+const SECTORS_BY_KIND: Partial<Record<GeneratorKindId, SectorPreset[]>> = {
+  vitrine: VITRINE_SECTOR_PRESETS,
+  reservation: RESERVATION_SECTOR_PRESETS,
+  ecommerce: ECOMMERCE_SECTOR_PRESETS,
+};
 
 export function listSectorsForKind(kind: GeneratorKindId): SectorPreset[] {
-  if (kind === "reservation") {
-    return RESERVATION_SECTOR_PRESETS;
+  const curated = SECTORS_BY_KIND[kind];
+  if (curated) {
+    return curated;
   }
   return SECTOR_PRESET_LIST.filter((p) => p.kinds.includes(kind));
 }

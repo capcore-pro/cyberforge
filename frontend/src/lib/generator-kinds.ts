@@ -8,6 +8,40 @@ export type GeneratorKindId =
   | "extension"
   | "desktop";
 
+export const GENERATOR_KIND_IDS: GeneratorKindId[] = [
+  "vitrine",
+  "app_web",
+  "ecommerce",
+  "reservation",
+  "extension",
+  "desktop",
+];
+
+const GENERATOR_KIND_STORAGE_KEY = "cyberforge.generatorKind";
+
+export function isGeneratorKindId(value: string): value is GeneratorKindId {
+  return (GENERATOR_KIND_IDS as string[]).includes(value);
+}
+
+/** Mémorise le type choisi à l'étape 1 (vitrine ≠ réservation malgré le même projectType). */
+export function persistGeneratorKind(kind: GeneratorKindId): void {
+  try {
+    localStorage.setItem(GENERATOR_KIND_STORAGE_KEY, kind);
+  } catch {
+    /* quota / mode privé */
+  }
+}
+
+export function readStoredGeneratorKind(): GeneratorKindId | null {
+  try {
+    const raw = localStorage.getItem(GENERATOR_KIND_STORAGE_KEY);
+    if (raw && isGeneratorKindId(raw)) return raw;
+  } catch {
+    /* indisponible */
+  }
+  return null;
+}
+
 export type DeployMode = "demo" | "real";
 
 export interface GeneratorKindOption {
@@ -165,6 +199,9 @@ export function inferKindFromSession(
   generationMode: GenerationMode,
   description: string,
 ): GeneratorKindId {
+  const stored = readStoredGeneratorKind();
+  if (stored) return stored;
+
   if (projectType === "application_desktop") return "desktop";
   if (projectType === "application_web") return "app_web";
   if (projectType === "saas_dashboard") return "ecommerce";
