@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
+import { Eye } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
+import {
+  BADGE_GLASS,
+  FIELD_LABEL,
+  GLASS_PILL_BTN,
+  GLASS_SECTION,
+  GOLD_BTN,
+  INPUT,
+  logAccountingApiError,
+  shouldSilenceApiError,
+} from "@/components/accounting/accounting-theme";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   fetchNewsletterContacts,
@@ -8,6 +19,12 @@ import {
   sendNewsletterToAll,
   type NewsletterEmail,
 } from "@/lib/newsletter-api";
+
+function reportError(context: string, res: { ok: boolean; status?: number }) {
+  const msg = apiErrorMessage(res, `${context} impossible.`);
+  logAccountingApiError(`Newsletter / ${context}`, msg);
+  return shouldSilenceApiError(msg) ? null : msg;
+}
 
 export function NewsletterBroadcastPanel() {
   const [theme, setTheme] = useState("");
@@ -22,6 +39,8 @@ export function NewsletterBroadcastPanel() {
     const res = await fetchNewsletterContacts();
     if (res.ok && Array.isArray(res.data)) {
       setSubscriberCount(res.data.filter((c) => c.subscribed).length);
+    } else if (!res.ok) {
+      reportError("abonnés", res);
     }
   }, []);
 
@@ -40,7 +59,7 @@ export function NewsletterBroadcastPanel() {
     });
     setLoading(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Génération impossible."));
+      setError(reportError("génération", res));
       return;
     }
     setDraft(res.data ?? null);
@@ -54,7 +73,7 @@ export function NewsletterBroadcastPanel() {
     const res = await previewNewsletterEmail(draft.id);
     setLoading(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Preview impossible."));
+      setError(reportError("preview", res));
       return;
     }
     setMessage(`Preview envoyée à ${res.data?.to ?? "Mat"}.`);
@@ -74,7 +93,7 @@ export function NewsletterBroadcastPanel() {
     const res = await sendNewsletterToAll(draft.id);
     setLoading(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Envoi global impossible."));
+      setError(reportError("envoi global", res));
       return;
     }
     setMessage(
@@ -85,31 +104,26 @@ export function NewsletterBroadcastPanel() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,340px)_1fr]">
-      <div className="cyber-panel space-y-4 border-cyber-border p-4">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-cyber-neon">
+      <div className={`${GLASS_SECTION} space-y-4 p-6`}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-[#d4a843]">
           Nouvelle newsletter
         </h3>
-        <p className="text-xs text-cyber-muted">
-          Abonnés actifs :{" "}
-          <span className="font-mono text-cyber-text">{subscriberCount}</span>
-        </p>
+        <span className={BADGE_GLASS}>
+          Abonnés actifs : {subscriberCount}
+        </span>
         <div>
-          <label className="mb-1 block text-xs font-bold uppercase text-cyber-muted">
-            Thème
-          </label>
+          <label className={FIELD_LABEL}>Thème</label>
           <input
-            className="cyber-input w-full"
+            className={INPUT}
             placeholder="Ex. nouvelle fonctionnalité clone de site"
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-bold uppercase text-cyber-muted">
-            Contexte (optionnel)
-          </label>
+          <label className={FIELD_LABEL}>Contexte (optionnel)</label>
           <textarea
-            className="cyber-input min-h-[100px] w-full resize-y"
+            className={`${INPUT} min-h-[120px] resize-none`}
             placeholder="Détails pour l'agent…"
             value={context}
             onChange={(e) => setContext(e.target.value)}
@@ -117,7 +131,7 @@ export function NewsletterBroadcastPanel() {
         </div>
         <button
           type="button"
-          className="cyber-action-btn cyber-action-btn-primary w-full text-xs"
+          className={`${GOLD_BTN} mt-2 w-full py-2.5 font-medium`}
           disabled={loading || !theme.trim()}
           onClick={() => void handleGenerate()}
         >
@@ -127,7 +141,7 @@ export function NewsletterBroadcastPanel() {
           <div className="flex flex-wrap gap-2 pt-2">
             <button
               type="button"
-              className="cyber-action-btn text-xs"
+              className={GLASS_PILL_BTN}
               disabled={loading}
               onClick={() => void handlePreview()}
             >
@@ -135,7 +149,7 @@ export function NewsletterBroadcastPanel() {
             </button>
             <button
               type="button"
-              className="cyber-action-btn text-xs"
+              className={GLASS_PILL_BTN}
               disabled={loading || subscriberCount === 0}
               onClick={() => void handleSendAll()}
             >
@@ -147,11 +161,13 @@ export function NewsletterBroadcastPanel() {
           <p className="text-sm text-red-300">{error}</p>
         ) : null}
         {message ? (
-          <p className="text-sm text-cyber-neon">{message}</p>
+          <p className="rounded-lg border border-[#d4a843]/30 bg-[#d4a843]/10 px-4 py-3 text-sm text-[#d4a843]">
+            {message}
+          </p>
         ) : null}
       </div>
 
-      <div className="cyber-panel flex min-h-[320px] flex-col border-cyber-border p-4">
+      <div className={`${GLASS_SECTION} flex min-h-[320px] flex-col p-6`}>
         {draft ? (
           <BackButton
             className="mb-3 self-start"
@@ -162,13 +178,13 @@ export function NewsletterBroadcastPanel() {
             }}
           />
         ) : null}
-        <h3 className="mb-2 text-sm font-bold uppercase tracking-wider text-cyber-muted">
+        <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-[#d4a843]">
           Aperçu HTML
         </h3>
         {draft ? (
           <>
-            <p className="mb-3 text-sm font-medium text-cyber-text">{draft.subject}</p>
-            <div className="flex-1 overflow-hidden rounded-lg border border-cyber-border bg-white">
+            <p className="mb-3 text-sm font-medium text-white">{draft.subject}</p>
+            <div className="flex-1 overflow-hidden rounded-lg border border-white/10 bg-white">
               <iframe
                 title="Aperçu newsletter"
                 className="h-[min(520px,60vh)] w-full bg-white"
@@ -178,9 +194,12 @@ export function NewsletterBroadcastPanel() {
             </div>
           </>
         ) : (
-          <p className="text-sm text-cyber-muted">
-            Générez une newsletter pour voir l&apos;aperçu ici.
-          </p>
+          <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+            <Eye className="mb-3 h-10 w-10 text-white/20" aria-hidden />
+            <p className="text-sm text-white/30">
+              Générez une newsletter pour voir l&apos;aperçu ici
+            </p>
+          </div>
         )}
       </div>
     </div>

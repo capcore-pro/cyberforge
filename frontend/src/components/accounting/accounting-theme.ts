@@ -22,6 +22,12 @@ export const INPUT =
 export const SELECT = `${INPUT} appearance-none`;
 export const FORM_CONTAINER =
   "rounded-xl border border-white/10 bg-white/[0.03] p-5";
+export const GLASS_PILL_BTN =
+  "inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-2 text-sm text-white/70 transition hover:border-white/30 hover:text-white disabled:opacity-50";
+export const FIELD_LABEL =
+  "mb-1 block text-xs font-semibold uppercase tracking-widest text-white/40";
+export const BADGE_GLASS =
+  "inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/50";
 
 export function logAccountingApiError(context: string, message: string): void {
   console.warn(`[Comptabilité] ${context}:`, message);

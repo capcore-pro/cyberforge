@@ -1,6 +1,11 @@
 import { lazy, Suspense, useState } from "react";
 import { PageLoader } from "@/components/PageLoader";
 
+const TAB_INACTIVE =
+  "border-b-2 border-transparent px-4 pb-3 pt-2 text-sm text-white/50 transition-colors hover:text-white/80";
+const TAB_ACTIVE =
+  "border-b-2 border-[#d4a843] px-4 pb-3 pt-2 text-sm font-medium text-[#d4a843]";
+
 const SequencesPanel = lazy(() =>
   import("@/components/newsletter/SequencesPanel").then((m) => ({
     default: m.SequencesPanel,
@@ -25,29 +30,6 @@ const SECTIONS: { id: NewsletterSection; label: string }[] = [
   { id: "contacts", label: "Contacts" },
 ];
 
-function SubTabs({
-  current,
-  onChange,
-}: {
-  current: NewsletterSection;
-  onChange: (s: NewsletterSection) => void;
-}) {
-  return (
-    <div className="cf-subtabs">
-      {SECTIONS.map((s) => (
-        <button
-          key={s.id}
-          type="button"
-          onClick={() => onChange(s.id)}
-          className={`cf-subtab ${current === s.id ? "cf-subtab-active" : ""}`}
-        >
-          {s.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /**
  * Module Newsletter — séquences bienvenue, envois Brevo et contacts.
  */
@@ -55,17 +37,29 @@ export function NewsletterPage() {
   const [section, setSection] = useState<NewsletterSection>("sequences");
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-cyber-text">
-          Newsletter CapCore
-        </h1>
-        <p className="mt-1 text-sm text-cyber-muted">
+    <div className="mx-auto max-w-6xl space-y-8">
+      <header>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#d4a843]/80">
+          Communications CapCore
+        </p>
+        <h1 className="text-2xl font-semibold text-white">Newsletter CapCore</h1>
+        <p className="mt-2 text-sm text-white/50">
           Séquences de bienvenue, newsletters ponctuelles et carnet abonnés.
         </p>
       </header>
 
-      <SubTabs current={section} onChange={setSection} />
+      <nav className="flex flex-wrap gap-1 border-b border-white/10">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setSection(s.id)}
+            className={section === s.id ? TAB_ACTIVE : TAB_INACTIVE}
+          >
+            {s.label}
+          </button>
+        ))}
+      </nav>
 
       <Suspense fallback={<PageLoader />}>
         {section === "sequences" ? <SequencesPanel /> : null}

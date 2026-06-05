@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
+import { Users } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
+import {
+  FORM_CONTAINER,
+  GLASS_PILL_BTN,
+  GLASS_SECTION,
+  GOLD_BTN,
+  INPUT,
+  logAccountingApiError,
+  shouldSilenceApiError,
+} from "@/components/accounting/accounting-theme";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   createNewsletterContact,
@@ -10,6 +20,12 @@ import {
 } from "@/lib/newsletter-api";
 
 const emptyForm = { name: "", email: "", company: "", sector: "" };
+
+function reportError(context: string, res: { ok: boolean; status?: number }) {
+  const msg = apiErrorMessage(res, `${context} impossible.`);
+  logAccountingApiError(`Newsletter / ${context}`, msg);
+  return shouldSilenceApiError(msg) ? null : msg;
+}
 
 export function NewsletterContactsPanel() {
   const [contacts, setContacts] = useState<NewsletterContact[]>([]);
@@ -24,7 +40,8 @@ export function NewsletterContactsPanel() {
     setError(null);
     const res = await fetchNewsletterContacts();
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Impossible de charger les contacts."));
+      setError(reportError("contacts", res));
+      setContacts([]);
       setLoading(false);
       return;
     }
@@ -49,7 +66,7 @@ export function NewsletterContactsPanel() {
     });
     setBusy(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Création impossible."));
+      setError(reportError("création", res));
       return;
     }
     setForm(emptyForm);
@@ -62,7 +79,7 @@ export function NewsletterContactsPanel() {
       subscribed: !contact.subscribed,
     });
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Mise à jour impossible."));
+      setError(reportError("mise à jour", res));
       return;
     }
     await load();
@@ -76,7 +93,7 @@ export function NewsletterContactsPanel() {
     }
     const res = await deleteNewsletterContact(contact.id);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Suppression impossible."));
+      setError(reportError("suppression", res));
       return;
     }
     await load();
@@ -87,14 +104,14 @@ export function NewsletterContactsPanel() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="cyber-action-btn cyber-action-btn-primary text-xs"
+          className={GOLD_BTN}
           onClick={() => setShowForm((v) => !v)}
         >
           {showForm ? "Fermer le formulaire" : "Ajouter contact"}
         </button>
         <button
           type="button"
-          className="cyber-action-btn text-xs"
+          className={GLASS_PILL_BTN}
           onClick={() => void load()}
         >
           Actualiser
@@ -104,7 +121,7 @@ export function NewsletterContactsPanel() {
       {showForm ? (
         <form
           onSubmit={handleAdd}
-          className="cyber-panel grid gap-3 border-cyber-neon/20 p-4 sm:grid-cols-2"
+          className={`${FORM_CONTAINER} grid gap-3 sm:grid-cols-2`}
         >
           <div className="sm:col-span-2">
             <BackButton
@@ -116,14 +133,14 @@ export function NewsletterContactsPanel() {
             />
           </div>
           <input
-            className="cyber-input"
+            className={INPUT}
             placeholder="Nom *"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             required
           />
           <input
-            className="cyber-input"
+            className={INPUT}
             type="email"
             placeholder="Email *"
             value={form.email}
@@ -131,13 +148,13 @@ export function NewsletterContactsPanel() {
             required
           />
           <input
-            className="cyber-input"
+            className={INPUT}
             placeholder="Entreprise"
             value={form.company}
             onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
           />
           <input
-            className="cyber-input"
+            className={INPUT}
             placeholder="Secteur"
             value={form.sector}
             onChange={(e) => setForm((f) => ({ ...f, sector: e.target.value }))}
@@ -145,7 +162,7 @@ export function NewsletterContactsPanel() {
           <div className="sm:col-span-2">
             <button
               type="submit"
-              className="cyber-action-btn cyber-action-btn-primary text-xs"
+              className={GOLD_BTN}
               disabled={busy}
             >
               {busy ? "…" : "Enregistrer"}
@@ -155,63 +172,66 @@ export function NewsletterContactsPanel() {
       ) : null}
 
       {error ? (
-        <p className="rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+        <p className="rounded-lg border border-red-500/30 bg-red-950/20 px-4 py-3 text-sm text-red-300">
           {error}
         </p>
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-cyber-muted animate-pulse">Chargement…</p>
+        <p className="animate-pulse text-sm text-white/50">Chargement…</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-cyber-border">
+        <div className={`${GLASS_SECTION} overflow-x-auto p-0`}>
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-cyber-border bg-cyber-surface/80 text-[10px] font-bold uppercase tracking-wider text-cyber-muted">
-                <th className="px-3 py-2">Nom</th>
-                <th className="px-3 py-2">Entreprise</th>
-                <th className="px-3 py-2">Secteur</th>
-                <th className="px-3 py-2">Abonné</th>
-                <th className="px-3 py-2">Actions</th>
+              <tr className="border-b border-white/10 text-xs font-semibold uppercase tracking-widest text-white/40">
+                <th className="px-4 py-3">Nom</th>
+                <th className="px-4 py-3">Entreprise</th>
+                <th className="px-4 py-3">Secteur</th>
+                <th className="px-4 py-3">Abonné</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-cyber-muted">
-                    Aucun contact.
+                  <td colSpan={5}>
+                    <div className="flex flex-col items-center py-12 text-center">
+                      <Users className="mb-3 h-10 w-10 text-white/20" aria-hidden />
+                      <p className="text-sm text-white/30">Aucun contact.</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 contacts.map((c) => (
                   <tr
                     key={c.id}
-                    className="border-b border-cyber-border/60 hover:bg-cyber-accent/5"
+                    className="border-b border-white/5 transition-colors hover:bg-white/5"
                   >
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-cyber-text">{c.name}</div>
-                      <div className="text-xs text-cyber-muted">{c.email}</div>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-white">{c.name}</div>
+                      <div className="text-xs text-white/45">{c.email}</div>
                     </td>
-                    <td className="px-3 py-2">{c.company || "—"}</td>
-                    <td className="px-3 py-2">{c.sector || "—"}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3 text-white/70">{c.company || "—"}</td>
+                    <td className="px-4 py-3 text-white/70">{c.sector || "—"}</td>
+                    <td className="px-4 py-3">
                       <button
                         type="button"
                         role="switch"
                         aria-checked={c.subscribed}
                         className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase ${
                           c.subscribed
-                            ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-200"
-                            : "border-slate-500/50 bg-slate-500/20 text-slate-300"
+                            ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-300"
+                            : "border-white/20 bg-white/10 text-white/55"
                         }`}
                         onClick={() => void toggleSubscribed(c)}
                       >
                         {c.subscribed ? "Oui" : "Non"}
                       </button>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <button
                         type="button"
-                        className="cyber-action-btn text-[10px] text-red-300"
+                        className="text-xs text-red-300/80 transition hover:text-red-300"
                         onClick={() => void handleDelete(c)}
                       >
                         Supprimer

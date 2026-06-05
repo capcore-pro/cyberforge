@@ -30,21 +30,21 @@ export function EmailTimeline({ emails }: { emails: NewsletterEmail[] }) {
         return (
           <div key={step.type} className="flex items-center gap-2">
             <div
-              className="min-w-[88px] rounded-md border border-cyber-border bg-cyber-bg/50 px-2 py-1.5 text-center"
+              className="min-w-[88px] rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 text-center"
               title={stepTitle(row, step.label)}
             >
               <div className="text-sm">{icon}</div>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-cyber-muted">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-white/40">
                 {step.label}
               </div>
               {row ? (
-                <div className="mt-0.5 truncate text-[9px] text-cyber-neon">
+                <div className="mt-0.5 truncate text-[9px] text-[#d4a843]/80">
                   {row.status}
                 </div>
               ) : null}
             </div>
             {idx < STEPS.length - 1 ? (
-              <span className="text-cyber-border" aria-hidden>
+              <span className="text-white/20" aria-hidden>
                 →
               </span>
             ) : null}

@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Mail } from "lucide-react";
 import type { ProjectRecord } from "@shared/types";
 import { BackButton } from "@/components/BackButton";
 import { EmailTimeline } from "@/components/newsletter/EmailTimeline";
+import {
+  GLASS_PILL_BTN,
+  GLASS_SECTION,
+  GOLD_BTN,
+  SELECT,
+  logAccountingApiError,
+} from "@/components/accounting/accounting-theme";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   fetchNewsletterContacts,
@@ -29,10 +37,13 @@ function formatDate(iso: string): string {
 }
 
 function statusClass(status: string): string {
-  if (status === "completed") return "bg-emerald-500/20 text-emerald-200 border-emerald-500/40";
-  if (status === "in_progress") return "bg-blue-500/20 text-blue-200 border-blue-500/40";
-  if (status === "cancelled") return "bg-red-500/20 text-red-200 border-red-500/40";
-  return "bg-slate-500/20 text-slate-200 border-slate-500/40";
+  if (status === "completed")
+    return "border-emerald-400/35 bg-emerald-500/15 text-emerald-300";
+  if (status === "in_progress")
+    return "border-blue-400/35 bg-blue-500/15 text-blue-300";
+  if (status === "cancelled")
+    return "border-red-400/35 bg-red-500/15 text-red-300";
+  return "border-white/20 bg-white/10 text-white/55";
 }
 
 export function SequencesPanel() {
@@ -40,7 +51,6 @@ export function SequencesPanel() {
   const [contacts, setContacts] = useState<NewsletterContact[]>([]);
   const [emailsBySeq, setEmailsBySeq] = useState<Record<string, NewsletterEmail[]>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -53,34 +63,37 @@ export function SequencesPanel() {
     [contacts],
   );
 
+  function reportError(context: string, res: { ok: boolean; status?: number }) {
+    const msg = apiErrorMessage(res, `${context} impossible.`);
+    logAccountingApiError(`Newsletter / ${context}`, msg);
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
     const [seqRes, contactRes] = await Promise.all([
       fetchNewsletterSequences(),
       fetchNewsletterContacts(),
     ]);
     if (!seqRes.ok) {
-      setError(apiErrorMessage(seqRes, "Impossible de charger les séquences."));
-      setLoading(false);
-      return;
+      reportError("séquences", seqRes);
+      setSequences([]);
+    } else {
+      const seqs = Array.isArray(seqRes.data) ? seqRes.data : [];
+      setSequences(seqs);
+      const emailEntries = await Promise.all(
+        seqs.map(async (s) => {
+          const res = await fetchSequenceEmails(s.id);
+          return [s.id, res.ok && Array.isArray(res.data) ? res.data : []] as const;
+        }),
+      );
+      setEmailsBySeq(Object.fromEntries(emailEntries));
     }
     if (!contactRes.ok) {
-      setError(apiErrorMessage(contactRes, "Impossible de charger les contacts."));
-      setLoading(false);
-      return;
+      reportError("contacts", contactRes);
+      setContacts([]);
+    } else {
+      setContacts(Array.isArray(contactRes.data) ? contactRes.data : []);
     }
-    const seqs = Array.isArray(seqRes.data) ? seqRes.data : [];
-    setSequences(seqs);
-    setContacts(Array.isArray(contactRes.data) ? contactRes.data : []);
-
-    const emailEntries = await Promise.all(
-      seqs.map(async (s) => {
-        const res = await fetchSequenceEmails(s.id);
-        return [s.id, res.ok && Array.isArray(res.data) ? res.data : []] as const;
-      }),
-    );
-    setEmailsBySeq(Object.fromEntries(emailEntries));
     setLoading(false);
   }, []);
 
@@ -105,7 +118,7 @@ export function SequencesPanel() {
     setBusy(false);
     setProjectPickerOpen(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Échec du déclenchement."));
+      reportError("déclenchement", res);
       return;
     }
     setActionMsg(
@@ -120,7 +133,7 @@ export function SequencesPanel() {
     const res = await sendPendingNewsletterEmails();
     setBusy(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Envoi en attente impossible."));
+      reportError("envoi en attente", res);
       return;
     }
     const d = res.data;
@@ -135,7 +148,7 @@ export function SequencesPanel() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="cyber-action-btn cyber-action-btn-primary text-xs"
+          className={GOLD_BTN}
           disabled={busy}
           onClick={() => void openProjectPicker()}
         >
@@ -143,7 +156,7 @@ export function SequencesPanel() {
         </button>
         <button
           type="button"
-          className="cyber-action-btn text-xs"
+          className={GLASS_PILL_BTN}
           disabled={busy}
           onClick={() => void handleSendPending()}
         >
@@ -151,78 +164,85 @@ export function SequencesPanel() {
         </button>
         <button
           type="button"
-          className="cyber-action-btn text-xs"
+          className={GLASS_PILL_BTN}
           onClick={() => void load()}
         >
           Actualiser
         </button>
       </div>
 
-      {error ? (
-        <p className="rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
-          {error}
-        </p>
-      ) : null}
       {actionMsg ? (
-        <p className="rounded border border-cyber-neon/30 bg-cyber-accent/10 px-3 py-2 text-sm text-cyber-neon">
+        <p className="rounded-lg border border-[#d4a843]/30 bg-[#d4a843]/10 px-4 py-3 text-sm text-[#d4a843]">
           {actionMsg}
         </p>
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-cyber-muted animate-pulse">Chargement des séquences…</p>
+        <p className="animate-pulse text-sm text-white/50">
+          Chargement des séquences…
+        </p>
+      ) : sequences.length === 0 ? (
+        <div
+          className={`${GLASS_SECTION} flex flex-col items-center py-14 text-center`}
+        >
+          <Mail className="mb-3 h-10 w-10 text-white/20" aria-hidden />
+          <p className="text-sm text-white/30">Aucune séquence pour le moment</p>
+          <button
+            type="button"
+            className={`${GOLD_BTN} mt-5`}
+            onClick={() => void openProjectPicker()}
+          >
+            Créer une séquence
+          </button>
+        </div>
       ) : (
         <div className="space-y-3">
-          {sequences.length === 0 ? (
-            <p className="text-sm text-cyber-muted">Aucune séquence pour le moment.</p>
-          ) : (
-            sequences.map((seq) => {
-              const contact = contactMap.get(seq.contact_id);
-              const emails = emailsBySeq[seq.id] ?? [];
-              return (
-                <div
-                  key={seq.id}
-                  className="cyber-panel border-cyber-border p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium text-cyber-text">
-                        {contact?.name ?? "—"}
-                        {contact?.company ? (
-                          <span className="text-cyber-muted"> — {contact.company}</span>
-                        ) : null}
-                      </p>
-                      <p className="text-xs text-cyber-muted">
-                        {TRIGGER_LABELS[seq.trigger] ?? seq.trigger} ·{" "}
-                        {formatDate(seq.created_at)}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${statusClass(seq.status)}`}
-                    >
-                      {SEQUENCE_STATUS_LABELS[seq.status] ?? seq.status}
-                    </span>
+          {sequences.map((seq) => {
+            const contact = contactMap.get(seq.contact_id);
+            const emails = emailsBySeq[seq.id] ?? [];
+            return (
+              <div key={seq.id} className={`${GLASS_SECTION} space-y-2`}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-white">
+                      {contact?.name ?? "—"}
+                      {contact?.company ? (
+                        <span className="text-white/50">
+                          {" "}
+                          — {contact.company}
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-xs text-white/45">
+                      {TRIGGER_LABELS[seq.trigger] ?? seq.trigger} ·{" "}
+                      {formatDate(seq.created_at)}
+                    </p>
                   </div>
-                  <EmailTimeline emails={emails} />
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase ${statusClass(seq.status)}`}
+                  >
+                    {SEQUENCE_STATUS_LABELS[seq.status] ?? seq.status}
+                  </span>
                 </div>
-              );
-            })
-          )}
+                <EmailTimeline emails={emails} />
+              </div>
+            );
+          })}
         </div>
       )}
 
       {projectPickerOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
-          <div className="cyber-panel w-full max-w-md border-cyber-violet/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#0f0f0f]/95 p-6">
             <BackButton
               className="mb-3"
               onClick={() => setProjectPickerOpen(false)}
             />
-            <h3 className="text-base font-semibold text-cyber-text">
+            <h3 className="text-base font-semibold text-white">
               Déclencher une séquence bienvenue
             </h3>
             <select
-              className="cyber-input mt-4 w-full"
+              className={`${SELECT} mt-4`}
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
             >
@@ -236,14 +256,14 @@ export function SequencesPanel() {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                className="cyber-action-btn"
+                className={GLASS_PILL_BTN}
                 onClick={() => setProjectPickerOpen(false)}
               >
                 Annuler
               </button>
               <button
                 type="button"
-                className="cyber-action-btn cyber-action-btn-primary"
+                className={GOLD_BTN}
                 disabled={!selectedProjectId || busy}
                 onClick={() => void handleTrigger()}
               >
