@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from config import Settings, get_settings, plain_secret_str, refresh_settings
+from security.cloudflare_env import load_cloudflare_from_env
 from security.env_file import upsert_env_vars
 from security.llm_secrets import llm_provider_flags
 from security.secret_vault import (
@@ -61,6 +62,9 @@ def _merge_configured_flags(
         raw = getattr(settings, field_name, None)
         if plain_secret_str(raw):
             merged[provider] = True
+    merged["cloudflare"] = settings.cloudflare_configured()
+    merged["pexels"] = settings.pexels_configured()
+    merged["firecrawl"] = settings.firecrawl_configured()
     return merged
 
 
@@ -84,6 +88,10 @@ class SaveSecretsRequest(BaseModel):
     stripe_secret_key: str | None = None
     brave_search_api_key: str | None = None
     exa_api_key: str | None = None
+    pexels_api_key: str | None = None
+    firecrawl_api_key: str | None = None
+    cloudflare_account_id: str | None = None
+    cloudflare_api_token: str | None = None
 
 
 class TestSecretRequest(BaseModel):
@@ -220,9 +228,18 @@ async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
         env_updates["BREVO_API_KEY"] = body.brevo_api_key.strip()
     if body.stripe_secret_key and body.stripe_secret_key.strip():
         env_updates["STRIPE_SECRET_KEY"] = body.stripe_secret_key.strip()
+    if body.pexels_api_key and body.pexels_api_key.strip():
+        env_updates["PEXELS_API_KEY"] = body.pexels_api_key.strip()
+    if body.firecrawl_api_key and body.firecrawl_api_key.strip():
+        env_updates["FIRECRAWL_API_KEY"] = body.firecrawl_api_key.strip()
+    if body.cloudflare_account_id and body.cloudflare_account_id.strip():
+        env_updates["CLOUDFLARE_ACCOUNT_ID"] = body.cloudflare_account_id.strip()
+    if body.cloudflare_api_token and body.cloudflare_api_token.strip():
+        env_updates["CLOUDFLARE_API_TOKEN"] = body.cloudflare_api_token.strip()
     if env_updates:
         upsert_env_vars(env_updates)
         refresh_settings()
+        load_cloudflare_from_env()
 
     status = vault.status()
     settings = get_settings()

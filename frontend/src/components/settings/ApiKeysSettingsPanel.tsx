@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PasswordInput } from "@/components/PasswordInput";
+import {
+  GLASS_CARD,
+  GLASS_SECTION,
+  GOLD_BTN,
+  GHOST_BTN,
+  openExternalUrl,
+} from "@/components/settings/settings-theme";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { notifySecretsSaved, SECRETS_SAVED_EVENT } from "@/lib/secrets-events";
 import {
@@ -7,128 +14,288 @@ import {
   resetSecrets,
   saveSecrets,
   testSecretKey,
-  unlockSecrets,
   type SecretsStatusResponse,
   type VaultConfiguredFlags,
   type VaultKeysPayload,
 } from "@/lib/secrets-api";
 
-type ApiKeyId = keyof VaultConfiguredFlags;
+type KeyId = keyof VaultConfiguredFlags;
 
-interface ApiKeyDef {
-  id: ApiKeyId;
+interface ServiceDef {
+  id: KeyId;
   label: string;
+  emoji: string;
   payloadKey: keyof VaultKeysPayload;
   placeholder: string;
+  creditHint: string;
+  topUpUrl: string;
+  testable: boolean;
 }
 
-const API_KEYS: ApiKeyDef[] = [
+interface ServiceCategory {
+  title: string;
+  services: ServiceDef[];
+}
+
+const VAULT_MASK = "••••••••••••";
+
+const CATEGORIES: ServiceCategory[] = [
   {
-    id: "anthropic",
-    label: "Anthropic",
-    payloadKey: "anthropic_api_key",
-    placeholder: "sk-ant-…",
+    title: "IA & Génération",
+    services: [
+      {
+        id: "anthropic",
+        label: "Anthropic",
+        emoji: "🧠",
+        payloadKey: "anthropic_api_key",
+        placeholder: "sk-ant-…",
+        creditHint: "~$18 restants (estim.)",
+        topUpUrl: "https://console.anthropic.com",
+        testable: true,
+      },
+      {
+        id: "deepseek",
+        label: "DeepSeek",
+        emoji: "⚡",
+        payloadKey: "deepseek_api_key",
+        placeholder: "sk-…",
+        creditHint: "~$5 restants (estim.)",
+        topUpUrl: "https://platform.deepseek.com",
+        testable: true,
+      },
+    ],
   },
   {
-    id: "deepseek",
-    label: "DeepSeek",
-    payloadKey: "deepseek_api_key",
-    placeholder: "sk-…",
+    title: "Déploiement",
+    services: [
+      {
+        id: "cloudflare",
+        label: "Cloudflare",
+        emoji: "☁️",
+        payloadKey: "cloudflare_api_token",
+        placeholder: "Token API…",
+        creditHint: "Pages — gratuit",
+        topUpUrl: "https://dash.cloudflare.com",
+        testable: false,
+      },
+      {
+        id: "railway",
+        label: "Railway",
+        emoji: "🚂",
+        payloadKey: "railway_api_key",
+        placeholder: "…",
+        creditHint: "~$10 restants (estim.)",
+        topUpUrl: "https://railway.app",
+        testable: true,
+      },
+      {
+        id: "vercel",
+        label: "Vercel",
+        emoji: "▲",
+        payloadKey: "vercel_token",
+        placeholder: "…",
+        creditHint: "Hobby — gratuit",
+        topUpUrl: "https://vercel.com",
+        testable: true,
+      },
+      {
+        id: "github",
+        label: "GitHub",
+        emoji: "🐙",
+        payloadKey: "github_token",
+        placeholder: "ghp_…",
+        creditHint: "—",
+        topUpUrl: "https://github.com/settings/tokens",
+        testable: true,
+      },
+    ],
   },
-  { id: "v0", label: "v0", payloadKey: "v0_api_key", placeholder: "v0_…" },
+  {
+    title: "Médias & Recherche",
+    services: [
+      {
+        id: "pexels",
+        label: "Pexels",
+        emoji: "📷",
+        payloadKey: "pexels_api_key",
+        placeholder: "…",
+        creditHint: "200 req/h — gratuit",
+        topUpUrl: "https://www.pexels.com/api",
+        testable: false,
+      },
+      {
+        id: "firecrawl",
+        label: "Firecrawl",
+        emoji: "🔥",
+        payloadKey: "firecrawl_api_key",
+        placeholder: "fc-…",
+        creditHint: "~500 pages/mois",
+        topUpUrl: "https://firecrawl.dev",
+        testable: false,
+      },
+      {
+        id: "brave_search",
+        label: "Brave Search",
+        emoji: "🦁",
+        payloadKey: "brave_search_api_key",
+        placeholder: "BSA…",
+        creditHint: "~2 000 req/mois",
+        topUpUrl: "https://brave.com/search/api",
+        testable: true,
+      },
+      {
+        id: "exa",
+        label: "Exa AI",
+        emoji: "🔍",
+        payloadKey: "exa_api_key",
+        placeholder: "exa-…",
+        creditHint: "~1 000 req/mois",
+        topUpUrl: "https://exa.ai",
+        testable: true,
+      },
+    ],
+  },
+  {
+    title: "Communication",
+    services: [
+      {
+        id: "brevo",
+        label: "Brevo",
+        emoji: "✉️",
+        payloadKey: "brevo_api_key",
+        placeholder: "xkeysib-…",
+        creditHint: "300 emails/jour",
+        topUpUrl: "https://app.brevo.com",
+        testable: true,
+      },
+      {
+        id: "stripe",
+        label: "Stripe",
+        emoji: "💳",
+        payloadKey: "stripe_secret_key",
+        placeholder: "sk_live_…",
+        creditHint: "Selon volume",
+        topUpUrl: "https://dashboard.stripe.com",
+        testable: true,
+      },
+    ],
+  },
+];
+
+const EXTRA_SERVICES: ServiceDef[] = [
   {
     id: "replicate",
     label: "Replicate",
+    emoji: "🎨",
     payloadKey: "replicate_api_key",
     placeholder: "r8_…",
+    creditHint: "~$3 restants",
+    topUpUrl: "https://replicate.com",
+    testable: true,
   },
   {
     id: "tavily",
     label: "Tavily",
+    emoji: "🌐",
     payloadKey: "tavily_api_key",
     placeholder: "tvly-…",
+    creditHint: "1 000 crédits/mois",
+    topUpUrl: "https://tavily.com",
+    testable: true,
   },
   {
-    id: "railway",
-    label: "Railway",
-    payloadKey: "railway_api_key",
-    placeholder: "…",
-  },
-  {
-    id: "vercel",
-    label: "Vercel",
-    payloadKey: "vercel_token",
-    placeholder: "…",
-  },
-  {
-    id: "github",
-    label: "GitHub",
-    payloadKey: "github_token",
-    placeholder: "ghp_…",
-  },
-  {
-    id: "brevo",
-    label: "Brevo",
-    payloadKey: "brevo_api_key",
-    placeholder: "xkeysib-…",
-  },
-  {
-    id: "stripe",
-    label: "Stripe",
-    payloadKey: "stripe_secret_key",
-    placeholder: "sk_live_…",
-  },
-  {
-    id: "brave_search",
-    label: "Brave Search",
-    payloadKey: "brave_search_api_key",
-    placeholder: "BSA…",
-  },
-  {
-    id: "exa",
-    label: "Exa AI",
-    payloadKey: "exa_api_key",
-    placeholder: "exa-…",
+    id: "v0",
+    label: "v0",
+    emoji: "✨",
+    payloadKey: "v0_api_key",
+    placeholder: "v0_…",
+    creditHint: "Selon abonnement",
+    topUpUrl: "https://v0.dev",
+    testable: true,
   },
 ];
 
-const VAULT_MASK = "••••••••••••";
+const ALL_SERVICES = [
+  ...CATEGORIES.flatMap((c) => c.services),
+  ...EXTRA_SERVICES,
+];
 
-function ApiKeyRow({
+function ServiceKeyCard({
   def,
   configured,
   value,
+  extraValue,
   onChange,
+  onExtraChange,
   onTest,
   testResult,
   testing,
 }: {
-  def: ApiKeyDef;
+  def: ServiceDef;
   configured: boolean;
   value: string;
+  extraValue?: string;
   onChange: (v: string) => void;
+  onExtraChange?: (v: string) => void;
   onTest: () => void;
   testResult: { valid: boolean; message: string } | null;
   testing: boolean;
 }) {
   const [visible, setVisible] = useState(false);
+  const isCloudflare = def.id === "cloudflare";
 
   return (
-    <div className="rounded-card border border-cf-border-input bg-cf-secondary/40 p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium text-cf-text">{def.label}</span>
+    <div className={GLASS_CARD}>
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-white">
+            <span aria-hidden className="mr-1.5">
+              {def.emoji}
+            </span>
+            {def.label}
+          </p>
+          <p className="mt-0.5 text-[11px] text-white/40">{def.creditHint}</p>
+        </div>
         <span
-          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase ${
             configured
-              ? "border-cf-gold/40 bg-cf-active text-cf-gold"
-              : "border-red-500/40 bg-red-950/30 text-red-300"
+              ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-300"
+              : "border-red-400/35 bg-red-500/15 text-red-300"
           }`}
         >
           {configured ? "Configurée" : "Manquante"}
         </span>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      {isCloudflare ? (
+        <div className="space-y-2">
+          <input
+            type="text"
+            autoComplete="off"
+            value={extraValue ?? ""}
+            onChange={(e) => onExtraChange?.(e.target.value)}
+            placeholder="Account ID Cloudflare"
+            className="w-full rounded-control border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-white focus:border-[#d4a843] focus:outline-none"
+          />
+          <input
+            type={visible ? "text" : "password"}
+            autoComplete="off"
+            value={value || (!visible && configured ? VAULT_MASK : value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (next === VAULT_MASK) return;
+              onChange(next);
+            }}
+            onFocus={() => {
+              if (!value && configured) onChange("");
+            }}
+            placeholder={
+              configured ? "Laisser vide pour conserver" : "Token API Cloudflare"
+            }
+            className="w-full rounded-control border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-white focus:border-[#d4a843] focus:outline-none"
+          />
+        </div>
+      ) : (
         <input
           type={visible ? "text" : "password"}
           autoComplete="off"
@@ -141,33 +308,44 @@ function ApiKeyRow({
           onFocus={() => {
             if (!value && configured) onChange("");
           }}
-          placeholder={configured ? "Laisser vide pour conserver" : def.placeholder}
-          className="min-w-0 flex-1 rounded-control border border-cf-border-input bg-cf-card px-3 py-2 font-mono text-xs text-cf-text focus:border-cf-gold/50 focus:outline-none"
+          placeholder={
+            configured ? "Laisser vide pour conserver" : def.placeholder
+          }
+          className="w-full rounded-control border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-white focus:border-[#d4a843] focus:outline-none"
         />
-        <div className="flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={() => setVisible((v) => !v)}
-            className="rounded-control border border-cf-border-input px-3 py-2 text-xs text-cf-muted hover:text-cf-text"
-            aria-label={visible ? "Masquer" : "Révéler"}
-          >
-            {visible ? "Masquer" : "Révéler"}
-          </button>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className={GHOST_BTN}
+        >
+          {visible ? "Masquer" : "Révéler"}
+        </button>
+        {def.testable ? (
           <button
             type="button"
             disabled={testing}
             onClick={onTest}
-            className="rounded-control border border-cf-border-input px-3 py-2 text-xs text-cf-gold hover:border-cf-gold/50 disabled:opacity-50"
+            className={GHOST_BTN}
           >
             {testing ? "Test…" : "Tester"}
           </button>
-        </div>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => openExternalUrl(def.topUpUrl)}
+          className={GHOST_BTN}
+        >
+          Recréditer →
+        </button>
       </div>
 
       {testResult ? (
         <p
           className={`mt-2 text-xs ${
-            testResult.valid ? "text-cf-success" : "text-red-300"
+            testResult.valid ? "text-emerald-300" : "text-red-300"
           }`}
         >
           {testResult.valid ? "✅ Valide" : "❌ Invalide"} — {testResult.message}
@@ -183,9 +361,8 @@ export function ApiKeysSettingsPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
+  const [showMore, setShowMore] = useState(false);
   const [vaultPassword, setVaultPassword] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
 
   const [values, setValues] = useState<Record<keyof VaultKeysPayload, string>>({
     anthropic_api_key: "",
@@ -202,12 +379,16 @@ export function ApiKeysSettingsPanel() {
     google_generative_ai_api_key: "",
     brave_search_api_key: "",
     exa_api_key: "",
+    pexels_api_key: "",
+    firecrawl_api_key: "",
+    cloudflare_account_id: "",
+    cloudflare_api_token: "",
   });
 
   const [testResults, setTestResults] = useState<
-    Partial<Record<ApiKeyId, { valid: boolean; message: string }>>
+    Partial<Record<KeyId, { valid: boolean; message: string }>>
   >({});
-  const [testingId, setTestingId] = useState<ApiKeyId | null>(null);
+  const [testingId, setTestingId] = useState<KeyId | null>(null);
 
   const refreshStatus = useCallback(async () => {
     setLoading(true);
@@ -226,28 +407,20 @@ export function ApiKeysSettingsPanel() {
     return () => window.removeEventListener(SECRETS_SAVED_EVENT, onSecretsSaved);
   }, [refreshStatus]);
 
-  async function handleUnlock() {
-    if (!vaultPassword.trim()) {
-      setError("Saisissez le mot de passe du coffre.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    const res = await unlockSecrets(vaultPassword);
-    setBusy(false);
-    if (!res.ok) {
-      setError(apiErrorMessage(res, "Mot de passe incorrect ou backend indisponible."));
-      setUnlocked(false);
-      return;
-    }
-    setUnlocked(true);
-    setSuccess("Coffre déverrouillé.");
-    await refreshStatus();
-  }
+  const configured = status?.configured ?? ({} as VaultConfiguredFlags);
 
-  async function handleTest(def: ApiKeyDef) {
+  const { configuredCount, missingCount, progressPct } = useMemo(() => {
+    const total = ALL_SERVICES.length;
+    const done = ALL_SERVICES.filter((s) => configured[s.id]).length;
+    return {
+      configuredCount: done,
+      missingCount: total - done,
+      progressPct: total ? Math.round((done / total) * 100) : 0,
+    };
+  }, [configured]);
+
+  async function handleTest(def: ServiceDef) {
     setTestingId(def.id);
-    setError(null);
     const res = await testSecretKey(
       def.id,
       values[def.payloadKey]?.trim() || undefined,
@@ -256,7 +429,10 @@ export function ApiKeysSettingsPanel() {
     if (!res.ok || !res.data) {
       setTestResults((prev) => ({
         ...prev,
-        [def.id]: { valid: false, message: apiErrorMessage(res, "Test impossible.") },
+        [def.id]: {
+          valid: false,
+          message: apiErrorMessage(res, "Test impossible."),
+        },
       }));
       return;
     }
@@ -272,14 +448,14 @@ export function ApiKeysSettingsPanel() {
       return;
     }
     const keys: VaultKeysPayload = {};
-    for (const def of API_KEYS) {
+    for (const def of ALL_SERVICES) {
       const trimmed = values[def.payloadKey]?.trim();
       if (trimmed) keys[def.payloadKey] = trimmed;
     }
-    if (Object.keys(keys).length === 0 && !status?.has_vault) {
-      setError("Saisissez au moins une clé à enregistrer.");
-      return;
-    }
+    const cfAccount = values.cloudflare_account_id?.trim();
+    const cfToken = values.cloudflare_api_token?.trim();
+    if (cfAccount) keys.cloudflare_account_id = cfAccount;
+    if (cfToken) keys.cloudflare_api_token = cfToken;
 
     setBusy(true);
     setError(null);
@@ -293,7 +469,9 @@ export function ApiKeysSettingsPanel() {
     setSuccess("Toutes les clés ont été enregistrées dans le coffre.");
     setValues((prev) => {
       const cleared = { ...prev };
-      for (const def of API_KEYS) cleared[def.payloadKey] = "";
+      for (const def of ALL_SERVICES) cleared[def.payloadKey] = "";
+      cleared.cloudflare_account_id = "";
+      cleared.cloudflare_api_token = "";
       return cleared;
     });
     notifySecretsSaved();
@@ -304,16 +482,10 @@ export function ApiKeysSettingsPanel() {
     const vaultPath =
       status?.vault_path ?? "%LOCALAPPDATA%\\CyberForge\\secrets.v1.json";
     const ok = window.confirm(
-      `Réinitialiser le coffre des clés API ?\n\n` +
-        `Le fichier chiffré sera supprimé :\n${vaultPath}\n\n` +
-        `Toutes les clés stockées uniquement dans le coffre seront perdues. ` +
-        `Vous pourrez définir un nouveau mot de passe à la prochaine sauvegarde.`,
+      `Réinitialiser le coffre des clés API ?\n\nFichier : ${vaultPath}`,
     );
     if (!ok) return;
-
     setBusy(true);
-    setError(null);
-    setSuccess(null);
     const res = await resetSecrets();
     setBusy(false);
     if (!res.ok) {
@@ -322,99 +494,170 @@ export function ApiKeysSettingsPanel() {
     }
     if (res.data) setStatus(res.data);
     setVaultPassword("");
-    setUnlocked(false);
-    setValues((prev) => {
-      const cleared = { ...prev };
-      for (const def of API_KEYS) cleared[def.payloadKey] = "";
-      return cleared;
-    });
     setTestResults({});
-    setSuccess("Coffre réinitialisé. Enregistrez vos clés avec un nouveau mot de passe.");
+    setSuccess("Coffre réinitialisé.");
     notifySecretsSaved();
     await refreshStatus();
   }
 
   if (loading) {
-    return <p className="animate-pulse text-sm text-cf-muted">Chargement des clés…</p>;
+    return (
+      <p className="animate-pulse text-sm text-white/50">Chargement des clés…</p>
+    );
   }
-
-  const configured = status?.configured ?? ({} as VaultConfiguredFlags);
 
   return (
     <div className="space-y-6">
-      <div className="rounded-card border border-cf-border-input bg-cf-secondary/30 p-4">
-        <label className="block">
-          <span className="cf-section-label mb-2 block">Mot de passe du coffre</span>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <PasswordInput
-              autoComplete="current-password"
-              value={vaultPassword}
-              onChange={(e) => setVaultPassword(e.target.value)}
-              placeholder="Mot de passe pour chiffrer / déverrouiller"
-              containerClassName="flex-1"
-            />
-            <button
-              type="button"
-              disabled={busy || unlocked}
-              onClick={() => void handleUnlock()}
-              className="rounded-control border border-cf-border-input px-4 py-2 text-sm text-cf-muted hover:text-cf-text disabled:opacity-50"
-            >
-              Déverrouiller
-            </button>
+      <div className={GLASS_SECTION}>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-white">Crédits globaux</p>
+            <p className="mt-1 text-xs text-white/50">
+              {configuredCount} clés configurées · {missingCount} manquantes
+            </p>
           </div>
-        </label>
-        {status ? (
-          <p className="mt-2 text-[11px] text-cf-muted">
-            Coffre {status.has_vault ? "actif" : "non créé"} —{" "}
-            {status.locked ? "verrouillé" : "déverrouillé"}
-            {status.vault_path ? (
-              <>
-                {" "}
-                —{" "}
-                <span className="font-mono text-[10px] opacity-80">
-                  {status.vault_path}
-                </span>
-              </>
-            ) : null}
-          </p>
-        ) : null}
-        <div className="mt-4 border-t border-cf-border-input/60 pt-4">
-          <button
-            type="button"
-            disabled={busy || !status?.has_vault}
-            onClick={() => void handleResetVault()}
-            className="rounded-control border border-red-500/50 px-4 py-2 text-sm text-red-300 transition hover:border-red-400 hover:bg-red-950/30 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Réinitialiser le coffre
-          </button>
-          {!status?.has_vault ? (
-            <p className="mt-2 text-[11px] text-cf-muted">
-              Aucun coffre sur disque — rien à réinitialiser.
-            </p>
-          ) : (
-            <p className="mt-2 text-[11px] text-cf-muted">
-              Supprime le fichier chiffré et permet de choisir un nouveau mot de passe
-              à la prochaine sauvegarde.
-            </p>
-          )}
+          <span className="text-2xl font-bold text-[#d4a843]">{progressPct}%</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#d4a843]/60 to-[#d4a843] transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
       </div>
 
-      <div className="space-y-3">
-        {API_KEYS.map((def) => (
-          <ApiKeyRow
-            key={def.id}
-            def={def}
-            configured={Boolean(configured[def.id])}
-            value={values[def.payloadKey]}
-            onChange={(v) =>
-              setValues((prev) => ({ ...prev, [def.payloadKey]: v }))
-            }
-            onTest={() => void handleTest(def)}
-            testResult={testResults[def.id] ?? null}
-            testing={testingId === def.id}
+      {CATEGORIES.map((category) => (
+        <div key={category.title}>
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/45">
+            {category.title}
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {category.services.map((def) => (
+              <ServiceKeyCard
+                key={def.id}
+                def={def}
+                configured={Boolean(configured[def.id])}
+                value={values[def.payloadKey]}
+                extraValue={
+                  def.id === "cloudflare"
+                    ? values.cloudflare_account_id
+                    : undefined
+                }
+                onChange={(v) =>
+                  setValues((prev) => ({ ...prev, [def.payloadKey]: v }))
+                }
+                onExtraChange={
+                  def.id === "cloudflare"
+                    ? (v) =>
+                        setValues((prev) => ({
+                          ...prev,
+                          cloudflare_account_id: v,
+                        }))
+                    : undefined
+                }
+                onTest={() => void handleTest(def)}
+                testResult={testResults[def.id] ?? null}
+                testing={testingId === def.id}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowMore((v) => !v)}
+          className="mb-3 text-sm text-[#d4a843] hover:underline"
+        >
+          {showMore ? "Masquer les services avancés" : "Afficher plus"}
+        </button>
+        {showMore ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {EXTRA_SERVICES.map((def) => (
+              <ServiceKeyCard
+                key={def.id}
+                def={def}
+                configured={Boolean(configured[def.id])}
+                value={values[def.payloadKey]}
+                onChange={(v) =>
+                  setValues((prev) => ({ ...prev, [def.payloadKey]: v }))
+                }
+                onTest={() => void handleTest(def)}
+                testResult={testResults[def.id] ?? null}
+                testing={testingId === def.id}
+              />
+            ))}
+            <div className={`${GLASS_CARD} opacity-80`}>
+              <p className="text-sm font-semibold text-white">
+                <span className="mr-1.5">🤖</span>
+                OpenHands
+              </p>
+              <p className="mt-1 text-xs text-white/45">
+                Module optionnel — configuration via environnement.
+              </p>
+              <span className="mt-2 inline-block rounded-full border border-white/20 px-2 py-0.5 text-[10px] text-white/50">
+                Module intégré
+              </span>
+            </div>
+            <div className={`${GLASS_CARD} opacity-80`}>
+              <p className="text-sm font-semibold text-white">
+                <span className="mr-1.5">🎭</span>
+                Playwright
+              </p>
+              <p className="mt-1 text-xs text-white/45">
+                Tests E2E locaux — pas de clé API requise.
+              </p>
+              <span className="mt-2 inline-block rounded-full border border-emerald-400/35 bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">
+                Inclus
+              </span>
+            </div>
+            <div className={`${GLASS_CARD} opacity-80`}>
+              <p className="text-sm font-semibold text-white">
+                <span className="mr-1.5">🏮</span>
+                Lighthouse
+              </p>
+              <p className="mt-1 text-xs text-white/45">
+                Audit qualité local — pas de clé API requise.
+              </p>
+              <span className="mt-2 inline-block rounded-full border border-emerald-400/35 bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">
+                Inclus
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className={GLASS_SECTION}>
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/45">
+          Coffre-fort
+        </h3>
+        <label className="block">
+          <span className="mb-2 block text-sm text-white/60">
+            Mot de passe du coffre
+          </span>
+          <PasswordInput
+            autoComplete="current-password"
+            value={vaultPassword}
+            onChange={(e) => setVaultPassword(e.target.value)}
+            placeholder="Chiffre toutes les clés sur cet appareil"
+            containerClassName="max-w-md"
           />
-        ))}
+        </label>
+        {status ? (
+          <p className="mt-2 text-[11px] text-white/40">
+            Coffre {status.has_vault ? "actif" : "non créé"} —{" "}
+            {status.locked ? "verrouillé" : "déverrouillé"}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          disabled={busy || !status?.has_vault}
+          onClick={() => void handleResetVault()}
+          className="mt-4 text-xs text-red-300 hover:underline disabled:opacity-40"
+        >
+          Réinitialiser le coffre
+        </button>
       </div>
 
       {error ? (
@@ -423,7 +666,7 @@ export function ApiKeysSettingsPanel() {
         </p>
       ) : null}
       {success ? (
-        <p className="rounded-control border border-cf-gold/30 bg-cf-active px-4 py-3 text-sm text-cf-gold">
+        <p className="rounded-control border border-[#d4a843]/30 bg-[#d4a843]/10 px-4 py-3 text-sm text-[#d4a843]">
           {success}
         </p>
       ) : null}
@@ -432,7 +675,7 @@ export function ApiKeysSettingsPanel() {
         type="button"
         disabled={busy}
         onClick={() => void handleSaveAll()}
-        className="w-full rounded-control border border-cf-gold bg-cf-gold py-3 text-sm font-semibold text-cf-main hover:bg-cf-gold-hover disabled:opacity-50 sm:w-auto sm:px-10"
+        className={`${GOLD_BTN} w-full sm:w-auto`}
       >
         {busy ? "Enregistrement…" : "Enregistrer toutes les clés"}
       </button>

@@ -1,65 +1,54 @@
 import { useState } from "react";
-import { ApiKeysSettingsPanel } from "@/components/settings/ApiKeysSettingsPanel";
-import { AgentsPipelineStatusPanel } from "@/components/settings/AgentsPipelineStatusPanel";
 import { AgentsSettingsPanel } from "@/components/settings/AgentsSettingsPanel";
-import { OpenHandsSettingsPanel } from "@/components/settings/OpenHandsSettingsPanel";
-import { PlaywrightSettingsPanel } from "@/components/settings/PlaywrightSettingsPanel";
-import { LighthouseSettingsPanel } from "@/components/settings/LighthouseSettingsPanel";
-import { ResearchSettingsPanel } from "@/components/settings/ResearchSettingsPanel";
+import { ApiKeysSettingsPanel } from "@/components/settings/ApiKeysSettingsPanel";
 import { ProfileSettingsPanel } from "@/components/settings/ProfileSettingsPanel";
 import { SystemSettingsPanel } from "@/components/settings/SystemSettingsPanel";
+import { TAB_ACTIVE, TAB_BASE } from "@/components/settings/settings-theme";
 
 type SettingsTab = "profile" | "keys" | "agents" | "system";
 
 const TABS: { id: SettingsTab; label: string }[] = [
-  { id: "profile", label: "Mon profil" },
+  { id: "profile", label: "Mon Profil" },
   { id: "keys", label: "Clés API" },
   { id: "agents", label: "Agents IA" },
   { id: "system", label: "Système" },
 ];
 
 /**
- * Paramètres — profil, clés API, agents et système.
+ * Paramètres — profil, clés API, agents pipeline v2 et système.
  */
 export function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>("profile");
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-4xl space-y-8">
       <header>
-        <p className="cf-section-label mb-2">Configuration</p>
-        <h1 className="cf-page-title">Paramètres</h1>
-        <p className="mt-2 text-sm text-cf-muted">
-          Profil CapCore, clés API, modules de génération et maintenance système.
+        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#d4a843]/80">
+          Configuration
+        </p>
+        <h1 className="text-2xl font-semibold text-white">Paramètres</h1>
+        <p className="mt-2 text-sm text-white/50">
+          Profil CapCore, clés API, agents pipeline v2 et maintenance système.
         </p>
       </header>
 
-      <nav className="flex flex-wrap gap-2 border-b border-cf-border-input pb-1">
+      <nav className="flex flex-wrap gap-1 border-b border-white/10">
         {TABS.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
-            className={`cf-subtab mb-1 ${tab === item.id ? "cf-subtab-active" : ""}`}
+            className={`${TAB_BASE} ${tab === item.id ? TAB_ACTIVE : ""}`}
           >
             {item.label}
           </button>
         ))}
       </nav>
 
-      <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
+      <section>
         {tab === "profile" ? <ProfileSettingsPanel /> : null}
         {tab === "keys" ? <ApiKeysSettingsPanel /> : null}
-        {tab === "agents" ? (
-          <>
-            <AgentsPipelineStatusPanel />
-            <OpenHandsSettingsPanel />
-            <ResearchSettingsPanel />
-            <PlaywrightSettingsPanel />
-            <LighthouseSettingsPanel />
-            <AgentsSettingsPanel />
-          </>
-        ) : null}
+        {tab === "agents" ? <AgentsSettingsPanel /> : null}
         {tab === "system" ? <SystemSettingsPanel /> : null}
       </section>
     </div>

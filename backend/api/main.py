@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.recent_logs import attach_ring_buffer_handler
 from api.routes import API_ROUTERS
 from api.routes import meta
 from config import refresh_settings
@@ -61,6 +62,7 @@ async def _lifespan(application: FastAPI):
 
 def create_app() -> FastAPI:
     """Crée et configure l'instance FastAPI."""
+    attach_ring_buffer_handler()
     settings = refresh_settings()
     reset_supabase_store()
     reset_managed_projects_store()

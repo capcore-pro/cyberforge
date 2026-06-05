@@ -1,25 +1,43 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  GLASS_CARD,
+  GLASS_SECTION,
+  GHOST_BTN,
+  openExternalUrl,
+} from "@/components/settings/settings-theme";
 import { useBackendHealth } from "@/context/BackendHealthContext";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   clearSystemCache,
   fetchSystemInfo,
+  fetchSystemLogs,
   restartBackend,
+  systemLogsExportUrl,
 } from "@/lib/settings-api";
+import { APP_VERSION } from "@shared/constants";
 
 export function SystemSettingsPanel() {
   const { status, health, refresh } = useBackendHealth();
-  const [version, setVersion] = useState<string>("—");
+  const [version, setVersion] = useState(APP_VERSION);
   const [appName, setAppName] = useState("CyberForge");
+  const [backendPort, setBackendPort] = useState(8002);
+  const [logLines, setLogLines] = useState<string[]>([]);
   const [busy, setBusy] = useState<"cache" | "restart" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadInfo = useCallback(async () => {
-    const res = await fetchSystemInfo();
-    if (res.ok && res.data) {
-      setVersion(res.data.version);
-      setAppName(res.data.app_name);
+    const [infoRes, logsRes] = await Promise.all([
+      fetchSystemInfo(),
+      fetchSystemLogs(5),
+    ]);
+    if (infoRes.ok && infoRes.data) {
+      setVersion(infoRes.data.version);
+      setAppName(infoRes.data.app_name);
+    }
+    if (logsRes.ok && logsRes.data) {
+      setLogLines(logsRes.data.lines);
+      setBackendPort(logsRes.data.backend_port);
     }
   }, []);
 
@@ -42,6 +60,7 @@ export function SystemSettingsPanel() {
     }
     setMessage(res.data.message);
     void refresh();
+    void loadInfo();
   }
 
   async function handleRestart() {
@@ -56,38 +75,78 @@ export function SystemSettingsPanel() {
     }
     setMessage(res.data.message);
     void refresh();
+    void loadInfo();
+  }
+
+  function handleExportLogs() {
+    openExternalUrl(systemLogsExportUrl());
   }
 
   return (
     <div className="space-y-6">
-      <dl className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-card border border-cf-border-input bg-cf-secondary/40 p-4">
-          <dt className="cf-section-label">Statut backend</dt>
-          <dd className="mt-2 flex items-center gap-2 text-sm font-medium">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={GLASS_CARD}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/45">
+            Statut backend
+          </p>
+          <div className="mt-3 flex items-center gap-2">
             <span
-              className={`inline-block h-2.5 w-2.5 rounded-full ${
-                backendOnline ? "bg-cf-success" : "bg-red-500"
+              className={`inline-block h-3 w-3 rounded-full ${
+                backendOnline
+                  ? "animate-pulse bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.6)]"
+                  : "bg-red-500"
               }`}
             />
-            <span className={backendOnline ? "text-cf-success" : "text-red-300"}>
-              {backendOnline ? "En ligne" : status === "checking" ? "Connexion…" : "Hors ligne"}
+            <span
+              className={`text-sm font-medium ${
+                backendOnline ? "text-emerald-300" : "text-red-300"
+              }`}
+            >
+              {backendOnline ? "En ligne" : "Hors ligne"}
             </span>
-          </dd>
+          </div>
         </div>
-        <div className="rounded-card border border-cf-border-input bg-cf-secondary/40 p-4">
-          <dt className="cf-section-label">Version {appName}</dt>
-          <dd className="mt-2 text-sm font-medium text-cf-text">
+
+        <div className={GLASS_CARD}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/45">
+            Version {appName}
+          </p>
+          <p className="mt-3 text-lg font-semibold text-white">
             v{displayVersion}
-          </dd>
+          </p>
         </div>
-      </dl>
+
+        <div className={GLASS_CARD}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/45">
+            Port backend
+          </p>
+          <p className="mt-3 font-mono text-lg font-semibold text-[#d4a843]">
+            {backendPort}
+          </p>
+        </div>
+      </div>
+
+      <div className={GLASS_SECTION}>
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/45">
+          Logs récents
+        </h3>
+        {logLines.length ? (
+          <pre className="max-h-48 overflow-auto rounded-control border border-white/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-white/70">
+            {logLines.join("\n")}
+          </pre>
+        ) : (
+          <p className="text-sm text-white/45">
+            Aucun log capturé pour l&apos;instant.
+          </p>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
           disabled={busy !== null}
           onClick={() => void handleRestart()}
-          className="rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text hover:border-cf-gold/40 disabled:opacity-50"
+          className={GHOST_BTN}
         >
           {busy === "restart" ? "Rechargement…" : "Redémarrer le backend"}
         </button>
@@ -95,9 +154,12 @@ export function SystemSettingsPanel() {
           type="button"
           disabled={busy !== null}
           onClick={() => void handleClearCache()}
-          className="rounded-control border border-cf-border-input bg-cf-secondary px-4 py-2.5 text-sm text-cf-text hover:border-cf-gold/40 disabled:opacity-50"
+          className={GHOST_BTN}
         >
           {busy === "cache" ? "Nettoyage…" : "Vider le cache"}
+        </button>
+        <button type="button" onClick={handleExportLogs} className={GHOST_BTN}>
+          Exporter les logs
         </button>
       </div>
 
@@ -107,7 +169,7 @@ export function SystemSettingsPanel() {
         </p>
       ) : null}
       {message ? (
-        <p className="rounded-control border border-cf-border-input bg-cf-secondary/60 px-4 py-3 text-sm text-cf-muted">
+        <p className="rounded-control border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/60">
           {message}
         </p>
       ) : null}

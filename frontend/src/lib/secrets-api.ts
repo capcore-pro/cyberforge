@@ -19,6 +19,9 @@ export interface InfraFlags {
   stripe: boolean;
   brave_search: boolean;
   exa: boolean;
+  cloudflare: boolean;
+  pexels: boolean;
+  firecrawl: boolean;
 }
 
 export type VaultConfiguredFlags = ProviderFlags & InfraFlags;
@@ -46,6 +49,10 @@ export interface VaultKeysPayload {
   stripe_secret_key?: string | null;
   brave_search_api_key?: string | null;
   exa_api_key?: string | null;
+  pexels_api_key?: string | null;
+  firecrawl_api_key?: string | null;
+  cloudflare_account_id?: string | null;
+  cloudflare_api_token?: string | null;
 }
 
 /** @deprecated Utiliser VaultKeysPayload */

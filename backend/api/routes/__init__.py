@@ -17,6 +17,9 @@ from api.routes import (
     notifications,
     projects,
     scrape_inspiration,
+    secrets,
+    settings,
+    system,
 )
 
 API_ROUTERS: list[tuple[APIRouter, str]] = [
@@ -27,6 +30,9 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
     (clients.router, "/api"),
     (notifications.router, "/api"),
     (demos.router, "/api"),
+    (secrets.router, "/api"),
+    (settings.router, "/api"),
+    (system.router, "/api"),
     (scrape_inspiration.router, "/api"),
     (clone_inspiration.router, "/api"),
     (managed_vitrines.router, "/api"),
@@ -52,4 +58,7 @@ __all__ = [
     "notifications",
     "projects",
     "scrape_inspiration",
+    "secrets",
+    "settings",
+    "system",
 ]
