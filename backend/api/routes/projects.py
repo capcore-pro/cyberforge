@@ -26,6 +26,7 @@ from db.supabase_store import (
     get_supabase_store,
 )
 from tools.demo_template_service import heuristic_demo_seed, seed_as_dict
+from tools.pipeline_project_deletion import cleanup_pipeline_project_externals
 
 logger = logging.getLogger(__name__)
 
@@ -134,8 +135,8 @@ async def get_project(project_id: str) -> ProjectDetailResponse:
 
 
 @router.delete("/projects/{project_id}")
-async def delete_project(project_id: str) -> dict[str, bool]:
-    """Supprime le projet Supabase et ses générations."""
+async def delete_project(project_id: str) -> dict[str, object]:
+    """Supprime le projet Supabase, ses générations et les ressources externes liées."""
     store = get_supabase_store()
     if not store.is_configured():
         raise HTTPException(status_code=503, detail=_not_configured_detail(store))
@@ -150,6 +151,8 @@ async def delete_project(project_id: str) -> dict[str, bool]:
     if existing is None:
         raise HTTPException(status_code=404, detail="Projet introuvable.")
 
+    cleanup = await cleanup_pipeline_project_externals(existing)
+
     try:
         await store.delete_project(project_id)
     except SupabaseStoreError as exc:
@@ -157,7 +160,12 @@ async def delete_project(project_id: str) -> dict[str, bool]:
             exc, f"DELETE /api/projects/{project_id}"
         ) from exc
 
-    return {"deleted": True}
+    logger.info(
+        "DELETE /api/projects/%s — projet Supabase supprimé | cleanup=%s",
+        project_id,
+        cleanup,
+    )
+    return {"deleted": True, "cleanup": cleanup}
 
 
 class UpdateProjectRequest(BaseModel):
