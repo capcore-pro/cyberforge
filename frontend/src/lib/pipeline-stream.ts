@@ -151,10 +151,56 @@ export async function streamCoremindRun(
 
   const emit = (event: PipelineStepEvent) => handlers.onStep?.(event);
 
+  const progressTimers: ReturnType<typeof setTimeout>[] = [];
+  const scheduleProgress = (
+    delayMs: number,
+    fn: () => void,
+  ) => {
+    progressTimers.push(window.setTimeout(fn, delayMs));
+  };
+  const clearProgressTimers = () => {
+    for (const timer of progressTimers) {
+      window.clearTimeout(timer);
+    }
+    progressTimers.length = 0;
+  };
+
   try {
     emit({ type: "pipeline_start" });
-    emitV2Progress(handlers, "start", "architect", "Brief client…");
-    emitV2Progress(handlers, "start", "builder", "Génération HTML…");
+    emitV2Progress(
+      handlers,
+      "start",
+      "architect",
+      "BriefAI — Analyse et enrichissement du brief",
+    );
+
+    scheduleProgress(3_500, () => {
+      emitV2Progress(handlers, "done", "architect", "Brief enrichi");
+      emitV2Progress(
+        handlers,
+        "start",
+        "builder",
+        "GeneratorAI — Génération HTML premium",
+      );
+    });
+    scheduleProgress(18_000, () => {
+      emitV2Progress(handlers, "done", "builder", "HTML généré");
+      emitV2Progress(
+        handlers,
+        "start",
+        "bughunter",
+        "SupervisorAI — Validation et corrections",
+      );
+    });
+    scheduleProgress(22_000, () => {
+      emitV2Progress(handlers, "done", "bughunter", "Contrôle qualité validé");
+      emitV2Progress(
+        handlers,
+        "start",
+        "export",
+        "DeployAI — Images Pexels + Cloudflare",
+      );
+    });
 
     const response = await fetch(resolveGenerateUrl(), {
       method: "POST",
@@ -181,6 +227,7 @@ export async function streamCoremindRun(
     }
 
     if (!response.ok) {
+      clearProgressTimers();
       const detail =
         payload && typeof payload === "object" && "error" in payload && payload.error
           ? String(payload.error)
@@ -195,6 +242,7 @@ export async function streamCoremindRun(
     }
 
     if (!payload?.success || !payload.html?.trim()) {
+      clearProgressTimers();
       const detail = payload?.error?.trim() || "Génération sans HTML valide.";
       emit({ type: "pipeline_end", ok: false, message: detail });
       return {
@@ -205,12 +253,13 @@ export async function streamCoremindRun(
       };
     }
 
-    emitV2Progress(handlers, "done", "architect", "Brief validé");
-    emitV2Progress(handlers, "done", "builder", "HTML généré", {
+    clearProgressTimers();
+    emitV2Progress(handlers, "done", "architect", "Brief enrichi");
+    emitV2Progress(handlers, "done", "builder", "HTML premium généré", {
       preview_html: payload.html,
     });
-    emitV2Progress(handlers, "start", "export", "Déploiement…");
-    emitV2Progress(handlers, "done", "export", "Site en ligne", {
+    emitV2Progress(handlers, "done", "bughunter", "Contrôle qualité validé");
+    emitV2Progress(handlers, "done", "export", "Démo en ligne", {
       production_url: payload.url,
       unlock_url: payload.unlock_url ?? null,
       demo_password: payload.demo_password ?? null,
@@ -225,6 +274,7 @@ export async function streamCoremindRun(
       data,
     };
   } catch (error) {
+    clearProgressTimers();
     const message =
       error instanceof Error
         ? error.name === "AbortError"
