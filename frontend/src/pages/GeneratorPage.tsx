@@ -1308,8 +1308,8 @@ export function GeneratorPage({
         </div>
 
         {projectOwnerMode === "client" ? (
-          <div className={`mb-4 space-y-3 ${GLASS_CARD} p-4`}>
-            <label className="block space-y-2">
+          <div className={`relative z-20 mb-4 space-y-3 ${GLASS_CARD} p-4`}>
+            <label className="relative block space-y-2">
               <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-label">
                 Client affilié
               </span>
@@ -1823,40 +1823,71 @@ export function GeneratorPage({
             Mode de déploiement
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              disabled={isRunning}
-              onClick={() => selectDeployMode("demo")}
-              className={`flex min-h-[96px] flex-col items-start p-4 text-left ${GLASS_CARD_INTERACTIVE} ${
-                deployMode === "demo" ? GLASS_CARD_SELECTED : ""
-              }`}
-            >
-              <span className="text-xl" aria-hidden>
-                🚀
-              </span>
-              <span className="mt-2 block text-sm font-medium text-cf-text">Mode démo</span>
-              <span className="mt-1 block text-xs leading-snug text-cf-muted">
-                Démo Cloudflare instantanée — idéal pour présenter au client.
-              </span>
-            </button>
-            <button
-              type="button"
-              disabled={isRunning}
-              onClick={() => selectDeployMode("real")}
-              className={`flex min-h-[96px] flex-col items-start p-4 text-left ${GLASS_CARD_INTERACTIVE} ${
-                deployMode === "real" ? GLASS_CARD_SELECTED : ""
-              }`}
-            >
-              <span className="text-xl" aria-hidden>
-                🏭
-              </span>
-              <span className="mt-2 block text-sm font-medium text-cf-text">Vraie app</span>
-              <span className="mt-1 block text-xs leading-snug text-cf-muted">
-                {isPersonalFlow
-                  ? "Projet Cloudflare Pages dédié (*.pages.dev)."
-                  : "Déploiement production Railway / Vercel."}
-              </span>
-            </button>
+            {(
+              [
+                {
+                  mode: "demo" as DeployMode,
+                  icon: "🚀",
+                  title: "Mode démo",
+                  description:
+                    "Démo Cloudflare instantanée — idéal pour présenter au client.",
+                },
+                {
+                  mode: "real" as DeployMode,
+                  icon: "🏭",
+                  title: "Vraie app",
+                  description: isPersonalFlow
+                    ? "Projet Cloudflare Pages dédié (*.pages.dev)."
+                    : "Déploiement production Railway / Vercel.",
+                },
+              ] as const
+            ).map((option) => {
+              const selected = deployMode === option.mode;
+              return (
+                <button
+                  key={option.mode}
+                  type="button"
+                  disabled={isRunning}
+                  onClick={() => selectDeployMode(option.mode)}
+                  className={[
+                    "relative flex min-h-[96px] flex-col items-start rounded-card p-4 text-left transition-all duration-200",
+                    selected
+                      ? "border-2 border-[#d4a843] bg-[#d4a843]/15 shadow-[0_0_24px_rgba(212,168,67,0.15)]"
+                      : "border border-white/10 bg-white/5 opacity-70 hover:border-[#d4a843]/30 hover:opacity-90",
+                    "disabled:cursor-not-allowed disabled:opacity-60",
+                  ].join(" ")}
+                >
+                  {selected ? (
+                    <span
+                      className="absolute right-3 top-3 text-sm text-[#d4a843]"
+                      aria-hidden
+                    >
+                      ✅
+                    </span>
+                  ) : null}
+                  <span
+                    className={[
+                      "transition-all duration-200",
+                      selected ? "text-3xl drop-shadow-[0_0_8px_rgba(212,168,67,0.45)]" : "text-xl",
+                    ].join(" ")}
+                    aria-hidden
+                  >
+                    {option.icon}
+                  </span>
+                  <span
+                    className={[
+                      "mt-2 block text-sm font-medium",
+                      selected ? "text-[#d4a843]" : "text-cf-text",
+                    ].join(" ")}
+                  >
+                    {option.title}
+                  </span>
+                  <span className="mt-1 block text-xs leading-snug text-cf-muted">
+                    {option.description}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 

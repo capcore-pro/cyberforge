@@ -140,7 +140,10 @@ export function ClientPickerDropdown({
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    <div
+      ref={rootRef}
+      className={open ? "relative z-[9999]" : "relative"}
+    >
       <button
         type="button"
         disabled={disabled}
@@ -182,7 +185,7 @@ export function ClientPickerDropdown({
       </button>
 
       {open ? (
-        <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-card border border-white/10 bg-[#0f0f0f]/95 shadow-[0_16px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="absolute left-0 right-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-card border border-white/10 bg-[#0f0f0f]/95 shadow-[0_16px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           <div className="border-b border-white/10 p-2">
             <input
               type="search"
