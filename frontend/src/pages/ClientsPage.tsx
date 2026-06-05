@@ -1,11 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackButton } from "@/components/BackButton";
-import { useGeneratorSession } from "@/context/GeneratorSessionContext";
+import {
+  ClientFormModal,
+  type ClientFormValues,
+} from "@/components/clients/ClientFormModal";
 import {
   DocumentFormModal,
   type DocumentFormValues,
 } from "@/components/legal/DocumentFormModal";
+import { ProjectPreviewThumbnail } from "@/components/ProjectPreviewThumbnail";
+import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import { apiErrorMessage } from "@/lib/api-errors";
+import {
+  avatarClasses,
+  clientInitials,
+  formatRelativeDate,
+  joinClientName,
+  loadClientMeta,
+  saveClientMeta,
+  splitClientName,
+} from "@/lib/client-page-utils";
 import {
   DEMO_STATUS_LABELS,
   createClient,
@@ -14,6 +28,7 @@ import {
   listClients,
   updateClient,
   type ClientDetail,
+  type ClientDemoRecord,
   type ClientRecord,
   type DemoStatusSlug,
 } from "@/lib/clients-api";
@@ -25,45 +40,58 @@ import {
   type LegalDocument,
 } from "@/lib/legal-api";
 import { setSelectedClientId } from "@/lib/selected-client";
+import {
+  STATUS_LABELS,
+  TYPE_LABELS,
+  loadAllUnifiedProjects,
+  type UnifiedProject,
+} from "@/lib/unified-projects";
 
 interface ClientsPageProps {
   onOpenGenerator?: () => void;
 }
 
-type View = "list" | "form" | "detail";
+type View = "list" | "detail";
 
-interface ClientFormState {
-  name: string;
-  company: string;
-  email: string;
-  phone: string;
-  address: string;
-  siret: string;
-  active: boolean;
-}
+const GOLD_BTN =
+  "inline-flex items-center gap-2 rounded-control border border-[#d4a843] bg-[#d4a843] px-4 py-2 text-sm font-semibold text-[#0a0a0a] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(212,168,67,0.4)] disabled:opacity-50";
+const GLASS_CARD =
+  "rounded-card border border-white/10 bg-white/5 shadow-card backdrop-blur-xl transition-all duration-200 hover:scale-[1.01] hover:border-[#d4a843]/50";
+const SECTION_GLASS =
+  "rounded-card border border-white/10 bg-white/5 p-5 backdrop-blur-xl";
+const GHOST_BTN =
+  "rounded-control border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/70 backdrop-blur-xl transition hover:border-white/30 hover:text-white";
 
-function emptyForm(): ClientFormState {
+function emptyFormValues(): ClientFormValues {
   return {
-    name: "",
-    company: "",
+    firstName: "",
+    lastName: "",
     email: "",
     phone: "",
+    company: "",
+    website: "",
     address: "",
-    siret: "",
+    notes: "",
     active: true,
   };
 }
 
-function formatDate(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("fr-FR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
+function formFromClient(
+  client: ClientRecord,
+  meta?: { website: string; notes: string },
+): ClientFormValues {
+  const { firstName, lastName } = splitClientName(client.name);
+  return {
+    firstName,
+    lastName,
+    email: client.email ?? "",
+    phone: client.phone ?? "",
+    company: client.company ?? "",
+    website: meta?.website ?? "",
+    address: client.address ?? "",
+    notes: meta?.notes ?? "",
+    active: client.active !== false,
+  };
 }
 
 function formatEur(value: number): string {
@@ -74,95 +102,230 @@ function formatEur(value: number): string {
 }
 
 const DEMO_STATUS_CLASS: Record<DemoStatusSlug, string> = {
-  envoyee: "text-cf-muted",
-  ouverte: "text-cf-info",
-  interessee: "text-cf-alert",
-  validee: "text-cf-success",
-  expiree: "text-cf-muted",
+  envoyee: "text-white/50",
+  ouverte: "text-blue-300",
+  interessee: "text-amber-300",
+  validee: "text-emerald-300",
+  expiree: "text-white/40",
 };
+
+function ClientAvatar({
+  name,
+  size = "md",
+}: {
+  name: string;
+  size?: "md" | "lg";
+}) {
+  const sizeClass =
+    size === "lg"
+      ? "h-20 w-20 text-2xl"
+      : "h-12 w-12 text-sm";
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-full border font-semibold ${sizeClass} ${avatarClasses(name)}`}
+      aria-hidden
+    >
+      {clientInitials(name)}
+    </div>
+  );
+}
 
 function ClientCard({
   client,
-  onClick,
+  projectCount,
+  onOpen,
+  onNewProject,
+  onDelete,
+  deleteBusy,
 }: {
   client: ClientRecord;
-  onClick: () => void;
+  projectCount: number;
+  onOpen: () => void;
+  onNewProject: () => void;
+  onDelete: () => void;
+  deleteBusy: boolean;
 }) {
+  const active = client.active !== false;
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full flex-col rounded-card border border-cf-border-input bg-cf-card p-4 text-left shadow-card transition hover:border-cf-gold/40"
+    <article
+      className={`${GLASS_CARD} flex flex-col p-5`}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-medium text-cf-text">{client.name}</h3>
-        <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase ${
-            client.active !== false
-              ? "border-cf-success/40 bg-cf-success/10 text-cf-success"
-              : "border-red-500/40 bg-red-950/30 text-red-300"
-          }`}
-        >
-          {client.active !== false ? "Actif" : "Inactif"}
-        </span>
+      <div className="flex items-start gap-3">
+        <ClientAvatar name={client.name} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-semibold text-white">
+                {client.name}
+              </h3>
+              {client.company ? (
+                <p className="truncate text-sm text-[#d4a843]/90">
+                  {client.company}
+                </p>
+              ) : null}
+            </div>
+            <span
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                active
+                  ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-300"
+                  : "border-red-400/35 bg-red-500/15 text-red-300"
+              }`}
+            >
+              {active ? "Actif" : "Inactif"}
+            </span>
+          </div>
+
+          <dl className="mt-3 space-y-1 text-xs text-white/55">
+            <div className="flex gap-2">
+              <dt className="shrink-0 text-white/35">Email</dt>
+              <dd className="truncate">{client.email || "—"}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="shrink-0 text-white/35">Tél.</dt>
+              <dd>{client.phone || "—"}</dd>
+            </div>
+          </dl>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/60">
+              {projectCount} projet{projectCount !== 1 ? "s" : ""}
+            </span>
+            <span className="text-[11px] text-white/40">
+              {formatRelativeDate(client.created_at)}
+            </span>
+          </div>
+        </div>
       </div>
-      {client.company ? (
-        <p className="mt-1 text-xs text-cf-gold">{client.company}</p>
-      ) : null}
-      <dl className="mt-3 space-y-1 text-xs text-cf-muted">
-        <div className="flex gap-2">
-          <dt className="text-cf-label">Email</dt>
-          <dd className="truncate text-cf-body">{client.email || "—"}</dd>
-        </div>
-        <div className="flex gap-2">
-          <dt className="text-cf-label">Tél.</dt>
-          <dd>{client.phone || "—"}</dd>
-        </div>
-      </dl>
-    </button>
+
+      <div
+        className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-4"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <button type="button" onClick={onOpen} className={GHOST_BTN}>
+          Voir fiche →
+        </button>
+        <button type="button" onClick={onNewProject} className={GHOST_BTN}>
+          Nouveau projet
+        </button>
+        <button
+          type="button"
+          disabled={deleteBusy}
+          onClick={onDelete}
+          className="rounded-control border border-red-500/30 px-3 py-1.5 text-xs text-red-300 transition hover:border-red-400/50 hover:bg-red-950/30 disabled:opacity-50"
+        >
+          Supprimer
+        </button>
+      </div>
+    </article>
   );
 }
 
 /**
- * Gestion des clients commerciaux — liste, fiche et formulaire inline.
+ * Gestion des clients commerciaux — liste premium, fiche détaillée et modal.
  */
 export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
   const { patch } = useGeneratorSession();
 
   const [view, setView] = useState<View>("list");
   const [clients, setClients] = useState<ClientRecord[]>([]);
+  const [allProjects, setAllProjects] = useState<UnifiedProject[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ClientDetail | null>(null);
   const [documents, setDocuments] = useState<LegalDocument[]>([]);
   const [legalClients, setLegalClients] = useState<LegalClient[]>([]);
 
-  const [form, setForm] = useState<ClientFormState>(emptyForm);
-  const [isNew, setIsNew] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [formInitial, setFormInitial] = useState(emptyFormValues);
+  const [formError, setFormError] = useState<string | null>(null);
+
   const [devisModalOpen, setDevisModalOpen] = useState(false);
-  const [devisBusy, setDevisBusy] = useState(false);
-  const [devisError, setDevisError] = useState<string | null>(null);
+  const [factureModalOpen, setFactureModalOpen] = useState(false);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
+
+  const [notes, setNotes] = useState("");
+  const [notesSaved, setNotesSaved] = useState(true);
+  const [clientWebsite, setClientWebsite] = useState("");
+  const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === selectedId) ?? null,
     [clients, selectedId],
   );
 
+  const projectCountByClient = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const project of allProjects) {
+      if (!project.clientId) continue;
+      map.set(project.clientId, (map.get(project.clientId) ?? 0) + 1);
+    }
+    return map;
+  }, [allProjects]);
+
+  const clientProjects = useMemo(() => {
+    if (!detail) return [];
+    return allProjects.filter((p) => p.clientId === detail.id);
+  }, [allProjects, detail]);
+
+  const orphanDemos = useMemo(() => {
+    if (!detail) return [];
+    const linkedDemoIds = new Set(
+      clientProjects.map((p) => p.demoId).filter(Boolean),
+    );
+    return detail.demos.filter((d) => !linkedDemoIds.has(d.id));
+  }, [detail, clientProjects]);
+
+  const devisList = useMemo(
+    () => documents.filter((d) => d.type === "devis"),
+    [documents],
+  );
+
+  const factureList = useMemo(
+    () => documents.filter((d) => d.type === "facture"),
+    [documents],
+  );
+
   const loadClients = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const response = await listClients("client");
-    setLoading(false);
-    if (!response.ok || !response.data) {
-      setError(apiErrorMessage(response, "Impossible de charger les clients."));
-      return;
+    try {
+      const [clientsRes, projects] = await Promise.all([
+        listClients("client"),
+        loadAllUnifiedProjects(),
+      ]);
+      if (!clientsRes.ok || !clientsRes.data) {
+        setError(
+          apiErrorMessage(clientsRes, "Impossible de charger les clients."),
+        );
+        return;
+      }
+      setClients(clientsRes.data);
+      setAllProjects(projects);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Impossible de charger les clients.",
+      );
+    } finally {
+      setLoading(false);
     }
-    setClients(response.data);
   }, []);
 
   const loadDetail = useCallback(async (clientId: string) => {
@@ -182,6 +345,11 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
     const clientDetail = detailRes.data;
     setDetail(clientDetail);
 
+    const meta = loadClientMeta(clientId);
+    setNotes(meta.notes);
+    setClientWebsite(meta.website);
+    setNotesSaved(true);
+
     if (legalClientsRes.ok && legalClientsRes.data) {
       setLegalClients(legalClientsRes.data);
     }
@@ -189,11 +357,7 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
     const legalId = clientDetail.legal_client_id;
     if (legalId) {
       const docsRes = await fetchLegalDocuments({ client_id: legalId });
-      if (docsRes.ok && docsRes.data) {
-        setDocuments(docsRes.data);
-      } else {
-        setDocuments([]);
-      }
+      setDocuments(docsRes.ok && docsRes.data ? docsRes.data : []);
     } else {
       setDocuments([]);
     }
@@ -209,112 +373,43 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
     }
   }, [view, selectedId, loadDetail]);
 
+  useEffect(() => {
+    return () => {
+      if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
+    };
+  }, []);
+
   function openList() {
     setView("list");
     setSelectedId(null);
     setDetail(null);
-    setIsNew(false);
     setError(null);
   }
 
   function openNewForm() {
-    setIsNew(true);
-    setSelectedId(null);
-    setDetail(null);
-    setForm(emptyForm());
-    setError(null);
-    setView("form");
-  }
-
-  function openDetail(clientId: string) {
-    setSelectedId(clientId);
-    setIsNew(false);
-    setView("detail");
+    setFormMode("create");
+    setFormInitial(emptyFormValues());
+    setFormError(null);
+    setFormOpen(true);
   }
 
   function openEditForm() {
     if (!detail) return;
-    setForm({
-      name: detail.name,
-      company: detail.company ?? "",
-      email: detail.email ?? "",
-      phone: detail.phone ?? "",
-      address: detail.address ?? "",
-      siret: detail.siret ?? "",
-      active: detail.active !== false,
-    });
-    setIsNew(false);
-    setView("form");
+    const meta = loadClientMeta(detail.id);
+    setFormMode("edit");
+    setFormInitial(formFromClient(detail, meta));
+    setFormError(null);
+    setFormOpen(true);
   }
 
-  async function handleSave(event: React.FormEvent) {
-    event.preventDefault();
-    const name = form.name.trim();
-    if (!name) {
-      setError("Le nom est obligatoire.");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    const payload = {
-      kind: "client" as const,
-      name,
-      company: form.company.trim() || null,
-      email: form.email.trim() || null,
-      phone: form.phone.trim() || null,
-      address: form.address.trim() || null,
-      siret: form.siret.trim() || null,
-      active: form.active,
-    };
-
-    if (isNew) {
-      const response = await createClient(payload);
-      setSaving(false);
-      if (!response.ok || !response.data) {
-        setError(apiErrorMessage(response, "Création impossible."));
-        return;
-      }
-      await loadClients();
-      openDetail(response.data.id);
-      return;
-    }
-
-    if (!selectedId) return;
-    const response = await updateClient(selectedId, payload);
-    setSaving(false);
-    if (!response.ok) {
-      setError(apiErrorMessage(response, "Enregistrement impossible."));
-      return;
-    }
-    await loadClients();
+  function openDetail(clientId: string) {
+    setSelectedId(clientId);
     setView("detail");
-    void loadDetail(selectedId);
   }
 
-  async function handleDelete() {
-    if (!selectedId || !detail) return;
-    const confirmed = window.confirm(
-      `Supprimer le client « ${detail.name} » ? Cette action est irréversible.`,
-    );
-    if (!confirmed) return;
-
-    setSaving(true);
-    const response = await deleteClient(selectedId);
-    setSaving(false);
-    if (!response.ok) {
-      setError(apiErrorMessage(response, "Suppression impossible."));
-      return;
-    }
-    await loadClients();
-    openList();
-  }
-
-  function handleGenerateProject() {
-    if (!detail) return;
-    setSelectedClientId(detail.id);
-    const company = detail.company?.trim();
-    const label = company || detail.name;
+  function startProjectForClient(client: ClientRecord) {
+    setSelectedClientId(client.id);
+    const label = client.company?.trim() || client.name;
     patch({
       prompt: `Projet pour ${label} — site professionnel adapté à leur activité.`,
       projectType: "site_web",
@@ -327,55 +422,225 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
     onOpenGenerator?.();
   }
 
-  async function handleCreateDevis(values: DocumentFormValues) {
-    if (!detail?.legal_client_id) {
-      setDevisError("Fiche légale non liée — enregistrez à nouveau le client.");
+  async function handleFormSubmit(values: ClientFormValues) {
+    const name = joinClientName(values.firstName, values.lastName);
+    if (!name) {
+      setFormError("Le prénom et le nom sont obligatoires.");
       return;
     }
-    setDevisBusy(true);
-    setDevisError(null);
+    if (!values.email.trim()) {
+      setFormError("L'email est obligatoire.");
+      return;
+    }
+
+    setSaving(true);
+    setFormError(null);
+    const payload = {
+      kind: "client" as const,
+      name,
+      company: values.company.trim() || null,
+      email: values.email.trim() || null,
+      phone: values.phone.trim() || null,
+      address: values.address.trim() || null,
+      active: values.active,
+    };
+
+    if (formMode === "create") {
+      const response = await createClient(payload);
+      setSaving(false);
+      if (!response.ok || !response.data) {
+        setFormError(apiErrorMessage(response, "Création impossible."));
+        return;
+      }
+      saveClientMeta(response.data.id, {
+        website: values.website.trim(),
+        notes: values.notes.trim(),
+      });
+      setFormOpen(false);
+      await loadClients();
+      openDetail(response.data.id);
+      return;
+    }
+
+    if (!selectedId) return;
+    const response = await updateClient(selectedId, payload);
+    setSaving(false);
+    if (!response.ok) {
+      setFormError(apiErrorMessage(response, "Enregistrement impossible."));
+      return;
+    }
+    saveClientMeta(selectedId, {
+      website: values.website.trim(),
+      notes: values.notes.trim(),
+    });
+    setFormOpen(false);
+    setNotes(values.notes.trim());
+    setClientWebsite(values.website.trim());
+    await loadClients();
+    void loadDetail(selectedId);
+  }
+
+  async function handleDeleteClient(client: ClientRecord) {
+    const confirmed = window.confirm(
+      `Supprimer le client « ${client.name} » ? Cette action est irréversible.`,
+    );
+    if (!confirmed) return;
+
+    setDeleteBusyId(client.id);
+    setError(null);
+    const response = await deleteClient(client.id);
+    setDeleteBusyId(null);
+    if (!response.ok) {
+      setError(apiErrorMessage(response, "Suppression impossible."));
+      return;
+    }
+    if (selectedId === client.id) openList();
+    await loadClients();
+  }
+
+  function handleNotesChange(value: string) {
+    setNotes(value);
+    setNotesSaved(false);
+    if (!selectedId) return;
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
+    notesTimerRef.current = setTimeout(() => {
+      const meta = loadClientMeta(selectedId);
+      saveClientMeta(selectedId, { ...meta, notes: value });
+      setNotesSaved(true);
+    }, 600);
+  }
+
+  async function handleCreateDocument(
+    type: "devis" | "facture",
+    values: DocumentFormValues,
+  ) {
+    if (!detail?.legal_client_id) {
+      setDocError("Fiche légale non liée — enregistrez à nouveau le client.");
+      return;
+    }
+    setDocBusy(true);
+    setDocError(null);
     const res = await createLegalDocument({
-      type: "devis",
+      type,
       title: values.title,
       client_id: detail.legal_client_id,
       notes: values.notes || null,
       line_items: values.lines,
     });
-    setDevisBusy(false);
+    setDocBusy(false);
     if (!res.ok) {
-      setDevisError(apiErrorMessage(res, "Création du devis impossible."));
+      setDocError(
+        apiErrorMessage(
+          res,
+          type === "devis"
+            ? "Création du devis impossible."
+            : "Création de la facture impossible.",
+        ),
+      );
       return;
     }
-    setDevisModalOpen(false);
+    if (type === "devis") setDevisModalOpen(false);
+    else setFactureModalOpen(false);
     void loadDetail(detail.id);
   }
 
-  const devisInitial = useMemo((): LegalDocument | null => {
-    if (!detail?.legal_client_id) return null;
-    const label = detail.company?.trim() || detail.name;
-    return {
-      id: "",
-      type: "devis",
-      number: "",
-      client_id: detail.legal_client_id,
-      project_id: null,
-      status: "draft",
-      title: `Devis — ${label}`,
-      notes: null,
-      total_ht: 0,
-      tva_rate: 0,
-      total_ttc: 0,
-      pdf_path: null,
-      pdf_url: null,
-      sent_at: null,
-      created_at: "",
-      line_items: [],
-    };
-  }, [detail]);
-
-  const devisAndFactures = documents.filter(
-    (d) => d.type === "devis" || d.type === "facture",
+  const legalDocInitial = useCallback(
+    (type: "devis" | "facture"): LegalDocument | null => {
+      if (!detail?.legal_client_id) return null;
+      const label = detail.company?.trim() || detail.name;
+      const prefix = type === "devis" ? "Devis" : "Facture";
+      return {
+        id: "",
+        type,
+        number: "",
+        client_id: detail.legal_client_id,
+        project_id: null,
+        status: "draft",
+        title: `${prefix} — ${label}`,
+        notes: null,
+        total_ht: 0,
+        tva_rate: 0,
+        total_ttc: 0,
+        pdf_path: null,
+        pdf_url: null,
+        sent_at: null,
+        created_at: "",
+        line_items: [],
+      };
+    },
+    [detail],
   );
+
+  function renderDemoRow(demo: ClientDemoRecord) {
+    return (
+      <li
+        key={demo.id}
+        className="flex flex-wrap items-center gap-3 rounded-control border border-white/10 bg-white/5 px-3 py-3"
+      >
+        <div className="h-14 w-24 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
+          <div className="flex h-full items-center justify-center text-[10px] text-white/30">
+            Démo
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-white">{demo.title}</p>
+          <p className="text-[11px] text-white/45">
+            Démo ·{" "}
+            <span className={DEMO_STATUS_CLASS[demo.status]}>
+              {DEMO_STATUS_LABELS[demo.status]}
+            </span>{" "}
+            · {formatRelativeDate(demo.created_at)}
+          </p>
+        </div>
+        {demo.unlock_url ? (
+          <a
+            href={demo.unlock_url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-[#d4a843] hover:underline"
+          >
+            Voir démo ↗
+          </a>
+        ) : null}
+      </li>
+    );
+  }
+
+  function renderProjectRow(project: UnifiedProject) {
+    return (
+      <li
+        key={project.key}
+        className="flex flex-wrap items-center gap-3 rounded-control border border-white/10 bg-white/5 px-3 py-3"
+      >
+        <div className="h-14 w-24 shrink-0 overflow-hidden rounded-md border border-white/10">
+          <ProjectPreviewThumbnail
+            previewUrl={project.url}
+            title={project.name}
+            width={96}
+            height={56}
+            className="h-full w-full"
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-white">{project.name}</p>
+          <p className="text-[11px] text-white/45">
+            {TYPE_LABELS[project.type]} · {STATUS_LABELS[project.status]} ·{" "}
+            {formatRelativeDate(project.createdAt)}
+          </p>
+        </div>
+        {project.url ? (
+          <a
+            href={project.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-[#d4a843] hover:underline"
+          >
+            Voir démo ↗
+          </a>
+        ) : null}
+      </li>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -383,17 +648,16 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
         <>
           <header className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="cf-section-label mb-2">Relation client</p>
-              <h1 className="cf-page-title">Clients</h1>
-              <p className="mt-1 text-sm text-cf-muted">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#d4a843]/80">
+                Relation client
+              </p>
+              <h1 className="text-2xl font-semibold text-white">Clients</h1>
+              <p className="mt-1 text-sm text-white/50">
                 Fiches clients, projets, devis et factures
               </p>
             </div>
-            <button
-              type="button"
-              onClick={openNewForm}
-              className="rounded-control border border-cf-gold/50 bg-cf-active px-4 py-2 text-sm font-medium text-cf-gold hover:border-cf-gold"
-            >
+            <button type="button" onClick={openNewForm} className={GOLD_BTN}>
+              <span aria-hidden>+</span>
               Nouveau client
             </button>
           </header>
@@ -409,19 +673,30 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
               {Array.from({ length: 6 }).map((_, i) => (
                 <div
                   key={i}
-                  className="h-36 animate-pulse rounded-card border border-cf-border-input bg-cf-card"
+                  className="h-48 animate-pulse rounded-card border border-white/10 bg-white/5 backdrop-blur-xl"
                 />
               ))}
             </div>
           ) : clients.length === 0 ? (
-            <div className="rounded-card border border-cf-border-input bg-cf-card px-6 py-12 text-center">
-              <p className="text-sm text-cf-muted">Aucun client pour l&apos;instant.</p>
+            <div className="flex flex-col items-center justify-center rounded-card border border-white/10 bg-white/5 px-6 py-16 text-center backdrop-blur-xl">
+              <span
+                className="mb-4 inline-block animate-pulse text-5xl"
+                aria-hidden
+              >
+                👥
+              </span>
+              <h2 className="text-lg font-semibold text-white">
+                Aucun client pour le moment
+              </h2>
+              <p className="mt-2 max-w-sm text-sm text-white/50">
+                Ajoutez votre premier client pour commencer
+              </p>
               <button
                 type="button"
                 onClick={openNewForm}
-                className="mt-3 text-sm text-cf-gold hover:underline"
+                className={`${GOLD_BTN} mt-6`}
               >
-                Créer le premier client
+                ＋ Ajouter mon premier client
               </button>
             </div>
           ) : (
@@ -430,7 +705,11 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
                 <ClientCard
                   key={client.id}
                   client={client}
-                  onClick={() => openDetail(client.id)}
+                  projectCount={projectCountByClient.get(client.id) ?? 0}
+                  onOpen={() => openDetail(client.id)}
+                  onNewProject={() => startProjectForClient(client)}
+                  onDelete={() => void handleDeleteClient(client)}
+                  deleteBusy={deleteBusyId === client.id}
                 />
               ))}
             </div>
@@ -438,174 +717,94 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
         </>
       ) : null}
 
-      {view === "form" ? (
-        <section className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
-          <BackButton
-            className="mb-4"
-            onClick={() => {
-              if (isNew) openList();
-              else if (selectedId) {
-                setView("detail");
-              } else openList();
-            }}
-          />
-
-          <h2 className="mb-6 text-lg font-medium text-cf-text">
-            {isNew ? "Nouveau client" : "Modifier le client"}
-          </h2>
-
-          <form onSubmit={(e) => void handleSave(e)} className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block sm:col-span-2">
-                <span className="cf-section-label mb-1 block">Nom *</span>
-                <input
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="cf-section-label mb-1 block">Entreprise</span>
-                <input
-                  value={form.company}
-                  onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
-                  className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="cf-section-label mb-1 block">Email</span>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="cf-section-label mb-1 block">Téléphone</span>
-                <input
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none"
-                />
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="cf-section-label mb-1 block">Adresse</span>
-                <input
-                  value={form.address}
-                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                  className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="cf-section-label mb-1 block">SIRET (optionnel)</span>
-                <input
-                  value={form.siret}
-                  onChange={(e) => setForm((f) => ({ ...f, siret: e.target.value }))}
-                  className="w-full rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text focus:border-cf-gold/50 focus:outline-none"
-                />
-              </label>
-              <label className="flex items-center gap-2 pt-6">
-                <input
-                  type="checkbox"
-                  checked={form.active}
-                  onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
-                  className="rounded border-cf-border-input"
-                />
-                <span className="text-sm text-cf-body">Client actif</span>
-              </label>
-            </div>
-
-            {error ? (
-              <p className="rounded-control border border-red-500/40 bg-red-950/30 px-4 py-3 text-sm text-red-200">
-                {error}
-              </p>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-control border border-cf-gold bg-cf-gold px-6 py-2.5 text-sm font-medium text-cf-main hover:bg-cf-gold-hover disabled:opacity-50"
-            >
-              {saving ? "Enregistrement…" : "Enregistrer"}
-            </button>
-          </form>
-        </section>
-      ) : null}
-
       {view === "detail" && selectedClient ? (
         <section className="space-y-6">
-          <BackButton className="mb-4" onClick={openList} />
+          <BackButton className="mb-2" onClick={openList} />
 
-          <div className="rounded-card border border-cf-border-input bg-cf-card p-6 shadow-card">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
+          <div className={`${SECTION_GLASS} p-6`}>
+            <div className="flex flex-wrap items-start gap-5">
+              <ClientAvatar name={selectedClient.name} size="lg" />
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-xl font-medium text-cf-text">{selectedClient.name}</h2>
+                  <h2 className="text-2xl font-semibold text-white">
+                    {selectedClient.name}
+                  </h2>
                   <span
-                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase ${
+                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase ${
                       selectedClient.active !== false
-                        ? "border-cf-success/40 bg-cf-success/10 text-cf-success"
-                        : "border-red-500/40 bg-red-950/30 text-red-300"
+                        ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-300"
+                        : "border-red-400/35 bg-red-500/15 text-red-300"
                     }`}
                   >
                     {selectedClient.active !== false ? "Actif" : "Inactif"}
                   </span>
                 </div>
                 {selectedClient.company ? (
-                  <p className="mt-1 text-sm text-cf-gold">{selectedClient.company}</p>
+                  <p className="mt-1 text-sm text-[#d4a843]/90">
+                    {selectedClient.company}
+                  </p>
                 ) : null}
-                <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   <div>
-                    <dt className="text-cf-label">Email</dt>
-                    <dd className="text-cf-body">{selectedClient.email || "—"}</dd>
+                    <dt className="text-xs uppercase tracking-wide text-white/35">
+                      Email
+                    </dt>
+                    <dd className="text-white/80">
+                      {selectedClient.email || "—"}
+                    </dd>
                   </div>
                   <div>
-                    <dt className="text-cf-label">Téléphone</dt>
-                    <dd className="text-cf-body">{selectedClient.phone || "—"}</dd>
+                    <dt className="text-xs uppercase tracking-wide text-white/35">
+                      Téléphone
+                    </dt>
+                    <dd className="text-white/80">
+                      {selectedClient.phone || "—"}
+                    </dd>
                   </div>
                   <div className="sm:col-span-2">
-                    <dt className="text-cf-label">Adresse</dt>
-                    <dd className="text-cf-body">{selectedClient.address || "—"}</dd>
+                    <dt className="text-xs uppercase tracking-wide text-white/35">
+                      Adresse
+                    </dt>
+                    <dd className="text-white/80">
+                      {selectedClient.address || "—"}
+                    </dd>
                   </div>
-                  {selectedClient.siret ? (
-                    <div>
-                      <dt className="text-cf-label">SIRET</dt>
-                      <dd className="text-cf-body">{selectedClient.siret}</dd>
+                  {clientWebsite ? (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs uppercase tracking-wide text-white/35">
+                        Site web
+                      </dt>
+                      <dd>
+                        <a
+                          href={clientWebsite}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#d4a843] hover:underline"
+                        >
+                          {clientWebsite}
+                        </a>
+                      </dd>
                     </div>
                   ) : null}
                 </dl>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex w-full flex-wrap gap-2 lg:w-auto lg:flex-col lg:items-stretch">
                 <button
                   type="button"
-                  onClick={openEditForm}
-                  className="rounded-control border border-cf-border-input px-3 py-2 text-xs text-cf-muted hover:text-cf-text"
+                  onClick={() => startProjectForClient(selectedClient)}
+                  className={GOLD_BTN}
                 >
+                  ⚡ Créer un projet
+                </button>
+                <button type="button" onClick={openEditForm} className={GHOST_BTN}>
                   Modifier
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDevisModalOpen(true)}
-                  disabled={!detail?.legal_client_id}
-                  className="rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold disabled:opacity-40"
-                >
-                  Créer un devis
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGenerateProject}
-                  className="rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold"
-                >
-                  Générer un projet
-                </button>
-                <button
-                  type="button"
                   disabled={saving}
-                  onClick={() => void handleDelete()}
-                  className="rounded-control border border-red-500/40 px-3 py-2 text-xs text-red-300 hover:bg-red-950/30"
+                  onClick={() => void handleDeleteClient(selectedClient)}
+                  className="rounded-control border border-red-500/30 px-3 py-2 text-xs text-red-300 hover:bg-red-950/30"
                 >
                   Supprimer
                 </button>
@@ -620,42 +819,74 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
           ) : null}
 
           {detailLoading ? (
-            <p className="animate-pulse text-sm text-cf-muted">Chargement…</p>
+            <p className="animate-pulse text-sm text-white/50">Chargement…</p>
           ) : (
             <>
-              <div className="rounded-card border border-cf-border-input bg-cf-card p-5 shadow-card">
-                <h3 className="cf-section-label mb-4">Projets & démos</h3>
-                {!detail?.demos.length ? (
-                  <p className="text-sm text-cf-muted">Aucun projet lié pour l&apos;instant.</p>
+              <div className={SECTION_GLASS}>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-white/45">
+                    Projets
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => startProjectForClient(selectedClient)}
+                    className={GHOST_BTN}
+                  >
+                    Nouveau projet
+                  </button>
+                </div>
+                {!clientProjects.length && !orphanDemos.length ? (
+                  <button
+                    type="button"
+                    onClick={() => startProjectForClient(selectedClient)}
+                    className="text-sm text-[#d4a843] hover:underline"
+                  >
+                    Aucun projet — créer le premier ↗
+                  </button>
                 ) : (
                   <ul className="space-y-2">
-                    {detail.demos.map((demo) => (
+                    {clientProjects.map(renderProjectRow)}
+                    {orphanDemos.map(renderDemoRow)}
+                  </ul>
+                )}
+              </div>
+
+              <div className={SECTION_GLASS}>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-white/45">
+                    Devis
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setDevisModalOpen(true)}
+                    disabled={!detail?.legal_client_id}
+                    className={GHOST_BTN}
+                  >
+                    Créer un devis
+                  </button>
+                </div>
+                {!devisList.length ? (
+                  <p className="text-sm text-white/45">
+                    Aucun devis pour ce client.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {devisList.map((doc) => (
                       <li
-                        key={demo.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-cf-border-input bg-cf-secondary/40 px-3 py-2.5"
+                        key={doc.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-white/10 bg-white/5 px-3 py-2.5"
                       >
                         <div>
-                          <p className="text-sm text-cf-text">{demo.title}</p>
-                          <p className="text-[11px] text-cf-muted">
-                            {formatDate(demo.created_at)}
+                          <p className="text-sm text-white">{doc.title}</p>
+                          <p className="text-[11px] text-white/45">
+                            {doc.number} · {formatRelativeDate(doc.created_at)}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-xs ${DEMO_STATUS_CLASS[demo.status]}`}
-                          >
-                            {DEMO_STATUS_LABELS[demo.status]}
-                          </span>
-                          {demo.unlock_url ? (
-                            <a
-                              href={demo.unlock_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs text-cf-gold hover:underline"
-                            >
-                              Voir
-                            </a>
-                          ) : null}
+                        <div className="text-right text-xs">
+                          <p className="font-medium text-[#d4a843]">
+                            {formatEur(doc.total_ttc)}
+                          </p>
+                          <p className="capitalize text-white/40">{doc.status}</p>
                         </div>
                       </li>
                     ))}
@@ -663,54 +894,113 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
                 )}
               </div>
 
-              <div className="rounded-card border border-cf-border-input bg-cf-card p-5 shadow-card">
-                <h3 className="cf-section-label mb-4">Devis & factures</h3>
-                {!devisAndFactures.length ? (
-                  <p className="text-sm text-cf-muted">Aucun document pour ce client.</p>
+              <div className={SECTION_GLASS}>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-white/45">
+                    Factures
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setFactureModalOpen(true)}
+                    disabled={!detail?.legal_client_id}
+                    className={GHOST_BTN}
+                  >
+                    Créer une facture
+                  </button>
+                </div>
+                {!factureList.length ? (
+                  <p className="text-sm text-white/45">
+                    Aucune facture pour ce client.
+                  </p>
                 ) : (
                   <ul className="space-y-2">
-                    {devisAndFactures.map((doc) => (
+                    {factureList.map((doc) => (
                       <li
                         key={doc.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-cf-border-input bg-cf-secondary/40 px-3 py-2.5"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-white/10 bg-white/5 px-3 py-2.5"
                       >
                         <div>
-                          <p className="text-sm text-cf-text">
-                            {doc.type === "devis" ? "Devis" : "Facture"} — {doc.title}
-                          </p>
-                          <p className="text-[11px] text-cf-muted">
-                            {doc.number} · {formatDate(doc.created_at)}
+                          <p className="text-sm text-white">{doc.title}</p>
+                          <p className="text-[11px] text-white/45">
+                            {doc.number} · {formatRelativeDate(doc.created_at)}
                           </p>
                         </div>
                         <div className="text-right text-xs">
-                          <p className="font-medium text-cf-gold">
+                          <p className="font-medium text-[#d4a843]">
                             {formatEur(doc.total_ttc)}
                           </p>
-                          <p className="text-cf-muted capitalize">{doc.status}</p>
+                          <p className="capitalize text-white/40">{doc.status}</p>
                         </div>
                       </li>
                     ))}
                   </ul>
                 )}
+              </div>
+
+              <div className={SECTION_GLASS}>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-white/45">
+                    Notes internes
+                  </h3>
+                  <span className="text-[11px] text-white/35">
+                    {notesSaved ? "Sauvegardé" : "Enregistrement…"}
+                  </span>
+                </div>
+                <textarea
+                  rows={5}
+                  value={notes}
+                  onChange={(e) => handleNotesChange(e.target.value)}
+                  placeholder="Notes privées sur ce client…"
+                  className="w-full resize-y rounded-control border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-[#d4a843] focus:outline-none"
+                />
               </div>
             </>
           )}
         </section>
       ) : null}
 
+      <ClientFormModal
+        open={formOpen}
+        title={formMode === "create" ? "Nouveau client" : "Modifier le client"}
+        submitLabel={formMode === "create" ? "Créer le client" : "Enregistrer"}
+        initial={formInitial}
+        busy={saving}
+        error={formError}
+        onClose={() => {
+          setFormOpen(false);
+          setFormError(null);
+        }}
+        onSubmit={(values) => void handleFormSubmit(values)}
+      />
+
       <DocumentFormModal
         open={devisModalOpen}
         mode="create"
         docTypeLabel="Devis"
-        initial={devisInitial}
+        initial={legalDocInitial("devis")}
         clients={legalClients}
         onClose={() => {
           setDevisModalOpen(false);
-          setDevisError(null);
+          setDocError(null);
         }}
-        onSubmit={(values) => void handleCreateDevis(values)}
-        busy={devisBusy}
-        error={devisError}
+        onSubmit={(values) => void handleCreateDocument("devis", values)}
+        busy={docBusy}
+        error={docError}
+      />
+
+      <DocumentFormModal
+        open={factureModalOpen}
+        mode="create"
+        docTypeLabel="Facture"
+        initial={legalDocInitial("facture")}
+        clients={legalClients}
+        onClose={() => {
+          setFactureModalOpen(false);
+          setDocError(null);
+        }}
+        onSubmit={(values) => void handleCreateDocument("facture", values)}
+        busy={docBusy}
+        error={docError}
       />
     </div>
   );
