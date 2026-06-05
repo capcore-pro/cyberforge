@@ -7,9 +7,9 @@ import {
 } from "./sector-presets";
 
 describe("listSectorsForKind", () => {
-  it("returns 8 vitrine sectors in order", () => {
+  it("returns 9 vitrine sectors in order", () => {
     const sectors = listSectorsForKind("vitrine");
-    expect(sectors).toHaveLength(8);
+    expect(sectors).toHaveLength(9);
     expect(sectors.map((s) => s.label)).toEqual([...REQUIRED_VITRINE_SECTOR_LABELS]);
     expect(sectors.every((s) => s.kinds.includes("vitrine"))).toBe(true);
   });

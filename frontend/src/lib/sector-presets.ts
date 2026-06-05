@@ -149,6 +149,25 @@ export const SECTOR_PRESET_LIST: SectorPreset[] = [
     services: ["Révision", "Pneus", "Carrosserie", "Diagnostic", "Véhicule de courtoisie"],
     sector: "garage / automobile",
   },
+  {
+    id: "tourisme-loisirs",
+    label: "Tourisme & Loisirs",
+    emoji: "🌍",
+    kinds: ["vitrine"],
+    project_type: "vitrine",
+    couleur_primaire: "#2d6a4f",
+    couleur_secondaire: "#1b4332",
+    description:
+      "Site vitrine pour camping, gîte, hôtel ou activité touristique : présentation des hébergements, activités, tarifs et contact.",
+    services: [
+      "Présentation hébergements",
+      "Activités & loisirs",
+      "Tarifs & disponibilités",
+      "Galerie photos",
+      "Contact & réservation",
+    ],
+    sector: "tourisme / loisirs",
+  },
   // —— Réservation ——
   {
     id: "camping-plein-air",
@@ -495,6 +514,7 @@ export const REQUIRED_VITRINE_SECTOR_LABELS = [
   "Beauté & Coiffure",
   "Formation & Coaching",
   "Garage & Auto",
+  "Tourisme & Loisirs",
 ] as const;
 
 /** Libellés obligatoires — type Réservation (étape secteur du générateur). */
@@ -533,7 +553,7 @@ function buildOrderedSectorPresets(
   });
 }
 
-/** 8 secteurs vitrine avec couleurs, descriptions et services complets. */
+/** 9 secteurs vitrine avec couleurs, descriptions et services complets. */
 export const VITRINE_SECTOR_PRESETS: SectorPreset[] = buildOrderedSectorPresets(
   "vitrine",
   REQUIRED_VITRINE_SECTOR_LABELS,

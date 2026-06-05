@@ -16,6 +16,10 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
+from agents.sector_generator_prompts import (
+    ECOMMERCE_APPENDIX,
+    build_sector_generator_appendix,
+)
 from config import get_settings
 from security.llm_secrets import get_effective_llm_key
 
@@ -239,6 +243,18 @@ SYSTEM_PROMPT_RESERVATION_CLONE = """Tu génères UNIQUEMENT le HTML complet (au
 _HTML_START_RE = re.compile(r"<!DOCTYPE\s+html|<html\b", re.I)
 
 
+def _is_ecommerce_brief(brief: dict[str, Any]) -> bool:
+    b = brief or {}
+    for key in ("project_type", "generation_mode"):
+        val = str(b.get(key) or "").strip().lower().replace("-", "_")
+        if val in ("ecommerce", "saas_dashboard"):
+            return True
+    prompt = str(b.get("prompt") or "")
+    if re.search(r"(?m)^TYPE:\s*ecommerce\b", prompt, re.I):
+        return True
+    return False
+
+
 def _is_site_reservation_brief(brief: dict[str, Any]) -> bool:
     b = brief or {}
     for key in ("project_type", "generation_mode"):
@@ -293,18 +309,22 @@ def _html_document_complete(html: str) -> bool:
 
 
 def _build_system_prompt(brief: dict[str, Any]) -> str:
+    sector_appendix = build_sector_generator_appendix(brief)
     parts = [HTML_CLOSING_RULE]
     if _is_site_reservation_clone(brief):
         parts.extend(
             [
                 SYSTEM_PROMPT_RESERVATION_CLONE,
                 SITE_RESERVATION_CLONE_APPENDIX,
+                sector_appendix,
             ]
         )
     elif _is_site_reservation_brief(brief):
-        parts.extend([SYSTEM_PROMPT, SITE_RESERVATION_APPENDIX])
+        parts.extend([SYSTEM_PROMPT, SITE_RESERVATION_APPENDIX, sector_appendix])
+    elif _is_ecommerce_brief(brief):
+        parts.extend([SYSTEM_PROMPT, ECOMMERCE_APPENDIX, sector_appendix])
     else:
-        parts.append(SYSTEM_PROMPT)
+        parts.extend([SYSTEM_PROMPT, sector_appendix])
     return "\n\n".join(parts)
 
 
@@ -440,7 +460,11 @@ class GeneratorAI:
                     raise ValueError("HTML incomplet : </html> manquant")
 
                 mode = "site_reservation_clone" if reservation_clone else (
-                    "site_reservation" if _is_site_reservation_brief(brief) else "standard"
+                    "site_reservation"
+                    if _is_site_reservation_brief(brief)
+                    else "ecommerce"
+                    if _is_ecommerce_brief(brief)
+                    else "standard"
                 )
                 logger.info(
                     "[GeneratorAI] OK (%s) — %d caractères "
