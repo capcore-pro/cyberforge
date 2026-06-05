@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { Layers, Sparkles } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
 import { PersoBadge } from "@/components/PersoBadge";
 import { PersonalProjectDetailView } from "@/components/personal/PersonalProjectDetailView";
+import {
+  GLASS_PILL_BTN,
+  GLASS_SECTION,
+  GOLD_BTN,
+  logAccountingApiError,
+} from "@/components/accounting/accounting-theme";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   createPersonalProject,
@@ -50,6 +57,11 @@ function formatEur(n: number): string {
   }).format(n);
 }
 
+function reportError(context: string, res: { ok: boolean; status?: number }) {
+  const msg = apiErrorMessage(res, `${context} impossible.`);
+  logAccountingApiError(`Projets perso / ${context}`, msg);
+}
+
 function resolveLinkedProject(
   pp: PersonalProject,
   unified: UnifiedProject[],
@@ -90,7 +102,6 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
   const [templates, setTemplates] = useState<DesktopTemplate[]>([]);
   const [selected, setSelected] = useState<PersonalProject | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const [createTitle, setCreateTitle] = useState("");
   const [createUsage, setCreateUsage] = useState<PersonalUsage>("personal");
@@ -106,7 +117,6 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
     const [ppRes, uRes, tplRes] = await Promise.all([
       fetchPersonalProjects(),
       loadAllUnifiedProjects(),
@@ -114,7 +124,8 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
     ]);
     setLoading(false);
     if (!ppRes.ok) {
-      setError(apiErrorMessage(ppRes, "Impossible de charger les projets perso."));
+      reportError("chargement", ppRes);
+      setProjects([]);
       return;
     }
     setProjects(Array.isArray(ppRes.data) ? ppRes.data : []);
@@ -141,7 +152,7 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
       commercial_description: template.description,
     });
     if (!res.ok || !res.data) {
-      setError(apiErrorMessage(res, "Création impossible."));
+      reportError("création mini-app", res);
       return;
     }
     openDetail(res.data);
@@ -157,7 +168,7 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
     });
     setPublishBusy(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Publication impossible."));
+      reportError("publication", res);
       return;
     }
     setPublishToast(res.data?.message ?? "Package publié.");
@@ -295,12 +306,14 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
     <div className="mx-auto max-w-6xl space-y-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="cf-section-label">Mat · créations perso</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#d4a843]">
+            Mat · créations perso
+          </p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h1 className="cf-page-title">Projets Perso</h1>
+            <h1 className="text-2xl font-semibold text-white">Projets Perso</h1>
             <PersoBadge />
           </div>
-          <p className="mt-2 max-w-2xl text-sm text-cf-muted">
+          <p className="mt-2 max-w-2xl text-sm text-white/50">
             Projets que vous créez pour vous — usage interne, vente one-shot ou abonnement.
             Distincts des projets clients.
           </p>
@@ -308,30 +321,31 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
         <button
           type="button"
           onClick={() => setView("create")}
-          className="rounded-control border border-fuchsia-400/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:border-fuchsia-300"
+          className={`${GOLD_BTN} hover:bg-[#d4a843]/80`}
         >
           + Créer un projet perso
         </button>
       </header>
 
-      {error ? (
-        <p className="rounded-card border border-red-500/40 bg-red-950/30 px-4 py-3 text-sm text-red-200">
-          {error}
-        </p>
-      ) : null}
       {publishToast ? (
-        <p className="rounded-card border border-emerald-500/40 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-200">
+        <p className="rounded-lg border border-[#d4a843]/30 bg-[#d4a843]/10 px-4 py-3 text-sm text-[#d4a843]">
           {publishToast}
         </p>
       ) : null}
 
       <section>
-        <h2 className="mb-4 text-sm font-semibold text-cf-text">Mes projets perso</h2>
+        <h2 className="mb-3 text-lg font-semibold text-white">Mes projets perso</h2>
         {loading ? (
-          <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
+          <p className="animate-pulse text-sm text-white/50">Chargement…</p>
         ) : projects.length === 0 ? (
-          <div className="rounded-card border border-dashed border-cf-border-input py-12 text-center text-sm text-cf-muted">
-            Aucun projet perso — créez-en un ou personnalisez une mini-app ci-dessous.
+          <div
+            className={`${GLASS_SECTION} flex min-h-[140px] flex-col items-center justify-center text-center`}
+          >
+            <Layers className="mb-2 h-8 w-8 text-white/20" aria-hidden />
+            <p className="text-sm text-white/30">Aucun projet perso pour le moment</p>
+            <p className="mt-1 text-xs text-white/20">
+              Créez-en un ou personnalisez une mini-app ci-dessous
+            </p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -342,26 +356,28 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
                   key={pp.id}
                   type="button"
                   onClick={() => openDetail(pp)}
-                  className="flex flex-col rounded-card border border-fuchsia-500/20 bg-cf-card p-4 text-left shadow-card transition hover:border-fuchsia-400/40 hover:bg-fuchsia-500/5"
+                  className={`${GLASS_SECTION} flex flex-col text-left transition-all hover:border-[#d4a843]/50`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="line-clamp-2 text-sm font-medium text-cf-text">
+                    <h3 className="line-clamp-2 text-sm font-medium text-white">
                       {pp.title}
                     </h3>
                     <PersoBadge />
                   </div>
-                  <p className="mt-2 text-xs text-fuchsia-200/80">
+                  <p className="mt-2 text-xs text-[#d4a843]/80">
                     {USAGE_LABELS[pp.usage_type]}
                     {pp.price_eur != null ? ` · ${formatEur(pp.price_eur)}` : ""}
                   </p>
                   {linked ? (
-                    <p className="mt-1 text-[10px] text-cf-muted">
+                    <p className="mt-1 text-[10px] text-white/45">
                       {TYPE_LABELS[linked.type]} · {linked.status}
                     </p>
                   ) : pp.app_type ? (
-                    <p className="mt-1 text-[10px] text-cf-muted">Mini-app · {pp.app_type}</p>
+                    <p className="mt-1 text-[10px] text-white/45">
+                      Mini-app · {pp.app_type}
+                    </p>
                   ) : null}
-                  <p className="mt-auto pt-3 text-[10px] text-cf-label">
+                  <p className="mt-auto pt-3 text-[10px] text-white/35">
                     {formatDate(pp.created_at)}
                   </p>
                 </button>
@@ -372,53 +388,62 @@ export function PersonalProjectsPage({ onOpenGenerator }: PersonalProjectsPagePr
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-cf-text">
+        <h2 className="text-lg font-semibold text-white">
           Mini-apps pré-fabriquées (P13)
         </h2>
-        <p className="mb-4 text-xs text-cf-muted">
+        <p className="mt-1 text-sm text-white/40">
           Templates desktop CapCore — personnalisez, générez ou publiez sur capcore.pro.
         </p>
-        <div className="grid gap-4 md:grid-cols-3">
-          {templates.map((tpl) => (
-            <article
-              key={tpl.id}
-              className="flex flex-col rounded-card border border-cf-border-input bg-cf-card p-5 shadow-card"
-            >
-              <span className="text-3xl" aria-hidden>
-                {tpl.icon}
-              </span>
-              <h3 className="mt-2 text-base font-medium text-cf-text">{tpl.title}</h3>
-              <p className="mt-2 flex-1 text-xs leading-relaxed text-cf-muted">
-                {tpl.description}
-              </p>
-              <ul className="mt-3 space-y-1">
-                {tpl.preview_features.map((f) => (
-                  <li key={f} className="text-[10px] text-cf-label">
-                    · {f}
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-4 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleCreateMiniApp(tpl)}
-                  className="rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-xs text-cf-text hover:border-fuchsia-400/40"
+        <div className={`${GLASS_SECTION} mt-2 p-6`}>
+          {templates.length === 0 ? (
+            <div className="flex flex-col items-center py-8 text-center">
+              <Sparkles className="mb-3 h-10 w-10 text-white/20" aria-hidden />
+              <p className="text-sm text-white/30">Templates disponibles prochainement</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              {templates.map((tpl) => (
+                <article
+                  key={tpl.id}
+                  className="flex flex-col rounded-xl border border-white/10 bg-white/[0.03] p-5"
                 >
-                  Personnaliser et générer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPublishTemplate(tpl);
-                    setPublishDesc(tpl.description);
-                  }}
-                  className="rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
-                >
-                  Publier sur capcore.pro
-                </button>
-              </div>
-            </article>
-          ))}
+                  <span className="text-3xl" aria-hidden>
+                    {tpl.icon}
+                  </span>
+                  <h3 className="mt-2 text-base font-medium text-white">{tpl.title}</h3>
+                  <p className="mt-2 flex-1 text-xs leading-relaxed text-white/50">
+                    {tpl.description}
+                  </p>
+                  <ul className="mt-3 space-y-1">
+                    {tpl.preview_features.map((f) => (
+                      <li key={f} className="text-[10px] text-white/40">
+                        · {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateMiniApp(tpl)}
+                      className={GOLD_BTN}
+                    >
+                      Personnaliser et générer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPublishTemplate(tpl);
+                        setPublishDesc(tpl.description);
+                      }}
+                      className={GLASS_PILL_BTN}
+                    >
+                      Publier sur capcore.pro
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
