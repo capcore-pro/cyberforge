@@ -5,6 +5,14 @@ Routes secrets — coffre local chiffré pour les clés API.
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(_BACKEND_DIR.parent / ".env", encoding="utf-8")
+load_dotenv(_BACKEND_DIR / ".env", override=True, encoding="utf-8")
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -38,7 +46,7 @@ _PROVIDER_ENV: dict[str, tuple[str, str]] = {
 
 
 def _env_nonempty(env_name: str) -> bool:
-    return bool((os.environ.get(env_name) or "").strip())
+    return bool((os.getenv(env_name) or "").strip())
 
 
 def _settings_field_nonempty(settings: Settings, field_name: str) -> bool:
@@ -57,11 +65,11 @@ def _resolve_api_key(provider: str, override: str | None, settings: Settings) ->
     vault_val = get_secret_vault().peek(env_name)
     if vault_val:
         return vault_val
-    env_val = (os.environ.get(env_name) or "").strip()
+    env_val = (os.getenv(env_name) or "").strip()
     if env_val:
         return env_val
     if key == "railway":
-        railway_token = (os.environ.get("RAILWAY_TOKEN") or "").strip()
+        railway_token = (os.getenv("RAILWAY_TOKEN") or "").strip()
         if railway_token:
             return railway_token
     raw = getattr(settings, field_name, None)
@@ -179,10 +187,11 @@ async def secrets_unlock(body: UnlockRequest) -> dict[str, object]:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     status = vault.status()
     settings = get_settings()
+    configured = _merge_configured_flags(status.configured, settings)
     return {
         "ok": True,
         "locked": status.locked,
-        "configured": status.configured,
+        "configured": configured,
         "effective": llm_provider_flags(settings),
     }
 
