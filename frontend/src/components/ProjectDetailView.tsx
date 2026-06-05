@@ -27,6 +27,7 @@ import {
   patchCmsProjectSettings,
   type CmsProjectSettings,
 } from "@/lib/cms-projects-api";
+import { findDemoIdByGeneration } from "@/lib/demos-api";
 import { copyTextToClipboard } from "@/lib/generation-export";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
 import { LighthouseScorePanel } from "@/components/LighthouseScorePanel";
@@ -107,6 +108,8 @@ export function ProjectDetailView({
     null,
   );
 
+  const [demoUrl, setDemoUrl] = useState<string | null>(() => project.url?.trim() || null);
+
   const showClientStripe = projectSupportsClientStripe(project);
 
   const projectReportKey =
@@ -140,6 +143,28 @@ export function ProjectDetailView({
     setName(project.name);
     setClientId(project.clientId ?? "");
   }, [project.key, project.name, project.clientId]);
+
+  useEffect(() => {
+    const fromProject = project.url?.trim();
+    if (fromProject) {
+      setDemoUrl(fromProject);
+      return;
+    }
+    const generationId = project.generationId;
+    if (!generationId) {
+      setDemoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    void findDemoIdByGeneration(generationId).then((res) => {
+      if (cancelled || !res.ok) return;
+      const url = res.data?.url?.trim() || null;
+      setDemoUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.key, project.url, project.generationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -384,14 +409,15 @@ export function ProjectDetailView({
 
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-cf-label">URL</p>
-          {project.url ? (
-            <button
-              type="button"
-              onClick={onView}
-              className="mt-1 break-all text-left text-sm text-cf-info hover:text-cf-gold hover:underline"
+          {demoUrl ? (
+            <a
+              href={demoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 block break-all text-sm text-[#d4a843] underline cursor-pointer"
             >
-              {project.url}
-            </button>
+              {demoUrl}
+            </a>
           ) : (
             <p className="mt-1 text-sm text-cf-muted">—</p>
           )}
@@ -582,9 +608,11 @@ export function ProjectDetailView({
         </button>
         <button
           type="button"
-          onClick={onView}
-          disabled={!project.url}
-          className="rounded-control border border-cf-gold/40 bg-cf-active px-4 py-2 text-sm text-cf-gold hover:border-cf-gold disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={() => {
+            if (demoUrl) window.open(demoUrl, "_blank");
+          }}
+          disabled={!demoUrl}
+          className="rounded-control border border-cf-gold/40 bg-cf-active px-4 py-2 text-sm text-cf-gold hover:border-cf-gold disabled:cursor-not-allowed disabled:opacity-50"
         >
           Ouvrir
         </button>

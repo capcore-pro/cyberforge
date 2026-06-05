@@ -177,7 +177,7 @@ export const ProjectCard = memo(function ProjectCard({
           onClick={() => onViewProject(project)}
           disabled={!demoUrl}
           title={demoUrl || "Aucune URL de démo"}
-          className="flex-1 rounded-control border border-[#d4a843]/40 bg-[#d4a843]/10 px-2 py-2 text-xs font-medium text-[#d4a843] transition-all duration-200 hover:bg-[#d4a843]/20 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex-1 rounded-control border border-[#d4a843]/40 bg-[#d4a843]/10 px-2 py-2 text-xs font-medium text-[#d4a843] transition-all duration-200 hover:bg-[#d4a843]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Voir →
         </button>

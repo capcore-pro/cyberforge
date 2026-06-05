@@ -98,7 +98,7 @@ export function PreviewFullscreenToolbar({
             <iframe
               title="Aperçu plein écran"
               srcDoc={previewDoc}
-              sandbox="allow-scripts allow-same-origin allow-forms"
+              sandbox="allow-scripts allow-same-origin"
               style={{
                 position: "absolute",
                 top: 0,
@@ -186,7 +186,7 @@ export function CyberForgePreviewFrame({
         <iframe
           title={title}
           srcDoc={srcDoc}
-          sandbox="allow-scripts allow-same-origin allow-forms"
+          sandbox="allow-scripts allow-same-origin"
           className={iframeClassName}
         />
       </div>

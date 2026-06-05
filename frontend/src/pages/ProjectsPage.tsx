@@ -8,7 +8,6 @@ import {
   deleteUnifiedProject,
   filterUnifiedProjects,
   loadAllUnifiedProjects,
-  openProjectUrl,
   STATUS_FILTER_OPTIONS,
   TYPE_FILTER_OPTIONS,
   type UnifiedProject,
@@ -113,9 +112,9 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
   }
 
   const handleView = useCallback((project: UnifiedProject) => {
-    const target = project.url?.trim();
-    if (!target) return;
-    openProjectUrl(target);
+    const demoUrl = project.url?.trim();
+    if (!demoUrl) return;
+    window.open(demoUrl, "_blank", "noopener,noreferrer");
   }, []);
 
   const handleConvert = useCallback(

@@ -22,6 +22,10 @@ import {
 import { getUserFirstName } from "@/lib/user-preferences";
 import type { AppPage } from "@/lib/navigation";
 import {
+  fetchStripeDashboard,
+  STRIPE_CAPCORE_PROJECT_ID,
+} from "@/lib/stripe-api";
+import {
   fetchSystemNotifications,
   type SystemNotification,
 } from "@/lib/system-notifications-api";
@@ -32,8 +36,6 @@ interface DashboardPageProps {
 
 type DashboardProjectKind = GeneratorKindId;
 
-const AVG_PROJECT_REVENUE_EUR = 2500;
-
 const eurFmt = new Intl.NumberFormat("fr-FR", {
   style: "currency",
   currency: "EUR",
@@ -41,8 +43,19 @@ const eurFmt = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 0,
 });
 
+const eurPreciseFmt = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 function formatEur(value: number): string {
   return eurFmt.format(value);
+}
+
+function formatEurPrecise(value: number): string {
+  return eurPreciseFmt.format(value);
 }
 
 function projectTypeLabel(type: string): string {
@@ -335,7 +348,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const firstName = getUserFirstName();
 
   const [loading, setLoading] = useState(true);
-  const [revenueMonth, setRevenueMonth] = useState<number | null>(null);
+  const [revenueMonth, setRevenueMonth] = useState(0);
   const [apiCostMonth, setApiCostMonth] = useState<number | null>(null);
   const [clients, setClients] = useState<LegalClient[]>([]);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -343,10 +356,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
-    const [clientsRes, projectsRes, notifRes] = await Promise.all([
+    const [clientsRes, projectsRes, notifRes, stripeRes] = await Promise.all([
       fetchLegalClients(),
       apiRequest<ProjectRecord[]>({ method: "GET", path: `${API_PREFIX}/projects` }),
       fetchSystemNotifications(false),
+      fetchStripeDashboard(STRIPE_CAPCORE_PROJECT_ID),
     ]);
 
     if (clientsRes.ok && Array.isArray(clientsRes.data)) {
@@ -365,6 +379,12 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setNotifications(notifRes.data.items);
     } else {
       setNotifications([]);
+    }
+
+    if (stripeRes.ok && stripeRes.data) {
+      setRevenueMonth(stripeRes.data.revenue_this_month_eur ?? 0);
+    } else {
+      setRevenueMonth(0);
     }
 
     setLoading(false);
@@ -387,15 +407,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const clientCount = clients.length;
   const backendOnline = backendStatus === "online";
 
-  const projectsThisMonth = useMemo(
-    () => projects.filter((p) => isThisMonth(p.created_at)),
-    [projects],
-  );
-  const projectsLastMonth = useMemo(
-    () => projects.filter((p) => isLastMonth(p.created_at)),
-    [projects],
-  );
-
   const estApiCostMonth = useMemo(() => {
     return projects
       .filter((p) => isThisMonth(p.updated_at))
@@ -408,17 +419,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       .reduce((sum, p) => sum + safeNumber(p.latest_estimated_cost_usd), 0);
   }, [projects]);
 
-  const estRevenueMonth = useMemo(
-    () => projectsThisMonth.length * AVG_PROJECT_REVENUE_EUR,
-    [projectsThisMonth.length],
-  );
-  const estRevenueLastMonth = useMemo(
-    () => projectsLastMonth.length * AVG_PROJECT_REVENUE_EUR,
-    [projectsLastMonth.length],
-  );
-
   const hasKpiData =
-    estRevenueMonth > 0 ||
+    revenueMonth > 0 ||
     activeProjectsCount > 0 ||
     clientCount > 0 ||
     estApiCostMonth > 0;
@@ -433,7 +435,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       } as const;
     }
     return {
-      revenue: calcTrendPct(estRevenueMonth, estRevenueLastMonth),
+      revenue: null,
       projects: calcTrendPct(
         activeProjectsCount,
         countBeforeThisMonth(projects),
@@ -447,18 +449,16 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     clients,
     estApiCostLastMonth,
     estApiCostMonth,
-    estRevenueLastMonth,
-    estRevenueMonth,
     hasKpiData,
     projects,
+    revenueMonth,
   ]);
 
   useEffect(() => {
-    setRevenueMonth(estRevenueMonth);
     setApiCostMonth(estApiCostMonth);
-  }, [estApiCostMonth, estRevenueMonth]);
+  }, [estApiCostMonth]);
 
-  const kpiRevenue = useCountUp(revenueMonth ?? 0, { enabled: !loading });
+  const kpiRevenue = useCountUp(revenueMonth, { enabled: !loading });
   const kpiApiCost = useCountUp(apiCostMonth ?? 0, { enabled: !loading });
   const kpiClients = useCountUp(clientCount ?? 0, { enabled: !loading });
   const kpiProjects = useCountUp(activeProjectsCount, { enabled: !loading });
@@ -558,9 +558,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           icon="€"
           iconClassName="text-cf-gold"
           label="CA ce mois"
-          value={formatEur(kpiRevenue)}
+          value={formatEurPrecise(kpiRevenue)}
           trendPct={kpiTrends.revenue}
-          loading={loading && revenueMonth === null}
+          loading={loading}
           delayMs={60}
         />
         <KpiCard
