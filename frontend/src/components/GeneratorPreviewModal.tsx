@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import {
   GENERATOR_PREVIEW_IFRAME_H,
   GENERATOR_PREVIEW_IFRAME_W,
@@ -11,8 +12,8 @@ interface GeneratorPreviewModalProps {
   onClose: () => void;
 }
 
-const VIEWPORT_W = Math.round(GENERATOR_PREVIEW_IFRAME_W * GENERATOR_PREVIEW_SCALE);
-const VIEWPORT_H = Math.round(GENERATOR_PREVIEW_IFRAME_H * GENERATOR_PREVIEW_SCALE);
+const VIEWPORT_W = GENERATOR_PREVIEW_IFRAME_W * GENERATOR_PREVIEW_SCALE;
+const VIEWPORT_H = GENERATOR_PREVIEW_IFRAME_H * GENERATOR_PREVIEW_SCALE;
 
 /** Prévisualisation inline (navigateur ou repli Electron). */
 export function GeneratorPreviewModal({
@@ -20,14 +21,14 @@ export function GeneratorPreviewModal({
   onClose,
 }: GeneratorPreviewModalProps) {
   const previewDoc = prepareInternalPreviewSrcDoc(html);
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Prévisualisation du code généré"
     >
-      <div className="flex max-h-[95vh] w-full min-w-0 max-w-4xl flex-col overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
+      <div className="flex max-h-[95vh] w-full min-w-[min(100%,56rem)] max-w-4xl flex-col overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyber-border px-4 py-3">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-cyber-neon">
@@ -54,14 +55,14 @@ export function GeneratorPreviewModal({
           <div className="flex justify-center overflow-auto rounded-md border border-cyber-border bg-[#0a0a0f] py-4">
             <div
               className="relative shrink-0 overflow-hidden"
-              style={{ width: VIEWPORT_W, height: VIEWPORT_H }}
+              style={{ width: `${VIEWPORT_W}px`, height: `${VIEWPORT_H}px` }}
             >
               <iframe
                 title="Prévisualisation CyberForge"
                 className="absolute left-0 top-0 border-0 bg-white"
                 style={{
-                  width: GENERATOR_PREVIEW_IFRAME_W,
-                  height: GENERATOR_PREVIEW_IFRAME_H,
+                  width: `${GENERATOR_PREVIEW_IFRAME_W}px`,
+                  height: `${GENERATOR_PREVIEW_IFRAME_H}px`,
                   transform: `scale(${GENERATOR_PREVIEW_SCALE})`,
                   transformOrigin: "top left",
                 }}
@@ -72,6 +73,7 @@ export function GeneratorPreviewModal({
           </div>
         </PreviewFullscreenHost>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

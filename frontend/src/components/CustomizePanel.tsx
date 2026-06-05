@@ -372,6 +372,7 @@ export function CustomizePanel({
           {previewHtml ? (
             <PreviewFullscreenHost
               html={previewHtml}
+              fullscreenMode="fixed"
               className="flex min-h-0 flex-1 flex-col px-2 pb-2"
             >
               <iframe

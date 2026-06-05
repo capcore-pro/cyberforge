@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
 import { openProjectUrl } from "@/lib/unified-projects";
@@ -20,10 +20,20 @@ export function PreviewFullscreenToolbar({
   externalUrl,
   fullscreenTargetRef,
   className = "",
-  fullscreenMode = "native",
+  fullscreenMode = "fixed",
 }: PreviewFullscreenToolbarProps) {
   const [fixedOverlayOpen, setFixedOverlayOpen] = useState(false);
   const previewDoc = html?.trim() ? prepareInternalPreviewSrcDoc(html) : "";
+  const useFixedOverlay = fullscreenMode === "fixed" && Boolean(previewDoc);
+
+  useEffect(() => {
+    if (!fixedOverlayOpen || !useFixedOverlay) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [fixedOverlayOpen, useFixedOverlay]);
 
   const openInNewTab = useCallback(() => {
     const url = externalUrl?.trim();
@@ -42,8 +52,8 @@ export function PreviewFullscreenToolbar({
   }, [externalUrl, html]);
 
   const toggleFullscreen = useCallback(async () => {
-    if (fullscreenMode === "fixed" && previewDoc) {
-      setFixedOverlayOpen(true);
+    if (useFixedOverlay) {
+      setFixedOverlayOpen((open) => !open);
       return;
     }
     const el = fullscreenTargetRef.current;
@@ -60,12 +70,12 @@ export function PreviewFullscreenToolbar({
     } catch {
       openInNewTab();
     }
-  }, [fullscreenMode, previewDoc, fullscreenTargetRef, openInNewTab]);
+  }, [useFixedOverlay, fullscreenTargetRef, openInNewTab]);
 
   const canOpenTab = Boolean(externalUrl?.trim() || html?.trim());
 
   const fixedOverlay =
-    fixedOverlayOpen && previewDoc && fullscreenMode === "fixed"
+    fixedOverlayOpen && useFixedOverlay
       ? createPortal(
           <div
             role="dialog"
@@ -82,7 +92,7 @@ export function PreviewFullscreenToolbar({
               padding: 0,
               overflow: "hidden",
               boxSizing: "border-box",
-              isolation: "isolate",
+              background: "#000",
             }}
           >
             <iframe
@@ -90,14 +100,13 @@ export function PreviewFullscreenToolbar({
               srcDoc={previewDoc}
               sandbox="allow-scripts allow-same-origin allow-forms"
               style={{
-                position: "fixed",
+                position: "absolute",
                 top: 0,
                 left: 0,
                 width: "100vw",
                 height: "100vh",
                 border: "none",
                 display: "block",
-                zIndex: 9999,
               }}
             />
             <button
@@ -191,7 +200,7 @@ export function PreviewFullscreenHost({
   html,
   externalUrl,
   className = "",
-  fullscreenMode = "native",
+  fullscreenMode = "fixed",
 }: {
   children: ReactNode;
   html?: string | null;
