@@ -14,31 +14,61 @@ import {
   type UnifiedProjectType,
 } from "@/lib/unified-projects";
 
-function formatDate(iso: string): string {
+function formatRelativeDate(iso: string): string {
   try {
+    const date = new Date(iso);
+    const diffMs = Date.now() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return "à l'instant";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `il y a ${diffMin} min`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `il y a ${diffHours} h`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return "il y a 1 jour";
+    if (diffDays < 30) return `il y a ${diffDays} jours`;
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths === 1) return "il y a 1 mois";
+    if (diffMonths < 12) return `il y a ${diffMonths} mois`;
     return new Intl.DateTimeFormat("fr-FR", {
       day: "2-digit",
       month: "short",
       year: "numeric",
-    }).format(new Date(iso));
+    }).format(date);
   } catch {
     return iso;
   }
 }
 
-function statusDotClass(status: UnifiedProject["status"]): string {
-  if (status === "online") return "bg-cf-success";
-  if (status === "demo") return "bg-cf-info";
-  return "bg-red-500";
+function statusBadgeClass(status: UnifiedProject["status"]): string {
+  if (status === "online") {
+    return "border-green-400/35 bg-green-500/15 text-green-300";
+  }
+  if (status === "demo") {
+    return "border-blue-400/35 bg-blue-500/15 text-blue-300";
+  }
+  return "border-white/20 bg-white/10 text-white/55";
 }
 
-function truncateUrl(url: string, max = 42): string {
-  if (url.length <= max) return url;
-  return `${url.slice(0, max - 1)}…`;
+function typeBadgeClass(type: UnifiedProjectType): string {
+  switch (type) {
+    case "vitrine":
+      return "border-amber-400/35 bg-amber-500/15 text-amber-200";
+    case "app_web":
+      return "border-blue-400/35 bg-blue-500/15 text-blue-200";
+    case "ecommerce":
+      return "border-emerald-400/35 bg-emerald-500/15 text-emerald-200";
+    case "reservation":
+      return "border-violet-400/35 bg-violet-500/15 text-violet-200";
+    case "extension":
+      return "border-cyan-400/35 bg-cyan-500/15 text-cyan-200";
+    default:
+      return "border-white/20 bg-white/10 text-white/70";
+  }
 }
 
 function projectTypeIcon(type: UnifiedProjectType): ReactNode {
-  const className = "h-10 w-10 text-cf-muted";
+  const className = "h-10 w-10 text-white/35";
   switch (type) {
     case "app_web":
       return <LayoutDashboard className={className} aria-hidden />;
@@ -58,14 +88,11 @@ function ProjectCardPreview({ project }: { project: UnifiedProject }) {
 
   if (demoUrl) {
     return (
-      <div
-        className="h-[200px] w-full shrink-0 overflow-hidden border-b border-cf-border-input"
-        aria-hidden
-      >
+      <div className="h-[180px] w-full shrink-0 overflow-hidden" aria-hidden>
         <ProjectPreviewThumbnail
           previewUrl={demoUrl}
           title={project.name}
-          height={200}
+          height={180}
           fill
           className="h-full rounded-none border-0"
         />
@@ -75,11 +102,11 @@ function ProjectCardPreview({ project }: { project: UnifiedProject }) {
 
   return (
     <div
-      className="flex h-[200px] w-full shrink-0 flex-col items-center justify-center gap-2 border-b border-cf-border-input bg-cf-secondary/40"
+      className="flex h-[180px] w-full shrink-0 flex-col items-center justify-center gap-2 border-b border-white/10 bg-white/5"
       aria-hidden
     >
       {projectTypeIcon(project.type)}
-      <span className="text-[10px] uppercase tracking-wider text-cf-tertiary">
+      <span className="text-[10px] uppercase tracking-wider text-white/40">
         {TYPE_LABELS[project.type]}
       </span>
     </div>
@@ -107,116 +134,81 @@ export const ProjectCard = memo(function ProjectCard({
 }: ProjectCardProps) {
   const demoUrl = project.url?.trim();
 
-  function handleCardClick() {
-    if (demoUrl) {
-      onViewProject(project);
-      return;
-    }
-    onOpenDetail(project.key);
-  }
-
   return (
-    <article className="group relative flex min-h-[420px] flex-col overflow-hidden rounded-card border border-cf-border-input bg-cf-card shadow-card">
+    <article
+      className="group flex min-h-[380px] flex-col overflow-hidden rounded-card border border-white/10 bg-white/5 shadow-none backdrop-blur-xl transition-all duration-200 hover:scale-[1.01] hover:border-[#d4a843]/50 hover:shadow-[0_0_24px_rgba(212,168,67,0.1)]"
+    >
       <button
         type="button"
-        onClick={handleCardClick}
-        className="flex w-full flex-1 flex-col text-left transition hover:bg-cf-secondary/20"
+        onClick={() => onOpenDetail(project.key)}
+        className="flex w-full flex-1 flex-col text-left transition-colors duration-200 hover:bg-white/[0.03]"
       >
         <ProjectCardPreview project={project} />
 
         <div className="flex flex-1 flex-col p-4">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="line-clamp-2 text-sm font-medium text-cf-text">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h3 className="line-clamp-2 min-w-0 flex-1 text-sm font-semibold text-white">
               {project.name}
             </h3>
-            <span className="shrink-0 rounded border border-cf-gold/30 bg-cf-gold-subtle px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-cf-gold">
+            <span
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${typeBadgeClass(project.type)}`}
+            >
               {TYPE_LABELS[project.type]}
             </span>
           </div>
 
-          <div className="mt-3 flex items-center gap-2 text-xs text-cf-muted">
+          <div className="mt-3">
             <span
-              className={`inline-block h-2 w-2 shrink-0 rounded-full ${statusDotClass(project.status)}`}
-              aria-hidden
-            />
-            <span>{STATUS_LABELS[project.status]}</span>
+              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusBadgeClass(project.status)}`}
+            >
+              {STATUS_LABELS[project.status]}
+            </span>
           </div>
 
-          <div className="mt-3 min-h-[2.5rem] text-xs">
-            {demoUrl ? (
-              <span className="break-all text-cf-info">{truncateUrl(demoUrl)}</span>
-            ) : (
-              <span className="text-cf-tertiary">Aucune URL</span>
-            )}
-          </div>
-
-          <p className="mt-auto pt-4 text-[11px] text-cf-label">
-            Créé le {formatDate(project.createdAt)}
+          <p className="mt-3 text-[11px] text-white/45">
+            {formatRelativeDate(project.createdAt)}
           </p>
         </div>
       </button>
 
-      <div className="pointer-events-none absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/80 to-black/30 p-3 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-        <div className="flex max-h-full flex-col gap-1.5 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEditDetail(project.key);
-              }}
-              className="rounded-control border border-cf-border-input bg-cf-secondary px-2 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold"
-            >
-              Modifier
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onViewProject(project);
-              }}
-              disabled={!demoUrl}
-              title={demoUrl || "Aucune URL de démo"}
-              className="rounded-control border border-cf-border-input bg-cf-secondary px-2 py-2 text-xs text-cf-text hover:border-cf-gold/50 hover:text-cf-gold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Voir
-            </button>
-          </div>
+      <div className="flex flex-wrap gap-2 border-t border-white/10 p-3">
+        <button
+          type="button"
+          onClick={() => onViewProject(project)}
+          disabled={!demoUrl}
+          title={demoUrl || "Aucune URL de démo"}
+          className="flex-1 rounded-control border border-[#d4a843]/40 bg-[#d4a843]/10 px-2 py-2 text-xs font-medium text-[#d4a843] transition-all duration-200 hover:bg-[#d4a843]/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Voir →
+        </button>
+        <button
+          type="button"
+          onClick={() => onEditDetail(project.key)}
+          className="flex-1 rounded-control border border-white/15 bg-white/5 px-2 py-2 text-xs text-white/80 transition-all duration-200 hover:border-white/30 hover:text-white"
+        >
+          Modifier
+        </button>
+        <button
+          type="button"
+          onClick={() => onDeleteProject(project)}
+          disabled={deleteBusy}
+          className="rounded-control border border-red-500/30 bg-red-950/30 px-2 py-2 text-xs text-red-300 transition-all duration-200 hover:bg-red-950/50 disabled:opacity-50"
+        >
+          Supprimer
+        </button>
+      </div>
+
+      {project.status === "demo" ? (
+        <div className="border-t border-white/10 px-3 pb-3">
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenDetail(project.key);
-            }}
-            className="w-full rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
+            onClick={() => onConvertProject(project)}
+            className="w-full rounded-control border border-white/15 px-2 py-1.5 text-[11px] text-white/60 transition hover:border-[#d4a843]/40 hover:text-[#d4a843]"
           >
-            Fiche projet
-          </button>
-          {project.status === "demo" ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onConvertProject(project);
-              }}
-              className="w-full rounded-control border border-cf-gold/40 bg-cf-active px-3 py-2 text-xs text-cf-gold hover:border-cf-gold"
-            >
-              Convertir en app réelle
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteProject(project);
-            }}
-            disabled={deleteBusy}
-            className="w-full rounded-control border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200 hover:bg-red-950/60 disabled:opacity-50"
-          >
-            Supprimer
+            Convertir en app réelle
           </button>
         </div>
-      </div>
+      ) : null}
     </article>
   );
 });

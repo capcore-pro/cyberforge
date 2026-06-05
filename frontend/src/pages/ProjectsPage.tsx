@@ -19,6 +19,11 @@ import { formatDeletionReport } from "@/lib/deletion-report";
 
 type ProjectsView = "list" | "detail" | "edit";
 
+const FILTER_BTN_BASE =
+  "rounded-control border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white/70 backdrop-blur-xl transition-all duration-200 hover:border-white/30";
+const FILTER_BTN_ACTIVE =
+  "border-[#d4a843] bg-[#d4a843]/20 text-[#d4a843] hover:border-[#d4a843]";
+
 interface ProjectsPageProps {
   onNavigate?: (page: AppPage) => void;
   onOpenGenerator: () => void;
@@ -54,10 +59,6 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
     setError(null);
     try {
       const items = await loadAllUnifiedProjects();
-      console.log("[ProjectsPage] données reçues pour l'UI", {
-        count: items.length,
-        items,
-      });
       setProjects(items);
     } catch (err) {
       setError(
@@ -229,20 +230,23 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
         <button
           type="button"
           onClick={handleNewProject}
-          className="rounded-control border border-cf-gold/50 bg-cf-active px-4 py-2 text-sm font-medium text-cf-gold hover:border-cf-gold hover:bg-cf-gold-subtle"
+          className="inline-flex items-center gap-2 rounded-control border border-[#d4a843] bg-[#d4a843] px-5 py-2.5 text-sm font-semibold text-[#0a0a0a] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(212,168,67,0.35)]"
         >
+          <span aria-hidden>⚡</span>
           Nouveau projet
         </button>
       </header>
 
-      <section className="space-y-4 rounded-card border border-cf-border-input bg-cf-card p-4 shadow-card">
+      <section className="space-y-4 rounded-card border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
         <div className="flex flex-wrap gap-2">
           {TYPE_FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.id}
               type="button"
               onClick={() => setTypeFilter(opt.id)}
-              className={`cf-subtab ${typeFilter === opt.id ? "cf-subtab-active" : ""}`}
+              className={`${FILTER_BTN_BASE} ${
+                typeFilter === opt.id ? FILTER_BTN_ACTIVE : ""
+              }`}
             >
               {opt.label}
             </button>
@@ -256,7 +260,9 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
                 key={opt.id}
                 type="button"
                 onClick={() => setStatusFilter(opt.id)}
-                className={`cf-subtab ${statusFilter === opt.id ? "cf-subtab-active" : ""}`}
+                className={`${FILTER_BTN_BASE} ${
+                  statusFilter === opt.id ? FILTER_BTN_ACTIVE : ""
+                }`}
               >
                 {opt.label}
               </button>
@@ -267,7 +273,7 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher par nom…"
-            className="ml-auto min-w-[200px] flex-1 rounded-control border border-cf-border-input bg-cf-secondary px-3 py-2 text-sm text-cf-text placeholder:text-cf-muted focus:border-cf-gold/50 focus:outline-none sm:max-w-xs"
+            className="ml-auto min-w-[200px] flex-1 rounded-control border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 backdrop-blur-xl focus:border-[#d4a843] focus:outline-none sm:max-w-xs"
           />
         </div>
       </section>
@@ -308,19 +314,49 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="min-h-[420px] animate-pulse rounded-card border border-cf-border-input bg-cf-card"
+              className="min-h-[380px] animate-pulse rounded-card border border-white/10 bg-white/5 backdrop-blur-xl"
             />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-card border border-cf-border-input bg-cf-card px-6 py-12 text-center shadow-card">
-          <p className="text-sm text-cf-muted">Aucun projet ne correspond aux filtres.</p>
+      ) : projects.length === 0 ? (
+        <div className="flex flex-col items-center rounded-card border border-white/10 bg-white/5 px-6 py-16 text-center backdrop-blur-xl">
+          <span
+            className="mb-6 text-6xl animate-pulse"
+            role="img"
+            aria-label="Dossier vide"
+          >
+            📁
+          </span>
+          <h2 className="text-xl font-semibold text-white">
+            Aucun projet pour le moment
+          </h2>
+          <p className="mt-2 max-w-sm text-sm text-white/50">
+            Créez votre premier projet en quelques minutes
+          </p>
           <button
             type="button"
             onClick={handleNewProject}
-            className="mt-4 text-sm text-cf-gold hover:text-cf-gold-hover hover:underline"
+            className="mt-8 inline-flex items-center gap-2 rounded-control border border-[#d4a843] bg-[#d4a843] px-8 py-3.5 text-base font-semibold text-[#0a0a0a] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_32px_rgba(212,168,67,0.4)]"
           >
-            Créer un projet
+            <span aria-hidden>⚡</span>
+            Créer mon premier projet
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-card border border-white/10 bg-white/5 px-6 py-12 text-center backdrop-blur-xl">
+          <p className="text-sm text-white/50">
+            Aucun projet ne correspond aux filtres.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setTypeFilter("all");
+              setStatusFilter("all");
+              setSearch("");
+            }}
+            className="mt-4 text-sm text-[#d4a843] hover:underline"
+          >
+            Réinitialiser les filtres
           </button>
         </div>
       ) : (

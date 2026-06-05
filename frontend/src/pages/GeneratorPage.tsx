@@ -309,6 +309,7 @@ export function GeneratorPage({
     payment_config,
     patch,
     applyPipelineStep,
+    resetSession,
   } = useGeneratorSession();
 
   const isPersonal = personalMode || sessionPersonalMode;
@@ -1196,19 +1197,25 @@ export function GeneratorPage({
   }
 
   function resetForNewProject() {
-    patch({
-      result: null,
-      error: null,
-      actionError: null,
-      phase: "idle",
-      previewHtml: null,
-      livePreviewHtml: null,
-      customizeOpen: false,
-      customization: null,
-    });
+    if (isRunning) return;
+    resetSession();
+    persistGeneratorKind("vitrine");
+    setSelectedKind("vitrine");
+    setWizardStep("type");
+    setSelectedSectorId(null);
+    setDetailsForm(EMPTY_GENERATOR_DETAILS);
+    setServicesText("");
+    setTouchedFields(new Set());
+    setDeployMode("demo");
     setGenerationStartedAt(null);
     setGenerationDurationMs(0);
-    setWizardStep("type");
+    setInspirationUrl("");
+    setInspirationError(null);
+    setInspirationScrapeMeta(null);
+    setInspirationStructureSummary(null);
+    setInspirationBrief(null);
+    setInspirationFirecrawl(null);
+    setCloneStatusMessage(null);
   }
 
   return (
@@ -1223,7 +1230,8 @@ export function GeneratorPage({
           <BackButton onClick={onOpenProjects} label="Retour vers Projets" />
         </div>
       ) : null}
-      <header>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
         <p className="cf-section-label mb-2">Création de projet</p>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="cf-page-title">Générateur</h1>
@@ -1256,6 +1264,15 @@ export function GeneratorPage({
             </button>
           </p>
         ) : null}
+        </div>
+        <button
+          type="button"
+          disabled={isRunning}
+          onClick={resetForNewProject}
+          className="shrink-0 rounded-control border border-[#d4a843] bg-transparent px-4 py-2 text-sm font-medium text-[#d4a843] transition-all duration-200 hover:bg-[#d4a843]/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          ＋ Nouveau projet
+        </button>
       </header>
 
       {wizardStep !== "type" ? (
