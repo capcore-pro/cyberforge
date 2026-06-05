@@ -1,5 +1,13 @@
 import { useState } from "react";
 import type { ProjectRecord } from "@shared/types";
+import {
+  GLASS_SECTION,
+  GOLD_BTN,
+  SELECT,
+  logAccountingApiError,
+  shouldSilenceApiError,
+} from "@/components/accounting/accounting-theme";
+import { AccountingToast } from "@/components/accounting/AccountingToast";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   fetchProjectsForLegal,
@@ -13,7 +21,7 @@ export function MentionsCgvPanel() {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [mentionsBusy, setMentionsBusy] = useState(false);
   const [cgvBusy, setCgvBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [lastPdfUrl, setLastPdfUrl] = useState<string | null>(null);
 
   async function ensureProjects() {
@@ -29,15 +37,16 @@ export function MentionsCgvPanel() {
 
   async function handleMentions() {
     if (!selectedProjectId) {
-      setError("Sélectionnez un projet.");
+      setToast("Sélectionnez un projet.");
       return;
     }
     setMentionsBusy(true);
-    setError(null);
     const res = await generateMentionsLegales(selectedProjectId);
     setMentionsBusy(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Génération des mentions légales impossible."));
+      const msg = apiErrorMessage(res, "Génération des mentions légales impossible.");
+      if (shouldSilenceApiError(msg)) logAccountingApiError("Mentions légales", msg);
+      else setToast(msg);
       return;
     }
     const url = resolveLegalUrl(res.data?.pdf_url ?? "");
@@ -47,11 +56,12 @@ export function MentionsCgvPanel() {
 
   async function handleCgv() {
     setCgvBusy(true);
-    setError(null);
     const res = await generateOrGetCgv();
     setCgvBusy(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Génération des CGV impossible."));
+      const msg = apiErrorMessage(res, "Génération des CGV impossible.");
+      if (shouldSilenceApiError(msg)) logAccountingApiError("CGV", msg);
+      else setToast(msg);
       return;
     }
     const url = resolveLegalUrl(res.data?.pdf_url ?? "");
@@ -61,27 +71,21 @@ export function MentionsCgvPanel() {
 
   return (
     <div className="max-w-xl space-y-6">
-      <p className="text-sm text-cyber-muted">
+      <p className="text-sm text-white/50">
         Générez les documents juridiques standards pour vos livrables web. Les PDF
         sont enregistrés sur le serveur et ouverts dans un nouvel onglet.
       </p>
 
-      {error ? (
-        <p className="rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
-          {error}
-        </p>
-      ) : null}
-
-      <div className="cyber-panel space-y-4 border-cyber-border p-5">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-cyber-neon">
+      <div className={`${GLASS_SECTION} space-y-4`}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-[#d4a843]">
           Mentions légales
         </h3>
-        <p className="text-xs text-cyber-muted">
+        <p className="text-xs text-white/50">
           Éditeur, hébergeur (Vercel / Railway selon le type de projet), SIRET et
           contact.
         </p>
         <select
-          className="cyber-input w-full"
+          className={SELECT}
           value={selectedProjectId}
           onFocus={() => void ensureProjects()}
           onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -95,7 +99,7 @@ export function MentionsCgvPanel() {
         </select>
         <button
           type="button"
-          className="cyber-action-btn cyber-action-btn-primary text-xs"
+          className={GOLD_BTN}
           disabled={mentionsBusy}
           onClick={() => void handleMentions()}
         >
@@ -103,17 +107,17 @@ export function MentionsCgvPanel() {
         </button>
       </div>
 
-      <div className="cyber-panel space-y-4 border-cyber-border p-5">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-cyber-neon">
+      <div className={`${GLASS_SECTION} space-y-4`}>
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-[#d4a843]">
           CGV
         </h3>
-        <p className="text-xs text-cyber-muted">
+        <p className="text-xs text-white/50">
           Conditions générales de vente globales (micro-entrepreneur prestataire
           digital). Un seul document CGV est conservé.
         </p>
         <button
           type="button"
-          className="cyber-action-btn cyber-action-btn-primary text-xs"
+          className={GOLD_BTN}
           disabled={cgvBusy}
           onClick={() => void handleCgv()}
         >
@@ -122,18 +126,20 @@ export function MentionsCgvPanel() {
       </div>
 
       {lastPdfUrl ? (
-        <p className="text-xs text-cyber-muted">
+        <p className="text-xs text-white/45">
           Dernier PDF :{" "}
           <a
             href={lastPdfUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-cyber-neon underline"
+            className="text-[#d4a843] hover:underline"
           >
             ouvrir
           </a>
         </p>
       ) : null}
+
+      <AccountingToast message={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

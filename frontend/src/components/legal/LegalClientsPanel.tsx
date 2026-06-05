@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
+import { Users } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
+import {
+  GLASS_BTN,
+  FORM_CONTAINER,
+  GLASS_SECTION,
+  GOLD_BTN,
+  INPUT,
+  logAccountingApiError,
+  shouldSilenceApiError,
+} from "@/components/accounting/accounting-theme";
+import { AccountingToast } from "@/components/accounting/AccountingToast";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   createLegalClient,
@@ -20,17 +31,18 @@ const emptyForm = {
 export function LegalClientsPanel() {
   const [clients, setClients] = useState<LegalClient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
     const res = await fetchLegalClients();
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Impossible de charger les clients."));
+      const msg = apiErrorMessage(res, "Impossible de charger les clients.");
+      logAccountingApiError("Carnet clients", msg);
+      setClients([]);
       setLoading(false);
       return;
     }
@@ -62,7 +74,6 @@ export function LegalClientsPanel() {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim()) return;
     setBusy(true);
-    setError(null);
     const body = {
       name: form.name.trim(),
       email: form.email.trim(),
@@ -75,7 +86,9 @@ export function LegalClientsPanel() {
       : await createLegalClient(body);
     setBusy(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Enregistrement impossible."));
+      const msg = apiErrorMessage(res, "Enregistrement impossible.");
+      if (!shouldSilenceApiError(msg)) setToast(msg);
+      else logAccountingApiError("Client save", msg);
       return;
     }
     cancelEdit();
@@ -92,7 +105,8 @@ export function LegalClientsPanel() {
     }
     const res = await deleteLegalClient(client.id);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Suppression impossible."));
+      const msg = apiErrorMessage(res, "Suppression impossible.");
+      if (!shouldSilenceApiError(msg)) setToast(msg);
       return;
     }
     if (editingId === client.id) cancelEdit();
@@ -101,103 +115,86 @@ export function LegalClientsPanel() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-cyber-muted">
+      <div className={GLASS_SECTION}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-white/45">
             Carnet clients
           </h3>
-          <button
-            type="button"
-            className="cyber-action-btn text-xs"
-            onClick={() => void load()}
-          >
+          <button type="button" onClick={() => void load()} className={GLASS_BTN}>
             Actualiser
           </button>
         </div>
-        {error ? (
-          <p className="mb-3 rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
-            {error}
-          </p>
-        ) : null}
         {loading ? (
-          <p className="text-sm text-cyber-muted animate-pulse">Chargement…</p>
+          <p className="animate-pulse text-sm text-white/50">Chargement…</p>
+        ) : clients.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Users className="mb-3 h-10 w-10 text-white/20" aria-hidden />
+            <p className="text-sm text-white/30">Aucun client enregistré</p>
+          </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-cyber-border">
+          <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-cyber-border bg-cyber-surface/80 text-[10px] font-bold uppercase tracking-wider text-cyber-muted">
-                  <th className="px-3 py-2">Nom</th>
-                  <th className="px-3 py-2">Email</th>
-                  <th className="px-3 py-2">SIRET</th>
-                  <th className="px-3 py-2">Actions</th>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-widest text-white/40">
+                  <th className="px-3 py-3 font-medium">Nom</th>
+                  <th className="px-3 py-3 font-medium">Email</th>
+                  <th className="px-3 py-3 font-medium">SIRET</th>
+                  <th className="px-3 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {clients.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-3 py-8 text-center text-cyber-muted">
-                      Aucun client enregistré.
+                {clients.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="border-b border-white/5 transition hover:bg-white/5"
+                  >
+                    <td className="px-3 py-3 font-medium text-white">{c.name}</td>
+                    <td className="px-3 py-3 text-white/50">{c.email}</td>
+                    <td className="px-3 py-3 font-mono text-xs text-white/60">
+                      {c.siret || "—"}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className={GLASS_BTN}
+                          onClick={() => startEdit(c)}
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-red-500/30 px-2 py-1 text-[10px] text-red-300 hover:bg-red-950/30"
+                          onClick={() => void handleDelete(c)}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ) : (
-                  clients.map((c) => (
-                    <tr
-                      key={c.id}
-                      className="border-b border-cyber-border/60 hover:bg-cyber-accent/5"
-                    >
-                      <td className="px-3 py-2 font-medium text-cyber-text">
-                        {c.name}
-                      </td>
-                      <td className="px-3 py-2 text-cyber-muted">{c.email}</td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {c.siret || "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            className="cyber-action-btn text-[10px]"
-                            onClick={() => startEdit(c)}
-                          >
-                            Modifier
-                          </button>
-                          <button
-                            type="button"
-                            className="cyber-action-btn text-[10px] text-red-300"
-                            onClick={() => void handleDelete(c)}
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="cyber-panel h-fit space-y-3 border-cyber-border p-4"
-      >
+      <form onSubmit={handleSubmit} className={`${FORM_CONTAINER} h-fit space-y-3`}>
         {editingId ? (
           <BackButton className="mb-1" onClick={cancelEdit} />
         ) : null}
-        <h3 className="text-sm font-bold uppercase tracking-wider text-cyber-neon">
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-[#d4a843]">
           {editingId ? "Modifier le client" : "Nouveau client"}
         </h3>
         <input
-          className="cyber-input w-full"
+          className={INPUT}
           placeholder="Nom ou raison sociale *"
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           required
         />
         <input
-          className="cyber-input w-full"
+          className={INPUT}
           type="email"
           placeholder="Email *"
           value={form.email}
@@ -205,42 +202,36 @@ export function LegalClientsPanel() {
           required
         />
         <input
-          className="cyber-input w-full"
+          className={INPUT}
           placeholder="Téléphone"
           value={form.phone}
           onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
         />
         <input
-          className="cyber-input w-full"
+          className={INPUT}
           placeholder="Adresse"
           value={form.address}
           onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
         />
         <input
-          className="cyber-input w-full"
+          className={INPUT}
           placeholder="SIRET"
           value={form.siret}
           onChange={(e) => setForm((f) => ({ ...f, siret: e.target.value }))}
         />
         <div className="flex gap-2 pt-1">
-          <button
-            type="submit"
-            className="cyber-action-btn cyber-action-btn-primary flex-1 text-xs"
-            disabled={busy}
-          >
+          <button type="submit" className={`${GOLD_BTN} w-full`} disabled={busy}>
             {busy ? "…" : editingId ? "Enregistrer" : "Ajouter"}
           </button>
           {editingId ? (
-            <button
-              type="button"
-              className="cyber-action-btn text-xs"
-              onClick={cancelEdit}
-            >
+            <button type="button" className={GLASS_BTN} onClick={cancelEdit}>
               Annuler
             </button>
           ) : null}
         </div>
       </form>
+
+      <AccountingToast message={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

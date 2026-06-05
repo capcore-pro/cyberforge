@@ -4,15 +4,24 @@ Routes secrets — coffre local chiffré pour les clés API.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
-_BACKEND_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(_BACKEND_DIR.parent / ".env", encoding="utf-8")
-load_dotenv(_BACKEND_DIR / ".env", override=True, encoding="utf-8")
+# Cherche le .env dans le dossier backend
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+env_path = BASE_DIR / ".env"
+if env_path.exists():
+    load_dotenv(env_path, override=True)
+else:
+    # Fallback sur le .env à la racine
+    load_dotenv(override=True)
+
+# Debug temporaire — à supprimer après
+logging.info(f"ANTHROPIC_API_KEY présente: {bool(os.getenv('ANTHROPIC_API_KEY'))}")
+logging.info(f".env path: {env_path} — existe: {env_path.exists()}")
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -86,14 +95,14 @@ def _provider_configured(
         return True
 
     if provider == "cloudflare":
-        return settings.cloudflare_configured() or (
+        return settings.cloudflare_configured or (
             _env_nonempty("CLOUDFLARE_ACCOUNT_ID")
             and _env_nonempty("CLOUDFLARE_API_TOKEN")
         )
     if provider == "pexels":
-        return settings.pexels_configured() or _env_nonempty("PEXELS_API_KEY")
+        return settings.pexels_configured or _env_nonempty("PEXELS_API_KEY")
     if provider == "firecrawl":
-        return settings.firecrawl_configured() or _env_nonempty("FIRECRAWL_API_KEY")
+        return settings.firecrawl_configured or _env_nonempty("FIRECRAWL_API_KEY")
 
     mapping = _PROVIDER_ENV.get(provider)
     if not mapping:

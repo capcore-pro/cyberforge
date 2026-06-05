@@ -58,7 +58,7 @@ def _deploy_ready() -> bool:
 
 
 def _supabase_ready() -> bool:
-    return _has_env("SUPABASE_URL") or get_settings().supabase_configured()
+    return _has_env("SUPABASE_URL") or get_settings().supabase_configured
 
 
 def _stripe_ready() -> bool:

@@ -2,6 +2,10 @@ import { useState } from "react";
 import { DocumentsTab } from "@/components/legal/DocumentsTab";
 import { LegalClientsPanel } from "@/components/legal/LegalClientsPanel";
 import { MentionsCgvPanel } from "@/components/legal/MentionsCgvPanel";
+import {
+  PILL_ACTIVE,
+  PILL_BASE,
+} from "@/components/accounting/accounting-theme";
 
 type LegalSection = "devis" | "factures" | "mentions" | "clients";
 
@@ -20,13 +24,13 @@ function SubTabs({
   onChange: (s: LegalSection) => void;
 }) {
   return (
-    <div className="cf-subtabs">
+    <div className="mb-6 flex flex-wrap gap-2">
       {SECTIONS.map((s) => (
         <button
           key={s.id}
           type="button"
           onClick={() => onChange(s.id)}
-          className={`cf-subtab ${current === s.id ? "cf-subtab-active" : ""}`}
+          className={`${PILL_BASE} ${current === s.id ? PILL_ACTIVE : ""}`}
         >
           {s.label}
         </button>
@@ -45,10 +49,10 @@ export function LegalPage({ embedded = false }: { embedded?: boolean }) {
     <div className={embedded ? "" : "mx-auto max-w-6xl px-4 py-6 md:px-6"}>
       {!embedded ? (
         <header className="mb-6">
-          <h1 className="text-2xl font-bold tracking-tight text-cyber-text">
+          <h1 className="text-2xl font-semibold text-white">
             Légal &amp; commercial
           </h1>
-          <p className="mt-1 text-sm text-cyber-muted">
+          <p className="mt-1 text-sm text-white/50">
             Devis, factures, documents juridiques et carnet clients CapCore.
           </p>
         </header>
