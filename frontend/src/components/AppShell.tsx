@@ -4,6 +4,7 @@ import { ContactNotificationToast } from "@/components/ContactNotificationToast"
 import { NotificationBell } from "@/components/NotificationBell";
 import { useContactNotifications } from "@/context/ContactNotificationsContext";
 import { useAgentsStatus } from "@/context/AgentsStatusContext";
+import { useBackendHealth } from "@/context/BackendHealthContext";
 import { enabledAgentCount } from "@/lib/agent-preferences";
 import {
   SETTINGS_NAV_ITEM,
@@ -67,7 +68,9 @@ export function AppShell({
 }: AppShellProps) {
   const { unreadCount } = useContactNotifications();
   const { activeCount, totalAgents } = useAgentsStatus();
+  const { status: backendStatus, health } = useBackendHealth();
   const localEnabled = enabledAgentCount();
+  const version = window.cyberforge?.getVersion?.() ?? "—";
 
   return (
     <div className="flex h-full min-h-0 w-full">
@@ -87,6 +90,20 @@ export function AppShell({
               height={45}
             />
           </button>
+
+          <div className="mt-5 flex items-center gap-3 rounded-control border border-white/10 bg-white/5 p-3 backdrop-blur-xl">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-cf-gold/25 bg-cf-gold/10 text-sm font-semibold text-cf-gold">
+              MG
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-cf-text">
+                Mat Gibiard
+              </p>
+              <p className="truncate text-[11px] text-cf-muted">
+                Fondateur CapCore
+              </p>
+            </div>
+          </div>
         </div>
 
         <nav
@@ -121,14 +138,47 @@ export function AppShell({
         </nav>
 
         {sidebarFooter ?? (
-          <div className="border-t border-cf-border p-4">
-            <p className="cf-section-label">Agents</p>
-            <p className="mt-1 text-2xl font-medium tabular-nums text-cf-gold">
-              {localEnabled} / {totalAgents}
-            </p>
-            <p className="text-[11px] text-cf-muted">
-              {activeCount} actifs côté serveur
-            </p>
+          <div className="space-y-3 border-t border-cf-border p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cf-muted">
+                Statut backend
+              </p>
+              <span className="inline-flex items-center gap-2 text-[11px] font-semibold text-cf-body">
+                <span
+                  className={[
+                    "h-2.5 w-2.5 rounded-full",
+                    backendStatus === "online"
+                      ? "bg-emerald-400"
+                      : backendStatus === "offline"
+                        ? "bg-red-400"
+                        : "bg-orange-300",
+                  ].join(" ")}
+                  aria-hidden
+                />
+                {backendStatus === "online"
+                  ? "En ligne"
+                  : backendStatus === "offline"
+                    ? "Hors ligne"
+                    : "Connexion…"}
+              </span>
+            </div>
+
+            <div className="rounded-control border border-white/10 bg-white/5 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cf-muted">
+                Agents
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-cf-gold">
+                {localEnabled} / {totalAgents}
+              </p>
+              <p className="text-[11px] text-cf-muted">
+                {activeCount} actifs côté serveur
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 text-[11px] text-cf-muted">
+              <span>v{health?.version ?? version}</span>
+              <span className="truncate">{health?.app ?? "CapCore"}</span>
+            </div>
           </div>
         )}
       </aside>
