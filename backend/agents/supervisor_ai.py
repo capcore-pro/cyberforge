@@ -5,6 +5,7 @@ SupervisorAI — validation binaire des sorties agents (dictateur qualité).
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 import httpx
@@ -199,6 +200,59 @@ def _visible_text_from_html(html: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+_NAME_MATCH_STOP_WORDS = frozenset(
+    {"de", "du", "des", "le", "la", "les", "et", "en", "au", "aux", "d", "l"}
+)
+
+
+def _normalize_match_text(text: str) -> str:
+    """Texte normalisé : casse ignorée + accents retirés (École → ecole)."""
+    folded = unicodedata.normalize("NFD", (text or "").strip().lower())
+    without_accents = "".join(
+        ch for ch in folded if unicodedata.category(ch) != "Mn"
+    )
+    return re.sub(r"\s+", " ", without_accents)
+
+
+def _meaningful_client_name_words(client_name: str) -> list[str]:
+    """Mots significatifs du nom client (hors articles / liaisons courts)."""
+    words = re.findall(r"[\w']+", _normalize_match_text(client_name), re.UNICODE)
+    return [w for w in words if len(w) >= 2 and w not in _NAME_MATCH_STOP_WORDS]
+
+
+def _client_name_matches_text(
+    client_name: str,
+    haystack: str,
+    *,
+    min_words: int = 2,
+) -> bool:
+    """
+    Valide la présence du nom client dans un texte :
+    - correspondance insensible à la casse (sous-chaîne complète), ou
+    - au moins ``min_words`` mots significatifs du nom présents dans le texte.
+    """
+    name = (client_name or "").strip()
+    if not name:
+        return True
+
+    norm_hay = _normalize_match_text(haystack)
+    if not norm_hay:
+        return False
+
+    norm_name = _normalize_match_text(name)
+    if norm_name in norm_hay:
+        return True
+
+    words = _meaningful_client_name_words(name)
+    if not words:
+        return False
+    if len(words) == 1:
+        return words[0] in norm_hay
+
+    matched = sum(1 for word in words if word in norm_hay)
+    return matched >= min(min_words, len(words))
+
+
 def _html_correction_instructions(errors: list[str], brief: dict) -> str:
     """Instructions courtes pour GeneratorAI (une ligne par type d'erreur)."""
     client_name = str(brief.get("client_name") or "").strip()
@@ -245,13 +299,14 @@ def _html_correction_instructions(errors: list[str], brief: dict) -> str:
         elif err.startswith("client_name «") and "absent du HTML" in err:
             if client_name:
                 add(
-                    f"CORRECTION OBLIGATOIRE : Affiche le nom exact « {client_name} » "
-                    "dans le corps de la page"
+                    f"CORRECTION OBLIGATOIRE : Affiche le nom du client « {client_name} » "
+                    "(ou au moins deux mots clés du nom) dans le corps de la page"
                 )
         elif err == "client_name absent du <title>":
             if client_name:
                 add(
-                    f"CORRECTION OBLIGATOIRE : Mets « {client_name} » dans la balise <title>"
+                    f"CORRECTION OBLIGATOIRE : Mets le nom du client « {client_name} » "
+                    "dans la balise <title>"
                 )
         elif err == "<style> CSS manquant":
             add("CORRECTION OBLIGATOIRE : Ajoute un bloc <style> avec le CSS du site")
@@ -456,7 +511,6 @@ class SupervisorAI:
         low = body.lower()
         b = brief or {}
         client_name = str(b.get("client_name") or "").strip()
-        name_low = client_name.lower()
 
         if len(body) < 3000:
             errors.append(f"HTML trop court ({len(body)} car., minimum 3000)")
@@ -469,11 +523,12 @@ class SupervisorAI:
                 errors.append(f"balise manquante : {tag}")
 
         if client_name:
-            if name_low not in low:
+            if not _client_name_matches_text(client_name, body):
                 errors.append(f"client_name « {client_name} » absent du HTML")
             title_m = re.search(r"<title[^>]*>([^<]*)</title>", body, re.I)
-            if title_m and name_low not in (title_m.group(1) or "").lower():
-                errors.append(f"client_name absent du <title>")
+            title_text = (title_m.group(1) or "") if title_m else ""
+            if title_m and not _client_name_matches_text(client_name, title_text):
+                errors.append("client_name absent du <title>")
 
         if "<style" not in low:
             errors.append("<style> CSS manquant")
@@ -538,7 +593,6 @@ class SupervisorAI:
         errors: list[str] = []
         target = (url or "").strip()
         name = (client_name or "").strip()
-        name_low = name.lower()
 
         if not target.startswith("http"):
             errors.append("URL de déploiement invalide")
@@ -559,8 +613,9 @@ class SupervisorAI:
 
         page = response.text or ""
         page_low = page.lower()
+        name_low = _normalize_match_text(name)
 
-        if name and name_low not in page_low:
+        if name and not _client_name_matches_text(name, page):
             errors.append(f"client_name « {name} » absent de la page déployée")
 
         for stale in _STALE_DEPLOYMENT_NAMES:

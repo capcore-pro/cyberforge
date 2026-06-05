@@ -485,7 +485,36 @@ export const SECTOR_PRESETS: Record<SectorPresetId, SectorPreset> = Object.fromE
   SECTOR_PRESET_LIST.map((p) => [p.id, p]),
 ) as Record<SectorPresetId, SectorPreset>;
 
+/** Libellés obligatoires — type Réservation (étape secteur du générateur). */
+export const REQUIRED_RESERVATION_SECTOR_LABELS = [
+  "Camping & Plein air",
+  "Hôtel & Hébergement",
+  "Gîte & Location saisonnière",
+  "Restaurant (réservation table)",
+  "Spa & Bien-être",
+  "Activités & Loisirs",
+  "Location nautique",
+] as const;
+
+function buildReservationSectorPresets(): SectorPreset[] {
+  return REQUIRED_RESERVATION_SECTOR_LABELS.map((label) => {
+    const preset = SECTOR_PRESET_LIST.find(
+      (p) => p.kinds.includes("reservation") && p.label === label,
+    );
+    if (!preset) {
+      throw new Error(`Preset réservation manquant : ${label}`);
+    }
+    return preset;
+  });
+}
+
+/** 7 secteurs réservation avec couleurs, descriptions et services complets. */
+export const RESERVATION_SECTOR_PRESETS: SectorPreset[] = buildReservationSectorPresets();
+
 export function listSectorsForKind(kind: GeneratorKindId): SectorPreset[] {
+  if (kind === "reservation") {
+    return RESERVATION_SECTOR_PRESETS;
+  }
   return SECTOR_PRESET_LIST.filter((p) => p.kinds.includes(kind));
 }
 
