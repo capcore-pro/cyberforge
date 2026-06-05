@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ImageIcon } from "lucide-react";
 import { MediaAddPanel } from "@/components/media/MediaAddPanel";
 import { MediaAssetCard } from "@/components/media/MediaAssetCard";
 import { MediaAssetDetailModal } from "@/components/media/MediaAssetDetailModal";
@@ -7,14 +8,25 @@ import {
   type SourceFilter,
   type TypeFilter,
 } from "@/components/media/MediaFiltersBar";
+import {
+  GLASS_SECTION,
+  GOLD_BTN,
+  logAccountingApiError,
+  shouldSilenceApiError,
+} from "@/components/accounting/accounting-theme";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   deleteMediaAsset,
   fetchMediaAssets,
   getAssetAbsolutePublicUrl,
-  getAssetPublicUrl,
   type MediaAsset,
 } from "@/lib/media-api";
+
+function reportError(context: string, res: { ok: boolean; status?: number }) {
+  const msg = apiErrorMessage(res, `${context} impossible.`);
+  logAccountingApiError(`Médiathèque / ${context}`, msg);
+  return shouldSilenceApiError(msg) ? null : msg;
+}
 
 /**
  * Médiathèque — grille d'assets locaux, recherche et ajout manuel.
@@ -49,7 +61,7 @@ export function MediaLibraryPage() {
     });
     setLoading(false);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Impossible de charger la médiathèque."));
+      setError(reportError("chargement", res));
       setAssets([]);
       return;
     }
@@ -82,7 +94,7 @@ export function MediaLibraryPage() {
     const res = await deleteMediaAsset(asset.id);
     setBusyId(null);
     if (!res.ok) {
-      setError(apiErrorMessage(res, "Suppression impossible."));
+      setError(reportError("suppression", res));
       return;
     }
     void load();
@@ -94,12 +106,14 @@ export function MediaLibraryPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="mx-auto max-w-7xl space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="cf-section-label">Ressources</p>
-          <h1 className="cf-page-title mt-1">Médiathèque</h1>
-          <p className="mt-2 max-w-2xl text-sm text-cf-muted">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#d4a843]">
+            Ressources
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold text-white">Médiathèque</h1>
+          <p className="mt-2 max-w-2xl text-sm text-white/50">
             Images stockées localement — recherche Pexels/Unsplash, génération Replicate et
             imports manuels.
           </p>
@@ -107,7 +121,7 @@ export function MediaLibraryPage() {
         <button
           type="button"
           aria-label="Ajouter une image"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-cf-gold/50 bg-cf-active text-xl font-light text-cf-gold transition hover:border-cf-gold hover:bg-cf-gold-subtle"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#d4a843] text-xl font-light text-black shadow-lg transition hover:bg-[#d4a843]/80"
           onClick={() => openAdd("import")}
         >
           +
@@ -124,7 +138,7 @@ export function MediaLibraryPage() {
         trailing={
           <button
             type="button"
-            className="cyber-action-btn cyber-action-btn-primary text-xs"
+            className={GOLD_BTN}
             onClick={() => openAdd("import")}
           >
             Importer un fichier
@@ -133,30 +147,33 @@ export function MediaLibraryPage() {
       />
 
       {toast ? (
-        <p className="mb-4 rounded border border-cyber-neon/40 bg-cyber-accent/10 px-3 py-2 text-sm text-cyber-neon">
+        <p className="rounded-lg border border-[#d4a843]/30 bg-[#d4a843]/10 px-4 py-3 text-sm text-[#d4a843]">
           {toast}
         </p>
       ) : null}
 
       {error ? (
-        <p className="mb-4 rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+        <p className="rounded-lg border border-red-500/30 bg-red-950/20 px-4 py-3 text-sm text-red-300">
           {error}
         </p>
       ) : null}
 
       {loading ? (
-        <p className="py-12 text-center text-sm text-cyber-muted animate-pulse">
+        <p className="animate-pulse py-12 text-center text-sm text-white/50">
           Chargement de la médiathèque…
         </p>
       ) : assets.length === 0 ? (
-        <div className="cyber-panel space-y-4 py-12 text-center">
-          <p className="text-sm text-cyber-muted">
-            Aucune image pour l&apos;instant — générez votre premier projet pour alimenter la
-            médiathèque
+        <div
+          className={`${GLASS_SECTION} flex min-h-[300px] flex-col items-center justify-center gap-4 text-center`}
+        >
+          <ImageIcon className="h-12 w-12 text-white/20" aria-hidden />
+          <p className="text-sm text-white/30">Aucune image pour l&apos;instant</p>
+          <p className="text-xs text-white/20">
+            Générez votre premier projet pour alimenter la médiathèque
           </p>
           <button
             type="button"
-            className="cyber-generate-btn px-5 py-2.5 text-xs"
+            className={`${GOLD_BTN} px-6 py-2.5`}
             onClick={() => openAdd("import")}
           >
             Rechercher des photos
@@ -165,11 +182,11 @@ export function MediaLibraryPage() {
       ) : (
         <>
           {imageCount === 0 ? (
-            <p className="mb-4 text-sm text-cf-muted">
+            <p className="text-sm text-white/50">
               Aucune image — utilisez « + » pour en ajouter via Pexels, Unsplash ou Replicate.
             </p>
           ) : null}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             {assets.map((asset) => (
               <MediaAssetCard
                 key={asset.id}

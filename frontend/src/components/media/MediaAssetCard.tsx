@@ -1,5 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { LazyImage } from "@/components/LazyImage";
+import { GLASS_PILL_BTN } from "@/components/accounting/accounting-theme";
 import {
   formatBytes,
   getAssetPublicUrl,
@@ -16,9 +17,9 @@ function typeIcon(type: MediaAsset["type"]): string {
 
 function sourceBadge(source: MediaAsset["source"]) {
   if (source === "upload") {
-    return "border-sky-500/50 bg-sky-500/15 text-sky-200";
+    return "border-sky-400/35 bg-sky-500/15 text-sky-300";
   }
-  return "border-violet-500/50 bg-violet-500/15 text-violet-200";
+  return "border-violet-400/35 bg-violet-500/15 text-violet-300";
 }
 
 export interface MediaAssetCardProps {
@@ -65,8 +66,8 @@ export const MediaAssetCard = memo(function MediaAssetCard({
 
   return (
     <article
-      className={`group relative flex flex-col overflow-hidden rounded-lg border border-cyber-border bg-cyber-surface/90 transition ${
-        selectable || onOpen ? "cursor-pointer hover:border-cyber-neon/60" : ""
+      className={`group relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] transition-all hover:border-[#d4a843]/50 ${
+        selectable || onOpen ? "cursor-pointer" : ""
       } ${busy ? "pointer-events-none opacity-60" : ""}`}
       onClick={handleCardClick}
       onKeyDown={(e) => {
@@ -78,7 +79,7 @@ export const MediaAssetCard = memo(function MediaAssetCard({
       role={selectable || onOpen ? "button" : undefined}
       tabIndex={selectable || onOpen ? 0 : undefined}
     >
-      <div className="relative aspect-[4/3] w-full bg-cyber-bg/80">
+      <div className="relative aspect-[4/3] w-full bg-black/20">
         {asset.type === "image" && thumb ? (
           <LazyImage
             src={thumb}
@@ -87,7 +88,7 @@ export const MediaAssetCard = memo(function MediaAssetCard({
             onError={() => setImgError(true)}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-cyber-muted">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-white/40">
             <span className="text-4xl" aria-hidden>
               {typeIcon(asset.type)}
             </span>
@@ -98,11 +99,11 @@ export const MediaAssetCard = memo(function MediaAssetCard({
         )}
 
         {!selectable && (onCopyUrl || onDelete) ? (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/70 opacity-0 transition group-hover:opacity-100">
+          <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
             {onCopyUrl ? (
               <button
                 type="button"
-                className="cyber-action-btn text-[10px]"
+                className={GLASS_PILL_BTN}
                 onClick={(e) => {
                   e.stopPropagation();
                   onCopyUrl(asset);
@@ -114,7 +115,7 @@ export const MediaAssetCard = memo(function MediaAssetCard({
             {onDelete ? (
               <button
                 type="button"
-                className="cyber-action-btn border-red-500/40 text-[10px] text-red-300"
+                className={`${GLASS_PILL_BTN} border-red-400/30 text-red-300 hover:border-red-400/50`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete(asset);
@@ -127,7 +128,7 @@ export const MediaAssetCard = memo(function MediaAssetCard({
               <a
                 href={getAssetPublicUrl(asset)}
                 download={asset.filename}
-                className="cyber-action-btn text-[10px]"
+                className={GLASS_PILL_BTN}
                 onClick={(e) => e.stopPropagation()}
               >
                 Télécharger
@@ -138,19 +139,19 @@ export const MediaAssetCard = memo(function MediaAssetCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
-        <p className="truncate text-sm font-medium text-cyber-text" title={asset.filename}>
+        <p className="truncate text-sm font-medium text-white" title={asset.filename}>
           {asset.filename}
         </p>
-        <p className="text-[11px] text-cyber-muted">
+        <p className="text-[11px] text-white/45">
           {formatBytes(asset.size_bytes)} · {dateLabel}
         </p>
         <div className="flex flex-wrap gap-1">
           <span
-            className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sourceBadge(asset.source)}`}
+            className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${sourceBadge(asset.source)}`}
           >
             {asset.source === "upload" ? "Upload" : "Généré"}
           </span>
-          <span className="rounded border border-cyber-border bg-cyber-bg/50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-cyber-muted">
+          <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/45">
             {provider}
           </span>
         </div>
@@ -159,7 +160,7 @@ export const MediaAssetCard = memo(function MediaAssetCard({
             {asset.tags.slice(0, 4).map((tag) => (
               <span
                 key={tag}
-                className="rounded-full border border-cyber-border/80 bg-cyber-bg/50 px-2 py-0.5 text-[9px] text-cyber-muted"
+                className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] text-white/45"
               >
                 {tag}
               </span>
