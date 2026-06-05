@@ -80,13 +80,13 @@ export function GeneratorResultCard({
                 title="Aperçu du projet généré"
                 src={demoUrl}
                 className="h-full w-full border-0"
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-same-origin allow-popups"
               />
             ) : (
               <iframe
                 title="Aperçu du projet généré"
                 srcDoc={previewHtml!}
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-same-origin allow-popups"
                 className="absolute left-0 top-0 origin-top-left border-0"
                 style={{
                   width: 800,

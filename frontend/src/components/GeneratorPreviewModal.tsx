@@ -66,7 +66,7 @@ export function GeneratorPreviewModal({
                   transform: `scale(${GENERATOR_PREVIEW_SCALE})`,
                   transformOrigin: "top left",
                 }}
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
                 srcDoc={previewDoc}
               />
             </div>

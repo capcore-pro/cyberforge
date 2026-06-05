@@ -62,6 +62,21 @@ _GENERIC_PRODUCT_NAMES = frozenset(
     }
 )
 
+_ECOMMERCE_GENERIC_PRODUCT_NAMES = _GENERIC_PRODUCT_NAMES | frozenset(
+    {
+        "produit 1",
+        "produit 2",
+        "produit 3",
+        "item",
+        "article",
+    }
+)
+
+_ECOMMERCE_GENERIC_PRODUCT_RE = re.compile(
+    r"^(?:produit|item|article|product)\s*\d*$",
+    re.I,
+)
+
 _HTML_FORBIDDEN_SNIPPETS = (
     "votre ville",
     "votre nom",
@@ -405,6 +420,64 @@ def _result(
     }
 
 
+def _is_ecommerce_brief(brief: dict[str, Any]) -> bool:
+    b = brief or {}
+    pt = str(b.get("project_type") or "").strip().lower().replace("-", "_")
+    return pt == "ecommerce"
+
+
+def _is_ecommerce_generic_product_name(name: str) -> bool:
+    n = (name or "").strip().lower()
+    if not n or len(n) < 2:
+        return True
+    if n in _ECOMMERCE_GENERIC_PRODUCT_NAMES:
+        return True
+    return bool(_ECOMMERCE_GENERIC_PRODUCT_RE.match(n))
+
+
+def _validate_ecommerce_products(products: list[Any]) -> list[str]:
+    """Validation structurelle PaymentAI e-commerce (sans cohérence sémantique)."""
+    errors: list[str] = []
+    if not isinstance(products, list) or not products:
+        errors.append("products vide")
+        return errors
+
+    valid_count = 0
+    for idx, item in enumerate(products, start=1):
+        if not isinstance(item, dict):
+            errors.append(f"produit {idx} invalide (objet attendu)")
+            continue
+        name = str(item.get("name") or "").strip()
+        description = str(item.get("description") or "").strip()
+        metadata = item.get("metadata")
+        sku = ""
+        if isinstance(metadata, dict):
+            sku = str(metadata.get("sku") or "").strip()
+
+        if not name:
+            errors.append(f"produit {idx} sans name")
+        elif _is_ecommerce_generic_product_name(name):
+            errors.append(f"produit {idx} nom générique : {name}")
+        if not description:
+            errors.append(f"produit {idx} sans description")
+        if not sku:
+            errors.append(f"produit {idx} sans metadata.sku")
+
+        if (
+            name
+            and description
+            and sku
+            and not _is_ecommerce_generic_product_name(name)
+        ):
+            valid_count += 1
+
+    if valid_count == 0:
+        errors.append(
+            "aucun produit e-commerce valide (name + description + metadata.sku, nom non générique)"
+        )
+    return errors
+
+
 def _is_meaningful_text(value: str, *, min_len: int = 2) -> bool:
     s = (value or "").strip()
     if len(s) < min_len:
@@ -686,45 +759,58 @@ class SupervisorAI:
         products = []
         if isinstance(stripe, dict):
             products = stripe.get("products") or []
-        if not isinstance(products, list) or not products:
-            errors.append("products vide")
+
+        if _is_ecommerce_brief(b):
+            errors.extend(_validate_ecommerce_products(products))
         else:
-            names: list[str] = []
-            for item in products:
-                if isinstance(item, dict):
-                    names.append(str(item.get("name") or "").strip())
-                else:
-                    names.append(str(item).strip())
-            real = [
-                n
-                for n in names
-                if _is_meaningful_text(n, min_len=3)
-                and n.lower() not in _GENERIC_PRODUCT_NAMES
-            ]
-            if not real:
-                errors.append("noms de produits génériques (Produit Unique, etc.)")
+            if not isinstance(products, list) or not products:
+                errors.append("products vide")
+            else:
+                names: list[str] = []
+                for item in products:
+                    if isinstance(item, dict):
+                        names.append(str(item.get("name") or "").strip())
+                    else:
+                        names.append(str(item).strip())
+                real = [
+                    n
+                    for n in names
+                    if _is_meaningful_text(n, min_len=3)
+                    and n.lower() not in _GENERIC_PRODUCT_NAMES
+                ]
+                if not real:
+                    errors.append("noms de produits génériques (Produit Unique, etc.)")
 
-            client_low = str(b.get("client_name") or "").lower()
-            sector_low = str(b.get("sector") or "").lower()
-            if client_low or sector_low:
-                coherent = any(
-                    client_low[:6] in n.lower()
-                    or any(tok in n.lower() for tok in sector_low.split() if len(tok) > 4)
-                    for n in real
-                )
-                if real and not coherent:
-                    errors.append("produits peu cohérents avec le brief client")
+                client_low = str(b.get("client_name") or "").lower()
+                sector_low = str(b.get("sector") or "").lower()
+                if client_low or sector_low:
+                    coherent = any(
+                        client_low[:6] in n.lower()
+                        or any(
+                            tok in n.lower() for tok in sector_low.split() if len(tok) > 4
+                        )
+                        for n in real
+                    )
+                    if real and not coherent:
+                        errors.append("produits peu cohérents avec le brief client")
 
-        prices = stripe.get("prices") if isinstance(stripe, dict) else []
-        if not isinstance(prices, list) or not prices:
-            errors.append("prices vide")
+            prices = stripe.get("prices") if isinstance(stripe, dict) else []
+            if not isinstance(prices, list) or not prices:
+                errors.append("prices vide")
 
         if errors:
-            corrected = (
-                "Regénère payment_config Stripe : "
-                + "; ".join(errors)
-                + f". Produits nommés selon {b.get('client_name')} / {b.get('sector')}."
-            )
+            if _is_ecommerce_brief(b):
+                corrected = (
+                    "Regénère payment_config Stripe e-commerce : "
+                    + "; ".join(errors)
+                    + ". Chaque produit : name, description, metadata.sku (noms concrets, pas génériques)."
+                )
+            else:
+                corrected = (
+                    "Regénère payment_config Stripe : "
+                    + "; ".join(errors)
+                    + f". Produits nommés selon {b.get('client_name')} / {b.get('sector')}."
+                )
             return _result(False, errors, corrected_prompt=corrected)
 
         return _result(True, [])

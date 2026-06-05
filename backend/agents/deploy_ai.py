@@ -19,6 +19,56 @@ _IMG_PEXELS_RE = re.compile(
     r"<img\b(?=[^>]*\bpexels-inject\b)([^>]*)/?>",
     re.IGNORECASE,
 )
+_CART_SCRIPT_RE = re.compile(
+    r"<script\b[^>]*>[\s\S]*?(?:addToCart|window\.cart|renderCart)[\s\S]*?</script>",
+    re.IGNORECASE,
+)
+_BODY_CLOSE_RE = re.compile(r"</body>", re.IGNORECASE)
+
+CART_JS = r"""
+<script>
+window.cart=[];
+function addToCart(btn){
+  var card=btn.closest('[data-id]')||btn.closest('.product-card')||btn.parentElement;
+  var id=card.dataset.id||card.dataset.productId||Math.random().toString(36).slice(2);
+  var name=card.dataset.name||card.dataset.productName||card.querySelector('h3,h2,.product-name')?.textContent||'Produit';
+  var price=parseFloat(card.dataset.price||card.dataset.productPrice||card.querySelector('.price,[class*="price"]')?.textContent?.replace(/[^\d.]/g,'')||0);
+  var size=card.querySelector('select')?.value||'';
+  var ex=window.cart.find(function(i){return i.id===id&&i.size===size;});
+  if(ex){ex.qty++;}else{window.cart.push({id:id,name:name,price:price,qty:1,size:size});}
+  renderCart();
+}
+function removeFromCart(id){window.cart=window.cart.filter(function(i){return i.id!==id;});renderCart();}
+function updateQty(id,delta){var item=window.cart.find(function(i){return i.id===id;});if(item){item.qty+=delta;if(item.qty<=0)removeFromCart(id);else renderCart();}}
+function renderCart(){
+  var count=document.getElementById('cart-count');
+  var items=document.getElementById('cart-items');
+  var total=document.getElementById('cart-total');
+  var n=window.cart.reduce(function(s,i){return s+i.qty;},0);
+  if(count)count.textContent=n;
+  if(!items)return;
+  if(window.cart.length===0){items.innerHTML='<p style="text-align:center;color:#999;padding:20px">Votre panier est vide</p>';if(total)total.textContent='0.00 €';return;}
+  items.innerHTML=window.cart.map(function(i){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #eee"><span>'+i.name+(i.size?' ('+i.size+')':'')+'</span><span><button onclick="updateQty(\''+i.id+'\',-1)" style="width:24px;height:24px;cursor:pointer;border:1px solid #ddd;background:#fff;border-radius:4px">−</button> '+i.qty+' <button onclick="updateQty(\''+i.id+'\',1)" style="width:24px;height:24px;cursor:pointer;border:1px solid #ddd;background:#fff;border-radius:4px">+</button> <strong>'+( i.price*i.qty).toFixed(2)+'€</strong> <button onclick="removeFromCart(\''+i.id+'\')" style="color:red;margin-left:8px;cursor:pointer;border:none;background:none">✕</button></span></div>';}).join('');
+  var t=window.cart.reduce(function(s,i){return s+i.price*i.qty;},0);
+  if(total)total.textContent=t.toFixed(2)+' €';
+}
+function filterProducts(cat){
+  document.querySelectorAll('.product-card,[data-category]').forEach(function(card){
+    var c=(card.dataset.category||'').toLowerCase();
+    card.style.display=(cat==='tous'||cat==='all'||cat==='toutes'||c.includes(cat.toLowerCase()))?'':'none';
+  });
+}
+function submitOrder(){
+  if(window.cart.length===0){alert('Votre panier est vide.');return;}
+  var fields=document.querySelectorAll('#order-form [required],#commande [required]');
+  for(var i=0;i<fields.length;i++){if(!fields[i].value.trim()){fields[i].focus();alert('Veuillez remplir tous les champs.');return;}}
+  window.cart=[];renderCart();
+  var s=document.getElementById('order-success');
+  if(s){s.style.display='block';}else{alert('Commande confirmée ! Merci.');}
+}
+document.addEventListener('DOMContentLoaded',function(){renderCart();});
+</script>
+"""
 _ALT_RE = re.compile(r"""\balt=(["'])(.*?)\1""", re.IGNORECASE | re.DOTALL)
 _SRC_RE = re.compile(r"""\bsrc=(["'])(.*?)\1""", re.IGNORECASE)
 
@@ -30,6 +80,37 @@ _CAMPING_LODGING_QUERIES: list[tuple[tuple[str, ...], str]] = [
     (("emplacement",), "campsite grass trees"),
     (("caravane", "caravan"), "caravan camping site"),
 ]
+
+
+def _is_ecommerce_project(project_type: str | None) -> bool:
+    pt = (project_type or "").strip().lower().replace("-", "_")
+    return pt in ("ecommerce", "saas_dashboard")
+
+
+def inject_cart_js(html: str) -> str:
+    """Remplace les scripts panier générés par un bloc JS fiable avant déploiement."""
+    print("[DeployAI] inject_cart_js appelée")
+    raw = (html or "").strip()
+    if not raw:
+        print("[DeployAI] inject_cart_js: HTML vide, skip")
+        return raw
+
+    print("[DeployAI] HTML avant injection:", raw[:200])
+    removed = len(_CART_SCRIPT_RE.findall(raw))
+    cleaned = _CART_SCRIPT_RE.sub("", raw)
+    body_m = _BODY_CLOSE_RE.search(cleaned)
+    if not body_m:
+        logger.warning("[DeployAI] inject_cart_js: balise </body> absente")
+        out = cleaned.rstrip() + "\n" + CART_JS.strip() + "\n"
+    else:
+        pos = body_m.start()
+        out = cleaned[:pos] + CART_JS + "\n" + cleaned[pos:]
+
+    print("[DeployAI] HTML après injection:", out[-500:])
+    if removed:
+        logger.info("[DeployAI] %d script(s) panier remplacé(s)", removed)
+    logger.info("[DeployAI] JS panier injecté avant </body>")
+    return out
 
 
 def _is_camping_reservation_context(*, sector: str | None, project_type: str | None) -> bool:
@@ -168,6 +249,17 @@ class DeployAI:
             sector=sector,
             project_type=project_type,
         )
+        if _is_ecommerce_project(project_type):
+            print(
+                f"[DeployAI] e-commerce détecté (project_type={project_type!r}) "
+                "— injection panier avant Cloudflare",
+            )
+            enriched = inject_cart_js(enriched)
+            print(f"[DeployAI] enriched réassigné, taille HTML={len(enriched)}")
+        else:
+            print(
+                f"[DeployAI] inject_cart_js ignorée (project_type={project_type!r})",
+            )
         demo_title = (title or "CyberForge Demo").strip()[:120]
 
         try:

@@ -387,11 +387,106 @@ Structure obligatoire :
 6) Footer
 
 JavaScript obligatoire (<script> avant </body>) :
-- État panier en mémoire (tableau {id, name, price, qty})
-- addToCart(), removeFromCart(), updateQty(), renderCart()
-- Calcul total temps réel
-- submitOrder() affiche confirmation stylée
+- État panier : window.cart = [] (tableau global {id, name, price, qty, size})
+- addToCart(id, name, price, size) : ajoute ou incrémente qty, appelle renderCart()
+- removeFromCart(id) : retire du tableau, appelle renderCart()
+- updateQty(id, delta) : modifie qty, retire si qty <= 0, appelle renderCart()
+- renderCart() : vide #cart-items, recrée les lignes, met à jour #cart-total et badge navbar
+- submitOrder() : valide champs formulaire, affiche #order-success, vide panier
+- Chaque bouton "Ajouter au panier" : onclick="addToCart('PRODUCT_ID', 'NOM', PRIX, 'TAILLE_DEFAULT')"
+- Badge panier navbar : <span id="cart-count">0</span> mis à jour à chaque renderCart()
+- DOMContentLoaded : initialiser renderCart()
+IMPORTANT : ne jamais laisser les boutons sans onclick. Tester mentalement que addToCart fonctionne.
 
-Design : couleur_primaire pour boutons/CTA, cards premium, responsive 768px.
+RÈGLES ABSOLUES JAVASCRIPT E-COMMERCE (TOUS TYPES) :
+
+RÈGLE 0 — SCOPE GLOBAL OBLIGATOIRE :
+Toutes les fonctions interactives DOIVENT être dans le scope global.
+Structure OBLIGATOIRE du <script> (avant </body>) :
+
+<script>
+// ═══ ÉTAT GLOBAL ═══
+window.cart = [];
+
+// ═══ FONCTIONS GLOBALES (onclick accessibles) ═══
+function addToCart(btn) {
+  const card = btn.closest('[data-id]') || btn.closest('.product-card');
+  const id = card.dataset.id || card.dataset.productId;
+  const name = card.dataset.name || card.dataset.productName;
+  const price = parseFloat(card.dataset.price || card.dataset.productPrice);
+  const sizeEl = card.querySelector('select');
+  const size = sizeEl ? sizeEl.value : '';
+  const existing = window.cart.find(i => i.id === id && i.size === size);
+  if (existing) { existing.qty++; } else { window.cart.push({id, name, price, qty:1, size}); }
+  renderCart();
+}
+
+function removeFromCart(id) {
+  window.cart = window.cart.filter(i => i.id !== id);
+  renderCart();
+}
+
+function updateQty(id, delta) {
+  const item = window.cart.find(i => i.id === id);
+  if (item) { item.qty += delta; if (item.qty <= 0) removeFromCart(id); else renderCart(); }
+}
+
+function renderCart() {
+  const items = document.getElementById('cart-items');
+  const total = document.getElementById('cart-total');
+  const count = document.getElementById('cart-count');
+  if (count) count.textContent = window.cart.reduce((s,i) => s+i.qty, 0);
+  if (!items) return;
+  if (window.cart.length === 0) { items.innerHTML = '<p style="color:#999;text-align:center;padding:20px">Votre panier est vide</p>'; }
+  else { items.innerHTML = window.cart.map(i => `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee"><span>${i.name} ${i.size ? '('+i.size+')' : ''}</span><span><button onclick="updateQty('${i.id}',-1)" style="margin:0 5px;cursor:pointer">−</button>${i.qty}<button onclick="updateQty('${i.id}',1)" style="margin:0 5px;cursor:pointer">+</button> ${(i.price*i.qty).toFixed(2)}€ <button onclick="removeFromCart('${i.id}')" style="color:red;margin-left:10px;cursor:pointer">✕</button></span></div>`).join(''); }
+  const t = window.cart.reduce((s,i) => s+i.price*i.qty, 0);
+  if (total) total.textContent = t.toFixed(2) + ' €';
+}
+
+function filterProducts(cat) {
+  document.querySelectorAll('.product-card, [data-category]').forEach(card => {
+    const c = card.dataset.category || '';
+    card.style.display = (cat === 'tous' || cat === 'all' || c.toLowerCase().includes(cat.toLowerCase())) ? '' : 'none';
+  });
+  document.querySelectorAll('.filter-btn, [onclick*="filterProducts"]').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.toLowerCase().includes(cat.toLowerCase()) || (cat === 'tous' && btn.textContent.toLowerCase().includes('tous')));
+  });
+}
+
+function submitOrder() {
+  const form = document.getElementById('order-form') || document.querySelector('form');
+  if (form) {
+    const required = form.querySelectorAll('[required]');
+    for (const field of required) {
+      if (!field.value.trim()) { field.focus(); alert('Veuillez remplir tous les champs obligatoires.'); return; }
+    }
+  }
+  if (window.cart.length === 0) { alert('Votre panier est vide.'); return; }
+  window.cart = [];
+  renderCart();
+  const success = document.getElementById('order-success');
+  if (success) { success.style.display = 'block'; success.scrollIntoView({behavior:'smooth'}); }
+  else { alert('Commande confirmée ! Merci pour votre achat.'); }
+}
+
+// ═══ INIT ═══
+document.addEventListener('DOMContentLoaded', function() {
+  renderCart();
+});
+</script>
+
+INTERDIT : déclarer addToCart, filterProducts, renderCart, submitOrder,
+removeFromCart, updateQty à l'intérieur de DOMContentLoaded.
+INTERDIT : utiliser scrollIntoView sans vérifier que l'élément existe.
+
+Design premium obligatoire :
+- Hero : min-height 100vh, background image Pexels (class="pexels-inject" alt="fashion boutique store") avec overlay couleur_primaire/80, titre blanc centré, CTA blanc border-radius 50px
+- Catalogue : fond blanc cassé #fafafa, cards avec box-shadow 0 4px 20px rgba(0,0,0,0.08), border-radius 16px, hover transform translateY(-4px) transition 0.3s
+- Prix : couleur_primaire, font-weight 700
+- Boutons "Ajouter au panier" : bg couleur_primaire, border-radius 50px, width 100%, padding 12px
+- Section panier : fond blanc, card récap glassmorphism border border-gray-100 rounded-2xl p-6
+- Section commande : fond gris clair #f8f8f8, inputs border border-gray-200 rounded-lg focus:border couleur_primaire
+- Google Fonts : Playfair Display (titres) + Inter (body)
+- Navbar : fond blanc, box-shadow légère, sticky top-0
 Maximum 15000 caractères.
 """
