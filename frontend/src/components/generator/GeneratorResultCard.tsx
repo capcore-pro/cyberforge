@@ -1,4 +1,11 @@
 import { formatEur } from "@/lib/generator-estimation";
+import {
+  prepareInternalPreviewSrcDoc,
+  withCyberforgeInternalPreview,
+} from "@/lib/cyberforge-preview";
+
+const PREVIEW_IFRAME_SANDBOX =
+  "allow-scripts allow-same-origin allow-forms allow-modals";
 
 function formatDuration(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -78,15 +85,15 @@ export function GeneratorResultCard({
             {demoUrl ? (
               <iframe
                 title="Aperçu du projet généré"
-                src={demoUrl}
+                src={withCyberforgeInternalPreview(demoUrl)}
                 className="h-full w-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-popups"
+                sandbox={PREVIEW_IFRAME_SANDBOX}
               />
             ) : (
               <iframe
                 title="Aperçu du projet généré"
-                srcDoc={previewHtml!}
-                sandbox="allow-scripts allow-same-origin allow-popups"
+                srcDoc={prepareInternalPreviewSrcDoc(previewHtml!)}
+                sandbox={PREVIEW_IFRAME_SANDBOX}
                 className="absolute left-0 top-0 origin-top-left border-0"
                 style={{
                   width: 800,

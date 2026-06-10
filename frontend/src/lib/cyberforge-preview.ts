@@ -67,10 +67,12 @@ export function prepareInternalPreviewSrcDoc(html: string): string {
   if (!body) {
     return body;
   }
-  const unlock = `<script>(function(){function u(){var l=document.getElementById("cf-login-screen");var d=document.getElementById("cf-demo-content");if(l&&d){l.style.display="none";d.classList.add("cf-unlocked");d.removeAttribute("aria-hidden");}var b=document.getElementById("cf-lock-btn");if(b){b.remove();}document.querySelectorAll(".cf-lock-btn").forEach(function(n){n.remove();});}window.unlockDemo=u;u();})();</script>`;
+  const unlock = `<script>(function(){function u(){var l=document.getElementById("cf-login-screen");var d=document.getElementById("cf-demo-content");if(l&&d){l.style.display="none";d.classList.add("cf-unlocked");d.removeAttribute("aria-hidden");}var b=document.getElementById("cf-lock-btn");if(b){b.remove();}document.querySelectorAll(".cf-lock-btn").forEach(function(n){n.remove();});}window.unlockDemo=u;if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",u);}else{u();}})();</script>`;
   let doc = body;
   if (body.toLowerCase().includes("cf-login-screen")) {
-    if (/<head\b/i.test(doc)) {
+    if (/<\/body>/i.test(doc)) {
+      doc = doc.replace(/<\/body>/i, `${unlock}</body>`);
+    } else if (/<head\b/i.test(doc)) {
       doc = doc.replace(/<head([^>]*)>/i, `<head$1>${unlock}`);
     } else {
       doc = unlock + doc;

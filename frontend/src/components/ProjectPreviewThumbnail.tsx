@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { prepareInternalPreviewSrcDoc } from "@/lib/cyberforge-preview";
+import {
+  prepareInternalPreviewSrcDoc,
+  withCyberforgeInternalPreview,
+} from "@/lib/cyberforge-preview";
+
+const PREVIEW_IFRAME_SANDBOX =
+  "allow-scripts allow-same-origin allow-forms allow-modals";
 
 interface ProjectPreviewThumbnailProps {
   html?: string | null;
@@ -63,7 +69,9 @@ export function ProjectPreviewThumbnail({
   const [loadFailed, setLoadFailed] = useState(false);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const srcDoc = html?.trim() ? prepareInternalPreviewSrcDoc(html) : null;
-  const externalUrl = previewUrl?.trim() || null;
+  const externalUrl = previewUrl?.trim()
+    ? withCyberforgeInternalPreview(previewUrl.trim())
+    : null;
 
   useEffect(() => {
     setLoadFailed(false);
@@ -141,7 +149,7 @@ export function ProjectPreviewThumbnail({
         title={`Aperçu ${title}`}
         className="pointer-events-none absolute left-0 top-0 border-0"
         style={frameStyle}
-        sandbox={externalUrl ? undefined : "allow-scripts"}
+        sandbox={PREVIEW_IFRAME_SANDBOX}
         src={externalUrl ?? undefined}
         srcDoc={externalUrl ? undefined : srcDoc ?? undefined}
         loading="lazy"

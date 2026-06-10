@@ -179,7 +179,7 @@ export function CyberForgePreviewFrame({
         html={rawHtml ?? srcDoc}
         externalUrl={externalUrl}
         fullscreenTargetRef={hostRef}
-        fullscreenMode={rawHtml ?? srcDoc ? "fixed" : "native"}
+        fullscreenMode={(rawHtml ?? srcDoc) ? "fixed" : "native"}
         className={toolbarClassName}
       />
       <div ref={hostRef} className={wrapperClassName}>

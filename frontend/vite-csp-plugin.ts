@@ -8,7 +8,7 @@ export const PRODUCTION_CSP = [
   "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*",
   "img-src 'self' data: blob: http://127.0.0.1:* http://localhost:*",
   "font-src 'self' data:",
-  "frame-src 'self' http://127.0.0.1:* http://localhost:* blob:",
+  "frame-src 'self' https: http://127.0.0.1:* http://localhost:* blob:",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
