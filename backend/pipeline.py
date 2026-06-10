@@ -514,6 +514,22 @@ async def _run_pipeline_body(
                 "demo_password": final_result.get("demo_password"),
             },
         )
+
+        async def _send_deploy_email() -> None:
+            try:
+                from agents.email_ai import send_deployment_notification
+
+                await send_deployment_notification(
+                    brief=brief,
+                    demo_url=str(final_result.get("url") or ""),
+                    duration_ms=total_duration_ms,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[EmailAI] notification déploiement ignorée: %s", exc
+                )
+
+        asyncio.create_task(_send_deploy_email())
     else:
         await _emit(
             generation_id,
@@ -653,6 +669,22 @@ async def _run_extension_pipeline(
                 "demo_password": final_result.get("demo_password"),
             },
         )
+
+        async def _send_extension_deploy_email() -> None:
+            try:
+                from agents.email_ai import send_deployment_notification
+
+                await send_deployment_notification(
+                    brief=brief,
+                    demo_url=str(final_result.get("url") or ""),
+                    duration_ms=total_duration_ms,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[EmailAI] notification déploiement extension ignorée: %s", exc
+                )
+
+        asyncio.create_task(_send_extension_deploy_email())
     else:
         await _emit(
             generation_id,

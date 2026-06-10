@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from security.agent_readiness import agent_is_active
+from security.agent_readiness import agent_is_active, brevo_ready
 
 load_dotenv(override=True)
 
@@ -22,8 +22,11 @@ _AGENT_CATALOG: tuple[tuple[str, str, str], ...] = (
     ("database", "DatabaseAI", "Schéma Supabase si app / ecommerce / réservation."),
     ("auth", "AuthAI", "Auth Supabase si application web."),
     ("payment", "PaymentAI", "Stripe si ecommerce / réservation."),
+    ("email", "EmailAI", "Notifications Brevo (déploiement, commande, réservation)."),
     ("electron", "ElectronAI", "Empaquetage application desktop (.exe)."),
 )
+
+_EMAIL_STANDBY_NOTE = "EmailAI en standby — configurer BREVO_API_KEY"
 
 PIPELINE_AGENT_IDS: tuple[str, ...] = tuple(agent_id for agent_id, _, _ in _AGENT_CATALOG)
 
@@ -50,11 +53,14 @@ async def get_agents_status() -> AgentsStatusResponse:
     for agent_id, name, description in _AGENT_CATALOG:
         in_pipeline = agent_id in pipeline_set
         is_active = in_pipeline and agent_is_active(agent_id)
+        desc = description
+        if agent_id == "email" and not brevo_ready():
+            desc = f"{description} — {_EMAIL_STANDBY_NOTE}"
         agents.append(
             AgentStatusItem(
                 id=agent_id,
                 name=name,
-                description=description,
+                description=desc,
                 status="active" if is_active else "standby",
                 in_pipeline=in_pipeline,
             )

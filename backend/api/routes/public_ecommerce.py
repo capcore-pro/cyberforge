@@ -4,6 +4,7 @@ Public storefront API for ecommerce projects.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -44,11 +45,17 @@ async def _get_project(slug: str) -> dict[str, Any]:
     currency = (getattr(row, "ecommerce_currency", None) or "eur").strip().lower()
     shipping = getattr(row, "ecommerce_shipping_flat_cents", None)
     shipping_cents = int(shipping) if shipping is not None else 500
+    shop_url = (row.url_production or row.url_preview or "").strip()
+    if not shop_url:
+        shop_url = f"https://{row.slug}.vercel.app"
     return {
         "id": row.id,
         "slug": row.slug,
         "currency": currency or "eur",
         "shipping_flat_cents": max(0, shipping_cents),
+        "client_name": (row.title or row.slug or "Boutique").strip(),
+        "demo_url": shop_url,
+        "couleur_primaire": "#d4a843",
     }
 
 
@@ -274,5 +281,80 @@ async def stripe_webhook(
         )
         if r.status_code >= 400:
             logger.warning("webhook order update failed: %s", r.text[:200])
+            return {"status": "ok", "type": "checkout.session.completed"}
+
+    customer_email = ""
+    details = obj.get("customer_details") or {}
+    if isinstance(details, dict):
+        customer_email = str(details.get("email") or "").strip()
+
+    line_items: list[dict[str, Any]] = []
+    raw_items = obj.get("line_items") or {}
+    if isinstance(raw_items, dict):
+        for item in raw_items.get("data") or []:
+            if not isinstance(item, dict):
+                continue
+            price_data = item.get("price") or {}
+            product_data = price_data.get("product_data") or {}
+            line_items.append(
+                {
+                    "name": product_data.get("name")
+                    or price_data.get("nickname")
+                    or "Article",
+                    "quantity": int(item.get("quantity") or 1),
+                    "unit_amount": int(price_data.get("unit_amount") or 0),
+                }
+            )
+
+    order_id = str((obj.get("metadata") or {}).get("order_id") or "").strip()
+    if not line_items and order_id:
+        items_url = f"{store._rest_url()}/ecommerce_order_items"  # noqa: SLF001
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            ri = await client.get(
+                items_url,
+                headers=store._headers(),  # noqa: SLF001
+                params={
+                    "order_id": f"eq.{order_id}",
+                    "select": "name_snapshot,price_cents_snapshot,qty",
+                },
+            )
+            if ri.status_code < 400:
+                for row in ri.json() or []:
+                    if not isinstance(row, dict):
+                        continue
+                    line_items.append(
+                        {
+                            "name": row.get("name_snapshot") or "Article",
+                            "quantity": int(row.get("qty") or 1),
+                            "unit_amount": int(row.get("price_cents_snapshot") or 0),
+                        }
+                    )
+
+    amount_total = obj.get("amount_total")
+    total = float(amount_total) / 100.0 if amount_total is not None else 0.0
+    currency = str(obj.get("currency") or project.get("currency") or "eur")
+
+    async def _send_order_email() -> None:
+        try:
+            from agents.email_ai import send_order_confirmation
+
+            await send_order_confirmation(
+                order_data={
+                    "items": line_items,
+                    "total": total,
+                    "currency": currency,
+                    "customer_email": customer_email,
+                },
+                shop_name=str(project.get("client_name") or "Boutique"),
+                shop_url=str(project.get("demo_url") or ""),
+                couleur_primaire=str(project.get("couleur_primaire") or "#d4a843"),
+                customer_email=customer_email or None,
+            )
+        except Exception as exc:
+            logger.warning("[EmailAI] confirmation commande ignorée: %s", exc)
+
+    if customer_email:
+        asyncio.create_task(_send_order_email())
+
     return {"status": "ok", "type": "checkout.session.completed"}
 

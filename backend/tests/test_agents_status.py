@@ -3,7 +3,7 @@
 from pydantic import SecretStr
 
 from config import Settings
-from security.agent_readiness import agent_is_active, deploy_ready, supabase_ready
+from security.agent_readiness import agent_is_active, brevo_ready, deploy_ready, supabase_ready
 
 
 def _settings(**kwargs: object) -> Settings:
@@ -90,6 +90,17 @@ def test_database_auth_require_supabase_url_and_secret() -> None:
     assert supabase_ready(settings) is True
     assert agent_is_active("database", settings) is True
     assert agent_is_active("auth", settings) is True
+
+
+def test_email_requires_brevo(monkeypatch) -> None:
+    monkeypatch.setenv("BREVO_API_KEY", "brevo-test-key")
+    assert brevo_ready() is True
+    assert agent_is_active("email") is True
+
+    monkeypatch.delenv("BREVO_API_KEY", raising=False)
+    settings = _settings(brevo_api_key=None)
+    assert brevo_ready(settings) is False
+    assert agent_is_active("email", settings) is False
 
 
 def test_payment_requires_stripe(monkeypatch) -> None:

@@ -6,6 +6,7 @@ Called by the Vercel Next.js reservation site.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -43,7 +44,16 @@ async def _get_project_by_slug(slug: str) -> dict[str, Any]:
     row = await store.get_project(pid)
     if not row or row.type != "site_reservation" or row.deleted_at:
         raise HTTPException(status_code=404, detail="Projet introuvable.")
-    return {"id": row.id, "slug": row.slug}
+    shop_url = (row.url_production or row.url_preview or "").strip()
+    if not shop_url:
+        shop_url = f"https://{row.slug}.vercel.app"
+    return {
+        "id": row.id,
+        "slug": row.slug,
+        "client_name": (row.title or row.slug or "Hébergement").strip(),
+        "demo_url": shop_url,
+        "couleur_primaire": "#1D9E75",
+    }
 
 
 class ServiceRow(BaseModel):
@@ -262,7 +272,7 @@ async def reserve(slug: str, body: ReserveRequest) -> ReserveResponse:
             params={
                 "id": f"eq.{body.service_id}",
                 "project_id": f"eq.{project['id']}",
-                "select": "id,duration_min,active",
+                "select": "id,duration_min,price_cents,active",
             },
         )
         if rsvc.status_code >= 400:
@@ -274,6 +284,7 @@ async def reserve(slug: str, body: ReserveRequest) -> ReserveResponse:
         if not svc.get("active", True):
             raise HTTPException(status_code=400, detail="Service inactif.")
         duration = int(svc["duration_min"])
+        price_cents = int(svc.get("price_cents") or 0)
 
     ends = starts + timedelta(minutes=duration)
 
@@ -306,7 +317,40 @@ async def reserve(slug: str, body: ReserveRequest) -> ReserveResponse:
             raise HTTPException(status_code=502, detail="Supabase error")
         rows = resp.json()
         row = rows[0] if isinstance(rows, list) and rows else rows
-        return ReserveResponse(reservation_id=row["id"], status=row.get("status", "confirmed"))
+
+    nights = max(1, (ends.date() - starts.date()).days) or 1
+    total_price = round(price_cents / 100.0, 2) if price_cents > 0 else 0.0
+    property_contact = ""
+    try:
+        auth = await store.get_project_auth(str(project["id"]))
+        if auth and auth.client_email:
+            property_contact = str(auth.client_email).strip()
+    except Exception:
+        property_contact = ""
+
+    async def _send_reservation_email() -> None:
+        try:
+            from agents.email_ai import send_reservation_confirmation
+
+            await send_reservation_confirmation(
+                reservation_data={
+                    "guest_name": body.customer_name,
+                    "guest_email": body.customer_email,
+                    "checkin": starts.strftime("%d/%m/%Y %H:%M"),
+                    "checkout": ends.strftime("%d/%m/%Y %H:%M"),
+                    "nights": nights,
+                    "total_price": total_price,
+                    "property_contact": property_contact,
+                },
+                property_name=str(project.get("client_name") or "Hébergement"),
+                property_url=str(project.get("demo_url") or ""),
+                couleur_primaire=str(project.get("couleur_primaire") or "#1D9E75"),
+            )
+        except Exception as exc:
+            logger.warning("[EmailAI] confirmation réservation ignorée: %s", exc)
+
+    asyncio.create_task(_send_reservation_email())
+    return ReserveResponse(reservation_id=row["id"], status=row.get("status", "confirmed"))
 
 
 @router.post("/reservation/{slug}/checkout", response_model=ReservationCheckoutResponse)

@@ -56,6 +56,15 @@ def stripe_ready(settings: Settings | None = None) -> bool:
     )
 
 
+def brevo_ready(settings: Settings | None = None) -> bool:
+    s = settings or get_settings()
+    return (
+        _env_nonempty("BREVO_API_KEY")
+        or _settings_secret_nonempty(s, "brevo_api_key")
+        or _vault_nonempty("BREVO_API_KEY")
+    )
+
+
 def agent_is_active(agent_id: str, settings: Settings | None = None) -> bool:
     """Actif si les clés requises sont disponibles (coffre, .env ou Settings)."""
     if agent_id == "electron":
@@ -68,4 +77,6 @@ def agent_is_active(agent_id: str, settings: Settings | None = None) -> bool:
         return supabase_ready(settings)
     if agent_id == "payment":
         return stripe_ready(settings)
+    if agent_id == "email":
+        return brevo_ready(settings)
     return False
