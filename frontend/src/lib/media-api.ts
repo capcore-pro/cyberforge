@@ -163,6 +163,30 @@ export function generateMediaImage(body: {
   });
 }
 
+export function searchMediaPhotos(query: string, count = 12) {
+  const q = new URLSearchParams();
+  q.set("q", query.trim());
+  q.set("count", String(count));
+  return apiRequest<MediaAsset[]>({
+    method: "GET",
+    path: `${MEDIA}/search?${q.toString()}`,
+    timeoutMs: 120_000,
+  });
+}
+
+export function upscaleMediaAsset(assetId: string, scale: 2 | 4) {
+  return apiRequest<MediaAsset>({
+    method: "POST",
+    path: `${MEDIA}/upscale`,
+    body: { asset_id: assetId, scale },
+    timeoutMs: 300_000,
+  });
+}
+
+export function isAssetUpscaled(asset: MediaAsset): boolean {
+  return asset.tags.some((t) => t.toLowerCase() === "upscaled");
+}
+
 export function importMediaFromUrl(body: {
   url: string;
   filename?: string;

@@ -19,8 +19,10 @@ import {
   deleteMediaAsset,
   fetchMediaAssets,
   getAssetAbsolutePublicUrl,
+  upscaleMediaAsset,
   type MediaAsset,
 } from "@/lib/media-api";
+import { fetchSecretsStatus } from "@/lib/secrets-api";
 
 function reportError(context: string, res: { ok: boolean; status?: number }) {
   const msg = apiErrorMessage(res, `${context} impossible.`);
@@ -40,7 +42,10 @@ export function MediaLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [addInitialTab, setAddInitialTab] = useState<"generate" | "import">("import");
+  const [addInitialTab, setAddInitialTab] = useState<"generate" | "import" | "search">(
+    "import",
+  );
+  const [replicateConfigured, setReplicateConfigured] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [detailAsset, setDetailAsset] = useState<MediaAsset | null>(null);
@@ -72,7 +77,15 @@ export function MediaLibraryPage() {
     void load();
   }, [load]);
 
-  function openAdd(tab: "generate" | "import" = "import") {
+  useEffect(() => {
+    void fetchSecretsStatus().then((res) => {
+      if (res.ok && res.data) {
+        setReplicateConfigured(Boolean(res.data.replicate));
+      }
+    });
+  }, []);
+
+  function openAdd(tab: "generate" | "import" | "search" = "import") {
     setAddInitialTab(tab);
     setAddOpen(true);
   }
@@ -86,6 +99,25 @@ export function MediaLibraryPage() {
       setToast(url);
     }
     window.setTimeout(() => setToast(null), 2500);
+  }
+
+  async function handleUpscale(asset: MediaAsset, scale: 2 | 4) {
+    setBusyId(asset.id);
+    setError(null);
+    const res = await upscaleMediaAsset(asset.id, scale);
+    setBusyId(null);
+    if (!res.ok || !res.data) {
+      setError(
+        reportError(
+          "upscaling",
+          res.ok ? { ok: false, status: 502 } : res,
+        ) ?? `Upscaling échoué — vérifiez REPLICATE_API_KEY.`,
+      );
+      return;
+    }
+    setToast(`Image upscalée ×${scale}.`);
+    window.setTimeout(() => setToast(null), 2500);
+    void load();
   }
 
   async function handleDelete(asset: MediaAsset) {
@@ -169,12 +201,12 @@ export function MediaLibraryPage() {
           <ImageIcon className="h-12 w-12 text-white/20" aria-hidden />
           <p className="text-sm text-white/30">Aucune image pour l&apos;instant</p>
           <p className="text-xs text-white/20">
-            Générez votre premier projet pour alimenter la médiathèque
+            Générez, importez ou recherchez des visuels pour vos projets clients
           </p>
           <button
             type="button"
             className={`${GOLD_BTN} px-6 py-2.5`}
-            onClick={() => openAdd("import")}
+            onClick={() => openAdd("search")}
           >
             Rechercher des photos
           </button>
@@ -192,9 +224,11 @@ export function MediaLibraryPage() {
                 key={asset.id}
                 asset={asset}
                 busy={busyId === asset.id}
+                replicateConfigured={replicateConfigured}
                 onOpen={setDetailAsset}
                 onCopyUrl={handleCopyUrl}
                 onDelete={handleDelete}
+                onUpscale={handleUpscale}
               />
             ))}
           </div>

@@ -56,6 +56,15 @@ def stripe_ready(settings: Settings | None = None) -> bool:
     )
 
 
+def replicate_ready(settings: Settings | None = None) -> bool:
+    s = settings or get_settings()
+    return (
+        _env_nonempty("REPLICATE_API_KEY")
+        or _settings_secret_nonempty(s, "replicate_api_key")
+        or _vault_nonempty("REPLICATE_API_KEY")
+    )
+
+
 def brevo_ready(settings: Settings | None = None) -> bool:
     s = settings or get_settings()
     return (
@@ -79,4 +88,6 @@ def agent_is_active(agent_id: str, settings: Settings | None = None) -> bool:
         return stripe_ready(settings)
     if agent_id == "email":
         return brevo_ready(settings)
+    if agent_id == "media":
+        return replicate_ready(settings)
     return False

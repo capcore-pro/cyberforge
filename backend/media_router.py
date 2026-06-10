@@ -90,6 +90,18 @@ class ProjectCoverResponse(BaseModel):
     asset: AssetResponse | None = None
 
 
+class UpscaleRequest(BaseModel):
+    asset_id: str = Field(..., min_length=1, max_length=128)
+    scale: int = Field(default=4, ge=2, le=4)
+
+
+class PexelsSearchHit(BaseModel):
+    url: str
+    thumbnail: str
+    author: str = ""
+    source: str = "pexels"
+
+
 def _enrich_asset(asset: dict[str, Any]) -> dict[str, Any]:
     out = dict(asset)
     try:
@@ -146,6 +158,17 @@ def sync_asset_by_id(asset_id: str) -> dict[str, Any] | None:
     if not url:
         return asset
     return update_asset_r2(asset_id, url, r2_key)
+
+
+def _resolve_asset_public_url(asset: dict[str, Any]) -> str:
+    r2 = str(asset.get("r2_url") or "").strip()
+    if r2.startswith("http"):
+        return r2
+    from config import get_settings
+
+    base = get_settings().backend_public_url.rstrip("/")
+    asset_id = str(asset.get("id") or "")
+    return f"{base}/api/media/files/{asset_id}"
 
 
 def _delete_asset_full(asset_id: str) -> bool:
@@ -341,6 +364,93 @@ async def generate_media_image(body: GenerateImageRequest) -> AssetResponse:
         ) from exc
 
     return _asset_response(asset)
+
+
+@router.post("/upscale", response_model=AssetResponse, status_code=201)
+async def upscale_media_asset(body: UpscaleRequest) -> AssetResponse:
+    """Upscale un asset image via Replicate Real-ESRGAN."""
+    from agents.media_ai import MediaAIAgent
+    from tools.replicate_image_gen import ReplicateImageGenerator
+
+    if not ReplicateImageGenerator().is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Replicate non configuré — ajoutez REPLICATE_API_KEY dans Paramètres.",
+        )
+
+    asset = db.get_asset(body.asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Asset introuvable.")
+    if str(asset.get("type")) != "image":
+        raise HTTPException(status_code=400, detail="Seules les images peuvent être upscalées.")
+
+    image_url = _resolve_asset_public_url(asset)
+    agent = MediaAIAgent()
+    result = await agent.upscale(
+        image_url,
+        body.scale,
+        project_id=str(asset.get("project_id") or "") or None,
+    )
+    if not result or not result.get("url"):
+        raise HTTPException(
+            status_code=502,
+            detail="Upscaling Replicate échoué ou indisponible.",
+        )
+
+    scale = int(result.get("scale") or body.scale)
+    safe_name = f"upscaled_{scale}x_{uuid.uuid4().hex[:10]}.png"
+    try:
+        saved = await save_generated_asset(
+            str(result["url"]),
+            safe_name,
+            asset.get("project_id"),
+            source="generated",
+            tags=["upscaled", "replicate", f"scale:{scale}", f"from:{body.asset_id}"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Impossible de télécharger l'image upscalée : {exc}",
+        ) from exc
+
+    return _asset_response(saved)
+
+
+@router.get("/search", response_model=list[AssetResponse])
+async def search_media_photos(
+    q: str = Query(..., min_length=2, max_length=200),
+    count: int = Query(12, ge=1, le=30),
+) -> list[AssetResponse]:
+    """Recherche Pexels et enregistre les résultats en médiathèque."""
+    from agents.media_ai import MediaAIAgent
+
+    agent = MediaAIAgent()
+    hits = await agent.search(q, count)
+    assets: list[AssetResponse] = []
+    for idx, hit in enumerate(hits):
+        url = str(hit.get("url") or "").strip()
+        if not url:
+            continue
+        author = str(hit.get("author") or "").strip()
+        filename = f"pexels_{uuid.uuid4().hex[:8]}.jpg"
+        tags = ["pexels", "search"]
+        if author:
+            tags.append(f"author:{author[:40]}")
+        try:
+            saved = await save_generated_asset(
+                url,
+                filename,
+                None,
+                source="generated",
+                tags=tags,
+            )
+            assets.append(_asset_response(saved))
+        except (ValueError, httpx.HTTPError) as exc:
+            logger.warning("[media] search import ignoré (%s): %s", idx, exc)
+            continue
+    return assets
 
 
 @router.post("/import-url", response_model=AssetResponse, status_code=201)

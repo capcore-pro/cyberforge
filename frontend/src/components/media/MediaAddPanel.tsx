@@ -3,11 +3,20 @@ import { BackButton } from "@/components/BackButton";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
   generateMediaImage,
+  getAssetPublicUrl,
+  searchMediaPhotos,
   uploadMediaAsset,
   type MediaAsset,
 } from "@/lib/media-api";
 
-type AddTab = "generate" | "import";
+type AddTab = "generate" | "import" | "search";
+
+export interface PexelsSearchPreview {
+  url: string;
+  thumbnail: string;
+  author: string;
+  source: string;
+}
 
 export interface MediaAddPanelProps {
   open: boolean;
@@ -25,18 +34,23 @@ export function MediaAddPanel({
   initialTab = "import",
   projectId,
 }: MediaAddPanelProps) {
-  const [tab, setTab] = useState<AddTab>(initialTab === "generate" ? "generate" : "import");
+  const [tab, setTab] = useState<AddTab>(initialTab);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [generatePrompt, setGeneratePrompt] = useState("");
   const [importDrag, setImportDrag] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<PexelsSearchPreview[]>([]);
+  const [savedAssets, setSavedAssets] = useState<MediaAsset[]>([]);
 
   useEffect(() => {
     if (open) {
-      setTab(initialTab === "generate" ? "generate" : "import");
+      setTab(initialTab);
       setError(null);
       setBusy(false);
+      setSearchResults([]);
+      setSavedAssets([]);
     }
   }, [open, initialTab]);
 
@@ -62,6 +76,40 @@ export function MediaAddPanel({
       return;
     }
     onAdded(res.data);
+    onClose();
+  }
+
+  async function handleSearch() {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setError("Saisissez au moins 2 caractères pour la recherche.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const res = await searchMediaPhotos(q, 12);
+    setBusy(false);
+    if (!res.ok || !res.data) {
+      setError(apiErrorMessage(res, "Recherche Pexels impossible."));
+      setSearchResults([]);
+      setSavedAssets([]);
+      return;
+    }
+    setSavedAssets(res.data);
+    setSearchResults(
+      res.data.map((asset) => ({
+        url: asset.local_url ?? "",
+        thumbnail: asset.local_url ?? "",
+        author: asset.tags.find((t) => t.startsWith("author:"))?.replace("author:", "") ?? "",
+        source: "pexels",
+      })),
+    );
+  }
+
+  async function handleAddSearchResult(index: number) {
+    const asset = savedAssets[index];
+    if (!asset) return;
+    onAdded(asset);
     onClose();
   }
 
@@ -112,6 +160,7 @@ export function MediaAddPanel({
         <div className="mb-4 flex gap-2 border-b border-cyber-border pb-2">
           {(
             [
+              ["search", "Rechercher"],
               ["generate", "Générer"],
               ["import", "Importer"],
             ] as const
@@ -141,6 +190,78 @@ export function MediaAddPanel({
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {tab === "search" ? (
+            <div className="space-y-4">
+              <label className="block space-y-2">
+                <span className="text-xs text-cyber-muted">Rechercher des photos…</span>
+                <div className="flex gap-2">
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    disabled={busy}
+                    placeholder="Ex : boulangerie artisanale"
+                    className="cyber-prompt-field min-h-0 flex-1 text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleSearch();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void handleSearch()}
+                    className="cyber-generate-btn shrink-0 px-4 py-2 text-xs"
+                  >
+                    {busy ? "…" : "Chercher"}
+                  </button>
+                </div>
+              </label>
+              {searchResults.length > 0 ? (
+                <div className="grid grid-cols-3 gap-3">
+                  {searchResults.map((hit, idx) => {
+                    const asset = savedAssets[idx];
+                    const thumb = asset
+                      ? getAssetPublicUrl(asset)
+                      : hit.thumbnail || hit.url;
+                    return (
+                      <div
+                        key={`${hit.url}-${idx}`}
+                        className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]"
+                      >
+                        <div className="aspect-[4/3] bg-black/30">
+                          {thumb ? (
+                            <img
+                              src={thumb}
+                              alt={hit.author || "Pexels"}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : null}
+                        </div>
+                        <div className="space-y-2 p-2">
+                          {hit.author ? (
+                            <p className="truncate text-[10px] text-white/45">{hit.author}</p>
+                          ) : null}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void handleAddSearchResult(idx)}
+                            className="w-full rounded-lg border border-[#d4a843]/40 bg-[#d4a843]/10 px-2 py-1.5 text-[11px] font-semibold text-[#d4a843] transition hover:bg-[#d4a843]/20"
+                          >
+                            Ajouter
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-cyber-muted">
+                  Résultats Pexels affichés ici — recherche via l&apos;API backend.
+                </p>
+              )}
+            </div>
+          ) : null}
+
           {tab === "generate" ? (
             <div className="space-y-4">
               <label className="block space-y-2">

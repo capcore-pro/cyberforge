@@ -5,6 +5,7 @@ import {
   formatBytes,
   getAssetPublicUrl,
   getAssetThumbnailUrl,
+  isAssetUpscaled,
   providerLabel,
   type MediaAsset,
 } from "@/lib/media-api";
@@ -27,9 +28,11 @@ export interface MediaAssetCardProps {
   onOpen?: (asset: MediaAsset) => void;
   onCopyUrl?: (asset: MediaAsset) => void;
   onDelete?: (asset: MediaAsset) => void;
+  onUpscale?: (asset: MediaAsset, scale: 2 | 4) => void;
   onSelect?: (asset: MediaAsset) => void;
   selectable?: boolean;
   busy?: boolean;
+  replicateConfigured?: boolean;
 }
 
 export const MediaAssetCard = memo(function MediaAssetCard({
@@ -37,13 +40,19 @@ export const MediaAssetCard = memo(function MediaAssetCard({
   onOpen,
   onCopyUrl,
   onDelete,
+  onUpscale,
   onSelect,
   selectable = false,
   busy = false,
+  replicateConfigured = true,
 }: MediaAssetCardProps) {
   const [imgError, setImgError] = useState(false);
+  const [upscaleOpen, setUpscaleOpen] = useState(false);
   const thumb = asset.type === "image" && !imgError ? getAssetThumbnailUrl(asset) : "";
   const provider = providerLabel(asset);
+  const upscaled = isAssetUpscaled(asset);
+  const canUpscale =
+    asset.type === "image" && !upscaled && Boolean(onUpscale);
 
   const dateLabel = useMemo(
     () =>
@@ -98,8 +107,60 @@ export const MediaAssetCard = memo(function MediaAssetCard({
           </div>
         )}
 
-        {!selectable && (onCopyUrl || onDelete) ? (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+        {upscaled ? (
+          <span className="absolute left-2 top-2 rounded-full border border-[#d4a843]/50 bg-[#d4a843]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#d4a843]">
+            4K
+          </span>
+        ) : null}
+
+        {!selectable && (onCopyUrl || onDelete || canUpscale) ? (
+          <div className="absolute inset-0 flex flex-wrap items-center justify-center gap-2 bg-black/60 p-2 opacity-0 transition-opacity group-hover:opacity-100">
+            {canUpscale ? (
+              <div className="relative">
+                <button
+                  type="button"
+                  title={
+                    replicateConfigured
+                      ? "Upscaler l'image"
+                      : "Configurer REPLICATE_API_KEY dans Paramètres"
+                  }
+                  className={`${GLASS_PILL_BTN} ${!replicateConfigured ? "opacity-60" : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!replicateConfigured) return;
+                    setUpscaleOpen((v) => !v);
+                  }}
+                >
+                  Upscaler
+                </button>
+                {upscaleOpen && replicateConfigured ? (
+                  <div className="absolute bottom-full left-1/2 z-10 mb-1 flex -translate-x-1/2 gap-1 rounded-lg border border-white/10 bg-[#1e2535] p-1 shadow-lg">
+                    <button
+                      type="button"
+                      className={GLASS_PILL_BTN}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUpscaleOpen(false);
+                        onUpscale?.(asset, 2);
+                      }}
+                    >
+                      ×2
+                    </button>
+                    <button
+                      type="button"
+                      className={GLASS_PILL_BTN}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setUpscaleOpen(false);
+                        onUpscale?.(asset, 4);
+                      }}
+                    >
+                      ×4
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {onCopyUrl ? (
               <button
                 type="button"

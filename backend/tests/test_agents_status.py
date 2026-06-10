@@ -1,9 +1,17 @@
 """Tests statut agents pipeline v2 — prérequis clés coffre / .env / Settings."""
 
+from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from api.main import create_app
 from config import Settings
-from security.agent_readiness import agent_is_active, brevo_ready, deploy_ready, supabase_ready
+from security.agent_readiness import (
+    agent_is_active,
+    brevo_ready,
+    deploy_ready,
+    replicate_ready,
+    supabase_ready,
+)
 
 
 def _settings(**kwargs: object) -> Settings:
@@ -101,6 +109,43 @@ def test_email_requires_brevo(monkeypatch) -> None:
     settings = _settings(brevo_api_key=None)
     assert brevo_ready(settings) is False
     assert agent_is_active("email", settings) is False
+
+
+def test_media_requires_replicate(monkeypatch) -> None:
+    monkeypatch.setenv("REPLICATE_API_KEY", "replicate-test")
+    assert replicate_ready() is True
+    assert agent_is_active("media") is True
+
+    monkeypatch.delenv("REPLICATE_API_KEY", raising=False)
+    settings = _settings(replicate_api_key=None)
+    assert replicate_ready(settings) is False
+    assert agent_is_active("media", settings) is False
+
+
+def test_media_agent_status_endpoint(monkeypatch) -> None:
+    monkeypatch.setattr("api.routes.agents_status.replicate_ready", lambda _s=None: True)
+    monkeypatch.setattr(
+        "api.routes.agents_status.agent_is_active",
+        lambda agent_id, _s=None: agent_id == "media",
+    )
+    with TestClient(create_app()) as client:
+        res = client.get("/api/agents/status")
+    assert res.status_code == 200
+    media = next(a for a in res.json()["agents"] if a["id"] == "media")
+    assert media["name"] == "MediaAI"
+    assert media["status"] == "active"
+
+    monkeypatch.setattr("api.routes.agents_status.replicate_ready", lambda _s=None: False)
+    monkeypatch.setattr(
+        "api.routes.agents_status.agent_is_active",
+        lambda agent_id, _s=None: False,
+    )
+    with TestClient(create_app()) as client:
+        res = client.get("/api/agents/status")
+    assert res.status_code == 200
+    media = next(a for a in res.json()["agents"] if a["id"] == "media")
+    assert media["status"] == "standby"
+    assert "REPLICATE_API_KEY" in media["description"]
 
 
 def test_payment_requires_stripe(monkeypatch) -> None:

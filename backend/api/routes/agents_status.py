@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from security.agent_readiness import agent_is_active, brevo_ready
+from security.agent_readiness import agent_is_active, brevo_ready, replicate_ready
 
 load_dotenv(override=True)
 
@@ -23,10 +23,12 @@ _AGENT_CATALOG: tuple[tuple[str, str, str], ...] = (
     ("auth", "AuthAI", "Auth Supabase si application web."),
     ("payment", "PaymentAI", "Stripe si ecommerce / réservation."),
     ("email", "EmailAI", "Notifications Brevo (déploiement, commande, réservation)."),
+    ("media", "MediaAI", "Upscaling Replicate, génération image et recherche Pexels."),
     ("electron", "ElectronAI", "Empaquetage application desktop (.exe)."),
 )
 
 _EMAIL_STANDBY_NOTE = "EmailAI en standby — configurer BREVO_API_KEY"
+_MEDIA_STANDBY_NOTE = "MediaAI en standby — configurer REPLICATE_API_KEY dans Paramètres"
 
 PIPELINE_AGENT_IDS: tuple[str, ...] = tuple(agent_id for agent_id, _, _ in _AGENT_CATALOG)
 
@@ -56,6 +58,8 @@ async def get_agents_status() -> AgentsStatusResponse:
         desc = description
         if agent_id == "email" and not brevo_ready():
             desc = f"{description} — {_EMAIL_STANDBY_NOTE}"
+        if agent_id == "media" and not replicate_ready():
+            desc = f"{description} — {_MEDIA_STANDBY_NOTE}"
         agents.append(
             AgentStatusItem(
                 id=agent_id,
