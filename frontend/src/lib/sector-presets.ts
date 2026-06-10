@@ -29,6 +29,7 @@ export interface GeneratorDetailsForm {
   phone: string;
   email: string;
   address: string;
+  stripe_publishable_key: string;
 }
 
 export const EMPTY_GENERATOR_DETAILS: GeneratorDetailsForm = {
@@ -40,6 +41,7 @@ export const EMPTY_GENERATOR_DETAILS: GeneratorDetailsForm = {
   phone: "",
   email: "",
   address: "",
+  stripe_publishable_key: "",
 };
 
 /** Liste ordonnée — filtrer par kind via `listSectorsForKind`. */
@@ -621,6 +623,7 @@ export function detailsFromPreset(preset: SectorPreset): GeneratorDetailsForm {
     phone: "",
     email: "",
     address: "",
+    stripe_publishable_key: "",
   };
 }
 

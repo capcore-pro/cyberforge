@@ -35,7 +35,13 @@ import {
 import { normalizeRunResponse } from "@/lib/normalize-run-response";
 import { projectTitleFromPrompt } from "@/lib/project-title";
 import { ClientPickerDropdown } from "@/components/generator/ClientPickerDropdown";
-import { fetchClientBranding, listClients, type ClientRecord } from "@/lib/clients-api";
+import {
+  fetchClientBranding,
+  fetchClientDetail,
+  listClients,
+  type ClientRecord,
+} from "@/lib/clients-api";
+import { StripePublishableKeyField } from "@/components/StripePublishableKeyField";
 import { updateProject } from "@/lib/projects-api";
 import {
   clearSelectedClientId,
@@ -351,6 +357,7 @@ export function GeneratorPage({
   );
   const [linkedClientLabel, setLinkedClientLabel] = useState<string | null>(null);
   const [linkedClientPerso, setLinkedClientPerso] = useState(false);
+  const [stripePrefilledFromClient, setStripePrefilledFromClient] = useState(false);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [customizeSaveBusy, setCustomizeSaveBusy] = useState(false);
   const [inspirationUrl, setInspirationUrl] = useState("");
@@ -519,12 +526,24 @@ export function GeneratorPage({
     }
   }
 
+  function applyClientStripeKey(clientStripeKey: string | null | undefined) {
+    if (touchedFields.has("stripe_publishable_key")) return;
+    const key = (clientStripeKey ?? "").trim();
+    setDetailsForm((prev) => {
+      const next = { ...prev, stripe_publishable_key: key };
+      syncPromptFromDetails(next, selectedSectorId, projectName);
+      return next;
+    });
+    setStripePrefilledFromClient(!!key);
+  }
+
   function handleClientSelect(clientId: string) {
     if (!clientId) {
       clearSelectedClientId();
       setLinkedClientId(null);
       setLinkedClientLabel(null);
       setLinkedClientPerso(false);
+      setStripePrefilledFromClient(false);
       return;
     }
     setSelectedClientId(clientId);
@@ -534,6 +553,11 @@ export function GeneratorPage({
         const label = response.data.company?.trim() || response.data.name;
         setLinkedClientLabel(label);
         setLinkedClientPerso(response.data.kind === "perso");
+      }
+    });
+    void fetchClientDetail(clientId).then((response) => {
+      if (response.ok && response.data) {
+        applyClientStripeKey(response.data.stripe_publishable_key);
       }
     });
   }
@@ -552,6 +576,11 @@ export function GeneratorPage({
         const label = response.data.company?.trim() || response.data.name;
         setLinkedClientLabel(label);
         setLinkedClientPerso(response.data.kind === "perso");
+      }
+    });
+    void fetchClientDetail(id).then((response) => {
+      if (response.ok && response.data) {
+        applyClientStripeKey(response.data.stripe_publishable_key);
       }
     });
   }, [isPersonal]);
@@ -809,6 +838,7 @@ export function GeneratorPage({
       phone: data.phone,
       email: data.email,
       address: data.address,
+      stripe_publishable_key: detailsForm.stripe_publishable_key,
     };
     setDetailsForm(nextDetails);
     setServicesText(nextDetails.services.join("\n"));
@@ -878,6 +908,7 @@ export function GeneratorPage({
       phone: response.data.phone,
       email: response.data.email,
       address: response.data.address,
+      stripe_publishable_key: detailsForm.stripe_publishable_key,
     };
     const launchPrompt = buildGeneratorDetailsPrompt(
       selectedKind,
@@ -1054,6 +1085,10 @@ export function GeneratorPage({
           playwright_enabled: isPlaywrightEnabled(),
           lighthouse_enabled: isLighthouseEnabled(),
           research_enabled: isResearchEnabled(),
+          stripe_publishable_key:
+            selectedKind === "ecommerce" && detailsForm.stripe_publishable_key.trim()
+              ? detailsForm.stripe_publishable_key.trim()
+              : null,
         },
         { onStep },
       );
@@ -1624,6 +1659,26 @@ export function GeneratorPage({
             />
           </label>
         </div>
+
+        {selectedKind === "ecommerce" ? (
+          <div className="mb-4 rounded-control border border-white/10 bg-white/[0.03] p-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/45">
+              Paiement Stripe
+            </h3>
+            <StripePublishableKeyField
+              value={detailsForm.stripe_publishable_key}
+              onChange={(value) => {
+                setStripePrefilledFromClient(false);
+                updateDetails({ stripe_publishable_key: value }, "stripe_publishable_key");
+              }}
+              disabled={isRunning}
+              fromClientBadge={stripePrefilledFromClient && !!detailsForm.stripe_publishable_key.trim()}
+            />
+            <p className="mt-2 text-xs text-white/40">
+              Laissez vide pour conserver un panier local sans paiement en ligne.
+            </p>
+          </div>
+        ) : null}
 
         <PromptGeneratorPanel
           disabled={isRunning}

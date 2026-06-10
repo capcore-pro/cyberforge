@@ -215,6 +215,7 @@ export async function streamCoremindRun(
         generation_mode: body.generation_mode ?? null,
         inspiration_brief: body.inspiration_brief ?? null,
         firecrawl_result: body.firecrawl_result ?? null,
+        stripe_publishable_key: body.stripe_publishable_key?.trim() || null,
       }),
       signal: controller.signal,
     });

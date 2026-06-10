@@ -23,6 +23,21 @@ logger = logging.getLogger(__name__)
 AGENT_TIMEOUT_SECONDS = 600
 
 
+def _apply_stripe_publishable_key(brief: dict[str, Any], stripe_publishable_key: str | None) -> None:
+    """Transmet la clé publishable client au brief (sans journaliser la valeur)."""
+    pk = (stripe_publishable_key or "").strip()
+    if not pk:
+        pc = brief.get("payment_config")
+        if isinstance(pc, dict):
+            pc["publishable_key"] = None
+        return
+    pc = brief.get("payment_config")
+    if not isinstance(pc, dict):
+        pc = {}
+        brief["payment_config"] = pc
+    pc["publishable_key"] = pk
+
+
 class PipelineRequest(BaseModel):
     prompt: str = Field(min_length=3)
     project_type: str = "vitrine_next"
@@ -30,6 +45,7 @@ class PipelineRequest(BaseModel):
     generation_mode: str | None = None
     inspiration_brief: str | None = None
     firecrawl_result: dict[str, Any] | None = None
+    stripe_publishable_key: str | None = None
 
 
 def _print_supervisor_fail(agent_name: str, errors: list[str]) -> None:
@@ -189,6 +205,8 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
             success_log=lambda p: f"type={p.get('payment_type', '?')}",
         )
 
+    _apply_stripe_publishable_key(brief, req.stripe_publishable_key)
+
     generator = GeneratorAI()
 
     async def _run_generator(correction: str) -> dict[str, Any]:
@@ -223,12 +241,17 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
     sector = str(brief.get("sector") or "")
     html_in = str(result["html"])
 
+    payment_config = brief.get("payment_config")
+    if not isinstance(payment_config, dict):
+        payment_config = None
+
     async def _run_deploy(_prompt: str) -> dict[str, Any]:
         return await deploy_ai.run(
             html_in,
             title=client_name,
             sector=sector,
             project_type=str(brief.get("project_type") or req.project_type or "vitrine_next"),
+            payment_config=payment_config,
         )
 
     async def _validate_deploy(deployed: dict[str, Any]) -> dict[str, Any]:

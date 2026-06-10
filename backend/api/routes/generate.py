@@ -43,6 +43,7 @@ class GenerateRequest(BaseModel):
     generation_mode: str | None = None
     inspiration_brief: str | None = None
     firecrawl_result: dict[str, Any] | None = None
+    stripe_publishable_key: str | None = None
 
 
 class GenerateResponse(BaseModel):
@@ -131,6 +132,7 @@ async def generate_site(body: GenerateRequest) -> GenerateResponse:
                 generation_mode=body.generation_mode,
                 inspiration_brief=body.inspiration_brief,
                 firecrawl_result=body.firecrawl_result,
+                stripe_publishable_key=body.stripe_publishable_key,
             )
         )
     except Exception as exc:

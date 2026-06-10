@@ -85,6 +85,8 @@ export interface CoreMindRequest {
   lighthouse_enabled?: boolean | null;
   /** ResearchAI Brave + Exa après ArchitectAI */
   research_enabled?: boolean | null;
+  /** Clé Stripe publishable (pk_test_ / pk_live_) — e-commerce uniquement */
+  stripe_publishable_key?: string | null;
 }
 
 /** Tarification ArchitectAI (SSE ou GET /projects/{id}/costs) */

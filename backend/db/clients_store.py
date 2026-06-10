@@ -29,7 +29,7 @@ CLIENT_BASE_SELECT = (
     "id,est_perso,nom,entreprise,email,telephone,couleur,logo_url,created_at"
 )
 # Colonnes ajoutées par migration 005 (comptabilité / fiche légale)
-CLIENT_EXTENDED_SELECT = "adresse,siret,actif,legal_client_id"
+CLIENT_EXTENDED_SELECT = "adresse,siret,actif,legal_client_id,stripe_publishable_key"
 CLIENT_LIST_SELECT = f"{CLIENT_BASE_SELECT},{CLIENT_EXTENDED_SELECT}"
 CLIENT_DETAIL_SELECT = CLIENT_LIST_SELECT
 
@@ -47,6 +47,7 @@ class ClientRow(BaseModel):
     legal_client_id: str | None = None
     primary_color: str | None = None
     logo_url: str | None = None
+    stripe_publishable_key: str | None = None
     created_at: str
 
 
@@ -131,6 +132,7 @@ class ClientsStore:
         legal_client_id: str | None = None,
         primary_color: str | None = None,
         logo_url: str | None = None,
+        stripe_publishable_key: str | None = None,
         kind: ClientKind = "client",
     ) -> ClientRow:
         if not self.is_configured():
@@ -147,6 +149,7 @@ class ClientsStore:
             legal_client_id=legal_client_id,
             primary_color=primary_color,
             logo_url=logo_url,
+            stripe_publishable_key=stripe_publishable_key,
             kind=kind,
         )
 
@@ -181,6 +184,7 @@ class ClientsStore:
         legal_client_id: str | None = None,
         primary_color: str | None = None,
         logo_url: str | None = None,
+        stripe_publishable_key: str | None = None,
         kind: ClientKind | None = None,
     ) -> ClientRow | None:
         if not self.is_configured():
@@ -209,6 +213,8 @@ class ClientsStore:
             patch["logo_url"] = _optional_str(logo_url)
         if kind is not None:
             patch["est_perso"] = kind == "perso"
+        if stripe_publishable_key is not None:
+            patch["stripe_publishable_key"] = _optional_str(stripe_publishable_key)
 
         if not patch:
             return await self.get_by_id(client_id)
@@ -288,6 +294,7 @@ def _row_to_db(
     legal_client_id: str | None = None,
     primary_color: str | None,
     logo_url: str | None,
+    stripe_publishable_key: str | None = None,
     kind: ClientKind,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
@@ -306,6 +313,8 @@ def _row_to_db(
         body["siret"] = _optional_str(siret)
     if legal_client_id is not None:
         body["legal_client_id"] = _optional_str(legal_client_id)
+    if stripe_publishable_key is not None:
+        body["stripe_publishable_key"] = _optional_str(stripe_publishable_key)
     return body
 
 
@@ -325,6 +334,7 @@ def _client_from_row(row: dict[str, Any]) -> ClientRow:
         legal_client_id=row.get("legal_client_id"),
         primary_color=row.get("couleur") if row.get("couleur") is not None else row.get("primary_color"),
         logo_url=row.get("logo_url"),
+        stripe_publishable_key=row.get("stripe_publishable_key"),
         created_at=str(row.get("created_at") or ""),
     )
 

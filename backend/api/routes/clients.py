@@ -81,6 +81,11 @@ class ClientCreateRequest(BaseModel):
     active: bool = True
     primary_color: str | None = Field(default=None, max_length=16)
     logo_url: str | None = Field(default=None, max_length=600_000)
+    stripe_publishable_key: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Clé Stripe publishable (pk_test_ / pk_live_) — jamais la clé secrète.",
+    )
 
 
 class ClientUpdateRequest(BaseModel):
@@ -93,6 +98,7 @@ class ClientUpdateRequest(BaseModel):
     active: bool | None = None
     primary_color: str | None = Field(default=None, max_length=16)
     logo_url: str | None = Field(default=None, max_length=600_000)
+    stripe_publishable_key: str | None = Field(default=None, max_length=200)
 
 
 class ClientBrandingResponse(BaseModel):
@@ -162,6 +168,7 @@ async def create_client(body: ClientCreateRequest) -> ClientRow:
             legal_client_id=legal_id,
             primary_color=body.primary_color,
             logo_url=body.logo_url,
+            stripe_publishable_key=body.stripe_publishable_key,
             kind=body.kind,
         )
     except SupabaseStoreError as exc:
@@ -252,6 +259,7 @@ async def update_client(client_id: str, body: ClientUpdateRequest) -> ClientRow:
             legal_client_id=legal_id,
             primary_color=body.primary_color,
             logo_url=body.logo_url,
+            stripe_publishable_key=body.stripe_publishable_key,
         )
     except SupabaseStoreError as exc:
         raise _http_error_from_supabase(exc, "PATCH /clients/{id}") from exc

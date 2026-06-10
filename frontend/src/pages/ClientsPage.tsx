@@ -20,6 +20,7 @@ import {
   saveClientMeta,
   splitClientName,
 } from "@/lib/client-page-utils";
+import { StripePublishableKeyField } from "@/components/StripePublishableKeyField";
 import {
   DEMO_STATUS_LABELS,
   createClient,
@@ -264,6 +265,9 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
   const [notes, setNotes] = useState("");
   const [notesSaved, setNotesSaved] = useState(true);
   const [clientWebsite, setClientWebsite] = useState("");
+  const [stripeKeyDraft, setStripeKeyDraft] = useState("");
+  const [stripeKeySaving, setStripeKeySaving] = useState(false);
+  const [stripeKeyError, setStripeKeyError] = useState<string | null>(null);
   const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedClient = useMemo(
@@ -348,6 +352,8 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
     const meta = loadClientMeta(clientId);
     setNotes(meta.notes);
     setClientWebsite(meta.website);
+    setStripeKeyDraft(clientDetail.stripe_publishable_key ?? "");
+    setStripeKeyError(null);
     setNotesSaved(true);
 
     if (legalClientsRes.ok && legalClientsRes.data) {
@@ -476,6 +482,22 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
     setFormOpen(false);
     setNotes(values.notes.trim());
     setClientWebsite(values.website.trim());
+    await loadClients();
+    void loadDetail(selectedId);
+  }
+
+  async function handleSaveStripeKey() {
+    if (!selectedId) return;
+    setStripeKeySaving(true);
+    setStripeKeyError(null);
+    const response = await updateClient(selectedId, {
+      stripe_publishable_key: stripeKeyDraft.trim() || null,
+    });
+    setStripeKeySaving(false);
+    if (!response.ok) {
+      setStripeKeyError(apiErrorMessage(response, "Enregistrement impossible."));
+      return;
+    }
     await loadClients();
     void loadDetail(selectedId);
   }
@@ -809,6 +831,36 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
                   Supprimer
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div className={SECTION_GLASS}>
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-white/45">
+              Paiement Stripe
+            </h3>
+            <StripePublishableKeyField
+              value={stripeKeyDraft}
+              onChange={setStripeKeyDraft}
+              disabled={stripeKeySaving || detailLoading}
+            />
+            {stripeKeyError ? (
+              <p className="mt-2 rounded-control border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+                {stripeKeyError}
+              </p>
+            ) : null}
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                disabled={
+                  stripeKeySaving ||
+                  detailLoading ||
+                  stripeKeyDraft.trim() === (detail?.stripe_publishable_key ?? "").trim()
+                }
+                onClick={() => void handleSaveStripeKey()}
+                className={GOLD_BTN}
+              >
+                {stripeKeySaving ? "Enregistrement…" : "Enregistrer la clé"}
+              </button>
             </div>
           </div>
 

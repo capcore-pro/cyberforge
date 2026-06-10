@@ -4,6 +4,7 @@ DeployAI — injection images Pexels + déploiement Cloudflare Pages (cyberforge
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from html import escape
@@ -110,6 +111,90 @@ def inject_cart_js(html: str) -> str:
     if removed:
         logger.info("[DeployAI] %d script(s) panier remplacé(s)", removed)
     logger.info("[DeployAI] JS panier injecté avant </body>")
+    return out
+
+
+def inject_stripe_checkout(
+    html: str,
+    *,
+    project_type: str | None,
+    payment_config: dict[str, Any] | None,
+) -> str:
+    """Injecte Stripe.js + redirectToCheckout si clé publishable présente (e-commerce)."""
+    if not _is_ecommerce_project(project_type):
+        return html
+
+    pk = ""
+    if isinstance(payment_config, dict):
+        pk = str(payment_config.get("publishable_key") or "").strip()
+    if not pk or not pk.startswith("pk_"):
+        return html
+
+    raw = (html or "").strip()
+    if not raw:
+        return html
+
+    pk_js = json.dumps(pk)
+    stripe_block = f"""
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+(function() {{
+  var stripe = Stripe({pk_js});
+  window.submitOrder = function() {{
+    if (!window.cart || !window.cart.length) return;
+    stripe.redirectToCheckout({{
+      lineItems: window.cart.map(function(item) {{
+        return {{
+          price_data: {{
+            currency: 'eur',
+            product_data: {{ name: item.name }},
+            unit_amount: Math.round(item.price * 100)
+          }},
+          quantity: item.qty
+        }};
+      }}),
+      mode: 'payment',
+      successUrl: window.location.href + '?payment=success',
+      cancelUrl: window.location.href + '?payment=cancelled'
+    }});
+  }};
+  document.addEventListener('DOMContentLoaded', function() {{
+    var params = new URLSearchParams(window.location.search);
+    var status = params.get('payment');
+    if (!status) return;
+    var banner = document.createElement('div');
+    banner.style.cssText = 'position:sticky;top:0;z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;font-size:14px;font-weight:600;';
+    if (status === 'success') {{
+      banner.style.background = '#065f46';
+      banner.style.color = '#ecfdf5';
+      banner.textContent = 'Paiement confirmé — merci pour votre commande !';
+    }} else if (status === 'cancelled') {{
+      banner.style.background = '#b45309';
+      banner.style.color = '#fffbeb';
+      banner.textContent = 'Paiement annulé — votre panier a été conservé.';
+    }} else {{
+      return;
+    }}
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Fermer');
+    close.textContent = '×';
+    close.style.cssText = 'background:transparent;border:none;color:inherit;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;';
+    close.addEventListener('click', function() {{ banner.remove(); }});
+    banner.appendChild(close);
+    document.body.insertBefore(banner, document.body.firstChild);
+  }});
+}})();
+</script>
+"""
+    body_m = _BODY_CLOSE_RE.search(raw)
+    if not body_m:
+        out = raw.rstrip() + "\n" + stripe_block.strip() + "\n"
+    else:
+        pos = body_m.start()
+        out = raw[:pos] + stripe_block + "\n" + raw[pos:]
+
+    logger.info("[DeployAI] Stripe Checkout injecté (e-commerce)")
     return out
 
 
@@ -239,6 +324,7 @@ class DeployAI:
         title: str = "",
         sector: str | None = None,
         project_type: str | None = None,
+        payment_config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         raw = (html or "").strip()
         if not raw:
@@ -255,6 +341,11 @@ class DeployAI:
                 "— injection panier avant Cloudflare",
             )
             enriched = inject_cart_js(enriched)
+            enriched = inject_stripe_checkout(
+                enriched,
+                project_type=project_type,
+                payment_config=payment_config,
+            )
             print(f"[DeployAI] enriched réassigné, taille HTML={len(enriched)}")
         else:
             print(

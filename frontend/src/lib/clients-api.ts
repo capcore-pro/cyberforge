@@ -22,6 +22,7 @@ export interface ClientRecord {
   legal_client_id: string | null;
   primary_color: string | null;
   logo_url: string | null;
+  stripe_publishable_key: string | null;
   created_at: string;
 }
 
@@ -60,6 +61,7 @@ export interface ClientPayload {
   active?: boolean;
   primary_color?: string | null;
   logo_url?: string | null;
+  stripe_publishable_key?: string | null;
 }
 
 export const DEMO_STATUS_LABELS: Record<DemoStatusSlug, string> = {
