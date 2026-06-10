@@ -346,6 +346,18 @@ async def _run_pipeline_body(
 
     _apply_stripe_publishable_key(brief, req.stripe_publishable_key)
 
+    try:
+        from knowledge.knowledge_service import get_knowledge_service
+
+        knowledge_ctx = await get_knowledge_service().get_context_for_prompt(
+            query=str(brief.get("description") or req.prompt),
+            project_id=brief.get("project_id"),
+        )
+        if knowledge_ctx:
+            brief["knowledge_context"] = knowledge_ctx
+    except Exception as exc:
+        logger.warning("[Pipeline] Knowledge Engine indisponible — %s", exc)
+
     generator = GeneratorAI()
 
     await _emit_agent_start(

@@ -438,6 +438,9 @@ def _build_user_message(
     if not isinstance(ds, dict) or not ds:
         ds = build_design_system(brief)
     extra += "\n\n" + format_design_system_for_prompt(ds)
+    kc = brief.get("knowledge_context")
+    if isinstance(kc, str) and kc.strip():
+        extra += "\n\n## knowledge_context\n" + kc.strip()
     brief_limit = 6000 if _is_site_reservation_clone(brief) else 12000
     body = (
         "## Brief client (JSON)\n"
