@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from agents.sector_generator_prompts import (
+    APP_WEB_APPENDIX,
     SECTOR_GENERATOR_PROFILES,
+    _brief_kind,
     build_sector_generator_appendix,
+    is_app_web_brief,
     resolve_sector_generator_profile,
 )
 
@@ -33,6 +36,11 @@ def test_all_catalogued_sectors_have_profiles() -> None:
         "hightech-electronique",
         "maison-deco",
         "fleurs-cadeaux",
+        "dashboard-analytics",
+        "crm-clients",
+        "planning-rdv",
+        "gestion-entreprise",
+        "stock-inventaire",
     }
     profile_ids = {p.id for p in SECTOR_GENERATOR_PROFILES}
     assert expected_ids == profile_ids
@@ -91,3 +99,30 @@ def test_sector_from_prompt_line() -> None:
     profile = resolve_sector_generator_profile(brief)
     assert profile is not None
     assert profile.id == "hotel-hebergement"
+
+
+def test_application_web_brief_kind() -> None:
+    brief = {"project_type": "application_web", "sector": "CRM / clients"}
+    assert _brief_kind(brief) == "app_web"
+    assert is_app_web_brief(brief)
+
+
+def test_app_web_crm_profile() -> None:
+    brief = {
+        "project_type": "application_web",
+        "sector": "CRM / clients",
+        "client_name": "CapCore CRM",
+    }
+    profile = resolve_sector_generator_profile(brief)
+    assert profile is not None
+    assert profile.id == "crm-clients"
+    appendix = build_sector_generator_appendix(brief)
+    assert "tableau clients" in appendix.lower()
+    assert "app web" in appendix.lower()
+
+
+def test_app_web_appendix_has_required_ids() -> None:
+    assert 'id="login-screen"' in APP_WEB_APPENDIX
+    assert 'id="app-shell"' in APP_WEB_APPENDIX
+    assert "demo2024" in APP_WEB_APPENDIX
+    assert "#0f1117" in APP_WEB_APPENDIX

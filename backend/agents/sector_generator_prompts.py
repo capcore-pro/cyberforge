@@ -9,7 +9,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Literal
 
-SectorKind = Literal["vitrine", "reservation", "ecommerce"]
+SectorKind = Literal["vitrine", "reservation", "ecommerce", "app_web"]
 
 
 @dataclass(frozen=True)
@@ -48,10 +48,14 @@ def _brief_kind(brief: dict[str, Any]) -> SectorKind | None:
     prompt = str(b.get("prompt") or "")
     for key in ("project_type", "generation_mode"):
         val = str(b.get(key) or "").strip().lower().replace("-", "_")
+        if val in ("application_web", "real_app"):
+            return "app_web"
         if val == "site_reservation":
             return "reservation"
         if val in ("ecommerce", "saas_dashboard"):
             return "ecommerce"
+    if re.search(r"(?m)^TYPE:\s*application_web\b", prompt, re.I):
+        return "app_web"
     if re.search(r"(?m)^TYPE:\s*site_reservation\b", prompt, re.I):
         return "reservation"
     if re.search(r"(?m)^TYPE:\s*ecommerce\b", prompt, re.I):
@@ -315,6 +319,58 @@ SECTOR_GENERATOR_PROFILES: tuple[SectorGeneratorProfile, ...] = (
 - CTA : « Réserver » / « Nous contacter »
 - Pexels alt : « holiday cottage countryside », « hotel resort pool », « tourist activities hiking », « camping family vacation »""",
     ),
+    # —— App web (5) ——
+    SectorGeneratorProfile(
+        id="dashboard-analytics",
+        kind="app_web",
+        matcher_groups=(("dashboard", "analytics"), ("dashboard",)),
+        instructions="""SECTEUR : Dashboard & Analytics (app web)
+- Vue 1 (Dashboard) : 4 KPI cards (chiffre + variation % + icône SVG) + graphique barres SVG inline (12 mois fictifs)
+- Vue 2 : tableau transactions/événements (5-8 lignes fictives)
+- Vue 3 : formulaire configuration des alertes (seuils, email, fréquence)
+- Sidebar : Dashboard, Transactions, Alertes, Paramètres""",
+    ),
+    SectorGeneratorProfile(
+        id="crm-clients",
+        kind="app_web",
+        matcher_groups=(("crm", "clients"), ("crm",)),
+        instructions="""SECTEUR : CRM & Clients (app web)
+- Vue 1 (Dashboard) : liste clients en cards (nom, email, statut, dernière interaction)
+- Vue 2 : tableau clients filtrable (filtres Tous / Actifs / Prospects / Inactifs) avec 5-8 lignes
+- Vue 3 : formulaire nouveau client (nom, email, téléphone, statut, notes)
+- Sidebar : Dashboard, Clients, Nouveau client, Paramètres""",
+    ),
+    SectorGeneratorProfile(
+        id="planning-rdv",
+        kind="app_web",
+        matcher_groups=(("planning", "rendez-vous"), ("planning", "rdv"), ("planning",)),
+        instructions="""SECTEUR : Planning & RDV (app web)
+- Vue 1 (Dashboard) : grille calendrier semaine (7 colonnes × créneaux horaires) avec RDV colorés par statut
+- Vue 2 : liste RDV du jour avec actions Confirmer / Annuler (5-8 entrées)
+- Vue 3 : formulaire nouveau RDV (client, date, heure, durée, notes)
+- Sidebar : Calendrier, RDV du jour, Nouveau RDV, Paramètres""",
+    ),
+    SectorGeneratorProfile(
+        id="gestion-entreprise",
+        kind="app_web",
+        matcher_groups=(("gestion", "entreprise"), ("gestion",)),
+        instructions="""SECTEUR : Gestion d'entreprise (app web)
+- Vue 1 (Dashboard) : Kanban 3 colonnes (À faire / En cours / Terminé) avec cards projets
+- Vue 2 : liste projets avec membres et deadlines (5-8 lignes)
+- Vue 3 : formulaire nouveau projet (titre, client, deadline, membres, statut)
+- Sidebar : Kanban, Projets, Nouveau projet, Paramètres""",
+    ),
+    SectorGeneratorProfile(
+        id="stock-inventaire",
+        kind="app_web",
+        matcher_groups=(("stock", "inventaire"), ("stock",), ("inventaire",)),
+        instructions="""SECTEUR : Stock & Inventaire (app web)
+- Vue 1 (Dashboard) : grille produits avec badge stock (Disponible / Faible / Rupture) sur chaque card
+- Vue 2 : tableau mouvements entrées/sorties avec dates (5-8 lignes)
+- Vue 3 : formulaire ajout produit (nom, SKU, quantité, seuil alerte, emplacement)
+- Sidebar : Inventaire, Mouvements, Ajouter produit, Paramètres
+- OBLIGATOIRE : badges « Disponible », « Faible » ou « Rupture » visibles sur les produits""",
+    ),
 )
 
 _DEFAULT_BY_KIND: dict[SectorKind, str] = {
@@ -330,6 +386,11 @@ _DEFAULT_BY_KIND: dict[SectorKind, str] = {
 - Catalogue produits, panier JS, formulaire commande
 - CTA : « Ajouter au panier » / « Commander »
 - Pexels alt : produits nommés selon le secteur du brief""",
+    "app_web": """SECTEUR : Application web générique
+- Vues sidebar : Login, Dashboard, Vue principale, Détail, Paramètres
+- Données fictives cohérentes avec database_schema du brief
+- Formulaires alignés sur les colonnes des tables
+- Rôles auth_schema affichés dans Paramètres ou header""",
 }
 
 
@@ -363,13 +424,127 @@ def build_sector_generator_appendix(brief: dict[str, Any]) -> str:
     if profile:
         lines.append(profile.instructions)
     else:
-        lines.append(_DEFAULT_BY_KIND[kind])
-    lines.append(
-        "Règles communes : vocabulaire métier français, sections dans l'ordre indiqué, "
-        "CTA cohérents, chaque <img class='pexels-inject'> avec un alt descriptif "
-        "en anglais (3-6 mots) reprenant les requêtes Pexels du secteur."
-    )
+        lines.append(_DEFAULT_BY_KIND[kind or "vitrine"])
+    if kind == "app_web":
+        lines.append(
+            "Règles communes app web : vocabulaire métier français, 3 vues minimum "
+            "avec switcher JS, données fictives réalistes, champs formulaires alignés "
+            "sur database_schema, rôles auth_schema visibles dans l'UI."
+        )
+    else:
+        lines.append(
+            "Règles communes : vocabulaire métier français, sections dans l'ordre indiqué, "
+            "CTA cohérents, chaque <img class='pexels-inject'> avec un alt descriptif "
+            "en anglais (3-6 mots) reprenant les requêtes Pexels du secteur."
+        )
     return "\n".join(lines)
+
+
+def is_app_web_brief(brief: dict[str, Any]) -> bool:
+    return _brief_kind(brief) == "app_web"
+
+
+APP_WEB_APPENDIX = """
+MODE APPLICATION WEB (project_type application_web ou real_app) :
+Page 100 % autonome — HTML + CSS + JavaScript inline. ZÉRO fetch/API externe.
+PAS de hero vitrine, PAS de Pexels, PAS de Playfair Display — Inter uniquement.
+
+IDS OBLIGATOIRES (exactement ces attributs id) :
+- id="login-screen" : visible par défaut (display:flex ou block)
+- id="app-shell" : caché par défaut (display:none)
+- id="login-password" sur le champ mot de passe
+- Chaque vue : id="view-dashboard", id="view-list", id="view-form" (ou noms métier cohérents)
+- Sidebar nav items avec data-view="view-dashboard" etc.
+
+STRUCTURE OBLIGATOIRE :
+
+1) ÉCRAN LOGIN (#login-screen, affiché par défaut)
+   - Pleine page centrée, fond #0f1117
+   - Logo client + nom de l'app (client_name du brief)
+   - Formulaire : email + mot de passe
+   - Bouton « Se connecter » couleur_primaire du brief
+   - JS onclick sur le bouton :
+     * si mot de passe === "demo2024" → cache #login-screen, affiche #app-shell
+     * sinon alert("Mot de passe incorrect")
+   - Mention discrète : « Démo : demo2024 »
+
+2) APP SHELL (#app-shell, display:none par défaut)
+   - Layout flex horizontal, min-height 100vh, fond #0f1117
+
+   SIDEBAR (fixe gauche, 240px, fond #161b27) :
+   - Logo + nom client en haut
+   - Minimum 3 items navigation avec icônes SVG inline (stroke, 20px)
+   - Item actif : couleur couleur_primaire, fond couleur_primaire à 10% opacity
+   - Bouton « Déconnexion » en bas → cache #app-shell, affiche #login-screen
+   - Sous 768px : sidebar en hamburger (bouton ☰, sidebar slide-in)
+
+   ZONE CONTENU (flex:1, overflow-y:auto, padding 24px) :
+   - Header : titre vue active + bouton « + Nouveau » (couleur_primaire)
+   - Une seule vue visible à la fois (les autres display:none)
+   - Footer minimal dans app-shell (copyright client)
+
+VUES OBLIGATOIRES (minimum 3, switcher JS via sidebar) :
+   - Vue 1 : vue principale du secteur (voir instructions secteur)
+   - Vue 2 : liste/tableau 5-8 entrées fictives cohérentes
+   - Vue 3 : formulaire création/édition
+
+JAVASCRIPT OBLIGATOIRE (scope global, avant </body>) :
+function showView(viewId) {
+  document.querySelectorAll('[id^="view-"]').forEach(v => v.style.display = 'none');
+  const el = document.getElementById(viewId);
+  if (el) el.style.display = 'block';
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const nav = document.querySelector('[data-view="' + viewId + '"]');
+  if (nav) nav.classList.add('active');
+  const title = document.getElementById('view-title');
+  if (title && nav) title.textContent = nav.textContent.trim();
+}
+function login() {
+  const pwd = document.getElementById('login-password').value;
+  if (pwd === 'demo2024') {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').style.display = 'flex';
+    showView('view-dashboard');
+  } else { alert('Mot de passe incorrect'); }
+}
+function logout() {
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+// Hamburger mobile : toggle .sidebar-open sur body ou sidebar
+
+INJECTION AUTH & DATABASE (OBLIGATOIRE) :
+- Lire ## database_schema et ## auth_schema du message utilisateur
+- Noms de tables → titres des vues/sections (ex: table "contacts" → vue Clients)
+- Colonnes des tables → champs dans formulaires et colonnes tableaux
+- auth_type et roles → afficher dans vue Paramètres ou badge header (ex: « Accès : admin »)
+- Si auth_schema absent → interface single_user par défaut
+- Si database_schema absent → données fictives génériques (users, items)
+
+DESIGN OBLIGATOIRE :
+- Fond global : #0f1117
+- Sidebar : #161b27
+- Cards/panels : #1e2535, border 1px solid rgba(255,255,255,0.08), border-radius 12px
+- couleur_primaire du brief : accents, boutons, item nav actif, KPI highlights
+- Google Fonts : Inter uniquement (<link> dans <head>)
+- Texte principal : #e2e8f0
+- Texte secondaire : #8892a4
+- Graphiques : SVG inline uniquement (pas Chart.js, pas CDN)
+- Tableaux : header #161b27, lignes alternées rgba(255,255,255,0.03)
+- Inputs : fond #161b27, border rgba(255,255,255,0.12), focus couleur_primaire
+- Responsive : sidebar collapse hamburger < 768px
+
+INTERDIT :
+- fetch(), XMLHttpRequest, appels API externes
+- Librairies JS/CSS externes (sauf Google Fonts Inter)
+- Hero vitrine plein écran, images Pexels
+- Placeholder visible dans le contenu
+
+Document COMPLET : <html><head><style>...</style></head><body>...</body></html>
+Minimum 4000 caractères. CSS compact (réutiliser classes .card, .btn, .table).
+Priorité absolue : document COMPLET terminé par </footer></body></html>.
+Si limite de place : réduire les données fictives, jamais couper la fin du document.
+"""
 
 
 ECOMMERCE_APPENDIX = """

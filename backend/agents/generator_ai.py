@@ -17,8 +17,10 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
 from agents.sector_generator_prompts import (
+    APP_WEB_APPENDIX,
     ECOMMERCE_APPENDIX,
     build_sector_generator_appendix,
+    is_app_web_brief,
 )
 from config import get_settings
 from security.llm_secrets import get_effective_llm_key
@@ -29,8 +31,10 @@ MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = 10000
 MAX_TOKENS_SITE_RESERVATION_CLONE = 8192
 MAX_HTML_CHARS = 15000
+MAX_HTML_CHARS_APP_WEB = 40000
 MAX_HTML_CHARS_SITE_RESERVATION = 20000
 MAX_HTML_CHARS_SITE_RESERVATION_CLONE = 15000
+MAX_TOKENS_APP_WEB = 20000
 GENERATOR_MAX_ATTEMPTS = 3
 
 HTML_CLOSING_RULE = """RÈGLE ABSOLUE : termine TOUJOURS par </body></html>.
@@ -230,6 +234,16 @@ Design minimal : Playfair + Inter, couleur_primaire navbar/boutons, responsive 7
 Priorité absolue : document COMPLET terminé par </footer></body></html>.
 """
 
+SYSTEM_PROMPT_APP_WEB = """Tu génères UNIQUEMENT le HTML complet d'une application web (aucun texte avant/après).
+- <html><head><body>, CSS dans <style>, un <script> avant </body>
+- Nom client exact dans <title> et dans la sidebar
+- id="login-screen" visible par défaut, id="app-shell" caché par défaut
+- Sidebar navigation + minimum 3 vues avec switcher JS
+- <footer> minimal dans #app-shell
+- Zéro placeholder visible, zéro commentaire HTML
+- Utiliser couleur_primaire et couleur_secondaire du brief
+"""
+
 SYSTEM_PROMPT_RESERVATION_CLONE = """Tu génères UNIQUEMENT le HTML complet (aucun texte avant/après).
 - <html><head><body>, CSS dans <style>, un <script> avant </body>
 - Nom client exact dans <title> et <h1>
@@ -241,6 +255,10 @@ SYSTEM_PROMPT_RESERVATION_CLONE = """Tu génères UNIQUEMENT le HTML complet (au
 """
 
 _HTML_START_RE = re.compile(r"<!DOCTYPE\s+html|<html\b", re.I)
+
+
+def _is_app_web_brief(brief: dict[str, Any]) -> bool:
+    return is_app_web_brief(brief or {})
 
 
 def _is_ecommerce_brief(brief: dict[str, Any]) -> bool:
@@ -292,6 +310,8 @@ def _is_site_reservation_clone(brief: dict[str, Any]) -> bool:
 def _max_tokens(brief: dict[str, Any]) -> int:
     if _is_site_reservation_clone(brief):
         return MAX_TOKENS_SITE_RESERVATION_CLONE
+    if _is_app_web_brief(brief):
+        return MAX_TOKENS_APP_WEB
     return MAX_TOKENS
 
 
@@ -300,6 +320,8 @@ def _max_html_chars(brief: dict[str, Any]) -> int:
         return MAX_HTML_CHARS_SITE_RESERVATION_CLONE
     if _is_site_reservation_brief(brief):
         return MAX_HTML_CHARS_SITE_RESERVATION
+    if _is_app_web_brief(brief):
+        return MAX_HTML_CHARS_APP_WEB
     return MAX_HTML_CHARS
 
 
@@ -323,6 +345,8 @@ def _build_system_prompt(brief: dict[str, Any]) -> str:
         parts.extend([SYSTEM_PROMPT, SITE_RESERVATION_APPENDIX, sector_appendix])
     elif _is_ecommerce_brief(brief):
         parts.extend([SYSTEM_PROMPT, ECOMMERCE_APPENDIX, sector_appendix])
+    elif _is_app_web_brief(brief):
+        parts.extend([SYSTEM_PROMPT_APP_WEB, APP_WEB_APPENDIX, sector_appendix])
     else:
         parts.extend([SYSTEM_PROMPT, sector_appendix])
     return "\n\n".join(parts)
@@ -362,12 +386,26 @@ def _apply_html_size_limit(html: str, max_chars: int) -> str:
     return html[:max_chars]
 
 
+def _slim_schema_for_prompt(schema: Any) -> Any:
+    """Réduit sql volumineux pour laisser de la place à la génération HTML."""
+    if not isinstance(schema, dict):
+        return schema
+    slim = {k: v for k, v in schema.items() if k != "sql"}
+    if schema.get("sql"):
+        slim["sql_note"] = "SQL omis — utiliser tables/colonnes ci-dessus"
+    return slim
+
+
 def _build_user_message(
     brief: dict[str, Any],
     *,
     corrections: str | None = None,
 ) -> str:
     payload = {k: brief.get(k) for k in brief if not str(k).startswith("_")}
+    if _is_app_web_brief(brief):
+        for key in ("database_schema", "auth_schema"):
+            if key in payload:
+                payload[key] = _slim_schema_for_prompt(payload[key])
     extra = ""
     extra_limit = 2000 if _is_site_reservation_clone(brief) else 4000
     if brief.get("payment_config"):
@@ -375,9 +413,24 @@ def _build_user_message(
             brief["payment_config"], ensure_ascii=False, indent=2
         )[:extra_limit]
     if brief.get("database_schema"):
+        db_for_prompt = (
+            _slim_schema_for_prompt(brief["database_schema"])
+            if _is_app_web_brief(brief)
+            else brief["database_schema"]
+        )
         extra += "\n\n## database_schema\n" + json.dumps(
-            brief["database_schema"], ensure_ascii=False, indent=2
+            db_for_prompt, ensure_ascii=False, indent=2
         )[:extra_limit]
+    auth = brief.get("auth_schema")
+    if isinstance(auth, dict) and auth:
+        roles = auth.get("roles") or []
+        roles_text = ", ".join(str(r) for r in roles) if roles else "aucun"
+        extra += (
+            "\n\n## auth_schema\n"
+            f"Type : {auth.get('auth_type', '')}\n"
+            f"Rôles : {roles_text}\n"
+            f"{auth.get('summary') or ''}"
+        )
     brief_limit = 6000 if _is_site_reservation_clone(brief) else 12000
     body = (
         "## Brief client (JSON)\n"
@@ -443,12 +496,21 @@ class GeneratorAI:
                     raise ValueError("HTML invalide (pas de balise html)")
 
                 if not _html_document_complete(html):
-                    last_error = (
-                        "CORRECTION OBLIGATOIRE : la réponse précédente était tronquée. "
-                        "Génère TOUT le document : hero slider, bienvenue, hébergements, "
-                        "calendrier, formulaire réservation, footer. "
-                        "Termine impérativement par </footer></body></html>."
-                    )
+                    if _is_app_web_brief(brief):
+                        last_error = (
+                            "CORRECTION OBLIGATOIRE : HTML tronqué. Génère l'app web COMPLÈTE : "
+                            "#login-screen, #app-shell, sidebar 3+ items, 3 vues (dashboard, "
+                            "liste/tableau, formulaire), JS showView/login/logout. "
+                            "CSS compact (classes réutilisées). "
+                            "Termine impérativement par </footer></body></html>."
+                        )
+                    else:
+                        last_error = (
+                            "CORRECTION OBLIGATOIRE : la réponse précédente était tronquée. "
+                            "Génère TOUT le document : hero slider, bienvenue, hébergements, "
+                            "calendrier, formulaire réservation, footer. "
+                            "Termine impérativement par </footer></body></html>."
+                        )
                     logger.warning(
                         "[GeneratorAI] HTML incomplet (tentative %d/%d, %d car.)",
                         attempt,
@@ -464,6 +526,8 @@ class GeneratorAI:
                     if _is_site_reservation_brief(brief)
                     else "ecommerce"
                     if _is_ecommerce_brief(brief)
+                    else "app_web"
+                    if _is_app_web_brief(brief)
                     else "standard"
                 )
                 logger.info(
