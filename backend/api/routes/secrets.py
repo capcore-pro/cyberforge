@@ -39,6 +39,7 @@ from tools.api_key_tester import test_api_key
 router = APIRouter(tags=["secrets"])
 
 _PROVIDER_ENV: dict[str, tuple[str, str]] = {
+    "openai": ("OPENAI_API_KEY", "openai_api_key"),
     "anthropic": ("ANTHROPIC_API_KEY", "anthropic_api_key"),
     "deepseek": ("DEEPSEEK_API_KEY", "deepseek_api_key"),
     "v0": ("V0_API_KEY", "v0_api_key"),

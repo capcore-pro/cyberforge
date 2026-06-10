@@ -22,6 +22,8 @@ def test_api_key(provider: str, api_key: str) -> tuple[bool, str]:
         return False, "Clé manquante"
 
     try:
+        if key == "openai":
+            return _test_openai(token)
         if key == "anthropic":
             return _test_anthropic(token)
         if key == "deepseek":
@@ -81,6 +83,14 @@ def _bearer_headers(token: str) -> dict[str, str]:
     if raw.lower().startswith("bearer "):
         raw = raw[7:].strip()
     return {"Authorization": f"Bearer {raw}"}
+
+
+def _test_openai(token: str) -> tuple[bool, str]:
+    return _http_ok(
+        "GET",
+        "https://api.openai.com/v1/models",
+        headers=_bearer_headers(token),
+    )
 
 
 def _test_anthropic(token: str) -> tuple[bool, str]:

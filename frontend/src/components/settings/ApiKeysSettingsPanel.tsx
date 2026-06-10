@@ -63,6 +63,16 @@ const CATEGORIES: ServiceCategory[] = [
         topUpUrl: "https://platform.deepseek.com",
         testable: true,
       },
+      {
+        id: "openai",
+        label: "OpenAI",
+        emoji: "🤖",
+        payloadKey: "openai_api_key",
+        placeholder: "sk-…",
+        creditHint: "Embeddings Knowledge Engine",
+        topUpUrl: "https://platform.openai.com/api-keys",
+        testable: true,
+      },
     ],
   },
   {
