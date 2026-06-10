@@ -10,6 +10,7 @@ import re
 from html import escape
 from typing import Any
 
+from agents.design_system_ai import build_design_system, inject_design_system_into_html
 from config import get_settings
 from tools.export_cloudflare import (
     CloudflareExportError,
@@ -437,6 +438,8 @@ class DeployAI:
         sector: str | None = None,
         project_type: str | None = None,
         payment_config: dict[str, Any] | None = None,
+        design_system: dict[str, Any] | None = None,
+        brief: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if _is_extension_project(project_type):
             return {
@@ -470,6 +473,13 @@ class DeployAI:
             print(
                 f"[DeployAI] inject_cart_js ignorée (project_type={project_type!r})",
             )
+        ds = design_system if isinstance(design_system, dict) and design_system else None
+        if not ds and isinstance(brief, dict):
+            ds = brief.get("design_system")
+        if not ds and isinstance(brief, dict):
+            ds = build_design_system(brief)
+        if ds:
+            enriched = inject_design_system_into_html(enriched, ds)
         demo_title = (title or "CyberForge Demo").strip()[:120]
 
         try:

@@ -48,7 +48,7 @@ def test_event_store_replay_without_duplicates() -> None:
 async def _test_event_store_replay_without_duplicates() -> None:
     gid = "test-replay-001"
     await generation_event_store.create(gid)
-    await generation_event_store.emit(gid, "agent_start", {"agent": "BriefAI", "step": 1, "total": 4})
+    await generation_event_store.emit(gid, "agent_start", {"agent": "BriefAI", "step": 1, "total": 5})
     await generation_event_store.emit(gid, "agent_done", {"agent": "BriefAI", "step": 1, "duration_ms": 10})
     await generation_event_store.emit(gid, "done", {"url": "https://x.test", "html": "<html></html>", "duration_ms": 99})
 
@@ -66,11 +66,11 @@ async def _test_event_store_replay_without_duplicates() -> None:
     await generation_event_store.cleanup(gid)
 
 
-def test_pipeline_emits_four_agents_in_order() -> None:
-    asyncio.run(_test_pipeline_emits_four_agents_in_order())
+def test_pipeline_emits_five_agents_in_order() -> None:
+    asyncio.run(_test_pipeline_emits_five_agents_in_order())
 
 
-async def _test_pipeline_emits_four_agents_in_order() -> None:
+async def _test_pipeline_emits_five_agents_in_order() -> None:
     from pipeline import run_pipeline, PipelineRequest
 
     gid = "test-pipeline-order"
@@ -127,8 +127,18 @@ async def _test_pipeline_emits_four_agents_in_order() -> None:
     session = generation_event_store.get_session(gid)
     assert session is not None
     types = [e[1] for e in session.history]
-    assert types.count("agent_start") == 4
-    assert types.count("agent_done") == 4
+    assert types.count("agent_start") == 5
+    assert types.count("agent_done") == 5
+    agents_started = [
+        e[2]["agent"] for e in session.history if e[1] == "agent_start"
+    ]
+    assert agents_started == [
+        "BriefAI",
+        "DesignSystemAI",
+        "GeneratorAI",
+        "SupervisorAI",
+        "DeployAI",
+    ]
     assert "done" in types
     assert result["success"] is True
     await generation_event_store.cleanup(gid)
@@ -285,7 +295,7 @@ def test_generate_sse_stream_and_reconnect() -> None:
         await generation_event_store.emit(
             gid,
             "agent_start",
-            {"agent": "BriefAI", "step": 1, "total": 4},
+            {"agent": "BriefAI", "step": 1, "total": 5},
         )
         await generation_event_store.emit(
             gid,
@@ -293,14 +303,15 @@ def test_generate_sse_stream_and_reconnect() -> None:
             {"agent": "BriefAI", "step": 1, "duration_ms": 5},
         )
         for agent, step in (
-            ("GeneratorAI", 2),
-            ("SupervisorAI", 3),
-            ("DeployAI", 4),
+            ("DesignSystemAI", 2),
+            ("GeneratorAI", 3),
+            ("SupervisorAI", 4),
+            ("DeployAI", 5),
         ):
             await generation_event_store.emit(
                 gid,
                 "agent_start",
-                {"agent": agent, "step": step, "total": 4},
+                {"agent": agent, "step": step, "total": 5},
             )
             await generation_event_store.emit(
                 gid,
@@ -331,8 +342,8 @@ def test_generate_sse_stream_and_reconnect() -> None:
 
     events = _parse_sse_events(raw)
     types = [e[1] for e in events]
-    assert types.count("agent_start") == 4
-    assert types.count("agent_done") == 4
+    assert types.count("agent_start") == 5
+    assert types.count("agent_done") == 5
     assert types[-1] == "done"
     assert events[-1][2]["url"] == "https://stream.test"
 

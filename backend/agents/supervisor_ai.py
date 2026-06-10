@@ -412,11 +412,13 @@ def _result(
     errors: list[str],
     *,
     corrected_prompt: str = "",
+    warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
         "valid": valid,
         "errors": errors,
         "corrected_prompt": corrected_prompt if not valid else "",
+        "warnings": list(warnings or []),
     }
 
 
@@ -507,6 +509,23 @@ def _sector_keywords(sector: str) -> tuple[str, ...]:
 class SupervisorAI:
     """Valide les livrables agents ; fournit des prompts de correction pour relance."""
 
+    def validate_design_system(
+        self,
+        design_system: dict[str, Any],
+        brief: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Valide le design_system ; rebuild silencieux si invalide."""
+        from agents.design_system_ai import (
+            STYLE_FAMILIES,
+            build_design_system,
+            is_valid_design_system,
+        )
+
+        ds = design_system if isinstance(design_system, dict) else {}
+        if is_valid_design_system(ds) and ds.get("style_family") in STYLE_FAMILIES:
+            return ds
+        return build_design_system(brief or {})
+
     async def validate_brief(self, brief: dict) -> dict[str, Any]:
         errors: list[str] = []
         b = brief or {}
@@ -580,10 +599,20 @@ class SupervisorAI:
 
     async def validate_html(self, html: str, brief: dict) -> dict[str, Any]:
         errors: list[str] = []
+        warnings: list[str] = []
         body = html or ""
         low = body.lower()
         b = brief or {}
         client_name = str(b.get("client_name") or "").strip()
+
+        if ":root" not in low:
+            warnings.append(
+                "design_system : bloc :root absent du HTML (DeployAI injectera le filet)"
+            )
+        if "--color-primary" not in low:
+            warnings.append(
+                "design_system : --color-primary absent du CSS (DeployAI injectera le filet)"
+            )
 
         if len(body) < 3000:
             errors.append(f"HTML trop court ({len(body)} car., minimum 3000)")
@@ -644,7 +673,7 @@ class SupervisorAI:
                 errors.append(f"texte interdit détecté : « {snippet} »")
 
         primary = str(b.get("couleur_primaire") or "").strip()
-        if primary and primary.lower() not in low:
+        if primary and primary.lower() not in low and "--color-primary" not in low:
             errors.append(f"couleur {primary} absente du CSS/HTML")
 
         if not re.search(r"<img\b", body, re.I):
@@ -658,9 +687,11 @@ class SupervisorAI:
 
         if errors:
             corrected_prompt = _html_correction_instructions(errors, b)
-            return _result(False, errors, corrected_prompt=corrected_prompt)
+            return _result(
+                False, errors, corrected_prompt=corrected_prompt, warnings=warnings
+            )
 
-        return _result(True, [])
+        return _result(True, [], warnings=warnings)
 
     async def validate_deployment(self, url: str, client_name: str) -> dict[str, Any]:
         errors: list[str] = []

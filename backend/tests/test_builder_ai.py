@@ -15,9 +15,6 @@ from agents.builder_ai import (
 from agents.coremind_agent import CoreMindAnalysis, ProjectType
 from agents.design_system_ai import build_design_system
 from agents.template_ai import load_sector_template_html
-from core.agent_contract import require_ok
-
-
 def _plan() -> ArchitectPlan:
     return ArchitectPlan(
         project_type=ProjectType.SITE_WEB,
@@ -41,20 +38,22 @@ def test_uses_template_assembly_vitrine_next() -> None:
 
 def test_validate_and_minify() -> None:
     html = load_sector_template_html("vitrine_default.html")
-    ds = require_ok(
-        build_design_system(
-            sector="commerce",
-            client_name="Test Co",
-            project_type=ProjectType.SITE_WEB,
-        )
+    ds = build_design_system(
+        {
+            "sector": "commerce",
+            "client_name": "Test Co",
+            "project_type": "vitrine_next",
+        }
     )
+    from core.agent_contract import require_ok
+
     filled = require_ok(
         assemble_vitrine_html(
             template_html=html,
             client_name="Test Co",
             sector="commerce",
             city="Paris",
-            design_system=ds.to_contract_dict(),
+            design_system=ds,
             template_id="vitrine_default",
         )
     )
@@ -106,13 +105,13 @@ def test_builder_agent_vitrine_next_assembly() -> None:
             plan=_plan(),
             analysis=analysis,
             generation_mode="vitrine_next",
-            design_system=require_ok(
-                build_design_system(
-                    sector="restauration",
-                    client_name="Aux Délices",
-                    project_type=ProjectType.SITE_WEB,
-                )
-            ).to_contract_dict(),
+            design_system=build_design_system(
+                {
+                    "sector": "restauration",
+                    "client_name": "Aux Délices",
+                    "project_type": "vitrine_next",
+                }
+            ),
             sector_template={
                 "template_id": "vitrine_alimentaire",
                 "html_raw": load_sector_template_html("vitrine_alimentaire.html"),

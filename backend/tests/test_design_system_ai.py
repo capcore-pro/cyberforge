@@ -1,153 +1,130 @@
-"""Tests DesignSystemAI — familles sectorielles et loi visuelle."""
+"""Tests DesignSystemAI — familles visuelles et tokens CSS."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 
-from agents.architect_agent import ToolboxPalette
-from agents.coremind_agent import ProjectType
 from agents.design_system_ai import (
-    DesignSystemJSON,
-    _CONTRACT_KEYS,
-    _FONT_STYLES,
+    STYLE_FAMILIES,
+    DesignSystemAgent,
     build_design_system,
     design_system_to_css_variables,
     format_design_system_for_prompt,
+    inject_design_system_into_html,
+    is_valid_design_system,
     resolve_visual_family,
 )
-from core.agent_contract import require_ok
 
 
-def test_missing_client_name_fails() -> None:
-    result = build_design_system(
-        sector="restauration",
-        client_name="",
-        project_type=ProjectType.SITE_WEB,
+def test_vitrine_boulangerie_premium_light() -> None:
+    brief = {
+        "project_type": "vitrine_next",
+        "sector": "boulangerie",
+        "couleur_primaire": "#5C3A21",
+        "couleur_secondaire": "#FCF7F0",
+    }
+    ds = build_design_system(brief)
+    assert ds["style_family"] == "premium_light"
+    assert ds["colors"]["primary"] == "#5C3A21"
+    assert ds["colors"]["background"] == STYLE_FAMILIES["premium_light"]["bg"]
+    assert ds["fonts"]["heading"] == "Playfair Display"
+    assert is_valid_design_system(ds)
+
+
+def test_ecommerce_mode_premium_commerce() -> None:
+    brief = {
+        "project_type": "ecommerce",
+        "sector": "mode",
+        "couleur_primaire": "#d4a843",
+    }
+    ds = build_design_system(brief)
+    assert ds["style_family"] == "premium_commerce"
+    assert ds["colors"]["primary"] == "#d4a843"
+    assert ds["fonts"]["heading"] == "Inter"
+    assert ds["fonts"]["body"] == "Inter"
+
+
+def test_application_web_premium_dark() -> None:
+    brief = {
+        "project_type": "application_web",
+        "sector": "dashboard-analytics",
+        "couleur_primaire": "#6366f1",
+    }
+    ds = build_design_system(brief)
+    assert ds["style_family"] == "premium_dark"
+    assert ds["colors"]["primary"] == "#6366f1"
+    assert ds["colors"]["background"] == "#0f1117"
+
+
+def test_sector_suggests_primary_when_missing() -> None:
+    ds = build_design_system(
+        {"project_type": "vitrine_next", "sector": "nautisme marine", "client_name": "Marine"}
     )
-    assert not result.ok
-    assert result.error and result.error.code == "missing_client_name"
+    assert ds["colors"]["primary"] == "#0A3D62"
 
 
-def test_boulangerie_warm_palette_artisanal_fonts() -> None:
-    result = build_design_system(
-        sector="commerce",
-        client_name="Aux Délices",
-        project_type=ProjectType.SITE_WEB,
-        user_prompt="Boulangerie artisanale à Rouen",
+def test_derived_colors_and_css_variables() -> None:
+    ds = build_design_system(
+        {"project_type": "vitrine_next", "couleur_primaire": "#5C3A21"}
     )
-    doc = require_ok(result)
-    assert doc.colors.primary == "#5C3A21"
-    assert doc.colors.bg == "#FCF7F0"
-    assert doc.fonts.heading == _FONT_STYLES["artisanal"][0]
-    assert doc.fonts.body == _FONT_STYLES["artisanal"][1]
-    assert "artisanal" in doc.style_keywords
+    assert ds["colors"]["accent"] != ds["colors"]["primary"]
+    assert ds["colors"]["primary_dark"] != ds["colors"]["primary"]
+    assert "rgba" in ds["colors"]["overlay"]
+    css = design_system_to_css_variables(ds)
+    assert ":root" in css
+    assert "--color-primary: #5C3A21" in css
+    assert "--font-heading" in css
+    assert "cf-design-system" in css
 
 
-def test_nautisme_deep_blue_moderne_fonts() -> None:
-    result = build_design_system(
-        sector="nautisme",
-        client_name="Marine Atlantique",
-        project_type=ProjectType.SITE_WEB,
+def test_format_design_system_for_prompt() -> None:
+    ds = build_design_system(
+        {"project_type": "site_reservation", "sector": "camping", "couleur_primaire": "#16a34a"}
     )
-    doc = require_ok(result)
-    assert doc.colors.primary == "#0A3D62"
-    assert doc.fonts.heading == "Inter"
-    assert doc.fonts.body == "Space Grotesk"
+    block = format_design_system_for_prompt(ds)
+    assert "## design_system" in block
+    assert "Famille : nature_warm" in block
+    assert ":root" in block
+    assert "Règles d'application" in block
 
 
-def test_tech_dark_neon() -> None:
-    result = build_design_system(
-        sector="technologie",
-        client_name="DataFlow",
-        project_type=ProjectType.APPLICATION_WEB,
-        user_prompt="SaaS digital startup",
-    )
-    doc = require_ok(result)
-    assert doc.colors.primary == "#0D1117"
-    assert doc.colors.accent == "#58A6FF"
-    assert not doc.colors.text.startswith("#1A")
+def test_inject_design_system_into_html() -> None:
+    ds = build_design_system({"project_type": "vitrine_next", "couleur_primaire": "#5C3A21"})
+    html = "<html><head><style>body{margin:0}</style></head><body></body></html>"
+    out = inject_design_system_into_html(html, ds)
+    assert "--color-primary" in out
+    assert "--font-heading" in out
+    assert inject_design_system_into_html(out, ds) == out
 
 
-def test_beaute_elegant_fonts() -> None:
-    result = build_design_system(
-        sector="beaute",
-        client_name="Salon Éclat",
-        project_type=ProjectType.SITE_WEB,
-    )
-    doc = require_ok(result)
-    assert doc.colors.primary == "#1A1A1A"
-    assert doc.fonts.heading == "Cormorant"
-    assert doc.fonts.body == "Raleway"
-
-
-def test_juridique_navy_gold() -> None:
-    result = build_design_system(
-        sector="immobilier",
-        client_name="Cabinet Mercier",
-        project_type=ProjectType.SITE_WEB,
-        user_prompt="Cabinet d'avocats finance",
-    )
-    doc = require_ok(result)
-    assert doc.colors.primary == "#1C2833"
-    assert doc.colors.accent == "#C9A84C"
-
-
-def test_visual_law_in_prompt() -> None:
-    result = build_design_system(
-        sector="artisanat",
-        client_name="Menuiserie Bois",
-        project_type=ProjectType.SITE_WEB,
-    )
-    doc = require_ok(result)
-    block = format_design_system_for_prompt(doc)
-    assert "LOI VISUELLE" in block
-    assert "TOUS les agents" in block
-    parsed = json.loads(block.split("```json\n")[1].split("\n```")[0])
-    assert set(parsed.keys()) == _CONTRACT_KEYS
-
-
-def test_resolve_family_from_prompt() -> None:
+def test_resolve_visual_family_legacy() -> None:
     assert resolve_visual_family("commerce", "boulangerie patisserie") == "alimentaire"
     assert resolve_visual_family("commerce", "startup SaaS tech") == "tech_digital"
 
 
-def test_palette_preference_merges() -> None:
-    pref = ToolboxPalette(primary="#FF0000", secondary="#FFFFFF", accent="#00FF00")
-    result = build_design_system(
-        sector="sport",
-        client_name="Gym Fit",
-        palette_preference=pref,
-        project_type="site_web",
+def test_design_system_agent_run() -> None:
+    agent = DesignSystemAgent()
+    ds = agent.run(
+        {
+            "project_type": "extension_navigateur",
+            "couleur_primaire": "#6366f1",
+        }
     )
-    doc = require_ok(result)
-    assert doc.colors.primary == "#FF0000"
+    assert ds["style_family"] == "compact_dark"
+    assert is_valid_design_system(ds)
 
 
-def test_css_variables_derived() -> None:
-    result = build_design_system(
-        sector="sante",
-        client_name="Clinique Vert",
-        project_type=ProjectType.SITE_WEB,
-    )
-    doc = require_ok(result)
-    css = design_system_to_css_variables(doc)
-    assert ":root" in css
-    assert doc.colors.primary in css
-
-
-def test_agent_run_async() -> None:
-    from agents.design_system_ai import DesignSystemAgent
-
+def test_agent_generate_async_legacy() -> None:
     agent = DesignSystemAgent()
 
     async def _run():
         return await agent.generate(
             sector="restauration",
             client_name="Le Bistrot",
-            project_type=ProjectType.SITE_WEB,
+            project_type="vitrine_next",
         )
 
     result = asyncio.run(_run())
     assert result.ok
-    DesignSystemJSON.model_validate(result.data.to_contract_dict())  # type: ignore[union-attr]
+    data = result.data.to_contract_dict()  # type: ignore[union-attr]
+    assert is_valid_design_system(data)

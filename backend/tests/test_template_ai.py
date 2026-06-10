@@ -68,18 +68,18 @@ def test_all_sector_templates_exist() -> None:
 
 
 def test_render_boulangerie_complete() -> None:
-    ds = require_ok(
-        build_design_system(
-            sector="restauration",
-            client_name="Aux Délices",
-            project_type=ProjectType.SITE_WEB,
-            user_prompt="Boulangerie à Rouen",
-        )
+    ds = build_design_system(
+        {
+            "sector": "restauration",
+            "client_name": "Aux Délices",
+            "project_type": "vitrine_next",
+            "user_prompt": "Boulangerie à Rouen",
+        }
     )
     result = render_sector_template(
         sector="restauration",
         user_prompt="Boulangerie patisserie Aux Délices Rouen",
-        design_system=ds.to_contract_dict(),
+        design_system=ds,
     )
     data = require_ok(result)
     assert data.template_id == "vitrine_alimentaire"
@@ -114,13 +114,13 @@ def test_agent_async() -> None:
         return await agent.load(
             sector="beaute",
             user_prompt="Coiffeur Salon Éclat",
-            design_system=require_ok(
-                build_design_system(
-                    sector="beaute",
-                    client_name="Salon Éclat",
-                    project_type=ProjectType.SITE_WEB,
-                )
-            ).to_contract_dict(),
+            design_system=build_design_system(
+                {
+                    "sector": "beaute",
+                    "client_name": "Salon Éclat",
+                    "project_type": "vitrine_next",
+                }
+            ),
         )
 
     result = asyncio.run(_run())

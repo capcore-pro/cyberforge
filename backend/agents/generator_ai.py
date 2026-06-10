@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
+from agents.design_system_ai import build_design_system, format_design_system_for_prompt
 from agents.sector_generator_prompts import (
     APP_WEB_APPENDIX,
     ECOMMERCE_APPENDIX,
@@ -56,8 +57,10 @@ du <body>. Ne jamais terminer le HTML sans </footer></body></html>
 VISUEL PREMIUM OBLIGATOIRE :
 - Google Fonts : charger 2 fonts via <link> dans <head>
   (ex: Playfair Display pour titres + Inter pour corps de texte)
-- Palette cohérente : utiliser les couleurs du brief partout
-  (couleur_primaire pour CTAs, navbar, accents)
+- Les variables CSS sont définies dans ## design_system.
+  Colle le bloc :root exactement tel quel dans <style>.
+  N'invente aucune valeur hexadécimale — utilise uniquement
+  les variables CSS --color-* fournies.
 - Hero plein écran : PAS de <img> dans le hero — image en background-image CSS :
   .hero {
     background-image: url('...');
@@ -88,8 +91,8 @@ Tu es un expert développeur web. Génère un site HTML complet,
 visuellement premium, pour ce client.
 RÈGLES STRICTES :
 - HTML complet avec <head> et <body>
-- CSS intégré dans <style> + variables --color-primary, --color-secondary
-  depuis couleur_primaire et couleur_secondaire du brief
+- CSS intégré dans <style> avec le bloc :root de ## design_system
+  (--color-primary, --color-secondary, etc.)
 - Structure : navbar + hero plein écran + 3 sections contenu +
   galerie + contact + footer
 - Tout le texte doit utiliser les vraies informations du brief
@@ -431,6 +434,10 @@ def _build_user_message(
             f"Rôles : {roles_text}\n"
             f"{auth.get('summary') or ''}"
         )
+    ds = brief.get("design_system")
+    if not isinstance(ds, dict) or not ds:
+        ds = build_design_system(brief)
+    extra += "\n\n" + format_design_system_for_prompt(ds)
     brief_limit = 6000 if _is_site_reservation_clone(brief) else 12000
     body = (
         "## Brief client (JSON)\n"

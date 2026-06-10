@@ -55,13 +55,13 @@ def test_services_not_generic() -> None:
 
 
 def test_fill_complete_html() -> None:
-    ds = require_ok(
-        build_design_system(
-            sector="restauration",
-            client_name="Aux Délices",
-            project_type="site_web",
-            user_prompt="Boulangerie Rouen",
-        )
+    ds = build_design_system(
+        {
+            "sector": "restauration",
+            "client_name": "Aux Délices",
+            "project_type": "vitrine_next",
+            "user_prompt": "Boulangerie Rouen",
+        }
     )
     result = asyncio.run(
         fill_template_content(
@@ -74,7 +74,7 @@ def test_fill_complete_html() -> None:
                 "ville": "Rouen",
                 "mots_cles": ["pain", "viennoiserie", "sandwichs"],
             },
-            design_system=ds.to_contract_dict(),
+            design_system=ds,
             template_id="vitrine_alimentaire",
             user_prompt="Boulangerie artisanale Rouen",
         )
@@ -84,7 +84,7 @@ def test_fill_complete_html() -> None:
     assert "lorem" not in data.html.lower()
     assert "Service 1" not in data.html
     assert "Aux Délices" in data.html
-    assert ds.colors.primary in data.html
+    assert ds["colors"]["primary"] in data.html
     assert "cf-design-system" in data.html
 
 

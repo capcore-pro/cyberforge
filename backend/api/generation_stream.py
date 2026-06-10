@@ -16,11 +16,12 @@ STREAM_TIMEOUT_SECONDS = 900
 
 TRACKED_AGENTS: tuple[tuple[str, int], ...] = (
     ("BriefAI", 1),
-    ("GeneratorAI", 2),
-    ("SupervisorAI", 3),
-    ("DeployAI", 4),
+    ("DesignSystemAI", 2),
+    ("GeneratorAI", 3),
+    ("SupervisorAI", 4),
+    ("DeployAI", 5),
 )
-TRACKED_TOTAL = 4
+TRACKED_TOTAL = 5
 EXTENSION_TRACKED_TOTAL = 3
 
 

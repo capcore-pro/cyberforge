@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from agents.brief_ai import BriefAI
 from agents.deploy_ai import DeployAI
+from agents.design_system_ai import DesignSystemAgent
 from agents.generator_ai import GeneratorAI
 from agents.supervisor_ai import SupervisorAI
 from api.generation_stream import EXTENSION_TRACKED_TOTAL as _EXT_TOTAL
@@ -241,6 +242,23 @@ async def _run_pipeline_body(
 
     pt = (brief.get("project_type") or req.project_type or "").strip().lower()
 
+    if not is_extension:
+        await _emit_agent_start(
+            generation_id, agent="DesignSystemAI", step=2, total=tracked_total
+        )
+    ds_t0 = time.perf_counter()
+    design_system = DesignSystemAgent().run(brief)
+    design_system = supervisor.validate_design_system(design_system, brief)
+    brief["design_system"] = design_system
+    if not is_extension:
+        await _emit_agent_done(
+            generation_id,
+            agent="DesignSystemAI",
+            step=2,
+            duration_ms=int((time.perf_counter() - ds_t0) * 1000),
+            total=tracked_total,
+        )
+
     if pt == "extension_navigateur":
         return await _run_extension_pipeline(
             req,
@@ -258,7 +276,7 @@ async def _run_pipeline_body(
             return await database_ai.run(
                 project_description=prompt,
                 project_type=pt,
-                design_system={},
+                design_system=brief.get("design_system") or {},
             )
 
         async def _validate_db(schema: dict[str, Any]) -> dict[str, Any]:
@@ -330,7 +348,9 @@ async def _run_pipeline_body(
 
     generator = GeneratorAI()
 
-    await _emit_agent_start(generation_id, agent="GeneratorAI", step=2)
+    await _emit_agent_start(
+        generation_id, agent="GeneratorAI", step=3, total=tracked_total
+    )
     gen_t0 = time.perf_counter()
     correction = ""
     result: dict[str, Any] = {}
@@ -343,11 +363,14 @@ async def _run_pipeline_body(
     await _emit_agent_done(
         generation_id,
         agent="GeneratorAI",
-        step=2,
+        step=3,
         duration_ms=int((time.perf_counter() - gen_t0) * 1000),
+        total=tracked_total,
     )
 
-    await _emit_agent_start(generation_id, agent="SupervisorAI", step=3)
+    await _emit_agent_start(
+        generation_id, agent="SupervisorAI", step=4, total=tracked_total
+    )
     sup_t0 = time.perf_counter()
 
     async def _supervisor_html_loop() -> None:
@@ -386,8 +409,9 @@ async def _run_pipeline_body(
     await _emit_agent_done(
         generation_id,
         agent="SupervisorAI",
-        step=3,
+        step=4,
         duration_ms=int((time.perf_counter() - sup_t0) * 1000),
+        total=tracked_total,
     )
 
     if not result.get("success") or not result.get("html"):
@@ -417,6 +441,8 @@ async def _run_pipeline_body(
             sector=sector,
             project_type=str(brief.get("project_type") or req.project_type or "vitrine_next"),
             payment_config=payment_config,
+            design_system=brief.get("design_system"),
+            brief=brief,
         )
 
     async def _validate_deploy(deployed: dict[str, Any]) -> dict[str, Any]:
@@ -425,7 +451,9 @@ async def _run_pipeline_body(
             client_name,
         )
 
-    await _emit_agent_start(generation_id, agent="DeployAI", step=4)
+    await _emit_agent_start(
+        generation_id, agent="DeployAI", step=5, total=tracked_total
+    )
     deploy_t0 = time.perf_counter()
     deployed = await _run_supervised(
         "DeployAI",
@@ -438,8 +466,9 @@ async def _run_pipeline_body(
     await _emit_agent_done(
         generation_id,
         agent="DeployAI",
-        step=4,
+        step=5,
         duration_ms=int((time.perf_counter() - deploy_t0) * 1000),
+        total=tracked_total,
     )
 
     deploy_url = str(deployed.get("url") or "")
