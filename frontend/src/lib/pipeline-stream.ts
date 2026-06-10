@@ -6,6 +6,7 @@ import {
 import type {
   CoreMindRequest,
   CoreMindRunResponse,
+  PipelineAgentId,
   PipelineStepEvent,
   ProjectType,
 } from "@shared/types";
@@ -15,6 +16,11 @@ import type { ApiResponsePayload } from "@shared/ipc";
 
 const GENERATE_TIMEOUT_MS = 600_000;
 
+interface GenerateStartResponse {
+  generation_id: string;
+  status: string;
+}
+
 interface GenerateApiResponse {
   url: string;
   html: string;
@@ -23,19 +29,57 @@ interface GenerateApiResponse {
   unlock_url?: string | null;
   demo_token?: string | null;
   demo_password?: string | null;
+  duration_ms?: number | null;
 }
 
-function resolveGenerateUrl(): string {
+const AGENT_TO_STEP: Record<string, PipelineAgentId> = {
+  BriefAI: "architect",
+  GeneratorAI: "builder",
+  SupervisorAI: "bughunter",
+  DeployAI: "export",
+};
+
+const AGENT_START_MESSAGES: Record<string, string> = {
+  BriefAI: "BriefAI — Analyse et enrichissement du brief",
+  GeneratorAI: "GeneratorAI — Génération HTML premium",
+  SupervisorAI: "SupervisorAI — Validation HTML",
+  DeployAI: "DeployAI — Images Pexels + Cloudflare",
+};
+
+const AGENT_DONE_MESSAGES: Record<string, string> = {
+  BriefAI: "Brief enrichi",
+  GeneratorAI: "HTML généré",
+  SupervisorAI: "Contrôle qualité validé",
+  DeployAI: "Démo en ligne",
+};
+
+function resolveApiBase(): string {
   if (import.meta.env.DEV) {
-    return `${API_PREFIX}/generate`;
+    return "";
   }
   const raw =
     import.meta.env.VITE_API_BASE_URL?.trim() ||
     (isElectronApiAvailable() ? DEFAULT_API_BASE_URL : "");
   if (!raw) {
-    return `${API_PREFIX}/generate`;
+    return "";
   }
-  return `${normalizeBackendBaseUrl(raw)}${API_PREFIX}/generate`;
+  return normalizeBackendBaseUrl(raw);
+}
+
+function resolveGenerateUrl(): string {
+  const base = resolveApiBase();
+  return base ? `${base}${API_PREFIX}/generate` : `${API_PREFIX}/generate`;
+}
+
+function resolveGenerateSyncUrl(): string {
+  const base = resolveApiBase();
+  return base ? `${base}${API_PREFIX}/generate/sync` : `${API_PREFIX}/generate/sync`;
+}
+
+function resolveGenerateStreamUrl(generationId: string): string {
+  const base = resolveApiBase();
+  const path = `${API_PREFIX}/generate/stream/${encodeURIComponent(generationId)}`;
+  return base ? `${base}${path}` : path;
 }
 
 function resolveApiProjectType(body: CoreMindRequest): string {
@@ -70,12 +114,25 @@ function resolveClientName(body: CoreMindRequest): string {
   );
 }
 
+function buildGenerateBody(body: CoreMindRequest) {
+  return {
+    prompt: body.prompt,
+    project_type: resolveApiProjectType(body),
+    client_name: resolveClientName(body),
+    generation_mode: body.generation_mode ?? null,
+    inspiration_brief: body.inspiration_brief ?? null,
+    firecrawl_result: body.firecrawl_result ?? null,
+    stripe_publishable_key: body.stripe_publishable_key?.trim() || null,
+  };
+}
+
 function mapGenerateToRunResponse(
   body: CoreMindRequest,
   api: GenerateApiResponse,
 ): CoreMindRunResponse {
   const html = (api.html || "").trim();
   const projectType = (body.project_type || "site_web") as ProjectType;
+  const durationMs = api.duration_ms ?? 0;
 
   return {
     analysis: {
@@ -104,7 +161,7 @@ function mapGenerateToRunResponse(
       provider: "cyberforge",
       complexity: "moyenne",
       complexity_score: 5,
-      duration_ms: 0,
+      duration_ms: durationMs,
       estimated_cost_usd: 0,
       project_type_selected: resolveApiProjectType(body),
     },
@@ -118,14 +175,13 @@ function mapGenerateToRunResponse(
   };
 }
 
-function emitV2Progress(
+function emitStep(
   handlers: PipelineStreamHandlers,
   phase: "start" | "done",
-  agent: PipelineStepEvent["agent"],
+  agent: PipelineAgentId,
   message: string,
   extra?: Partial<PipelineStepEvent>,
 ) {
-  if (!agent) return;
   handlers.onStep?.({
     type: phase === "start" ? "step_start" : "step_done",
     agent,
@@ -135,12 +191,148 @@ function emitV2Progress(
   });
 }
 
+export interface AgentRetryEvent {
+  agent: string;
+  attempt: number;
+  reason: string;
+}
+
 export interface PipelineStreamHandlers {
   onStep?: (event: PipelineStepEvent) => void;
+  onAgentRetry?: (event: AgentRetryEvent) => void;
+  onAgentDuration?: (agent: string, durationMs: number) => void;
+  onServerDuration?: (durationMs: number) => void;
+}
+
+function parseSseData<T>(raw: string): T {
+  return JSON.parse(raw) as T;
+}
+
+function waitForGenerationSse(
+  generationId: string,
+  handlers: PipelineStreamHandlers,
+  signal: AbortSignal,
+): Promise<GenerateApiResponse> {
+  return new Promise((resolve, reject) => {
+    const es = new EventSource(resolveGenerateStreamUrl(generationId));
+    let settled = false;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      es.close();
+      fn();
+    };
+
+    const onAbort = () => {
+      finish(() => {
+        reject(new DOMException("Génération annulée", "AbortError"));
+      });
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    es.addEventListener("agent_start", (event: Event) => {
+      const msg = event as MessageEvent<string>;
+      const data = parseSseData<{ agent: string; step: number; total: number }>(
+        msg.data,
+      );
+      const stepId = AGENT_TO_STEP[data.agent];
+      if (!stepId) return;
+      emitStep(
+        handlers,
+        "start",
+        stepId,
+        AGENT_START_MESSAGES[data.agent] ??
+          `${data.agent} — étape ${data.step}/${data.total}`,
+      );
+    });
+
+    es.addEventListener("agent_done", (event: Event) => {
+      const msg = event as MessageEvent<string>;
+      const data = parseSseData<{
+        agent: string;
+        step: number;
+        duration_ms: number;
+      }>(msg.data);
+      const stepId = AGENT_TO_STEP[data.agent];
+      if (!stepId) return;
+      handlers.onAgentDuration?.(data.agent, data.duration_ms);
+      const extra: Partial<PipelineStepEvent> = {};
+      if (data.agent === "GeneratorAI") {
+        // preview may arrive on done from server later
+      }
+      emitStep(
+        handlers,
+        "done",
+        stepId,
+        AGENT_DONE_MESSAGES[data.agent] ?? `${data.agent} terminé`,
+        extra,
+      );
+    });
+
+    es.addEventListener("agent_retry", (event: Event) => {
+      const msg = event as MessageEvent<string>;
+      const data = parseSseData<AgentRetryEvent>(msg.data);
+      handlers.onAgentRetry?.(data);
+    });
+
+    es.addEventListener("done", (event: Event) => {
+      const msg = event as MessageEvent<string>;
+      const data = parseSseData<GenerateApiResponse>(msg.data);
+      if (typeof data.duration_ms === "number") {
+        handlers.onServerDuration?.(data.duration_ms);
+      }
+      const builderId = AGENT_TO_STEP.GeneratorAI;
+      if (builderId && data.html?.trim()) {
+        emitStep(handlers, "done", builderId, "HTML premium généré", {
+          preview_html: data.html,
+        });
+      }
+      const exportId = AGENT_TO_STEP.DeployAI;
+      if (exportId) {
+        emitStep(handlers, "done", exportId, "Démo en ligne", {
+          production_url: data.url,
+          unlock_url: data.unlock_url ?? null,
+          demo_password: data.demo_password ?? null,
+        });
+      }
+      signal.removeEventListener("abort", onAbort);
+      finish(() => {
+        resolve({
+          url: data.url ?? "",
+          html: data.html ?? "",
+          success: true,
+          unlock_url: data.unlock_url,
+          demo_token: data.demo_token,
+          demo_password: data.demo_password,
+          duration_ms: data.duration_ms,
+        });
+      });
+    });
+
+    es.addEventListener("error", (event: Event) => {
+      if (event instanceof MessageEvent) {
+        const data = parseSseData<{ message?: string }>(event.data);
+        signal.removeEventListener("abort", onAbort);
+        finish(() => {
+          reject(new Error(data.message?.trim() || "Erreur pipeline"));
+        });
+      }
+    });
+
+    es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED && !settled) {
+        signal.removeEventListener("abort", onAbort);
+        finish(() => {
+          reject(new Error("Connexion SSE interrompue"));
+        });
+      }
+    };
+  });
 }
 
 /**
- * Lance le pipeline CyberForge v2 via POST /api/generate.
+ * Lance le pipeline CyberForge v2 via POST /api/generate + SSE.
  */
 export async function streamCoremindRun(
   body: CoreMindRequest,
@@ -151,100 +343,65 @@ export async function streamCoremindRun(
 
   const emit = (event: PipelineStepEvent) => handlers.onStep?.(event);
 
-  const progressTimers: ReturnType<typeof setTimeout>[] = [];
-  const scheduleProgress = (
-    delayMs: number,
-    fn: () => void,
-  ) => {
-    progressTimers.push(window.setTimeout(fn, delayMs));
-  };
-  const clearProgressTimers = () => {
-    for (const timer of progressTimers) {
-      window.clearTimeout(timer);
-    }
-    progressTimers.length = 0;
-  };
-
   try {
     emit({ type: "pipeline_start" });
-    emitV2Progress(
-      handlers,
-      "start",
-      "architect",
-      "BriefAI — Analyse et enrichissement du brief",
-    );
 
-    scheduleProgress(3_500, () => {
-      emitV2Progress(handlers, "done", "architect", "Brief enrichi");
-      emitV2Progress(
-        handlers,
-        "start",
-        "builder",
-        "GeneratorAI — Génération HTML premium",
-      );
-    });
-    scheduleProgress(18_000, () => {
-      emitV2Progress(handlers, "done", "builder", "HTML généré");
-      emitV2Progress(
-        handlers,
-        "start",
-        "bughunter",
-        "SupervisorAI — Validation et corrections",
-      );
-    });
-    scheduleProgress(22_000, () => {
-      emitV2Progress(handlers, "done", "bughunter", "Contrôle qualité validé");
-      emitV2Progress(
-        handlers,
-        "start",
-        "export",
-        "DeployAI — Images Pexels + Cloudflare",
-      );
-    });
-
-    const response = await fetch(resolveGenerateUrl(), {
+    const startResponse = await fetch(resolveGenerateUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({
-        prompt: body.prompt,
-        project_type: resolveApiProjectType(body),
-        client_name: resolveClientName(body),
-        generation_mode: body.generation_mode ?? null,
-        inspiration_brief: body.inspiration_brief ?? null,
-        firecrawl_result: body.firecrawl_result ?? null,
-        stripe_publishable_key: body.stripe_publishable_key?.trim() || null,
-      }),
+      body: JSON.stringify(buildGenerateBody(body)),
       signal: controller.signal,
     });
 
-    let payload: GenerateApiResponse | null = null;
+    let startPayload: GenerateStartResponse | GenerateApiResponse | null = null;
     try {
-      payload = (await response.json()) as GenerateApiResponse;
+      startPayload = (await startResponse.json()) as
+        | GenerateStartResponse
+        | GenerateApiResponse;
     } catch {
-      payload = null;
+      startPayload = null;
     }
 
-    if (!response.ok) {
-      clearProgressTimers();
+    if (!startResponse.ok) {
       const detail =
-        payload && typeof payload === "object" && "error" in payload && payload.error
-          ? String(payload.error)
-          : response.statusText;
+        startPayload && "error" in startPayload && startPayload.error
+          ? String(startPayload.error)
+          : startResponse.statusText;
       emit({ type: "pipeline_end", ok: false, message: detail });
       return {
         ok: false,
-        status: response.status,
+        status: startResponse.status,
         statusText: detail,
         data: null as CoreMindRunResponse,
       };
     }
 
-    if (!payload?.success || !payload.html?.trim()) {
-      clearProgressTimers();
-      const detail = payload?.error?.trim() || "Génération sans HTML valide.";
+    const generationId =
+      startPayload && "generation_id" in startPayload
+        ? startPayload.generation_id
+        : null;
+
+    if (!generationId) {
+      emit({ type: "pipeline_end", ok: false, message: "generation_id manquant" });
+      return {
+        ok: false,
+        status: 502,
+        statusText: "generation_id manquant",
+        data: null as CoreMindRunResponse,
+      };
+    }
+
+    const payload = await waitForGenerationSse(
+      generationId,
+      handlers,
+      controller.signal,
+    );
+
+    if (!payload.success || !payload.html?.trim()) {
+      const detail = payload.error?.trim() || "Génération sans HTML valide.";
       emit({ type: "pipeline_end", ok: false, message: detail });
       return {
         ok: false,
@@ -254,17 +411,6 @@ export async function streamCoremindRun(
       };
     }
 
-    clearProgressTimers();
-    emitV2Progress(handlers, "done", "architect", "Brief enrichi");
-    emitV2Progress(handlers, "done", "builder", "HTML premium généré", {
-      preview_html: payload.html,
-    });
-    emitV2Progress(handlers, "done", "bughunter", "Contrôle qualité validé");
-    emitV2Progress(handlers, "done", "export", "Démo en ligne", {
-      production_url: payload.url,
-      unlock_url: payload.unlock_url ?? null,
-      demo_password: payload.demo_password ?? null,
-    });
     emit({ type: "pipeline_end", ok: true });
 
     const data = mapGenerateToRunResponse(body, payload);
@@ -275,7 +421,6 @@ export async function streamCoremindRun(
       data,
     };
   } catch (error) {
-    clearProgressTimers();
     const message =
       error instanceof Error
         ? error.name === "AbortError"
@@ -292,6 +437,35 @@ export async function streamCoremindRun(
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+/** Pipeline synchrone — tests et scripts (POST /api/generate/sync). */
+export async function streamCoremindRunSync(
+  body: CoreMindRequest,
+): Promise<ApiResponsePayload<CoreMindRunResponse>> {
+  const response = await fetch(resolveGenerateSyncUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(buildGenerateBody(body)),
+  });
+  const payload = (await response.json()) as GenerateApiResponse;
+  if (!response.ok || !payload.success) {
+    return {
+      ok: false,
+      status: response.status,
+      statusText: payload.error || response.statusText,
+      data: null as CoreMindRunResponse,
+    };
+  }
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    data: mapGenerateToRunResponse(body, payload),
+  };
 }
 
 /** Message utilisateur à partir d'une réponse pipeline. */

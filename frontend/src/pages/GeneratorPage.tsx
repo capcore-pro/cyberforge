@@ -13,6 +13,7 @@ import { apiErrorMessage } from "@/lib/api-errors";
 import {
   pipelineStreamErrorMessage,
   streamCoremindRun,
+  type AgentRetryEvent,
 } from "@/lib/pipeline-stream";
 import { isOpenHandsEnabled } from "@/lib/openhands-preferences";
 import { isPlaywrightEnabled } from "@/lib/playwright-preferences";
@@ -352,6 +353,9 @@ export function GeneratorPage({
   });
   const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null);
   const [generationDurationMs, setGenerationDurationMs] = useState(0);
+  const [agentDurations, setAgentDurations] = useState<Partial<Record<string, number>>>({});
+  const [pipelineRetries, setPipelineRetries] = useState<AgentRetryEvent[]>([]);
+  const [serverDurationMs, setServerDurationMs] = useState<number | null>(null);
   const [linkedClientId, setLinkedClientId] = useState<string | null>(() =>
     personalMode ? null : getSelectedClientId(),
   );
@@ -956,6 +960,9 @@ export function GeneratorPage({
     const startedAt = Date.now();
     setGenerationStartedAt(startedAt);
     setGenerationDurationMs(0);
+    setAgentDurations({});
+    setPipelineRetries([]);
+    setServerDurationMs(null);
 
     patch({
       phase: "running",
@@ -1090,7 +1097,19 @@ export function GeneratorPage({
               ? detailsForm.stripe_publishable_key.trim()
               : null,
         },
-        { onStep },
+        {
+          onStep,
+          onAgentRetry: (event) => {
+            setPipelineRetries((prev) => [...prev, event]);
+          },
+          onAgentDuration: (agent, durationMs) => {
+            setAgentDurations((prev) => ({ ...prev, [agent]: durationMs }));
+          },
+          onServerDuration: (durationMs) => {
+            setServerDurationMs(durationMs);
+            setGenerationDurationMs(durationMs);
+          },
+        },
       );
 
       if (!response.ok || !response.data) {
@@ -2020,6 +2039,9 @@ export function GeneratorPage({
           <GeneratorPipelineProgress
             steps={pipelineSteps}
             startedAt={generationStartedAt}
+            agentDurations={agentDurations}
+            retries={pipelineRetries}
+            serverDurationMs={serverDurationMs}
           />
         ) : null}
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PipelineAgentId } from "@shared/types";
+import type { AgentRetryEvent } from "@/lib/pipeline-stream";
 import type { PipelineStepState, PipelineStepStatus } from "@/components/PipelineProgress";
 
 const V2_STEPS: {
@@ -8,6 +9,7 @@ const V2_STEPS: {
   title: string;
   agentName: string;
   description: string;
+  trackedAgent: string;
 }[] = [
   {
     agentId: "architect",
@@ -15,6 +17,7 @@ const V2_STEPS: {
     title: "Plan du projet",
     agentName: "BriefAI",
     description: "Analyse et enrichissement du brief",
+    trackedAgent: "BriefAI",
   },
   {
     agentId: "builder",
@@ -22,6 +25,7 @@ const V2_STEPS: {
     title: "Structure HTML",
     agentName: "GeneratorAI",
     description: "Génération HTML premium (Sonnet)",
+    trackedAgent: "GeneratorAI",
   },
   {
     agentId: "bughunter",
@@ -29,6 +33,7 @@ const V2_STEPS: {
     title: "Contrôle qualité",
     agentName: "SupervisorAI",
     description: "Validation et corrections",
+    trackedAgent: "SupervisorAI",
   },
   {
     agentId: "export",
@@ -36,6 +41,7 @@ const V2_STEPS: {
     title: "Photos & Deploy",
     agentName: "DeployAI",
     description: "Images Pexels + Cloudflare",
+    trackedAgent: "DeployAI",
   },
 ];
 
@@ -45,6 +51,11 @@ function formatElapsed(ms: number): string {
   const sec = totalSec % 60;
   if (min > 0) return `${min}m ${sec.toString().padStart(2, "0")}s`;
   return `${sec}s`;
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  return formatElapsed(ms);
 }
 
 function resolveStatus(
@@ -97,11 +108,17 @@ function StatusIcon({ status }: { status: PipelineStepStatus }) {
 interface GeneratorPipelineProgressProps {
   steps: PipelineStepState[];
   startedAt: number | null;
+  agentDurations?: Partial<Record<string, number>>;
+  retries?: AgentRetryEvent[];
+  serverDurationMs?: number | null;
 }
 
 export function GeneratorPipelineProgress({
   steps,
   startedAt,
+  agentDurations = {},
+  retries = [],
+  serverDurationMs = null,
 }: GeneratorPipelineProgressProps) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -113,6 +130,11 @@ export function GeneratorPipelineProgress({
 
   const percent = useMemo(() => progressPercent(steps), [steps]);
   const elapsedMs = startedAt ? now - startedAt : 0;
+  const displayElapsed =
+    serverDurationMs != null && serverDurationMs > 0 ? serverDurationMs : elapsedMs;
+  const allDone = percent >= 100;
+
+  const supervisorRetries = retries.filter((r) => r.agent === "SupervisorAI");
 
   return (
     <div className="space-y-4">
@@ -120,7 +142,10 @@ export function GeneratorPipelineProgress({
         <div className="mb-2 flex items-center justify-between text-xs text-white/50">
           <span>Progression globale</span>
           <span className="tabular-nums">
-            {percent.toFixed(0)}% · {formatElapsed(elapsedMs)}
+            {percent.toFixed(0)}% · {formatElapsed(displayElapsed)}
+            {allDone && serverDurationMs != null && serverDurationMs > 0 ? (
+              <span className="ml-1 text-[#d4a843]/80">(serveur)</span>
+            ) : null}
           </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white/10">
@@ -139,6 +164,7 @@ export function GeneratorPipelineProgress({
         {V2_STEPS.map((def) => {
           const status = resolveStatus(def.agentId, steps);
           const isActive = status === "active";
+          const duration = agentDurations[def.trackedAgent];
           return (
             <li
               key={def.agentId}
@@ -165,8 +191,25 @@ export function GeneratorPipelineProgress({
                   >
                     {def.agentName}
                   </span>
+                  {typeof duration === "number" && status === "done" ? (
+                    <span className="text-[10px] tabular-nums text-white/40">
+                      {formatDurationMs(duration)}
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-0.5 text-xs text-white/45">{def.description}</p>
+                {def.agentId === "bughunter" && supervisorRetries.length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {supervisorRetries.map((retry) => (
+                      <li
+                        key={`${retry.attempt}-${retry.reason}`}
+                        className="rounded-control border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200"
+                      >
+                        SupervisorAI — tentative {retry.attempt} — {retry.reason}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
               <div className="mt-1 shrink-0">
                 <StatusIcon status={status} />

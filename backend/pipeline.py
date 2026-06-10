@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -16,6 +17,7 @@ from agents.brief_ai import BriefAI
 from agents.deploy_ai import DeployAI
 from agents.generator_ai import GeneratorAI
 from agents.supervisor_ai import SupervisorAI
+from api.generation_stream import TRACKED_TOTAL, generation_event_store
 from db.supabase_store import SupabaseStoreError, get_supabase_store
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,63 @@ def _print_supervisor_retry(agent_name: str, attempt: int) -> None:
     print(f"[SupervisorAI] 🔄 {agent_name} relancé — tentative {attempt}")
 
 
+async def _emit(
+    generation_id: str | None,
+    event_type: str,
+    data: dict[str, Any] | None = None,
+) -> None:
+    if not generation_id:
+        return
+    await generation_event_store.emit(generation_id, event_type, data)
+
+
+async def _emit_log(generation_id: str | None, message: str) -> None:
+    if not generation_id:
+        return
+    await generation_event_store.emit_log(generation_id, message)
+
+
+async def _emit_agent_start(
+    generation_id: str | None,
+    *,
+    agent: str,
+    step: int,
+) -> None:
+    await _emit(
+        generation_id,
+        "agent_start",
+        {"agent": agent, "step": step, "total": TRACKED_TOTAL},
+    )
+
+
+async def _emit_agent_done(
+    generation_id: str | None,
+    *,
+    agent: str,
+    step: int,
+    duration_ms: int,
+) -> None:
+    await _emit(
+        generation_id,
+        "agent_done",
+        {"agent": agent, "step": step, "duration_ms": duration_ms},
+    )
+
+
+async def _emit_agent_retry(
+    generation_id: str | None,
+    *,
+    agent: str,
+    attempt: int,
+    reason: str,
+) -> None:
+    await _emit(
+        generation_id,
+        "agent_retry",
+        {"agent": agent, "attempt": attempt, "reason": reason},
+    )
+
+
 async def _run_supervised(
     agent_name: str,
     run_once: Callable[[str], Awaitable[Any]],
@@ -63,6 +122,7 @@ async def _run_supervised(
     *,
     initial_prompt: str,
     success_log: Callable[[Any], str] | None = None,
+    generation_id: str | None = None,
 ) -> Any:
     """
     Exécute run_once(prompt) jusqu'à validation SupervisorAI ou timeout 10 min.
@@ -80,11 +140,18 @@ async def _run_supervised(
             check = await validate(last_result)
             if check.get("valid"):
                 if success_log:
-                    print(f"[SupervisorAI] ✅ {agent_name} validé — {success_log(last_result)}")
+                    msg = f"[SupervisorAI] ✅ {agent_name} validé — {success_log(last_result)}"
+                    print(msg)
+                    await _emit_log(generation_id, msg)
                 return last_result
 
             errors = list(check.get("errors") or [])
             _print_supervisor_fail(agent_name, errors)
+            reason = "; ".join(str(e) for e in errors) or "validation échouée"
+            await _emit_log(
+                generation_id,
+                f"[SupervisorAI] {agent_name} invalide — {reason}",
+            )
             corrected = str(check.get("corrected_prompt") or "").strip()
             if corrected:
                 prompt = corrected
@@ -98,12 +165,31 @@ async def _run_supervised(
         ) from exc
 
 
-async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, Any]:
+async def run_pipeline(
+    request: PipelineRequest | dict[str, Any],
+    *,
+    generation_id: str | None = None,
+) -> dict[str, Any]:
+    pipeline_t0 = time.perf_counter()
+
     if isinstance(request, dict):
         req = PipelineRequest.model_validate(request)
     else:
         req = request
 
+    try:
+        return await _run_pipeline_body(req, generation_id=generation_id, pipeline_t0=pipeline_t0)
+    except Exception as exc:
+        await _emit(generation_id, "error", {"message": str(exc)})
+        raise
+
+
+async def _run_pipeline_body(
+    req: PipelineRequest,
+    *,
+    generation_id: str | None,
+    pipeline_t0: float,
+) -> dict[str, Any]:
     supervisor = SupervisorAI()
     brief_ai = BriefAI()
 
@@ -117,13 +203,23 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
     async def _validate_brief(brief: dict[str, Any]) -> dict[str, Any]:
         return await supervisor.validate_brief(brief)
 
+    await _emit_agent_start(generation_id, agent="BriefAI", step=1)
+    brief_t0 = time.perf_counter()
     brief = await _run_supervised(
         "BriefAI",
         _run_brief,
         _validate_brief,
         initial_prompt=req.prompt,
         success_log=lambda b: f"client: {b.get('client_name', '?')}",
+        generation_id=generation_id,
     )
+    await _emit_agent_done(
+        generation_id,
+        agent="BriefAI",
+        step=1,
+        duration_ms=int((time.perf_counter() - brief_t0) * 1000),
+    )
+
     brief["prompt"] = req.prompt
     if req.generation_mode:
         brief["generation_mode"] = req.generation_mode.strip()
@@ -149,12 +245,14 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
         async def _validate_db(schema: dict[str, Any]) -> dict[str, Any]:
             return await supervisor.validate_database(schema, brief)
 
+        await _emit_log(generation_id, "DatabaseAI — schéma base de données")
         brief["database_schema"] = await _run_supervised(
             "DatabaseAI",
             _run_db,
             _validate_db,
             initial_prompt=base_desc,
             success_log=lambda s: f"{len((s or {}).get('tables') or [])} table(s)",
+            generation_id=generation_id,
         )
 
     if pt in ("application_web", "real_app"):
@@ -176,12 +274,14 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
                 "corrected_prompt": str(brief.get("description") or req.prompt),
             }
 
+        await _emit_log(generation_id, "AuthAI — schéma authentification")
         brief["auth_schema"] = await _run_supervised(
             "AuthAI",
             _run_auth,
             _validate_auth,
             initial_prompt=str(brief.get("description") or req.prompt),
             success_log=lambda s: f"auth_type={s.get('auth_type', '?')}",
+            generation_id=generation_id,
         )
 
     if pt in ("ecommerce", "site_reservation"):
@@ -197,43 +297,89 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
         async def _validate_payment(payment: dict[str, Any]) -> dict[str, Any]:
             return await supervisor.validate_payment(payment, brief)
 
+        await _emit_log(generation_id, "PaymentAI — configuration paiement")
         brief["payment_config"] = await _run_supervised(
             "PaymentAI",
             _run_payment,
             _validate_payment,
             initial_prompt=str(brief.get("description") or req.prompt),
             success_log=lambda p: f"type={p.get('payment_type', '?')}",
+            generation_id=generation_id,
         )
 
     _apply_stripe_publishable_key(brief, req.stripe_publishable_key)
 
     generator = GeneratorAI()
 
-    async def _run_generator(correction: str) -> dict[str, Any]:
+    await _emit_agent_start(generation_id, agent="GeneratorAI", step=2)
+    gen_t0 = time.perf_counter()
+    correction = ""
+    result: dict[str, Any] = {}
+
+    async def _run_generator_once() -> dict[str, Any]:
         fixes = correction.strip() or None
         return await generator.run(brief, corrections=fixes)
 
-    async def _validate_generator(result: dict[str, Any]) -> dict[str, Any]:
-        html = str((result or {}).get("html") or "")
-        return await supervisor.validate_html(html, brief)
+    result = await _run_generator_once()
+    await _emit_agent_done(
+        generation_id,
+        agent="GeneratorAI",
+        step=2,
+        duration_ms=int((time.perf_counter() - gen_t0) * 1000),
+    )
 
-    result = await _run_supervised(
-        "GeneratorAI",
-        _run_generator,
-        _validate_generator,
-        initial_prompt="",
-        success_log=lambda r: (
-            f"client: {brief.get('client_name')} — {len(str(r.get('html') or ''))} car."
-        ),
+    await _emit_agent_start(generation_id, agent="SupervisorAI", step=3)
+    sup_t0 = time.perf_counter()
+
+    async def _supervisor_html_loop() -> None:
+        nonlocal result, correction
+        attempt = 0
+        while True:
+            attempt += 1
+            html = str((result or {}).get("html") or "")
+            check = await supervisor.validate_html(html, brief)
+            if check.get("valid"):
+                msg = f"[SupervisorAI] ✅ HTML validé — {len(html)} car."
+                print(msg)
+                await _emit_log(generation_id, msg)
+                return
+
+            errors = list(check.get("errors") or [])
+            _print_supervisor_fail("SupervisorAI", errors)
+            reason = "; ".join(str(e) for e in errors) or "HTML invalide"
+            await _emit_agent_retry(
+                generation_id,
+                agent="SupervisorAI",
+                attempt=attempt,
+                reason=reason,
+            )
+            corrected = str(check.get("corrected_prompt") or "").strip()
+            correction = corrected
+            _print_supervisor_retry("SupervisorAI", attempt + 1)
+            gen_retry_t0 = time.perf_counter()
+            result = await generator.run(brief, corrections=correction or None)
+            await _emit_log(
+                generation_id,
+                f"GeneratorAI — regénération après rejet ({int((time.perf_counter() - gen_retry_t0) * 1000)} ms)",
+            )
+
+    await asyncio.wait_for(_supervisor_html_loop(), timeout=AGENT_TIMEOUT_SECONDS)
+    await _emit_agent_done(
+        generation_id,
+        agent="SupervisorAI",
+        step=3,
+        duration_ms=int((time.perf_counter() - sup_t0) * 1000),
     )
 
     if not result.get("success") or not result.get("html"):
+        error_msg = "GeneratorAI n'a pas produit de HTML valide."
+        await _emit(generation_id, "error", {"message": error_msg})
         return {
             "url": "",
             "html": "",
             "success": False,
             "brief": brief,
-            "error": "GeneratorAI n'a pas produit de HTML valide.",
+            "error": error_msg,
         }
 
     deploy_ai = DeployAI()
@@ -260,12 +406,21 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
             client_name,
         )
 
+    await _emit_agent_start(generation_id, agent="DeployAI", step=4)
+    deploy_t0 = time.perf_counter()
     deployed = await _run_supervised(
         "DeployAI",
         _run_deploy,
         _validate_deploy,
         initial_prompt="",
         success_log=lambda d: f"URL: {d.get('url', '')}",
+        generation_id=generation_id,
+    )
+    await _emit_agent_done(
+        generation_id,
+        agent="DeployAI",
+        step=4,
+        duration_ms=int((time.perf_counter() - deploy_t0) * 1000),
     )
 
     deploy_url = str(deployed.get("url") or "")
@@ -285,7 +440,8 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
             except SupabaseStoreError as exc:
                 logger.warning("[pipeline] persistance Supabase ignorée: %s", exc)
 
-    return {
+    total_duration_ms = int((time.perf_counter() - pipeline_t0) * 1000)
+    final_result = {
         "url": deployed.get("url", ""),
         "html": deployed.get("html") or result["html"],
         "success": bool(deployed.get("success")),
@@ -294,4 +450,27 @@ async def run_pipeline(request: PipelineRequest | dict[str, Any]) -> dict[str, A
         "demo_token": deployed.get("demo_token"),
         "demo_password": deployed.get("demo_password"),
         "error": deployed.get("error"),
+        "duration_ms": total_duration_ms,
     }
+
+    if final_result["success"]:
+        await _emit(
+            generation_id,
+            "done",
+            {
+                "url": str(final_result.get("url") or ""),
+                "html": str(final_result.get("html") or ""),
+                "duration_ms": total_duration_ms,
+                "unlock_url": final_result.get("unlock_url"),
+                "demo_token": final_result.get("demo_token"),
+                "demo_password": final_result.get("demo_password"),
+            },
+        )
+    else:
+        await _emit(
+            generation_id,
+            "error",
+            {"message": str(final_result.get("error") or "Déploiement échoué")},
+        )
+
+    return final_result
