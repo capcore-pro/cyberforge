@@ -987,6 +987,7 @@ async def deploy_demo_to_cyberforge_demos(
     html: str,
     other_manifest_entries: dict[str, str],
     password_gated: bool = True,
+    extra_upload_files: dict[str, bytes] | None = None,
 ) -> CloudflareDeployResult:
     """
     Publie la démo sous d/{slug}/index.html sur le projet fixe cyberforge-demos.
@@ -1020,6 +1021,13 @@ async def deploy_demo_to_cyberforge_demos(
     entries = sanitize_manifest_entries(other_manifest_entries)
     entries[asset_path] = digest
     entries[flat_asset_path] = flat_digest
+    extra_blobs: dict[str, bytes] = {}
+    if extra_upload_files:
+        for path, blob in extra_upload_files.items():
+            clean = path.strip().lstrip("/").replace("\\", "/")
+            if clean and blob is not None:
+                extra_blobs[clean] = blob
+                entries[clean] = _file_digest(clean, blob)
     manifest = build_pages_manifest(entries, include_root_stub=False)
     _log_deploy_step(
         "0/5 deploy_demo",
@@ -1030,11 +1038,12 @@ async def deploy_demo_to_cyberforge_demos(
         manifest_paths=sorted(manifest.keys()),
         manifest_entry=manifest.get(manifest_path),
     )
-    upload_files = {
+    upload_files: dict[str, bytes] = {
         asset_path: body,
         flat_asset_path: body,
         REDIRECTS_ASSET_PATH: _REDIRECTS_BODY,
     }
+    upload_files.update(extra_blobs)
 
     if password_gated:
         if "cf-password-toggle" not in html_fresh:

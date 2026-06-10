@@ -25,7 +25,7 @@ from tools.theme_enforce import enforce_capcore_theme
 logger = logging.getLogger(__name__)
 
 _UNGATED_PROJECT_TYPES = frozenset(
-    {"vitrine_next", "ecommerce", "site_reservation"},
+    {"vitrine_next", "ecommerce", "site_reservation", "extension_navigateur"},
 )
 _GATED_PROJECT_TYPES = frozenset(
     {"application_web", "application_desktop", "real_app"},
@@ -174,3 +174,64 @@ async def deploy_html_demo(
 
     unlock = unlock_demo_url(demo_token) if use_gate else production_url
     return production_url, demo_token, demo_password, unlock
+
+
+async def deploy_extension_demo(
+    *,
+    demo_html: str,
+    zip_bytes: bytes,
+    title: str,
+    project_type: str = "extension_navigateur",
+) -> tuple[str, str, str, str]:
+    """
+    Déploie la page de démo + extension.zip sur cyberforge-demos (même slug).
+    """
+    from tools.cloudflare_pages import pages_token_slug
+
+    credentials = get_cloudflare_credentials()
+    if credentials is None:
+        raise CloudflareExportError("Cloudflare non configuré (CLOUDFLARE_*).")
+
+    if not (demo_html or "").strip():
+        raise CloudflareExportError("HTML de démo extension vide.")
+
+    demo_token = DemosStore._new_token()
+    slug = pages_token_slug(demo_token)
+    zip_asset_path = f"d/{slug}/extension.zip"
+
+    other_entries: dict[str, str] = {}
+    store = get_demos_store()
+    if store.is_configured():
+        try:
+            other_entries = await store.list_cloudflare_manifest_entries(
+                exclude_token=demo_token,
+            )
+        except Exception as exc:
+            logger.warning("Manifest Cloudflare Supabase ignoré : %s", exc)
+
+    try:
+        from tools.cloudflare_pages import deploy_demo_to_cyberforge_demos
+
+        deploy = await deploy_demo_to_cyberforge_demos(
+            account_id=credentials.account_id,
+            api_token=credentials.api_token,
+            token=demo_token,
+            html=demo_html.strip(),
+            other_manifest_entries=other_entries,
+            password_gated=False,
+            extra_upload_files={zip_asset_path: zip_bytes},
+        )
+    except Exception as exc:
+        if isinstance(exc, CloudflareExportError):
+            raise
+        from tools.cloudflare_pages import CloudflarePagesError
+
+        if isinstance(exc, CloudflarePagesError):
+            raise CloudflareExportError(str(exc)) from exc
+        raise CloudflareExportError(str(exc)) from exc
+
+    production_url = (deploy.url or public_demo_url_for_token(demo_token)).rstrip("/")
+    if not production_url.startswith("http"):
+        production_url = public_demo_url_for_token(demo_token).rstrip("/")
+
+    return production_url, demo_token, "", production_url

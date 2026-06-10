@@ -11,7 +11,11 @@ from html import escape
 from typing import Any
 
 from config import get_settings
-from tools.export_cloudflare import CloudflareExportError, deploy_html_demo
+from tools.export_cloudflare import (
+    CloudflareExportError,
+    deploy_extension_demo,
+    deploy_html_demo,
+)
 from tools.toolbox_media import PexelsImageRole, search_toolbox_photos
 
 logger = logging.getLogger(__name__)
@@ -81,6 +85,68 @@ _CAMPING_LODGING_QUERIES: list[tuple[tuple[str, ...], str]] = [
     (("emplacement",), "campsite grass trees"),
     (("caravane", "caravan"), "caravan camping site"),
 ]
+
+
+def _is_extension_project(project_type: str | None) -> bool:
+    return (project_type or "").strip().lower().replace("-", "_") == "extension_navigateur"
+
+
+def build_extension_demo_page(
+    *,
+    extension_name: str,
+    client_name: str,
+    primary_color: str = "#4f46e5",
+    zip_href: str = "./extension.zip",
+) -> str:
+    """Page Cloudflare de démo : instructions + lien téléchargement ZIP."""
+    title = escape((extension_name or client_name or "Extension").strip())
+    primary = escape((primary_color or "#4f46e5").strip())
+    safe_zip = escape(zip_href, quote=True)
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Extension {title} — prête à installer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: Inter, system-ui, sans-serif;
+      background: #0f1117; color: #e2e8f0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }}
+    .wrap {{
+      max-width: 520px; width: 100%;
+      background: #1e2535; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px; padding: 32px;
+    }}
+    h1 {{ font-size: 1.5rem; margin-bottom: 8px; }}
+    p {{ color: #8892a4; line-height: 1.6; margin-bottom: 16px; }}
+    ol {{ margin: 0 0 24px 20px; color: #cbd5e1; line-height: 1.8; }}
+    .btn {{
+      display: inline-block; padding: 14px 28px; border-radius: 8px;
+      background: {primary}; color: #fff; text-decoration: none; font-weight: 600;
+    }}
+    .btn:hover {{ opacity: 0.92; }}
+    footer {{ margin-top: 28px; font-size: 12px; color: #64748b; }}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Extension {title} — prête à installer</h1>
+    <p>Téléchargez l'archive ZIP et chargez l'extension dans Chrome (mode développeur).</p>
+    <ol>
+      <li>Ouvrez <code>chrome://extensions</code></li>
+      <li>Activez le <strong>Mode développeur</strong></li>
+      <li>Cliquez sur <strong>Charger l'extension non empaquetée</strong></li>
+      <li>Décompressez le ZIP et sélectionnez le dossier</li>
+    </ol>
+    <a class="btn" href="{safe_zip}" download="extension.zip">Télécharger le ZIP</a>
+    <footer>Manifest V3 — généré par CyberForge</footer>
+  </main>
+</body>
+</html>"""
 
 
 def _is_ecommerce_project(project_type: str | None) -> bool:
@@ -317,6 +383,52 @@ async def inject_pexels_images(
 
 
 class DeployAI:
+    async def run_extension(
+        self,
+        zip_bytes: bytes,
+        *,
+        extension_name: str = "",
+        client_name: str = "",
+        primary_color: str = "#4f46e5",
+        project_type: str = "extension_navigateur",
+    ) -> dict[str, Any]:
+        if not zip_bytes:
+            return {"url": "", "success": False, "error": "ZIP extension vide"}
+
+        name = (extension_name or client_name or "Extension").strip()
+        demo_html = build_extension_demo_page(
+            extension_name=name,
+            client_name=client_name or name,
+            primary_color=primary_color,
+            zip_href="./extension.zip",
+        )
+        demo_title = f"Extension {name}"[:120]
+
+        try:
+            production_url, demo_token, _demo_password, unlock_url = await deploy_extension_demo(
+                demo_html=demo_html,
+                zip_bytes=zip_bytes,
+                title=demo_title,
+                project_type=project_type,
+            )
+            return {
+                "url": production_url,
+                "success": True,
+                "demo_token": demo_token,
+                "demo_password": "",
+                "unlock_url": unlock_url,
+                "html": demo_html,
+                "extension_zip_bytes": len(zip_bytes),
+            }
+        except CloudflareExportError as exc:
+            logger.error("[DeployAI] extension Cloudflare: %s", exc)
+            return {
+                "url": "",
+                "success": False,
+                "error": str(exc),
+                "html": demo_html,
+            }
+
     async def run(
         self,
         html: str,
@@ -326,6 +438,13 @@ class DeployAI:
         project_type: str | None = None,
         payment_config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if _is_extension_project(project_type):
+            return {
+                "url": "",
+                "success": False,
+                "error": "Utiliser run_extension() pour extension_navigateur",
+            }
+
         raw = (html or "").strip()
         if not raw:
             return {"url": "", "success": False, "error": "HTML vide"}

@@ -21,6 +21,7 @@ TRACKED_AGENTS: tuple[tuple[str, int], ...] = (
     ("DeployAI", 4),
 )
 TRACKED_TOTAL = 4
+EXTENSION_TRACKED_TOTAL = 3
 
 
 @dataclass

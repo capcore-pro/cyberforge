@@ -17,6 +17,7 @@ from agents.brief_ai import BriefAI
 from agents.deploy_ai import DeployAI
 from agents.generator_ai import GeneratorAI
 from agents.supervisor_ai import SupervisorAI
+from api.generation_stream import EXTENSION_TRACKED_TOTAL as _EXT_TOTAL
 from api.generation_stream import TRACKED_TOTAL, generation_event_store
 from db.supabase_store import SupabaseStoreError, get_supabase_store
 
@@ -79,11 +80,12 @@ async def _emit_agent_start(
     *,
     agent: str,
     step: int,
+    total: int | None = None,
 ) -> None:
     await _emit(
         generation_id,
         "agent_start",
-        {"agent": agent, "step": step, "total": TRACKED_TOTAL},
+        {"agent": agent, "step": step, "total": total if total is not None else TRACKED_TOTAL},
     )
 
 
@@ -93,12 +95,16 @@ async def _emit_agent_done(
     agent: str,
     step: int,
     duration_ms: int,
+    total: int | None = None,
 ) -> None:
-    await _emit(
-        generation_id,
-        "agent_done",
-        {"agent": agent, "step": step, "duration_ms": duration_ms},
-    )
+    payload: dict[str, Any] = {
+        "agent": agent,
+        "step": step,
+        "duration_ms": duration_ms,
+    }
+    if total is not None:
+        payload["total"] = total
+    await _emit(generation_id, "agent_done", payload)
 
 
 async def _emit_agent_retry(
@@ -192,6 +198,8 @@ async def _run_pipeline_body(
 ) -> dict[str, Any]:
     supervisor = SupervisorAI()
     brief_ai = BriefAI()
+    is_extension = (req.project_type or "").strip().lower() == "extension_navigateur"
+    tracked_total = _EXT_TOTAL if is_extension else TRACKED_TOTAL
 
     async def _run_brief(prompt: str) -> dict[str, Any]:
         return await brief_ai.run(
@@ -203,7 +211,9 @@ async def _run_pipeline_body(
     async def _validate_brief(brief: dict[str, Any]) -> dict[str, Any]:
         return await supervisor.validate_brief(brief)
 
-    await _emit_agent_start(generation_id, agent="BriefAI", step=1)
+    await _emit_agent_start(
+        generation_id, agent="BriefAI", step=1, total=tracked_total
+    )
     brief_t0 = time.perf_counter()
     brief = await _run_supervised(
         "BriefAI",
@@ -218,6 +228,7 @@ async def _run_pipeline_body(
         agent="BriefAI",
         step=1,
         duration_ms=int((time.perf_counter() - brief_t0) * 1000),
+        total=tracked_total,
     )
 
     brief["prompt"] = req.prompt
@@ -229,6 +240,14 @@ async def _run_pipeline_body(
         brief["firecrawl_result"] = req.firecrawl_result
 
     pt = (brief.get("project_type") or req.project_type or "").strip().lower()
+
+    if pt == "extension_navigateur":
+        return await _run_extension_pipeline(
+            req,
+            brief,
+            generation_id=generation_id,
+            pipeline_t0=pipeline_t0,
+        )
 
     if pt not in ("vitrine_next",):
         from agents import database_ai
@@ -471,6 +490,145 @@ async def _run_pipeline_body(
             generation_id,
             "error",
             {"message": str(final_result.get("error") or "Déploiement échoué")},
+        )
+
+    return final_result
+
+
+async def _run_extension_pipeline(
+    req: PipelineRequest,
+    brief: dict[str, Any],
+    *,
+    generation_id: str | None,
+    pipeline_t0: float,
+) -> dict[str, Any]:
+    """BriefAI → ExtensionBuilder → DeployAI (pas Generator/DB/Auth/Payment)."""
+    from tools.extension_pipeline import build_extension_files, build_extension_zip
+
+    supervisor = SupervisorAI()
+    client_name = str(brief.get("client_name") or req.client_name or "CyberForge")
+    primary_color = str(brief.get("couleur_primaire") or "#4f46e5")
+
+    await _emit_agent_start(
+        generation_id,
+        agent="ExtensionBuilder",
+        step=2,
+        total=_EXT_TOTAL,
+    )
+    ext_t0 = time.perf_counter()
+    await _emit_log(generation_id, "ExtensionBuilder — génération MV3")
+
+    def _build() -> tuple[dict[str, str], bytes]:
+        files = build_extension_files(brief)
+        zip_bytes = build_extension_zip(files)
+        return files, zip_bytes
+
+    extension_files, zip_bytes = await asyncio.to_thread(_build)
+    brief["extension_files"] = extension_files
+    duration_ext = int((time.perf_counter() - ext_t0) * 1000)
+    await _emit(
+        generation_id,
+        "agent_done",
+        {
+            "agent": "ExtensionBuilder",
+            "step": 2,
+            "duration_ms": duration_ext,
+            "total": _EXT_TOTAL,
+        },
+    )
+    await _emit_log(
+        generation_id,
+        f"ExtensionBuilder — {len(extension_files)} fichier(s), ZIP {len(zip_bytes)} octets",
+    )
+
+    deploy_ai = DeployAI()
+
+    async def _run_deploy(_prompt: str) -> dict[str, Any]:
+        del _prompt
+        return await deploy_ai.run_extension(
+            zip_bytes,
+            extension_name=client_name,
+            client_name=client_name,
+            primary_color=primary_color,
+            project_type="extension_navigateur",
+        )
+
+    async def _validate_deploy(deployed: dict[str, Any]) -> dict[str, Any]:
+        return await supervisor.validate_deployment(
+            str(deployed.get("url") or ""),
+            client_name,
+        )
+
+    await _emit_agent_start(
+        generation_id, agent="DeployAI", step=3, total=_EXT_TOTAL
+    )
+    deploy_t0 = time.perf_counter()
+    deployed = await _run_supervised(
+        "DeployAI",
+        _run_deploy,
+        _validate_deploy,
+        initial_prompt="",
+        success_log=lambda d: f"URL: {d.get('url', '')}",
+        generation_id=generation_id,
+    )
+    await _emit(
+        generation_id,
+        "agent_done",
+        {
+            "agent": "DeployAI",
+            "step": 3,
+            "duration_ms": int((time.perf_counter() - deploy_t0) * 1000),
+            "total": _EXT_TOTAL,
+        },
+    )
+
+    deploy_url = str(deployed.get("url") or "")
+    if deployed.get("success") and deploy_url:
+        store = get_supabase_store()
+        if store.is_configured():
+            try:
+                await store.save_pipeline_v2_deploy(
+                    prompt=req.prompt,
+                    project_type="extension_navigateur",
+                    client_name=client_name,
+                    demo_url=deploy_url,
+                    html=str(deployed.get("html") or ""),
+                )
+            except SupabaseStoreError as exc:
+                logger.warning("[pipeline] persistance Supabase ignorée: %s", exc)
+
+    total_duration_ms = int((time.perf_counter() - pipeline_t0) * 1000)
+    final_result = {
+        "url": deployed.get("url", ""),
+        "html": deployed.get("html") or "",
+        "success": bool(deployed.get("success")),
+        "brief": brief,
+        "extension_zip_bytes": len(zip_bytes),
+        "unlock_url": deployed.get("unlock_url"),
+        "demo_token": deployed.get("demo_token"),
+        "demo_password": deployed.get("demo_password") or "",
+        "error": deployed.get("error"),
+        "duration_ms": total_duration_ms,
+    }
+
+    if final_result["success"]:
+        await _emit(
+            generation_id,
+            "done",
+            {
+                "url": str(final_result.get("url") or ""),
+                "html": str(final_result.get("html") or ""),
+                "duration_ms": total_duration_ms,
+                "unlock_url": final_result.get("unlock_url"),
+                "demo_token": final_result.get("demo_token"),
+                "demo_password": final_result.get("demo_password"),
+            },
+        )
+    else:
+        await _emit(
+            generation_id,
+            "error",
+            {"message": str(final_result.get("error") or "Déploiement extension échoué")},
         )
 
     return final_result

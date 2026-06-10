@@ -139,17 +139,67 @@ def _permissions_for_prompt(prompt: str) -> list[str]:
     return sorted(set(perms))
 
 
+def resolve_extension_sector_id(brief: dict[str, Any]) -> str:
+    """Identifie le preset secteur (ecommerce-helper, productivite, seo-analytics)."""
+    raw = " ".join(
+        str(brief.get(k) or "")
+        for k in ("sector", "sector_id", "id", "prompt", "description")
+    ).lower()
+    if "ecommerce-helper" in raw or "e-commerce" in raw or "ecommerce helper" in raw:
+        return "ecommerce-helper"
+    if "productivite" in raw or "productivité" in raw or "productivity" in raw:
+        return "productivite"
+    if "seo-analytics" in raw or ("seo" in raw and "analytics" in raw):
+        return "seo-analytics"
+    return "generic"
+
+
+def _brief_from_args(
+    prompt_or_brief: str | dict[str, Any],
+    *,
+    slug: str | None = None,
+    primary_color: str = "#4f46e5",
+) -> dict[str, Any]:
+    if isinstance(prompt_or_brief, dict):
+        brief = dict(prompt_or_brief)
+    else:
+        brief = {"prompt": str(prompt_or_brief or "")}
+    if slug:
+        brief.setdefault("slug", slug)
+    if primary_color and not brief.get("couleur_primaire"):
+        brief.setdefault("couleur_primaire", primary_color)
+    prompt = str(brief.get("prompt") or brief.get("description") or "")
+    brief.setdefault("prompt", prompt)
+    return brief
+
+
 def build_extension_files(
-    prompt: str,
+    prompt_or_brief: str | dict[str, Any],
     *,
     slug: str | None = None,
     primary_color: str = "#4f46e5",
 ) -> dict[str, str]:
     """
-    Génère manifest.json, popup.html, background.js, content.js, README.
-    popup.html : 380×500px, toggles ON/OFF, stats, paramètres.
+    Génère manifest.json, popup.html, popup.js, background.js, content.js, README.
+    Route vers un template secteur si brief["sector"] correspond.
     """
-    slug = slug or _slug_from_prompt(prompt)
+    from tools.extension_sector_templates import (
+        build_ecommerce_helper,
+        build_productivite,
+        build_seo_analytics,
+    )
+
+    brief = _brief_from_args(prompt_or_brief, slug=slug, primary_color=primary_color)
+    sector_id = resolve_extension_sector_id(brief)
+    if sector_id == "ecommerce-helper":
+        return build_ecommerce_helper(brief)
+    if sector_id == "productivite":
+        return build_productivite(brief)
+    if sector_id == "seo-analytics":
+        return build_seo_analytics(brief)
+
+    prompt = str(brief.get("prompt") or "")
+    slug = slug or str(brief.get("slug") or "") or _slug_from_prompt(prompt)
     name = _extension_name(prompt, slug)
     safe_name = html_lib.escape(name)
     description = (prompt.strip()[:200] or "Extension générée par CyberForge").replace(

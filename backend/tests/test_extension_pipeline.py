@@ -63,6 +63,7 @@ def test_build_extension_files_manifest_and_popup() -> None:
     files = build_extension_files("extension pour bloquer les pubs")
     assert "manifest.json" in files
     assert "popup.html" in files
+    assert "popup.js" in files
     assert "background.js" in files
     assert "content.js" in files
     manifest = json.loads(files["manifest.json"])
@@ -70,6 +71,19 @@ def test_build_extension_files_manifest_and_popup() -> None:
     assert manifest["action"]["default_popup"] == "popup.html"
     assert "380px" in files["popup.html"]
     assert "500px" in files["popup.html"]
+
+
+def test_build_extension_files_from_brief_dict() -> None:
+    files = build_extension_files(
+        {
+            "client_name": "ShopSmart",
+            "sector": "ecommerce-helper",
+            "couleur_primaire": "#f59e0b",
+            "prompt": "Extension e-commerce",
+        }
+    )
+    assert "Comparer" in files["popup.html"]
+    assert "popup.js" in files
 
 
 def test_extension_zip_contains_all_files() -> None:
