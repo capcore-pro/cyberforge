@@ -3,9 +3,11 @@ import { BackendStatusBanner } from "@/components/BackendStatusBanner";
 import { ContactNotificationToast } from "@/components/ContactNotificationToast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useContactNotifications } from "@/context/ContactNotificationsContext";
-import { useAgentsStatus } from "@/context/AgentsStatusContext";
+import {
+  formatAgentsCountDisplay,
+  useAgentsStatus,
+} from "@/context/AgentsStatusContext";
 import { useBackendHealth } from "@/context/BackendHealthContext";
-import { enabledAgentCount } from "@/lib/agent-preferences";
 import {
   SETTINGS_NAV_ITEM,
   SIDEBAR_NAV_GROUPS,
@@ -67,9 +69,9 @@ export function AppShell({
   sidebarFooter,
 }: AppShellProps) {
   const { unreadCount } = useContactNotifications();
-  const { activeCount, totalAgents } = useAgentsStatus();
+  const { activeCount, totalAgents, agentsCountKnown, loading } =
+    useAgentsStatus();
   const { status: backendStatus, health } = useBackendHealth();
-  const localEnabled = enabledAgentCount();
   const version = window.cyberforge?.getVersion?.() ?? "—";
 
   return (
@@ -168,11 +170,14 @@ export function AppShell({
                 Agents
               </p>
               <p className="mt-1 text-2xl font-semibold tabular-nums text-cf-gold">
-                {localEnabled} / {totalAgents}
+                {formatAgentsCountDisplay({
+                  activeCount,
+                  totalAgents,
+                  agentsCountKnown,
+                  loading,
+                })}
               </p>
-              <p className="text-[11px] text-cf-muted">
-                {activeCount} actifs côté serveur
-              </p>
+              <p className="text-[11px] text-cf-muted">actifs côté serveur</p>
             </div>
 
             <div className="flex items-center justify-between gap-3 text-[11px] text-cf-muted">

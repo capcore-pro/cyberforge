@@ -17,10 +17,13 @@ export type AgentDisplayStatus = "active" | "standby";
 
 interface AgentsStatusContextValue {
   status: AgentsStatusResponse | null;
+  /** True après au moins une réponse API réussie (session courante). */
+  agentsCountKnown: boolean;
   loading: boolean;
   refresh: () => Promise<void>;
   getAgentStatus: (agentId: string) => AgentDisplayStatus;
-  activeCount: number;
+  /** Nombre d'agents actifs — `null` tant que l'API n'a pas répondu. */
+  activeCount: number | null;
   totalAgents: number;
 }
 
@@ -40,93 +43,58 @@ const PIPELINE_AGENT_IDS = [
   "electron",
 ] as const;
 
-const AGENT_CATALOG: { id: string; name: string; description: string }[] = [
-  {
-    id: "brief",
-    name: "BriefAI",
-    description: "Brief structuré + Firecrawl (concurrents).",
-  },
-  {
-    id: "supervisor",
-    name: "SupervisorAI",
-    description: "Validation binaire à chaque étape du pipeline.",
-  },
-  {
-    id: "generator",
-    name: "GeneratorAI",
-    description: "HTML complet en un appel Claude.",
-  },
-  {
-    id: "deploy",
-    name: "DeployAI",
-    description: "Images Pexels + déploiement Cloudflare Pages.",
-  },
-  {
-    id: "database",
-    name: "DatabaseAI",
-    description: "Schéma Supabase si app / ecommerce / réservation.",
-  },
-  {
-    id: "auth",
-    name: "AuthAI",
-    description: "Auth Supabase si application web.",
-  },
-  {
-    id: "payment",
-    name: "PaymentAI",
-    description: "Stripe si ecommerce / réservation.",
-  },
-  {
-    id: "electron",
-    name: "ElectronAI",
-    description: "Empaquetage application desktop (.exe).",
-  },
-];
-
-const KEYLESS_PIPELINE_AGENTS = new Set([
-  "supervisor",
-  "deploy",
-  "electron",
-]);
-
-function defaultAgentsStatus(): AgentsStatusResponse {
-  const pipelineSet = new Set<string>(PIPELINE_AGENT_IDS);
-  let active_count = 0;
-  const agents = AGENT_CATALOG.map(({ id, name, description }) => {
-    const in_pipeline = pipelineSet.has(id);
-    const is_active = in_pipeline && KEYLESS_PIPELINE_AGENTS.has(id);
-    if (is_active) active_count += 1;
-    return {
-      id,
-      name,
-      description,
-      status: (is_active ? "active" : "standby") as "active" | "standby",
-      in_pipeline,
-    };
-  });
-  return {
-    total_agents: PIPELINE_AGENT_IDS.length,
-    active_count,
-    pipeline_agent_ids: [...PIPELINE_AGENT_IDS],
-    agents,
-  };
+/** Affichage sidebar — distingue chargement, inconnu et compte réel. */
+export function formatAgentsCountDisplay({
+  activeCount,
+  totalAgents,
+  agentsCountKnown,
+  loading,
+}: {
+  activeCount: number | null;
+  totalAgents: number;
+  agentsCountKnown: boolean;
+  loading: boolean;
+}): string {
+  if (agentsCountKnown && activeCount !== null) {
+    return `${activeCount} / ${totalAgents}`;
+  }
+  if (loading) return `… / ${totalAgents}`;
+  return `— / ${totalAgents}`;
 }
 
-const DEFAULT_AGENTS_STATUS = defaultAgentsStatus();
+/** Badge dashboard — libellé selon backend + disponibilité API agents. */
+export function formatAgentsBadgeLabel({
+  backendOnline,
+  activeCount,
+  totalAgents,
+  agentsCountKnown,
+  loading,
+}: {
+  backendOnline: boolean;
+  activeCount: number | null;
+  totalAgents: number;
+  agentsCountKnown: boolean;
+  loading: boolean;
+}): string {
+  if (!backendOnline) return "Backend hors ligne";
+  if (agentsCountKnown && activeCount !== null) {
+    return `${activeCount}/${totalAgents} agents actifs`;
+  }
+  if (loading) return "Chargement agents…";
+  return "Statut agents indisponible";
+}
 
 export function AgentsStatusProvider({ children }: { children: ReactNode }) {
   const { status: backendStatus } = useBackendHealth();
-  const [data, setData] = useState<AgentsStatusResponse | null>(
-    DEFAULT_AGENTS_STATUS,
-  );
+  const [data, setData] = useState<AgentsStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (backendStatus !== "online") {
-      setData(DEFAULT_AGENTS_STATUS);
-      setLoading(false);
+      setLoading(backendStatus === "loading");
       return;
     }
+    setLoading(true);
     try {
       const response = await apiRequest<AgentsStatusResponse>({
         method: "GET",
@@ -135,11 +103,9 @@ export function AgentsStatusProvider({ children }: { children: ReactNode }) {
       });
       if (response.ok && response.data) {
         setData(response.data);
-      } else {
-        setData(DEFAULT_AGENTS_STATUS);
       }
     } catch {
-      setData(DEFAULT_AGENTS_STATUS);
+      // Conserve la dernière valeur connue ; sinon l'UI affiche —/8.
     } finally {
       setLoading(false);
     }
@@ -166,16 +132,19 @@ export function AgentsStatusProvider({ children }: { children: ReactNode }) {
     [data],
   );
 
+  const agentsCountKnown = data !== null;
+
   const value = useMemo(
     () => ({
       status: data,
+      agentsCountKnown,
       loading,
       refresh,
       getAgentStatus,
-      activeCount: data?.active_count ?? DEFAULT_AGENTS_STATUS.active_count,
-      totalAgents: data?.total_agents ?? DEFAULT_AGENTS_STATUS.total_agents,
+      activeCount: agentsCountKnown ? (data?.active_count ?? null) : null,
+      totalAgents: data?.total_agents ?? PIPELINE_AGENT_IDS.length,
     }),
-    [data, loading, refresh, getAgentStatus],
+    [data, agentsCountKnown, loading, refresh, getAgentStatus],
   );
 
   return (

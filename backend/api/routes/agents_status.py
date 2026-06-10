@@ -4,13 +4,11 @@ Statut des agents IA — pipeline v2.
 
 from __future__ import annotations
 
-import os
-
 from dotenv import load_dotenv
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from config import get_settings
+from security.agent_readiness import agent_is_active
 
 load_dotenv(override=True)
 
@@ -45,48 +43,13 @@ class AgentsStatusResponse(BaseModel):
     agents: list[AgentStatusItem]
 
 
-def _has_env(name: str) -> bool:
-    return bool((os.getenv(name) or "").strip())
-
-
-def _anthropic_ready() -> bool:
-    return _has_env("ANTHROPIC_API_KEY")
-
-
-def _deploy_ready() -> bool:
-    return _has_env("PEXELS_API_KEY") and _has_env("CLOUDFLARE_API_TOKEN")
-
-
-def _supabase_ready() -> bool:
-    return _has_env("SUPABASE_URL") or get_settings().supabase_configured
-
-
-def _stripe_ready() -> bool:
-    return _has_env("STRIPE_SECRET_KEY")
-
-
-def _agent_is_active(agent_id: str) -> bool:
-    """Actif si les clés requises sont présentes dans l'environnement."""
-    if agent_id == "electron":
-        return True
-    if agent_id in ("brief", "generator", "supervisor"):
-        return _anthropic_ready()
-    if agent_id == "deploy":
-        return _deploy_ready()
-    if agent_id in ("database", "auth"):
-        return _supabase_ready()
-    if agent_id == "payment":
-        return _stripe_ready()
-    return False
-
-
 @router.get("/agents/status", response_model=AgentsStatusResponse)
 async def get_agents_status() -> AgentsStatusResponse:
     pipeline_set = set(PIPELINE_AGENT_IDS)
     agents: list[AgentStatusItem] = []
     for agent_id, name, description in _AGENT_CATALOG:
         in_pipeline = agent_id in pipeline_set
-        is_active = in_pipeline and _agent_is_active(agent_id)
+        is_active = in_pipeline and agent_is_active(agent_id)
         agents.append(
             AgentStatusItem(
                 id=agent_id,

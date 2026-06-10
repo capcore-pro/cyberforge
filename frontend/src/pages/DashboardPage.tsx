@@ -9,7 +9,10 @@ import {
 } from "react";
 import { API_PREFIX } from "@shared/constants";
 import type { ProjectRecord } from "@shared/types";
-import { useAgentsStatus } from "@/context/AgentsStatusContext";
+import {
+  formatAgentsBadgeLabel,
+  useAgentsStatus,
+} from "@/context/AgentsStatusContext";
 import { useBackendHealth } from "@/context/BackendHealthContext";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import { apiRequest } from "@/lib/api-client";
@@ -342,7 +345,8 @@ function ProgressBar({ pct }: { pct: number }) {
  */
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const { status: backendStatus } = useBackendHealth();
-  const { activeCount, totalAgents } = useAgentsStatus();
+  const { activeCount, totalAgents, agentsCountKnown, loading: agentsLoading } =
+    useAgentsStatus();
   const { patch } = useGeneratorSession();
 
   const firstName = getUserFirstName();
@@ -547,7 +551,13 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 />
               ) : null}
             </span>
-            {backendOnline ? `${activeCount}/${totalAgents} agents actifs` : "Backend hors ligne"}
+            {formatAgentsBadgeLabel({
+              backendOnline,
+              activeCount,
+              totalAgents,
+              agentsCountKnown,
+              loading: agentsLoading,
+            })}
           </span>
         </div>
       </header>
