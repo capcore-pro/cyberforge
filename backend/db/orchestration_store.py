@@ -33,7 +33,15 @@ CONTEXT_SELECT = (
 )
 
 MESSAGE_SELECT = (
-    "id,session_id,sender_agent,receiver_agent,message_type,payload,status,created_at"
+    "id,session_id,sender_agent,receiver_agent,message_type,payload,status,"
+    "channel_name,priority,created_at"
+)
+
+CHANNEL_SELECT = "id,channel_name,channel_type,description,created_at"
+
+ANALYTICS_SELECT = (
+    "id,period_date,channel_name,messages_sent,messages_acked,"
+    "avg_latency_ms,updated_at"
 )
 
 
@@ -305,6 +313,8 @@ class OrchestrationStore:
         payload: dict[str, Any] | None = None,
         *,
         receiver_agent: str | None = None,
+        channel_name: str = "pipeline_events",
+        priority: str = "normal",
     ) -> dict[str, Any] | None:
         if not self.is_configured() or not session_id.strip():
             return None
@@ -315,6 +325,8 @@ class OrchestrationStore:
             "message_type": message_type.strip(),
             "payload": payload or {},
             "status": "sent",
+            "channel_name": (channel_name or "pipeline_events").strip(),
+            "priority": (priority or "normal").strip(),
         }
         if receiver_agent:
             body["receiver_agent"] = receiver_agent.strip()
@@ -338,6 +350,7 @@ class OrchestrationStore:
         session_id: str,
         *,
         receiver_agent: str | None = None,
+        channel_name: str | None = None,
     ) -> list[dict[str, Any]]:
         if not self.is_configured() or not session_id.strip():
             return []
@@ -349,11 +362,164 @@ class OrchestrationStore:
         }
         if receiver_agent:
             params["receiver_agent"] = f"eq.{receiver_agent.strip()}"
+        if channel_name:
+            params["channel_name"] = f"eq.{channel_name.strip()}"
 
         url = f"{self._rest_url()}/agent_messages"
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(url, headers=self._supabase._headers(), params=params)
             _raise_for_status(resp, "get_messages", "GET", url, self._supabase)
+            rows = resp.json()
+            return rows if isinstance(rows, list) else []
+
+    async def list_channels(self) -> list[dict[str, Any]]:
+        if not self.is_configured():
+            return []
+
+        url = f"{self._rest_url()}/communication_channels"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={"select": CHANNEL_SELECT, "order": "channel_name.asc"},
+            )
+            _raise_for_status(resp, "list_channels", "GET", url, self._supabase)
+            rows = resp.json()
+            return rows if isinstance(rows, list) else []
+
+    async def ack_message(
+        self,
+        message_id: str,
+        agent_id: str,
+        *,
+        status: str = "received",
+    ) -> dict[str, Any] | None:
+        if not self.is_configured() or not message_id.strip() or not agent_id.strip():
+            return None
+
+        body = {
+            "message_id": message_id.strip(),
+            "agent_id": agent_id.strip(),
+            "status": status.strip(),
+        }
+        url = f"{self._rest_url()}/message_acks"
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    url,
+                    headers=self._supabase._headers("return=representation"),
+                    json=body,
+                )
+                _raise_for_status(resp, "ack_message", "POST", url, self._supabase)
+                row = _first_row(resp.json())
+                if row:
+                    msg_resp = await client.get(
+                        f"{self._rest_url()}/agent_messages",
+                        headers=self._supabase._headers(),
+                        params={
+                            "id": f"eq.{message_id.strip()}",
+                            "select": "channel_name",
+                            "limit": "1",
+                        },
+                    )
+                    if msg_resp.status_code == 200:
+                        msg_row = _first_row(msg_resp.json())
+                        channel = str(
+                            (msg_row or {}).get("channel_name") or "pipeline_events"
+                        )
+                        await self.increment_analytics(channel, messages_acked=1)
+                return row
+        except Exception as exc:
+            logger.warning("[OrchestrationStore] ack_message ignoré — %s", exc)
+            return None
+
+    async def increment_analytics(
+        self,
+        channel_name: str,
+        *,
+        messages_sent: int = 0,
+        messages_acked: int = 0,
+        latency_ms: float = 0,
+    ) -> None:
+        if not self.is_configured():
+            return
+
+        period = datetime.now(UTC).date().isoformat()
+        channel = (channel_name or "pipeline_events").strip()
+        url = f"{self._rest_url()}/communication_analytics"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    url,
+                    headers=self._supabase._headers(),
+                    params={
+                        "period_date": f"eq.{period}",
+                        "channel_name": f"eq.{channel}",
+                        "select": ANALYTICS_SELECT,
+                        "limit": "1",
+                    },
+                )
+                existing = _first_row(resp.json()) if resp.status_code == 200 else None
+
+                if existing:
+                    sent = int(existing.get("messages_sent") or 0) + messages_sent
+                    acked = int(existing.get("messages_acked") or 0) + messages_acked
+                    prev_avg = float(existing.get("avg_latency_ms") or 0)
+                    if messages_sent > 0 and latency_ms > 0:
+                        prev_sent = int(existing.get("messages_sent") or 0)
+                        avg = ((prev_avg * prev_sent) + latency_ms) / max(sent, 1)
+                    else:
+                        avg = prev_avg
+                    patch = await client.patch(
+                        url,
+                        headers=self._supabase._headers(),
+                        params={"id": f"eq.{existing['id']}"},
+                        json={
+                            "messages_sent": sent,
+                            "messages_acked": acked,
+                            "avg_latency_ms": round(avg, 2),
+                            "updated_at": _now_iso(),
+                        },
+                    )
+                    _raise_for_status(patch, "increment_analytics", "PATCH", url, self._supabase)
+                else:
+                    post = await client.post(
+                        url,
+                        headers=self._supabase._headers(),
+                        json={
+                            "period_date": period,
+                            "channel_name": channel,
+                            "messages_sent": messages_sent,
+                            "messages_acked": messages_acked,
+                            "avg_latency_ms": round(latency_ms, 2) if latency_ms else 0,
+                            "updated_at": _now_iso(),
+                        },
+                    )
+                    _raise_for_status(post, "increment_analytics", "POST", url, self._supabase)
+        except Exception as exc:
+            logger.warning("[OrchestrationStore] increment_analytics ignoré — %s", exc)
+
+    async def get_communication_analytics(
+        self,
+        *,
+        days: int = 30,
+    ) -> list[dict[str, Any]]:
+        if not self.is_configured():
+            return []
+
+        url = f"{self._rest_url()}/communication_analytics"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={
+                    "select": ANALYTICS_SELECT,
+                    "order": "period_date.desc",
+                    "limit": str(max(1, min(days, 365))),
+                },
+            )
+            _raise_for_status(resp, "get_communication_analytics", "GET", url, self._supabase)
             rows = resp.json()
             return rows if isinstance(rows, list) else []
 

@@ -35,6 +35,17 @@ class MaxRetriesExceeded(Exception):
     """Le superviseur a épuisé le nombre maximal de tentatives autorisées."""
 
 
+_AGENT_RECEIVER_SLUG: dict[str, str] = {
+    "BriefAI": "brief_ai",
+    "DatabaseAI": "database_ai",
+    "AuthAI": "auth_ai",
+    "PaymentAI": "payment_ai",
+    "GeneratorAI": "generator_ai",
+    "DeployAI": "deploy_ai",
+    "SupervisorAI": "supervisor_ai",
+}
+
+
 _AGENT_PLAN_KEYS: dict[str, str] = {
     "BriefAI": "brief",
     "DesignSystemAI": "design_system",
@@ -376,12 +387,24 @@ async def _emit_agent_start(
     agent: str,
     step: int,
     total: int | None = None,
+    session_id: str | None = None,
 ) -> None:
+    total_val = total if total is not None else TRACKED_TOTAL
     await _emit(
         generation_id,
         "agent_start",
-        {"agent": agent, "step": step, "total": total if total is not None else TRACKED_TOTAL},
+        {"agent": agent, "step": step, "total": total_val},
     )
+    if session_id:
+        from agents.message_bus import message_bus
+
+        message_bus.publish(
+            session_id=str(session_id),
+            sender_agent="pipeline",
+            message_type="agent_started",
+            payload={"agent": agent, "step": step, "total": total_val},
+            channel_name="pipeline_events",
+        )
 
 
 async def _emit_agent_done(
@@ -392,6 +415,7 @@ async def _emit_agent_done(
     duration_ms: int,
     total: int | None = None,
     usage: dict[str, Any] | None = None,
+    session_id: str | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "agent": agent,
@@ -405,6 +429,16 @@ async def _emit_agent_done(
             if key in usage:
                 payload[key] = usage[key]
     await _emit(generation_id, "agent_done", payload)
+    if session_id:
+        from agents.message_bus import message_bus
+
+        message_bus.publish(
+            session_id=str(session_id),
+            sender_agent="pipeline",
+            message_type="agent_completed",
+            payload={"agent": agent, "step": step, "duration_ms": duration_ms},
+            channel_name="pipeline_events",
+        )
 
 
 async def _emit_agent_retry(
@@ -431,6 +465,7 @@ async def _run_supervised(
     generation_id: str | None = None,
     project_id: str | None = None,
     html_quality_score: int = 0,
+    session_id: str | None = None,
 ) -> Any:
     """
     Exécute run_once(prompt) jusqu'à validation SupervisorAI ou timeout 10 min.
@@ -479,6 +514,19 @@ async def _run_supervised(
             )
 
             if check.get("valid"):
+                if session_id:
+                    from agents.message_bus import message_bus
+
+                    message_bus.publish(
+                        session_id=str(session_id),
+                        sender_agent="supervisor_ai",
+                        receiver_agent=_AGENT_RECEIVER_SLUG.get(
+                            agent_name, agent_name.lower()
+                        ),
+                        message_type="validation_passed",
+                        payload={"agent": agent_name, "attempt": attempt},
+                        channel_name="supervisor_corrections",
+                    )
                 if success_log:
                     msg = f"[SupervisorAI] ✅ {agent_name} validé — {success_log(last_result)}"
                     print(msg)
@@ -488,11 +536,29 @@ async def _run_supervised(
             errors = list(check.get("errors") or [])
             _print_supervisor_fail(agent_name, errors)
             reason = "; ".join(str(e) for e in errors) or "validation échouée"
+            corrected = str(check.get("corrected_prompt") or "").strip()
+            if session_id:
+                from agents.message_bus import message_bus
+
+                message_bus.publish(
+                    session_id=str(session_id),
+                    sender_agent="supervisor_ai",
+                    receiver_agent=_AGENT_RECEIVER_SLUG.get(
+                        agent_name, agent_name.lower()
+                    ),
+                    message_type="correction_request",
+                    payload={
+                        "errors": errors,
+                        "corrected_prompt": corrected,
+                        "attempt": attempt,
+                    },
+                    channel_name="supervisor_corrections",
+                    priority="high",
+                )
             await _emit_log(
                 generation_id,
                 f"[SupervisorAI] {agent_name} invalide — {reason}",
             )
-            corrected = str(check.get("corrected_prompt") or "").strip()
             if corrected:
                 prompt = corrected
             _print_supervisor_retry(agent_name, attempt + 1)
@@ -587,6 +653,7 @@ async def _run_pipeline_body_inner(
         )
         if session:
             orchestration_ctx["session_id"] = session.get("id")
+    orch_session_id: str | None = orchestration_ctx.get("session_id")
     await _emit_log(
         generation_id,
         (
@@ -625,7 +692,11 @@ async def _run_pipeline_body_inner(
         return await supervisor.validate_brief(brief)
 
     await _emit_agent_start(
-        generation_id, agent="BriefAI", step=1, total=tracked_total
+        generation_id,
+        agent="BriefAI",
+        step=1,
+        total=tracked_total,
+        session_id=orch_session_id,
     )
     brief_t0 = time.perf_counter()
     brief_raw = await _run_supervised(
@@ -636,6 +707,7 @@ async def _run_pipeline_body_inner(
         success_log=lambda b: f"client: {b.get('client_name', '?')}",
         generation_id=generation_id,
         project_id=None,
+        session_id=orch_session_id,
     )
     brief, brief_usage = pop_agent_usage(brief_raw)
     brief_duration_ms = int((time.perf_counter() - brief_t0) * 1000)
@@ -653,6 +725,7 @@ async def _run_pipeline_body_inner(
         duration_ms=brief_duration_ms,
         total=tracked_total,
         usage=brief_usage,
+        session_id=orch_session_id,
     )
     _track_orchestration_agent(
         orchestration_ctx, "BriefAI", generation_id=generation_id
@@ -670,10 +743,9 @@ async def _run_pipeline_body_inner(
     pt = (brief.get("project_type") or req.project_type or "").strip().lower()
     project_id = str(brief.get("project_id") or "") or None
 
-    session_id = orchestration_ctx.get("session_id")
-    if session_id:
+    if orch_session_id:
         _schedule_orchestration(
-            _orchestration_set_brief_context(str(session_id), dict(brief))
+            _orchestration_set_brief_context(str(orch_session_id), dict(brief))
         )
 
     _schedule_workflow(
@@ -687,7 +759,11 @@ async def _run_pipeline_body_inner(
 
     if not is_extension:
         await _emit_agent_start(
-            generation_id, agent="DesignSystemAI", step=2, total=tracked_total
+            generation_id,
+            agent="DesignSystemAI",
+            step=2,
+            total=tracked_total,
+            session_id=orch_session_id,
         )
     ds_t0 = time.perf_counter()
     design_system = DesignSystemAgent().run(brief)
@@ -700,6 +776,7 @@ async def _run_pipeline_body_inner(
             step=2,
             duration_ms=int((time.perf_counter() - ds_t0) * 1000),
             total=tracked_total,
+            session_id=orch_session_id,
         )
         _track_workflow_step(workflow_ctx, "DesignSystemAI")
         _track_orchestration_agent(
@@ -741,9 +818,23 @@ async def _run_pipeline_body_inner(
             success_log=lambda s: f"{len((s or {}).get('tables') or [])} table(s)",
             generation_id=generation_id,
             project_id=project_id,
+            session_id=orch_session_id,
         )
         db_schema, db_usage = pop_agent_usage(db_raw)
         brief["database_schema"] = db_schema
+        if orch_session_id:
+            from agents.message_bus import message_bus
+
+            message_bus.publish(
+                session_id=str(orch_session_id),
+                sender_agent="database_ai",
+                message_type="schema_ready",
+                payload={
+                    "tables": len((db_schema or {}).get("tables") or []),
+                    "project_type": pt,
+                },
+                channel_name="schema_propagation",
+            )
         await llm_usage_svc.record_agent(
             "DatabaseAI",
             db_usage,
@@ -785,6 +876,7 @@ async def _run_pipeline_body_inner(
             success_log=lambda s: f"auth_type={s.get('auth_type', '?')}",
             generation_id=generation_id,
             project_id=project_id,
+            session_id=orch_session_id,
         )
         auth_schema, auth_usage = pop_agent_usage(auth_raw)
         brief["auth_schema"] = auth_schema
@@ -823,6 +915,7 @@ async def _run_pipeline_body_inner(
             success_log=lambda p: f"type={p.get('payment_type', '?')}",
             generation_id=generation_id,
             project_id=project_id,
+            session_id=orch_session_id,
         )
         payment_cfg, pay_usage = pop_agent_usage(pay_raw)
         brief["payment_config"] = payment_cfg
@@ -866,6 +959,21 @@ async def _run_pipeline_body_inner(
         brief["knowledge_context"] = contexts.get("knowledge") or ""
         brief["memory_context"] = contexts.get("memory") or ""
 
+        if orch_session_id:
+            from agents.message_bus import message_bus
+
+            message_bus.publish(
+                session_id=str(orch_session_id),
+                sender_agent="context_enrichment",
+                receiver_agent="generator_ai",
+                message_type="context_ready",
+                payload={
+                    "has_knowledge": bool(contexts.get("knowledge")),
+                    "has_memory": bool(contexts.get("memory")),
+                },
+                channel_name="context_enrichment",
+            )
+
         if generation_id:
             _schedule_orchestration(
                 _orchestration_update_session(
@@ -885,7 +993,11 @@ async def _run_pipeline_body_inner(
     generator = GeneratorAI()
 
     await _emit_agent_start(
-        generation_id, agent="GeneratorAI", step=3, total=tracked_total
+        generation_id,
+        agent="GeneratorAI",
+        step=3,
+        total=tracked_total,
+        session_id=orch_session_id,
     )
     gen_t0 = time.perf_counter()
     correction = ""
@@ -912,6 +1024,7 @@ async def _run_pipeline_body_inner(
         duration_ms=gen_duration_ms,
         total=tracked_total,
         usage=gen_usage,
+        session_id=orch_session_id,
     )
     _track_workflow_step(workflow_ctx, "GeneratorAI")
     _track_orchestration_agent(
@@ -919,7 +1032,11 @@ async def _run_pipeline_body_inner(
     )
 
     await _emit_agent_start(
-        generation_id, agent="SupervisorAI", step=4, total=tracked_total
+        generation_id,
+        agent="SupervisorAI",
+        step=4,
+        total=tracked_total,
+        session_id=orch_session_id,
     )
     sup_t0 = time.perf_counter()
 
@@ -964,6 +1081,17 @@ async def _run_pipeline_body_inner(
                     generation_id=generation_id,
                     project_id=project_id,
                 )
+                if orch_session_id:
+                    from agents.message_bus import message_bus
+
+                    message_bus.publish(
+                        session_id=str(orch_session_id),
+                        sender_agent="supervisor_ai",
+                        receiver_agent="generator_ai",
+                        message_type="validation_passed",
+                        payload={"html_length": len(html), "attempt": attempt},
+                        channel_name="supervisor_corrections",
+                    )
                 msg = f"[SupervisorAI] ✅ HTML validé — {len(html)} car."
                 print(msg)
                 await _emit_log(generation_id, msg)
@@ -972,13 +1100,29 @@ async def _run_pipeline_body_inner(
             errors = list(check.get("errors") or [])
             _print_supervisor_fail("SupervisorAI", errors)
             reason = "; ".join(str(e) for e in errors) or "HTML invalide"
+            corrected = str(check.get("corrected_prompt") or "").strip()
+            if orch_session_id and not check.get("valid"):
+                from agents.message_bus import message_bus
+
+                message_bus.publish(
+                    session_id=str(orch_session_id),
+                    sender_agent="supervisor_ai",
+                    receiver_agent="generator_ai",
+                    message_type="correction_request",
+                    payload={
+                        "errors": errors,
+                        "corrected_prompt": corrected,
+                        "attempt": attempt,
+                    },
+                    channel_name="supervisor_corrections",
+                    priority="high",
+                )
             await _emit_agent_retry(
                 generation_id,
                 agent="SupervisorAI",
                 attempt=attempt,
                 reason=reason,
             )
-            corrected = str(check.get("corrected_prompt") or "").strip()
             correction = corrected
             _print_supervisor_retry("SupervisorAI", attempt + 1)
             gen_retry_t0 = time.perf_counter()
@@ -1003,6 +1147,7 @@ async def _run_pipeline_body_inner(
         step=4,
         duration_ms=int((time.perf_counter() - sup_t0) * 1000),
         total=tracked_total,
+        session_id=orch_session_id,
     )
     _track_workflow_step(workflow_ctx, "SupervisorAI")
     _track_orchestration_agent(
@@ -1010,10 +1155,10 @@ async def _run_pipeline_body_inner(
     )
 
     html_for_context = str((result or {}).get("html") or "")
-    if session_id and html_for_context:
+    if orch_session_id and html_for_context:
         _schedule_orchestration(
             _orchestration_set_html_context(
-                str(session_id),
+                str(orch_session_id),
                 len(html_for_context),
                 html_quality_score,
             )
@@ -1076,7 +1221,11 @@ async def _run_pipeline_body_inner(
         )
 
     await _emit_agent_start(
-        generation_id, agent="DeployAI", step=5, total=tracked_total
+        generation_id,
+        agent="DeployAI",
+        step=5,
+        total=tracked_total,
+        session_id=orch_session_id,
     )
     deploy_t0 = time.perf_counter()
     deployed = await _run_supervised(
@@ -1088,6 +1237,7 @@ async def _run_pipeline_body_inner(
         generation_id=generation_id,
         project_id=project_id,
         html_quality_score=html_quality_score,
+        session_id=orch_session_id,
     )
     await _emit_agent_done(
         generation_id,
@@ -1095,6 +1245,7 @@ async def _run_pipeline_body_inner(
         step=5,
         duration_ms=int((time.perf_counter() - deploy_t0) * 1000),
         total=tracked_total,
+        session_id=orch_session_id,
     )
     _track_workflow_step(workflow_ctx, "DeployAI")
     _track_orchestration_agent(
@@ -1336,6 +1487,7 @@ async def _run_extension_pipeline(
     )
     deploy_t0 = time.perf_counter()
     ext_project_id = str(brief.get("project_id") or "") or None
+    ext_session_id = orch_ctx.get("session_id")
     deployed = await _run_supervised(
         "DeployAI",
         _run_deploy,
@@ -1345,6 +1497,7 @@ async def _run_extension_pipeline(
         generation_id=generation_id,
         project_id=ext_project_id,
         html_quality_score=0,
+        session_id=ext_session_id,
     )
     await _emit(
         generation_id,
