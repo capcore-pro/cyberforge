@@ -35,6 +35,19 @@ class MaxRetriesExceeded(Exception):
     """Le superviseur a épuisé le nombre maximal de tentatives autorisées."""
 
 
+_AGENT_PLAN_KEYS: dict[str, str] = {
+    "BriefAI": "brief",
+    "DesignSystemAI": "design_system",
+    "DatabaseAI": "database",
+    "AuthAI": "auth",
+    "PaymentAI": "payment",
+    "GeneratorAI": "generator",
+    "SupervisorAI": "supervisor",
+    "DeployAI": "deploy",
+    "ExtensionBuilder": "extension_builder",
+}
+
+
 def _decision_type_for_agent(agent_name: str) -> str:
     mapping = {
         "BriefAI": "brief",
@@ -144,6 +157,98 @@ def _schedule_workflow(coro: Awaitable[None]) -> None:
             logger.warning("[WorkflowStore] ignoré — %s", exc)
 
     asyncio.create_task(_runner())
+
+
+def _schedule_orchestration(coro: Awaitable[None]) -> None:
+    """Orchestration store non bloquant — ne doit jamais faire échouer le pipeline."""
+
+    async def _runner() -> None:
+        try:
+            await coro
+        except Exception as exc:
+            logger.warning("[OrchestrationStore] ignoré — %s", exc)
+
+    asyncio.create_task(_runner())
+
+
+def _track_orchestration_agent(
+    orchestration_ctx: dict[str, Any],
+    agent_name: str,
+    *,
+    generation_id: str | None,
+) -> None:
+    plan_key = _AGENT_PLAN_KEYS.get(agent_name, agent_name.lower())
+    completed: list[str] = orchestration_ctx.setdefault("agents_completed", [])
+    if plan_key not in completed:
+        completed.append(plan_key)
+    if not generation_id:
+        return
+    _schedule_orchestration(
+        _orchestration_update_session(generation_id, orchestration_ctx, current_agent=plan_key)
+    )
+
+
+async def _orchestration_update_session(
+    generation_id: str,
+    orchestration_ctx: dict[str, Any],
+    *,
+    current_agent: str | None = None,
+    parallel_groups: list[list[str]] | None = None,
+) -> None:
+    from db.orchestration_store import get_orchestration_store
+
+    await get_orchestration_store().update_session(
+        generation_id,
+        status="running",
+        agents_completed=list(orchestration_ctx.get("agents_completed") or []),
+        agents_failed=list(orchestration_ctx.get("agents_failed") or []),
+        current_agent=current_agent,
+        parallel_groups=parallel_groups,
+    )
+
+
+def _orchestration_complete(
+    orchestration_ctx: dict[str, Any],
+    generation_id: str | None,
+) -> None:
+    if not orchestration_ctx.get("session_id") or not generation_id:
+        return
+    status = str(orchestration_ctx.get("status") or "completed")
+    _schedule_orchestration(
+        _orchestration_finish_session(generation_id, status)
+    )
+
+
+async def _orchestration_finish_session(generation_id: str, status: str) -> None:
+    from db.orchestration_store import get_orchestration_store
+
+    await get_orchestration_store().complete_session(generation_id, status=status)
+
+
+async def _orchestration_set_brief_context(session_id: str, brief: dict[str, Any]) -> None:
+    from db.orchestration_store import get_orchestration_store
+
+    await get_orchestration_store().set_shared_context(
+        session_id=session_id,
+        context_key="brief",
+        context_value=brief,
+        produced_by="brief_ai",
+    )
+
+
+async def _orchestration_set_html_context(
+    session_id: str,
+    html_length: int,
+    quality_score: int,
+) -> None:
+    from db.orchestration_store import get_orchestration_store
+
+    await get_orchestration_store().set_shared_context(
+        session_id=session_id,
+        context_key="html",
+        context_value={"length": html_length, "quality_score": quality_score},
+        produced_by="generator_ai",
+    )
 
 
 async def _workflow_init(
@@ -425,6 +530,34 @@ async def _run_pipeline_body(
     generation_id: str | None,
     pipeline_t0: float,
 ) -> dict[str, Any]:
+    orchestration_ctx: dict[str, Any] = {
+        "session_id": None,
+        "agents_completed": [],
+        "agents_failed": [],
+        "status": "completed",
+    }
+
+    try:
+        return await _run_pipeline_body_inner(
+            req,
+            generation_id=generation_id,
+            pipeline_t0=pipeline_t0,
+            orchestration_ctx=orchestration_ctx,
+        )
+    except Exception:
+        orchestration_ctx["status"] = "failed"
+        raise
+    finally:
+        _orchestration_complete(orchestration_ctx, generation_id)
+
+
+async def _run_pipeline_body_inner(
+    req: PipelineRequest,
+    *,
+    generation_id: str | None,
+    pipeline_t0: float,
+    orchestration_ctx: dict[str, Any],
+) -> dict[str, Any]:
     supervisor = SupervisorAI()
     brief_ai = BriefAI()
     llm_usage_svc = get_llm_usage_service()
@@ -442,6 +575,18 @@ async def _run_pipeline_body(
         "client_name": req.client_name or "",
     }
     execution_plan = PlanningEngine().build_plan(pre_brief)
+
+    if generation_id:
+        from db.orchestration_store import get_orchestration_store
+
+        session = await get_orchestration_store().create_session(
+            generation_id=generation_id,
+            workflow_id=execution_plan["workflow_id"],
+            agents_planned=execution_plan["agents"],
+            project_id=None,
+        )
+        if session:
+            orchestration_ctx["session_id"] = session.get("id")
     await _emit_log(
         generation_id,
         (
@@ -509,6 +654,9 @@ async def _run_pipeline_body(
         total=tracked_total,
         usage=brief_usage,
     )
+    _track_orchestration_agent(
+        orchestration_ctx, "BriefAI", generation_id=generation_id
+    )
 
     brief["prompt"] = req.prompt
     if req.generation_mode:
@@ -521,6 +669,12 @@ async def _run_pipeline_body(
     brief["execution_plan"] = PlanningEngine().build_plan(brief)
     pt = (brief.get("project_type") or req.project_type or "").strip().lower()
     project_id = str(brief.get("project_id") or "") or None
+
+    session_id = orchestration_ctx.get("session_id")
+    if session_id:
+        _schedule_orchestration(
+            _orchestration_set_brief_context(str(session_id), dict(brief))
+        )
 
     _schedule_workflow(
         _workflow_init(
@@ -548,6 +702,9 @@ async def _run_pipeline_body(
             total=tracked_total,
         )
         _track_workflow_step(workflow_ctx, "DesignSystemAI")
+        _track_orchestration_agent(
+            orchestration_ctx, "DesignSystemAI", generation_id=generation_id
+        )
 
     if pt == "extension_navigateur":
         return await _run_extension_pipeline(
@@ -556,6 +713,7 @@ async def _run_pipeline_body(
             generation_id=generation_id,
             pipeline_t0=pipeline_t0,
             workflow_ctx=workflow_ctx,
+            orchestration_ctx=orchestration_ctx,
         )
 
     if pt not in ("vitrine_next",):
@@ -594,6 +752,9 @@ async def _run_pipeline_body(
             totals=usage_totals,
         )
         _track_workflow_step(workflow_ctx, "DatabaseAI")
+        _track_orchestration_agent(
+            orchestration_ctx, "DatabaseAI", generation_id=generation_id
+        )
 
     if pt in ("application_web", "real_app", "crm"):
         from agents import auth_ai
@@ -635,6 +796,9 @@ async def _run_pipeline_body(
             totals=usage_totals,
         )
         _track_workflow_step(workflow_ctx, "AuthAI")
+        _track_orchestration_agent(
+            orchestration_ctx, "AuthAI", generation_id=generation_id
+        )
 
     if pt in ("ecommerce", "site_reservation"):
         from agents import payment_ai
@@ -670,32 +834,53 @@ async def _run_pipeline_body(
             totals=usage_totals,
         )
         _track_workflow_step(workflow_ctx, "PaymentAI")
+        _track_orchestration_agent(
+            orchestration_ctx, "PaymentAI", generation_id=generation_id
+        )
 
     _apply_stripe_publishable_key(brief, req.stripe_publishable_key)
 
+    from agents.parallel_executor import parallel_executor
+
     try:
         from knowledge.knowledge_service import get_knowledge_service
-
-        knowledge_ctx = await get_knowledge_service().get_context_for_prompt(
-            query=str(brief.get("description") or req.prompt),
-            project_id=brief.get("project_id"),
-        )
-        if knowledge_ctx:
-            brief["knowledge_context"] = knowledge_ctx
-    except Exception as exc:
-        logger.warning("[Pipeline] Knowledge Engine indisponible — %s", exc)
-
-    try:
         from memory.memory_service import get_memory_service
 
-        memory_ctx = await get_memory_service().get_context_for_prompt(
-            query=str(brief.get("description") or req.prompt),
-            project_id=brief.get("project_id"),
+        knowledge_service = get_knowledge_service()
+        memory_service = get_memory_service()
+        query = str(brief.get("description") or req.prompt)
+        proj_id = brief.get("project_id")
+
+        contexts = await parallel_executor.run_parallel(
+            {
+                "knowledge": knowledge_service.get_context_for_prompt(
+                    query=query,
+                    project_id=proj_id,
+                ),
+                "memory": memory_service.get_context_for_prompt(
+                    query=query,
+                    project_id=proj_id,
+                ),
+            }
         )
-        if memory_ctx:
-            brief["memory_context"] = memory_ctx
+        brief["knowledge_context"] = contexts.get("knowledge") or ""
+        brief["memory_context"] = contexts.get("memory") or ""
+
+        if generation_id:
+            _schedule_orchestration(
+                _orchestration_update_session(
+                    generation_id,
+                    orchestration_ctx,
+                    parallel_groups=[["knowledge", "memory"]],
+                )
+            )
+            await _emit(
+                generation_id,
+                "log",
+                {"message": "Knowledge + Memory récupérés en parallèle"},
+            )
     except Exception as exc:
-        logger.warning("[Pipeline] Memory Engine indisponible — %s", exc)
+        logger.warning("[Pipeline] Knowledge/Memory parallèle indisponible — %s", exc)
 
     generator = GeneratorAI()
 
@@ -729,6 +914,9 @@ async def _run_pipeline_body(
         usage=gen_usage,
     )
     _track_workflow_step(workflow_ctx, "GeneratorAI")
+    _track_orchestration_agent(
+        orchestration_ctx, "GeneratorAI", generation_id=generation_id
+    )
 
     await _emit_agent_start(
         generation_id, agent="SupervisorAI", step=4, total=tracked_total
@@ -817,9 +1005,23 @@ async def _run_pipeline_body(
         total=tracked_total,
     )
     _track_workflow_step(workflow_ctx, "SupervisorAI")
+    _track_orchestration_agent(
+        orchestration_ctx, "SupervisorAI", generation_id=generation_id
+    )
+
+    html_for_context = str((result or {}).get("html") or "")
+    if session_id and html_for_context:
+        _schedule_orchestration(
+            _orchestration_set_html_context(
+                str(session_id),
+                len(html_for_context),
+                html_quality_score,
+            )
+        )
 
     if not result.get("success") or not result.get("html"):
         error_msg = "GeneratorAI n'a pas produit de HTML valide."
+        orchestration_ctx["status"] = "failed"
         await _emit(generation_id, "error", {"message": error_msg})
         _schedule_workflow(
             _workflow_complete(
@@ -895,6 +1097,9 @@ async def _run_pipeline_body(
         total=tracked_total,
     )
     _track_workflow_step(workflow_ctx, "DeployAI")
+    _track_orchestration_agent(
+        orchestration_ctx, "DeployAI", generation_id=generation_id
+    )
 
     deploy_url = str(deployed.get("url") or "")
     persisted_project_id: str | None = None
@@ -1023,6 +1228,7 @@ async def _run_pipeline_body(
         )
     else:
         err = str(final_result.get("error") or "Déploiement échoué")
+        orchestration_ctx["status"] = "failed"
         await _emit(generation_id, "error", {"message": err})
         _schedule_audit(
             _audit_log(
@@ -1055,11 +1261,18 @@ async def _run_extension_pipeline(
     generation_id: str | None,
     pipeline_t0: float,
     workflow_ctx: dict[str, Any] | None = None,
+    orchestration_ctx: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """BriefAI → ExtensionBuilder → DeployAI (pas Generator/DB/Auth/Payment)."""
     from tools.extension_pipeline import build_extension_files, build_extension_zip
 
     wf_ctx = workflow_ctx or _new_workflow_ctx()
+    orch_ctx = orchestration_ctx if orchestration_ctx is not None else {
+        "session_id": None,
+        "agents_completed": [],
+        "agents_failed": [],
+        "status": "completed",
+    }
     supervisor = SupervisorAI()
     client_name = str(brief.get("client_name") or req.client_name or "CyberForge")
     primary_color = str(brief.get("couleur_primaire") or "#4f46e5")
@@ -1096,6 +1309,9 @@ async def _run_extension_pipeline(
         f"ExtensionBuilder — {len(extension_files)} fichier(s), ZIP {len(zip_bytes)} octets",
     )
     _track_workflow_step(wf_ctx, "ExtensionBuilder")
+    _track_orchestration_agent(
+        orch_ctx, "ExtensionBuilder", generation_id=generation_id
+    )
 
     deploy_ai = DeployAI()
 
@@ -1141,6 +1357,9 @@ async def _run_extension_pipeline(
         },
     )
     _track_workflow_step(wf_ctx, "DeployAI")
+    _track_orchestration_agent(
+        orch_ctx, "DeployAI", generation_id=generation_id
+    )
 
     deploy_url = str(deployed.get("url") or "")
     if deployed.get("success") and deploy_url:
@@ -1241,6 +1460,7 @@ async def _run_extension_pipeline(
         )
     else:
         err = str(final_result.get("error") or "Déploiement extension échoué")
+        orch_ctx["status"] = "failed"
         await _emit(generation_id, "error", {"message": err})
         _schedule_audit(
             _audit_log(
