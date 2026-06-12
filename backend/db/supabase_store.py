@@ -202,6 +202,12 @@ class SupabaseStore:
         client_name: str,
         demo_url: str,
         html: str,
+        duration_ms: int = 0,
+        estimated_cost_usd: float = 0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        total_tokens: int = 0,
+        generation_id: str | None = None,
     ) -> PersistenceResult | None:
         """Enregistre un run pipeline v2 (brief → generate → deploy) dans Supabase."""
         if not self.is_configured():
@@ -275,6 +281,13 @@ class SupabaseStore:
                 else:
                     raise SupabaseStoreError("Création projet v2 sans identifiant.")
 
+            analysis: dict[str, Any] = {
+                "summary": "Pipeline v2",
+                "agent_id": "cyberforge",
+            }
+            if generation_id:
+                analysis["generation_stream_id"] = generation_id
+
             gen_payload = {
                 "project_id": project_id,
                 "prompt": trimmed,
@@ -283,12 +296,15 @@ class SupabaseStore:
                 "provider": "cyberforge",
                 "complexity": "moyenne",
                 "complexity_score": 5,
-                "duration_ms": 0,
-                "estimated_cost_usd": 0,
+                "duration_ms": max(0, int(duration_ms or 0)),
+                "estimated_cost_usd": float(estimated_cost_usd or 0),
+                "input_tokens": max(0, int(input_tokens or 0)),
+                "output_tokens": max(0, int(output_tokens or 0)),
+                "total_tokens": max(0, int(total_tokens or 0)),
                 "code": code[:50000],
                 "files": files,
                 "stack": ["html"],
-                "analysis": {"summary": "Pipeline v2", "agent_id": "cyberforge"},
+                "analysis": analysis,
                 "generation_summary": "Génération HTML pipeline v2",
                 "planned_models": ["brief-ai", "generator-ai", "deploy-ai"],
                 "preview_html": code[:50000] if code else None,

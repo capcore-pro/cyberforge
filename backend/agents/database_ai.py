@@ -21,6 +21,8 @@ import re
 from typing import Any
 
 import anthropic
+
+from agents.llm_usage_utils import usage_from_anthropic_response
 from dotenv import load_dotenv
 
 load_dotenv(
@@ -345,7 +347,11 @@ async def run(project_description: str, project_type: str, design_system: dict) 
         summary = parsed.get("summary")
         if not isinstance(tables, list) or not isinstance(sql, str) or not isinstance(summary, str):
             raise ValueError("JSON incomplet (tables/sql/summary).")
-        return {"tables": tables, "sql": sql, "summary": summary}
+        result = {"tables": tables, "sql": sql, "summary": summary}
+        usage = usage_from_anthropic_response(response, MODEL)
+        if usage:
+            result["usage"] = usage
+        return result
     except Exception as _ex:
         print(f"[DatabaseAI PARSE ERROR] {_ex}"); return _default_schema(pt)
 

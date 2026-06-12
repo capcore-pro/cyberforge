@@ -30,6 +30,8 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
 import anthropic  # noqa: E402
 
+from agents.llm_usage_utils import merge_usage, usage_from_anthropic_response  # noqa: E402
+
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = max(4000, int(os.getenv("PAYMENT_AI_MAX_TOKENS", "8000")))
@@ -257,14 +259,21 @@ async def run(project_description: str, project_type: str, database_schema: dict
         f"{json.dumps(database_schema or {}, ensure_ascii=False)[:8000]}"
     ).strip()
 
+    usage_total: dict[str, Any] | None = None
     try:
         response = await _call_claude(SYSTEM_PROMPT, user_prompt)
+        usage_total = merge_usage(
+            usage_total, usage_from_anthropic_response(response, MODEL)
+        )
         raw_text = response.content[0].text
         print(
             f"[PaymentAI DEBUG] Réponse brute (300 premiers chars):\n{raw_text[:300]}"
         )
         try:
-            return _parse_payment_json(raw_text, detected=detected)
+            payload = _parse_payment_json(raw_text, detected=detected)
+            if usage_total:
+                payload["usage"] = usage_total
+            return payload
         except json.JSONDecodeError as exc:
             logger.warning(
                 "[PaymentAI] JSON invalide ou tronqué (max_tokens=%s) — retry minimal: %s",
@@ -282,11 +291,17 @@ async def run(project_description: str, project_type: str, database_schema: dict
                 minimal_prompt,
                 max_tokens=2048,
             )
+            usage_total = merge_usage(
+                usage_total, usage_from_anthropic_response(retry, MODEL)
+            )
             retry_text = retry.content[0].text
             print(
                 f"[PaymentAI DEBUG] Retry minimal (300 chars):\n{retry_text[:300]}"
             )
-            return _parse_payment_json(retry_text, detected=detected)
+            payload = _parse_payment_json(retry_text, detected=detected)
+            if usage_total:
+                payload["usage"] = usage_total
+            return payload
     except json.JSONDecodeError as exc:
         logger.warning(
             "[PaymentAI] JSON retry minimal échoué — paiement ignoré: %s",

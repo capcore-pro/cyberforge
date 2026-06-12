@@ -17,7 +17,9 @@ from agents.brief_ai import BriefAI
 from agents.deploy_ai import DeployAI
 from agents.design_system_ai import DesignSystemAgent
 from agents.generator_ai import GeneratorAI
+from agents.llm_usage_utils import pop_agent_usage
 from agents.supervisor_ai import SupervisorAI
+from llm.llm_usage_service import LLMUsageTotals, get_llm_usage_service
 from api.generation_stream import EXTENSION_TRACKED_TOTAL as _EXT_TOTAL
 from api.generation_stream import TRACKED_TOTAL, generation_event_store
 from db.supabase_store import SupabaseStoreError, get_supabase_store
@@ -76,6 +78,34 @@ async def _emit_log(generation_id: str | None, message: str) -> None:
     await generation_event_store.emit_log(generation_id, message)
 
 
+def _schedule_audit(coro: Awaitable[None]) -> None:
+    """Audit non bloquant — ne doit jamais faire échouer le pipeline."""
+
+    async def _runner() -> None:
+        try:
+            await coro
+        except Exception as exc:
+            logger.warning("[AuditStore] log ignoré — %s", exc)
+
+    asyncio.create_task(_runner())
+
+
+async def _audit_log(
+    event_type: str,
+    brief: dict[str, Any],
+    event_data: dict[str, Any],
+) -> None:
+    from db.audit_store import get_audit_store
+
+    await get_audit_store().log(
+        event_type=event_type,
+        actor_type="agent",
+        actor_id="pipeline",
+        event_data=event_data,
+        project_id=str(brief.get("project_id") or "") or None,
+    )
+
+
 async def _emit_agent_start(
     generation_id: str | None,
     *,
@@ -97,6 +127,7 @@ async def _emit_agent_done(
     step: int,
     duration_ms: int,
     total: int | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "agent": agent,
@@ -105,6 +136,10 @@ async def _emit_agent_done(
     }
     if total is not None:
         payload["total"] = total
+    if isinstance(usage, dict):
+        for key in ("input_tokens", "output_tokens", "total_tokens", "model", "provider"):
+            if key in usage:
+                payload[key] = usage[key]
     await _emit(generation_id, "agent_done", payload)
 
 
@@ -199,6 +234,8 @@ async def _run_pipeline_body(
 ) -> dict[str, Any]:
     supervisor = SupervisorAI()
     brief_ai = BriefAI()
+    llm_usage_svc = get_llm_usage_service()
+    usage_totals = LLMUsageTotals()
     is_extension = (req.project_type or "").strip().lower() == "extension_navigateur"
     tracked_total = _EXT_TOTAL if is_extension else TRACKED_TOTAL
 
@@ -216,7 +253,7 @@ async def _run_pipeline_body(
         generation_id, agent="BriefAI", step=1, total=tracked_total
     )
     brief_t0 = time.perf_counter()
-    brief = await _run_supervised(
+    brief_raw = await _run_supervised(
         "BriefAI",
         _run_brief,
         _validate_brief,
@@ -224,12 +261,22 @@ async def _run_pipeline_body(
         success_log=lambda b: f"client: {b.get('client_name', '?')}",
         generation_id=generation_id,
     )
+    brief, brief_usage = pop_agent_usage(brief_raw)
+    brief_duration_ms = int((time.perf_counter() - brief_t0) * 1000)
+    await llm_usage_svc.record_agent(
+        "BriefAI",
+        brief_usage,
+        duration_ms=brief_duration_ms,
+        generation_id=generation_id,
+        totals=usage_totals,
+    )
     await _emit_agent_done(
         generation_id,
         agent="BriefAI",
         step=1,
-        duration_ms=int((time.perf_counter() - brief_t0) * 1000),
+        duration_ms=brief_duration_ms,
         total=tracked_total,
+        usage=brief_usage,
     )
 
     brief["prompt"] = req.prompt
@@ -283,7 +330,8 @@ async def _run_pipeline_body(
             return await supervisor.validate_database(schema, brief)
 
         await _emit_log(generation_id, "DatabaseAI — schéma base de données")
-        brief["database_schema"] = await _run_supervised(
+        db_t0 = time.perf_counter()
+        db_raw = await _run_supervised(
             "DatabaseAI",
             _run_db,
             _validate_db,
@@ -291,8 +339,17 @@ async def _run_pipeline_body(
             success_log=lambda s: f"{len((s or {}).get('tables') or [])} table(s)",
             generation_id=generation_id,
         )
+        db_schema, db_usage = pop_agent_usage(db_raw)
+        brief["database_schema"] = db_schema
+        await llm_usage_svc.record_agent(
+            "DatabaseAI",
+            db_usage,
+            duration_ms=int((time.perf_counter() - db_t0) * 1000),
+            generation_id=generation_id,
+            totals=usage_totals,
+        )
 
-    if pt in ("application_web", "real_app"):
+    if pt in ("application_web", "real_app", "crm"):
         from agents import auth_ai
 
         async def _run_auth(prompt: str) -> dict[str, Any]:
@@ -312,13 +369,23 @@ async def _run_pipeline_body(
             }
 
         await _emit_log(generation_id, "AuthAI — schéma authentification")
-        brief["auth_schema"] = await _run_supervised(
+        auth_t0 = time.perf_counter()
+        auth_raw = await _run_supervised(
             "AuthAI",
             _run_auth,
             _validate_auth,
             initial_prompt=str(brief.get("description") or req.prompt),
             success_log=lambda s: f"auth_type={s.get('auth_type', '?')}",
             generation_id=generation_id,
+        )
+        auth_schema, auth_usage = pop_agent_usage(auth_raw)
+        brief["auth_schema"] = auth_schema
+        await llm_usage_svc.record_agent(
+            "AuthAI",
+            auth_usage,
+            duration_ms=int((time.perf_counter() - auth_t0) * 1000),
+            generation_id=generation_id,
+            totals=usage_totals,
         )
 
     if pt in ("ecommerce", "site_reservation"):
@@ -335,13 +402,23 @@ async def _run_pipeline_body(
             return await supervisor.validate_payment(payment, brief)
 
         await _emit_log(generation_id, "PaymentAI — configuration paiement")
-        brief["payment_config"] = await _run_supervised(
+        pay_t0 = time.perf_counter()
+        pay_raw = await _run_supervised(
             "PaymentAI",
             _run_payment,
             _validate_payment,
             initial_prompt=str(brief.get("description") or req.prompt),
             success_log=lambda p: f"type={p.get('payment_type', '?')}",
             generation_id=generation_id,
+        )
+        payment_cfg, pay_usage = pop_agent_usage(pay_raw)
+        brief["payment_config"] = payment_cfg
+        await llm_usage_svc.record_agent(
+            "PaymentAI",
+            pay_usage,
+            duration_ms=int((time.perf_counter() - pay_t0) * 1000),
+            generation_id=generation_id,
+            totals=usage_totals,
         )
 
     _apply_stripe_publishable_key(brief, req.stripe_publishable_key)
@@ -384,12 +461,22 @@ async def _run_pipeline_body(
         return await generator.run(brief, corrections=fixes)
 
     result = await _run_generator_once()
+    result, gen_usage = pop_agent_usage(result)
+    gen_duration_ms = int((time.perf_counter() - gen_t0) * 1000)
+    await llm_usage_svc.record_agent(
+        "GeneratorAI",
+        gen_usage,
+        duration_ms=gen_duration_ms,
+        generation_id=generation_id,
+        totals=usage_totals,
+    )
     await _emit_agent_done(
         generation_id,
         agent="GeneratorAI",
         step=3,
-        duration_ms=int((time.perf_counter() - gen_t0) * 1000),
+        duration_ms=gen_duration_ms,
         total=tracked_total,
+        usage=gen_usage,
     )
 
     await _emit_agent_start(
@@ -423,7 +510,15 @@ async def _run_pipeline_body(
             correction = corrected
             _print_supervisor_retry("SupervisorAI", attempt + 1)
             gen_retry_t0 = time.perf_counter()
-            result = await generator.run(brief, corrections=correction or None)
+            retry_raw = await generator.run(brief, corrections=correction or None)
+            result, retry_usage = pop_agent_usage(retry_raw)
+            await llm_usage_svc.record_agent(
+                "GeneratorAI",
+                retry_usage,
+                duration_ms=int((time.perf_counter() - gen_retry_t0) * 1000),
+                generation_id=generation_id,
+                totals=usage_totals,
+            )
             await _emit_log(
                 generation_id,
                 f"GeneratorAI — regénération après rejet ({int((time.perf_counter() - gen_retry_t0) * 1000)} ms)",
@@ -441,6 +536,16 @@ async def _run_pipeline_body(
     if not result.get("success") or not result.get("html"):
         error_msg = "GeneratorAI n'a pas produit de HTML valide."
         await _emit(generation_id, "error", {"message": error_msg})
+        _schedule_audit(
+            _audit_log(
+                "generation_failed",
+                brief,
+                {
+                    "error": error_msg,
+                    "project_type": str(brief.get("project_type") or req.project_type or ""),
+                },
+            )
+        )
         return {
             "url": "",
             "html": "",
@@ -496,11 +601,13 @@ async def _run_pipeline_body(
     )
 
     deploy_url = str(deployed.get("url") or "")
+    persisted_project_id: str | None = None
     if deployed.get("success") and deploy_url:
         store = get_supabase_store()
         if store.is_configured():
             try:
-                await store.save_pipeline_v2_deploy(
+                metrics = usage_totals.as_dict()
+                persistence = await store.save_pipeline_v2_deploy(
                     prompt=req.prompt,
                     project_type=str(
                         brief.get("project_type") or req.project_type or "vitrine_next"
@@ -508,11 +615,25 @@ async def _run_pipeline_body(
                     client_name=client_name,
                     demo_url=deploy_url,
                     html=str(deployed.get("html") or result.get("html") or ""),
+                    duration_ms=int((time.perf_counter() - pipeline_t0) * 1000),
+                    estimated_cost_usd=float(metrics.get("estimated_cost_usd") or 0),
+                    input_tokens=int(metrics.get("input_tokens") or 0),
+                    output_tokens=int(metrics.get("output_tokens") or 0),
+                    total_tokens=int(metrics.get("total_tokens") or 0),
+                    generation_id=generation_id,
                 )
+                if persistence:
+                    persisted_project_id = persistence.project_id
             except SupabaseStoreError as exc:
                 logger.warning("[pipeline] persistance Supabase ignorée: %s", exc)
 
     total_duration_ms = int((time.perf_counter() - pipeline_t0) * 1000)
+    usage_summary = usage_totals.as_dict()
+    await llm_usage_svc.finalize_generation(
+        generation_id=generation_id,
+        project_id=persisted_project_id,
+        success=bool(deployed.get("success")),
+    )
     final_result = {
         "url": deployed.get("url", ""),
         "html": deployed.get("html") or result["html"],
@@ -523,6 +644,11 @@ async def _run_pipeline_body(
         "demo_password": deployed.get("demo_password"),
         "error": deployed.get("error"),
         "duration_ms": total_duration_ms,
+        "input_tokens": usage_summary.get("input_tokens", 0),
+        "output_tokens": usage_summary.get("output_tokens", 0),
+        "total_tokens": usage_summary.get("total_tokens", 0),
+        "estimated_cost_usd": usage_summary.get("estimated_cost_usd", 0),
+        "llm_usage": usage_summary.get("agents", []),
     }
 
     if final_result["success"]:
@@ -533,6 +659,10 @@ async def _run_pipeline_body(
                 "url": str(final_result.get("url") or ""),
                 "html": str(final_result.get("html") or ""),
                 "duration_ms": total_duration_ms,
+                "input_tokens": final_result.get("input_tokens", 0),
+                "output_tokens": final_result.get("output_tokens", 0),
+                "total_tokens": final_result.get("total_tokens", 0),
+                "estimated_cost_usd": final_result.get("estimated_cost_usd", 0),
                 "unlock_url": final_result.get("unlock_url"),
                 "demo_token": final_result.get("demo_token"),
                 "demo_password": final_result.get("demo_password"),
@@ -570,11 +700,32 @@ async def _run_pipeline_body(
                 logger.warning("[MemoryEngine] remember_generation ignoré — %s", exc)
 
         asyncio.create_task(_remember_generation())
+
+        _schedule_audit(
+            _audit_log(
+                "project_generated",
+                brief,
+                {
+                    "project_type": str(brief.get("project_type") or req.project_type or ""),
+                    "client_name": str(brief.get("client_name") or req.client_name or ""),
+                    "url": str(final_result.get("url") or ""),
+                    "duration_ms": total_duration_ms,
+                    "cost_usd": float(final_result.get("estimated_cost_usd") or 0),
+                },
+            )
+        )
     else:
-        await _emit(
-            generation_id,
-            "error",
-            {"message": str(final_result.get("error") or "Déploiement échoué")},
+        err = str(final_result.get("error") or "Déploiement échoué")
+        await _emit(generation_id, "error", {"message": err})
+        _schedule_audit(
+            _audit_log(
+                "generation_failed",
+                brief,
+                {
+                    "error": err,
+                    "project_type": str(brief.get("project_type") or req.project_type or ""),
+                },
+            )
         )
 
     return final_result
@@ -743,11 +894,32 @@ async def _run_extension_pipeline(
                 )
 
         asyncio.create_task(_remember_extension_generation())
+
+        _schedule_audit(
+            _audit_log(
+                "project_generated",
+                brief,
+                {
+                    "project_type": "extension_navigateur",
+                    "client_name": client_name,
+                    "url": str(final_result.get("url") or ""),
+                    "duration_ms": total_duration_ms,
+                    "cost_usd": 0,
+                },
+            )
+        )
     else:
-        await _emit(
-            generation_id,
-            "error",
-            {"message": str(final_result.get("error") or "Déploiement extension échoué")},
+        err = str(final_result.get("error") or "Déploiement extension échoué")
+        await _emit(generation_id, "error", {"message": err})
+        _schedule_audit(
+            _audit_log(
+                "generation_failed",
+                brief,
+                {
+                    "error": err,
+                    "project_type": "extension_navigateur",
+                },
+            )
         )
 
     return final_result

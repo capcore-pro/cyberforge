@@ -70,6 +70,10 @@ class GenerateResponse(BaseModel):
     demo_token: str | None = None
     demo_password: str | None = None
     duration_ms: int | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    estimated_cost_usd: float | None = None
 
 
 class GeneratePromptFromIdeaRequest(BaseModel):
@@ -103,6 +107,10 @@ def _to_generate_response(result: dict[str, Any]) -> GenerateResponse:
         demo_token=result.get("demo_token"),
         demo_password=result.get("demo_password"),
         duration_ms=result.get("duration_ms"),
+        input_tokens=result.get("input_tokens"),
+        output_tokens=result.get("output_tokens"),
+        total_tokens=result.get("total_tokens"),
+        estimated_cost_usd=result.get("estimated_cost_usd"),
     )
 
 

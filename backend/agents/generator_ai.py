@@ -17,11 +17,13 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
 from agents.design_system_ai import build_design_system, format_design_system_for_prompt
+from agents.llm_usage_utils import merge_usage, usage_from_anthropic_response
 from agents.sector_generator_prompts import (
     APP_WEB_APPENDIX,
     ECOMMERCE_APPENDIX,
     build_sector_generator_appendix,
     is_app_web_brief,
+    is_crm_brief,
 )
 from config import get_settings
 from security.llm_secrets import get_effective_llm_key
@@ -264,6 +266,14 @@ def _is_app_web_brief(brief: dict[str, Any]) -> bool:
     return is_app_web_brief(brief or {})
 
 
+def _is_crm_brief(brief: dict[str, Any]) -> bool:
+    return is_crm_brief(brief or {})
+
+
+def _is_interactive_app_brief(brief: dict[str, Any]) -> bool:
+    return _is_app_web_brief(brief) or _is_crm_brief(brief)
+
+
 def _is_ecommerce_brief(brief: dict[str, Any]) -> bool:
     b = brief or {}
     for key in ("project_type", "generation_mode"):
@@ -313,7 +323,7 @@ def _is_site_reservation_clone(brief: dict[str, Any]) -> bool:
 def _max_tokens(brief: dict[str, Any]) -> int:
     if _is_site_reservation_clone(brief):
         return MAX_TOKENS_SITE_RESERVATION_CLONE
-    if _is_app_web_brief(brief):
+    if _is_interactive_app_brief(brief):
         return MAX_TOKENS_APP_WEB
     return MAX_TOKENS
 
@@ -323,7 +333,7 @@ def _max_html_chars(brief: dict[str, Any]) -> int:
         return MAX_HTML_CHARS_SITE_RESERVATION_CLONE
     if _is_site_reservation_brief(brief):
         return MAX_HTML_CHARS_SITE_RESERVATION
-    if _is_app_web_brief(brief):
+    if _is_interactive_app_brief(brief):
         return MAX_HTML_CHARS_APP_WEB
     return MAX_HTML_CHARS
 
@@ -348,6 +358,8 @@ def _build_system_prompt(brief: dict[str, Any]) -> str:
         parts.extend([SYSTEM_PROMPT, SITE_RESERVATION_APPENDIX, sector_appendix])
     elif _is_ecommerce_brief(brief):
         parts.extend([SYSTEM_PROMPT, ECOMMERCE_APPENDIX, sector_appendix])
+    elif _is_crm_brief(brief):
+        parts.extend([SYSTEM_PROMPT_APP_WEB, sector_appendix])
     elif _is_app_web_brief(brief):
         parts.extend([SYSTEM_PROMPT_APP_WEB, APP_WEB_APPENDIX, sector_appendix])
     else:
@@ -405,7 +417,7 @@ def _build_user_message(
     corrections: str | None = None,
 ) -> str:
     payload = {k: brief.get(k) for k in brief if not str(k).startswith("_")}
-    if _is_app_web_brief(brief):
+    if _is_interactive_app_brief(brief):
         for key in ("database_schema", "auth_schema"):
             if key in payload:
                 payload[key] = _slim_schema_for_prompt(payload[key])
@@ -418,7 +430,7 @@ def _build_user_message(
     if brief.get("database_schema"):
         db_for_prompt = (
             _slim_schema_for_prompt(brief["database_schema"])
-            if _is_app_web_brief(brief)
+            if _is_interactive_app_brief(brief)
             else brief["database_schema"]
         )
         extra += "\n\n## database_schema\n" + json.dumps(
@@ -476,6 +488,7 @@ class GeneratorAI:
         model = MODEL
         extra_fix = (corrections or "").strip()
         last_error: str | None = None
+        usage_total: dict[str, Any] | None = None
 
         for attempt in range(1, GENERATOR_MAX_ATTEMPTS + 1):
             attempt_fix = extra_fix
@@ -487,7 +500,7 @@ class GeneratorAI:
                 )
             user_message = _build_user_message(brief, corrections=attempt_fix or None)
 
-            def _call() -> str:
+            def _call():
                 response = client.messages.create(
                     model=model,
                     max_tokens=max_tokens,
@@ -499,17 +512,28 @@ class GeneratorAI:
                     text = getattr(block, "text", None)
                     if text:
                         parts.append(text)
-                return "".join(parts)
+                return "".join(parts), response
 
             try:
-                raw = await asyncio.to_thread(_call)
+                raw, response = await asyncio.to_thread(_call)
+                usage_total = merge_usage(
+                    usage_total, usage_from_anthropic_response(response, model)
+                )
                 html = _extract_html(raw)
                 html = _apply_html_size_limit(html, max_chars)
                 if not _HTML_START_RE.search(html):
                     raise ValueError("HTML invalide (pas de balise html)")
 
                 if not _html_document_complete(html):
-                    if _is_app_web_brief(brief):
+                    if _is_crm_brief(brief):
+                        last_error = (
+                            "CORRECTION OBLIGATOIRE : HTML tronqué. Génère le CRM COMPLET : "
+                            "#login-screen, #app-shell, sidebar (Dashboard, Contacts, Pipeline, "
+                            "Activités, Paramètres), 5 vues dont Kanban pipeline, "
+                            "JS showView/login/logout. CSS compact. "
+                            "Termine impérativement par </footer></body></html>."
+                        )
+                    elif _is_app_web_brief(brief):
                         last_error = (
                             "CORRECTION OBLIGATOIRE : HTML tronqué. Génère l'app web COMPLÈTE : "
                             "#login-screen, #app-shell, sidebar 3+ items, 3 vues (dashboard, "
@@ -539,6 +563,8 @@ class GeneratorAI:
                     if _is_site_reservation_brief(brief)
                     else "ecommerce"
                     if _is_ecommerce_brief(brief)
+                    else "crm"
+                    if _is_crm_brief(brief)
                     else "app_web"
                     if _is_app_web_brief(brief)
                     else "standard"
@@ -552,7 +578,10 @@ class GeneratorAI:
                     model,
                     max_tokens,
                 )
-                return {"html": html, "success": True}
+                out: dict[str, Any] = {"html": html, "success": True}
+                if usage_total:
+                    out["usage"] = usage_total
+                return out
             except Exception as exc:
                 last_error = str(exc)
                 logger.warning(

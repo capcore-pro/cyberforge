@@ -25,6 +25,8 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
 import anthropic  # noqa: E402
 
+from agents.llm_usage_utils import usage_from_anthropic_response  # noqa: E402
+
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = 4096
@@ -284,12 +286,16 @@ async def run(project_description: str, project_type: str, database_schema: dict
         if not all(k in parsed for k in ["auth_type", "sql", "roles", "summary"]):
             raise ValueError("JSON incomplet — clés manquantes")
 
-        return {
+        result = {
             "auth_type": parsed.get("auth_type") or detected,
             "sql": parsed.get("sql") or "",
             "roles": parsed.get("roles") or [],
             "summary": parsed.get("summary") or "",
         }
+        usage = usage_from_anthropic_response(response, MODEL)
+        if usage:
+            result["usage"] = usage
+        return result
     except Exception:
         if detected == "single_user":
             return {

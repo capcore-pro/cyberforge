@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
+from agents.llm_usage_utils import usage_from_anthropic_response
 from config import get_settings
 from security.llm_secrets import get_effective_llm_key
 from tools.firecrawl_client import FirecrawlError, firecrawl_scrape
@@ -168,7 +169,7 @@ class BriefAI:
 
         client = anthropic.Anthropic(api_key=api_key)
 
-        def _call() -> str:
+        def _call():
             response = client.messages.create(
                 model=MODEL,
                 max_tokens=MAX_TOKENS,
@@ -180,10 +181,12 @@ class BriefAI:
                 text = getattr(block, "text", None)
                 if text:
                     parts.append(text)
-            return "".join(parts)
+            return "".join(parts), response
 
+        usage: dict[str, Any] | None = None
         try:
-            raw = await asyncio.to_thread(_call)
+            raw, response = await asyncio.to_thread(_call)
+            usage = usage_from_anthropic_response(response, MODEL)
             parsed = _parse_json_response(raw)
         except Exception as exc:
             logger.warning("[BriefAI] échec Claude — brief minimal: %s", exc)
@@ -206,4 +209,6 @@ class BriefAI:
                 brief[list_key] = []
             brief[list_key] = [str(x).strip() for x in brief[list_key] if str(x).strip()]
 
+        if usage:
+            brief["usage"] = usage
         return brief
