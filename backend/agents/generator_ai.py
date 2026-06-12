@@ -441,6 +441,9 @@ def _build_user_message(
     kc = brief.get("knowledge_context")
     if isinstance(kc, str) and kc.strip():
         extra += "\n\n## knowledge_context\n" + kc.strip()
+    mc = brief.get("memory_context")
+    if isinstance(mc, str) and mc.strip():
+        extra += "\n\n## memory_context\n" + mc.strip()
     brief_limit = 6000 if _is_site_reservation_clone(brief) else 12000
     body = (
         "## Brief client (JSON)\n"

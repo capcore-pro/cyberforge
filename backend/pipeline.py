@@ -358,6 +358,18 @@ async def _run_pipeline_body(
     except Exception as exc:
         logger.warning("[Pipeline] Knowledge Engine indisponible — %s", exc)
 
+    try:
+        from memory.memory_service import get_memory_service
+
+        memory_ctx = await get_memory_service().get_context_for_prompt(
+            query=str(brief.get("description") or req.prompt),
+            project_id=brief.get("project_id"),
+        )
+        if memory_ctx:
+            brief["memory_context"] = memory_ctx
+    except Exception as exc:
+        logger.warning("[Pipeline] Memory Engine indisponible — %s", exc)
+
     generator = GeneratorAI()
 
     await _emit_agent_start(
@@ -542,6 +554,22 @@ async def _run_pipeline_body(
                 )
 
         asyncio.create_task(_send_deploy_email())
+
+        async def _remember_generation() -> None:
+            try:
+                from memory.memory_service import get_memory_service
+
+                await get_memory_service().remember_generation(
+                    brief=brief,
+                    result={
+                        "url": str(final_result.get("url") or ""),
+                        "duration_ms": total_duration_ms,
+                    },
+                )
+            except Exception as exc:
+                logger.warning("[MemoryEngine] remember_generation ignoré — %s", exc)
+
+        asyncio.create_task(_remember_generation())
     else:
         await _emit(
             generation_id,
@@ -697,6 +725,24 @@ async def _run_extension_pipeline(
                 )
 
         asyncio.create_task(_send_extension_deploy_email())
+
+        async def _remember_extension_generation() -> None:
+            try:
+                from memory.memory_service import get_memory_service
+
+                await get_memory_service().remember_generation(
+                    brief=brief,
+                    result={
+                        "url": str(final_result.get("url") or ""),
+                        "duration_ms": total_duration_ms,
+                    },
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[MemoryEngine] remember_generation extension ignoré — %s", exc
+                )
+
+        asyncio.create_task(_remember_extension_generation())
     else:
         await _emit(
             generation_id,
