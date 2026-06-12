@@ -515,10 +515,36 @@ class GeneratorAI:
                 return "".join(parts), response
 
             try:
-                raw, response = await asyncio.to_thread(_call)
-                usage_total = merge_usage(
-                    usage_total, usage_from_anthropic_response(response, model)
-                )
+                try:
+                    raw, response = await asyncio.to_thread(_call)
+                    usage_total = merge_usage(
+                        usage_total, usage_from_anthropic_response(response, model)
+                    )
+                except anthropic.APIError as exc:
+                    logger.warning("[GeneratorAI] Anthropic failed: %s", exc)
+                    from llm.base_provider import LLMRequest
+                    from llm.router import llm_router
+
+                    llm_response = await llm_router.route(
+                        LLMRequest(
+                            messages=[{"role": "user", "content": user_message}],
+                            system_prompt=system_prompt,
+                            model=None,
+                            max_tokens=max_tokens,
+                        ),
+                        task_type="generation",
+                    )
+                    raw = llm_response.content
+                    usage_total = merge_usage(
+                        usage_total,
+                        {
+                            "input_tokens": llm_response.input_tokens,
+                            "output_tokens": llm_response.output_tokens,
+                            "total_tokens": llm_response.total_tokens,
+                            "model": llm_response.model,
+                            "provider": llm_response.provider,
+                        },
+                    )
                 html = _extract_html(raw)
                 html = _apply_html_size_limit(html, max_chars)
                 if not _HTML_START_RE.search(html):

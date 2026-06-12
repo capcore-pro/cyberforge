@@ -74,6 +74,38 @@ def brevo_ready(settings: Settings | None = None) -> bool:
     )
 
 
+def llm_router_ready(settings: Settings | None = None) -> bool:
+    """True si au moins un provider LLM est disponible pour le routeur."""
+    _ = settings
+    from llm.router import get_llm_router
+
+    return len(get_llm_router().get_available_providers()) > 0
+
+
+def llm_fallback_count(settings: Settings | None = None) -> int:
+    """Nombre de providers de secours (total disponibles - 1)."""
+    _ = settings
+    from llm.router import get_llm_router
+
+    count = len(get_llm_router().get_available_providers())
+    return max(0, count - 1)
+
+
+def llm_router_status(settings: Settings | None = None) -> dict[str, object]:
+    """Statut synthétique du LLM Router."""
+    _ = settings
+    from llm.router import ROUTING_RULES, get_llm_router
+
+    router = get_llm_router()
+    available = router.get_available_providers()
+    return {
+        "active": len(available) > 0,
+        "available_providers": available,
+        "fallback_count": max(0, len(available) - 1),
+        "task_types": list(ROUTING_RULES.keys()),
+    }
+
+
 def agent_is_active(agent_id: str, settings: Settings | None = None) -> bool:
     """Actif si les clés requises sont disponibles (coffre, .env ou Settings)."""
     if agent_id == "electron":

@@ -188,6 +188,28 @@ class BriefAI:
             raw, response = await asyncio.to_thread(_call)
             usage = usage_from_anthropic_response(response, MODEL)
             parsed = _parse_json_response(raw)
+        except anthropic.APIError as exc:
+            logger.warning("[BriefAI] Anthropic failed: %s", exc)
+            from llm.base_provider import LLMRequest
+            from llm.router import llm_router
+
+            llm_response = await llm_router.route(
+                LLMRequest(
+                    messages=[{"role": "user", "content": user_message}],
+                    system_prompt=SYSTEM_PROMPT,
+                    model=None,
+                    max_tokens=MAX_TOKENS,
+                ),
+                task_type="brief",
+            )
+            usage = {
+                "input_tokens": llm_response.input_tokens,
+                "output_tokens": llm_response.output_tokens,
+                "total_tokens": llm_response.total_tokens,
+                "model": llm_response.model,
+                "provider": llm_response.provider,
+            }
+            parsed = _parse_json_response(llm_response.content)
         except Exception as exc:
             logger.warning("[BriefAI] échec Claude — brief minimal: %s", exc)
             parsed = {}

@@ -8,7 +8,12 @@ from dotenv import load_dotenv
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from security.agent_readiness import agent_is_active, brevo_ready, replicate_ready
+from security.agent_readiness import (
+    agent_is_active,
+    brevo_ready,
+    llm_router_status,
+    replicate_ready,
+)
 
 load_dotenv(override=True)
 
@@ -41,11 +46,19 @@ class AgentStatusItem(BaseModel):
     in_pipeline: bool = False
 
 
+class LLMRouterStatus(BaseModel):
+    active: bool
+    available_providers: list[str]
+    fallback_count: int
+    task_types: list[str]
+
+
 class AgentsStatusResponse(BaseModel):
     total_agents: int
     active_count: int
     pipeline_agent_ids: list[str]
     agents: list[AgentStatusItem]
+    llm_router: LLMRouterStatus
 
 
 @router.get("/agents/status", response_model=AgentsStatusResponse)
@@ -70,9 +83,16 @@ async def get_agents_status() -> AgentsStatusResponse:
             )
         )
     active_count = sum(1 for a in agents if a.status == "active")
+    router_info = llm_router_status()
     return AgentsStatusResponse(
         total_agents=len(PIPELINE_AGENT_IDS),
         active_count=active_count,
         pipeline_agent_ids=list(PIPELINE_AGENT_IDS),
         agents=agents,
+        llm_router=LLMRouterStatus(
+            active=bool(router_info.get("active")),
+            available_providers=list(router_info.get("available_providers") or []),
+            fallback_count=int(router_info.get("fallback_count") or 0),
+            task_types=list(router_info.get("task_types") or []),
+        ),
     )
