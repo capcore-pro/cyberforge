@@ -16,7 +16,7 @@ from knowledge.embedding_service import EmbeddingService
 logger = logging.getLogger(__name__)
 
 SUPPORTED_UPLOAD_SUFFIXES = {".txt", ".md"}
-SIMILARITY_THRESHOLD = 0.7
+SIMILARITY_THRESHOLD = 0.5
 
 
 class KnowledgeService:
@@ -142,6 +142,8 @@ class KnowledgeService:
         max_tokens: int = 4000,
     ) -> str:
         hits = await self.search(query, project_id=project_id, limit=10)
+        # Seuil abaissé — documents courts ou requêtes sémantiquement éloignées
+        # À remonter à 0.7 quand la base knowledge sera plus dense
         relevant = [h for h in hits if float(h.get("similarity") or 0) >= SIMILARITY_THRESHOLD]
         if not relevant:
             return ""
