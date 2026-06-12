@@ -27,6 +27,42 @@ from db.supabase_store import SupabaseStoreError, get_supabase_store
 logger = logging.getLogger(__name__)
 
 AGENT_TIMEOUT_SECONDS = 600
+MAX_RETRIES = 3
+MAX_HTML_RETRIES = 3
+
+
+class MaxRetriesExceeded(Exception):
+    """Le superviseur a épuisé le nombre maximal de tentatives autorisées."""
+
+
+def _decision_type_for_agent(agent_name: str) -> str:
+    mapping = {
+        "BriefAI": "brief",
+        "DatabaseAI": "database",
+        "AuthAI": "auth",
+        "PaymentAI": "payment",
+        "DeployAI": "deployment",
+        "SupervisorAI": "html",
+    }
+    return mapping.get(agent_name, agent_name.lower().replace("ai", ""))
+
+
+def _schedule_supervisor_decision(**kwargs: Any) -> None:
+    async def _record() -> None:
+        from db.supervisor_store import get_supervisor_store
+
+        await get_supervisor_store().record_decision(**kwargs)
+
+    _schedule_audit(_record())
+
+
+def _schedule_quality_review(**kwargs: Any) -> None:
+    async def _record() -> None:
+        from db.supervisor_store import get_supervisor_store
+
+        await get_supervisor_store().record_quality_review(**kwargs)
+
+    _schedule_audit(_record())
 
 
 def _apply_stripe_publishable_key(brief: dict[str, Any], stripe_publishable_key: str | None) -> None:
@@ -288,21 +324,55 @@ async def _run_supervised(
     initial_prompt: str,
     success_log: Callable[[Any], str] | None = None,
     generation_id: str | None = None,
+    project_id: str | None = None,
+    html_quality_score: int = 0,
 ) -> Any:
     """
     Exécute run_once(prompt) jusqu'à validation SupervisorAI ou timeout 10 min.
     """
+    from agents.quality_scorer import QualityScorer
+
     supervisor = SupervisorAI()
     prompt = (initial_prompt or "").strip()
     attempt = 0
+    scorer = QualityScorer()
 
     async def _loop() -> Any:
         nonlocal prompt, attempt
         last_result: Any = None
         while True:
             attempt += 1
+            if attempt > MAX_RETRIES:
+                raise MaxRetriesExceeded(
+                    f"{agent_name} failed after {MAX_RETRIES} attempts"
+                )
+            attempt_t0 = time.perf_counter()
             last_result = await run_once(prompt)
             check = await validate(last_result)
+            duration_ms = int((time.perf_counter() - attempt_t0) * 1000)
+
+            quality_score = 0
+            if agent_name == "BriefAI" and isinstance(last_result, dict):
+                quality_score = scorer.score_brief(last_result)
+            elif agent_name == "DeployAI" and isinstance(last_result, dict):
+                quality_score = scorer.score_deployment(
+                    str(last_result.get("url") or ""),
+                    html_quality_score,
+                )
+
+            _schedule_supervisor_decision(
+                decision_type=_decision_type_for_agent(agent_name),
+                agent_validated=agent_name,
+                valid=bool(check.get("valid")),
+                quality_score=quality_score,
+                errors=list(check.get("errors") or []),
+                warnings=list(check.get("warnings") or []),
+                attempt_number=attempt,
+                duration_ms=duration_ms,
+                generation_id=generation_id,
+                project_id=project_id,
+            )
+
             if check.get("valid"):
                 if success_log:
                     msg = f"[SupervisorAI] ✅ {agent_name} validé — {success_log(last_result)}"
@@ -362,6 +432,42 @@ async def _run_pipeline_body(
     workflow_ctx = _new_workflow_ctx()
     is_extension = (req.project_type or "").strip().lower() == "extension_navigateur"
     tracked_total = _EXT_TOTAL if is_extension else TRACKED_TOTAL
+    html_quality_score = 0
+
+    from agents.planning_engine import PlanningEngine
+
+    pre_brief = {
+        "project_type": req.project_type,
+        "description": req.prompt,
+        "client_name": req.client_name or "",
+    }
+    execution_plan = PlanningEngine().build_plan(pre_brief)
+    await _emit_log(
+        generation_id,
+        (
+            f"Plan: {execution_plan['workflow_id']} | "
+            f"{len(execution_plan['agents'])} agents | "
+            f"~{execution_plan['estimated_cost_usd']:.3f}$ | "
+            f"risque: {execution_plan['risk_level']}"
+        ),
+    )
+    async def _audit_pipeline_planned() -> None:
+        from db.audit_store import get_audit_store
+
+        await get_audit_store().log(
+            "pipeline_planned",
+            actor_type="supervisor",
+            actor_id="planning_engine",
+            event_data={
+                "workflow_id": execution_plan["workflow_id"],
+                "agents": execution_plan["agents"],
+                "estimated_cost": execution_plan["estimated_cost_usd"],
+                "risk_level": execution_plan["risk_level"],
+                "risk_factors": execution_plan["risk_factors"],
+            },
+        )
+
+    _schedule_audit(_audit_pipeline_planned())
 
     async def _run_brief(prompt: str) -> dict[str, Any]:
         return await brief_ai.run(
@@ -384,6 +490,7 @@ async def _run_pipeline_body(
         initial_prompt=req.prompt,
         success_log=lambda b: f"client: {b.get('client_name', '?')}",
         generation_id=generation_id,
+        project_id=None,
     )
     brief, brief_usage = pop_agent_usage(brief_raw)
     brief_duration_ms = int((time.perf_counter() - brief_t0) * 1000)
@@ -411,7 +518,9 @@ async def _run_pipeline_body(
     if req.firecrawl_result:
         brief["firecrawl_result"] = req.firecrawl_result
 
+    brief["execution_plan"] = PlanningEngine().build_plan(brief)
     pt = (brief.get("project_type") or req.project_type or "").strip().lower()
+    project_id = str(brief.get("project_id") or "") or None
 
     _schedule_workflow(
         _workflow_init(
@@ -473,6 +582,7 @@ async def _run_pipeline_body(
             initial_prompt=base_desc,
             success_log=lambda s: f"{len((s or {}).get('tables') or [])} table(s)",
             generation_id=generation_id,
+            project_id=project_id,
         )
         db_schema, db_usage = pop_agent_usage(db_raw)
         brief["database_schema"] = db_schema
@@ -513,6 +623,7 @@ async def _run_pipeline_body(
             initial_prompt=str(brief.get("description") or req.prompt),
             success_log=lambda s: f"auth_type={s.get('auth_type', '?')}",
             generation_id=generation_id,
+            project_id=project_id,
         )
         auth_schema, auth_usage = pop_agent_usage(auth_raw)
         brief["auth_schema"] = auth_schema
@@ -547,6 +658,7 @@ async def _run_pipeline_body(
             initial_prompt=str(brief.get("description") or req.prompt),
             success_log=lambda p: f"type={p.get('payment_type', '?')}",
             generation_id=generation_id,
+            project_id=project_id,
         )
         payment_cfg, pay_usage = pop_agent_usage(pay_raw)
         brief["payment_config"] = payment_cfg
@@ -624,13 +736,46 @@ async def _run_pipeline_body(
     sup_t0 = time.perf_counter()
 
     async def _supervisor_html_loop() -> None:
-        nonlocal result, correction
+        nonlocal result, correction, html_quality_score
+        from agents.quality_scorer import QualityScorer
+
+        scorer = QualityScorer()
         attempt = 0
         while True:
             attempt += 1
+            if attempt > MAX_HTML_RETRIES:
+                raise MaxRetriesExceeded(
+                    f"SupervisorAI failed after {MAX_HTML_RETRIES} attempts"
+                )
+            html_t0 = time.perf_counter()
             html = str((result or {}).get("html") or "")
             check = await supervisor.validate_html(html, brief)
+            duration_ms = int((time.perf_counter() - html_t0) * 1000)
+            html_score_attempt = scorer.score_html(html, brief)
+
+            _schedule_supervisor_decision(
+                decision_type="html",
+                agent_validated="SupervisorAI",
+                valid=bool(check.get("valid")),
+                quality_score=html_score_attempt,
+                errors=list(check.get("errors") or []),
+                warnings=list(check.get("warnings") or []),
+                attempt_number=attempt,
+                duration_ms=duration_ms,
+                generation_id=generation_id,
+                project_id=project_id,
+            )
+
             if check.get("valid"):
+                html_quality_score = html_score_attempt
+                _schedule_quality_review(
+                    review_type="html_quality",
+                    score=html_quality_score,
+                    passed=html_quality_score >= 60,
+                    details={"html_length": len(html)},
+                    generation_id=generation_id,
+                    project_id=project_id,
+                )
                 msg = f"[SupervisorAI] ✅ HTML validé — {len(html)} car."
                 print(msg)
                 await _emit_log(generation_id, msg)
@@ -739,6 +884,8 @@ async def _run_pipeline_body(
         initial_prompt="",
         success_log=lambda d: f"URL: {d.get('url', '')}",
         generation_id=generation_id,
+        project_id=project_id,
+        html_quality_score=html_quality_score,
     )
     await _emit_agent_done(
         generation_id,
@@ -798,6 +945,7 @@ async def _run_pipeline_body(
         "total_tokens": usage_summary.get("total_tokens", 0),
         "estimated_cost_usd": usage_summary.get("estimated_cost_usd", 0),
         "llm_usage": usage_summary.get("agents", []),
+        "quality_score": html_quality_score,
     }
 
     if final_result["success"]:
@@ -812,6 +960,7 @@ async def _run_pipeline_body(
                 "output_tokens": final_result.get("output_tokens", 0),
                 "total_tokens": final_result.get("total_tokens", 0),
                 "estimated_cost_usd": final_result.get("estimated_cost_usd", 0),
+                "quality_score": html_quality_score,
                 "unlock_url": final_result.get("unlock_url"),
                 "demo_token": final_result.get("demo_token"),
                 "demo_password": final_result.get("demo_password"),
@@ -970,6 +1119,7 @@ async def _run_extension_pipeline(
         generation_id, agent="DeployAI", step=3, total=_EXT_TOTAL
     )
     deploy_t0 = time.perf_counter()
+    ext_project_id = str(brief.get("project_id") or "") or None
     deployed = await _run_supervised(
         "DeployAI",
         _run_deploy,
@@ -977,6 +1127,8 @@ async def _run_extension_pipeline(
         initial_prompt="",
         success_log=lambda d: f"URL: {d.get('url', '')}",
         generation_id=generation_id,
+        project_id=ext_project_id,
+        html_quality_score=0,
     )
     await _emit(
         generation_id,
