@@ -1,27 +1,50 @@
-import { useCallback, useEffect, useState } from "react";
-import { GHOST_BTN } from "@/components/settings/settings-theme";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { GHOST_BTN, TAB_ACTIVE, TAB_BASE } from "@/components/settings/settings-theme";
 import {
   acknowledgeMonitoringAlert,
   fetchMonitoringAlerts,
+  fetchMonitoringHealth,
   fetchMonitoringIncidents,
-  fetchMonitoringOverview,
-  fetchMonitoringSources,
+  formatUsdEur,
+  overallStatusBadgeClass,
   resolveMonitoringAlert,
   resolveMonitoringIncident,
-  runMonitoringScan,
+  runMonitoringCheck,
   severityBadgeClass,
   type MonitoringAlert,
+  type MonitoringHealth,
   type MonitoringIncident,
-  type MonitoringOverview,
-  type MonitoringSource,
+  type OverallStatus,
 } from "@/lib/monitoring-api";
 
-type MonitoringTab = "overview" | "alerts" | "incidents";
+type MonitoringTab = "global" | "alerts" | "incidents";
+type AlertStatusFilter = "all" | "open" | "acknowledged" | "resolved";
+type AlertSeverityFilter = "all" | "critical" | "warning" | "info";
 
 const TABS: { id: MonitoringTab; label: string }[] = [
-  { id: "overview", label: "Vue d'ensemble" },
+  { id: "global", label: "Vue globale" },
   { id: "alerts", label: "Alertes" },
   { id: "incidents", label: "Incidents" },
+];
+
+const STATUS_FILTERS: { id: AlertStatusFilter; label: string }[] = [
+  { id: "all", label: "Toutes" },
+  { id: "open", label: "Ouvertes" },
+  { id: "acknowledged", label: "Acquittées" },
+  { id: "resolved", label: "Résolues" },
+];
+
+const SEVERITY_FILTERS: { id: AlertSeverityFilter; label: string }[] = [
+  { id: "all", label: "Toutes" },
+  { id: "critical", label: "Critique" },
+  { id: "warning", label: "Warning" },
+  { id: "info", label: "Info" },
 ];
 
 function formatRelativeTime(iso: string): string {
@@ -35,52 +58,88 @@ function formatRelativeTime(iso: string): string {
   return `il y a ${Math.round(hours / 24)} j`;
 }
 
+function overallStatusLabel(status: OverallStatus): string {
+  if (status === "healthy") return "Sain";
+  if (status === "degraded") return "Dégradé";
+  return "Critique";
+}
+
 export function MonitoringPage() {
-  const [tab, setTab] = useState<MonitoringTab>("overview");
-  const [overview, setOverview] = useState<MonitoringOverview | null>(null);
-  const [sources, setSources] = useState<MonitoringSource[]>([]);
+  const [tab, setTab] = useState<MonitoringTab>("global");
+  const [health, setHealth] = useState<MonitoringHealth | null>(null);
+  const [openAlerts, setOpenAlerts] = useState<MonitoringAlert[]>([]);
   const [alerts, setAlerts] = useState<MonitoringAlert[]>([]);
   const [incidents, setIncidents] = useState<MonitoringIncident[]>([]);
+  const [statusFilter, setStatusFilter] = useState<AlertStatusFilter>("open");
+  const [severityFilter, setSeverityFilter] =
+    useState<AlertSeverityFilter>("all");
   const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [resolveNotes, setResolveNotes] = useState<Record<string, string>>({});
+
+  const loadGlobal = useCallback(async () => {
+    const [h, open] = await Promise.all([
+      fetchMonitoringHealth(),
+      fetchMonitoringAlerts({ status: "open" }),
+    ]);
+    setHealth(h);
+    setOpenAlerts(open);
+  }, []);
+
+  const loadAlerts = useCallback(async () => {
+    const items = await fetchMonitoringAlerts({
+      status: statusFilter,
+      severity: severityFilter === "all" ? undefined : severityFilter,
+    });
+    setAlerts(items);
+  }, [severityFilter, statusFilter]);
+
+  const loadIncidents = useCallback(async () => {
+    const items = await fetchMonitoringIncidents("open");
+    setIncidents(items);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [ov, src, al, inc] = await Promise.all([
-        fetchMonitoringOverview(),
-        fetchMonitoringSources(),
-        fetchMonitoringAlerts("open"),
-        fetchMonitoringIncidents("open"),
-      ]);
-      setOverview(ov);
-      setSources(src);
-      setAlerts(al);
-      setIncidents(inc);
+      await loadGlobal();
+      await loadAlerts();
+      await loadIncidents();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chargement impossible.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadAlerts, loadGlobal, loadIncidents]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  async function handleScan() {
-    setScanning(true);
+  useEffect(() => {
+    if (tab === "alerts") {
+      void loadAlerts();
+    }
+  }, [tab, loadAlerts]);
+
+  const agentPct = useMemo(() => {
+    if (!health?.agents.total) return 0;
+    return Math.round((health.agents.active / health.agents.total) * 100);
+  }, [health]);
+
+  async function handleCheck() {
+    setChecking(true);
     setError(null);
     try {
-      await runMonitoringScan();
+      await runMonitoringCheck();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Scan impossible.");
+      setError(err instanceof Error ? err.message : "Checks impossible.");
     } finally {
-      setScanning(false);
+      setChecking(false);
     }
   }
 
@@ -111,7 +170,7 @@ export function MonitoringPage() {
   async function handleResolveIncident(id: string) {
     setActionId(id);
     try {
-      await resolveMonitoringIncident(id, "Résolu depuis le Monitoring Center");
+      await resolveMonitoringIncident(id, resolveNotes[id] || undefined);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Action impossible.");
@@ -121,45 +180,42 @@ export function MonitoringPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div className="mx-auto max-w-6xl space-y-8">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cf-muted">
+          <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[#d4a843]/80">
+            <i className="ti ti-activity text-base" aria-hidden />
             Infrastructure
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-cf-text">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-white">
+            <i className="ti ti-activity text-[#d4a843]" aria-hidden />
             Monitoring Center
           </h1>
-          <p className="mt-2 text-sm text-cf-body">
-            Alertes pipeline, incidents et sources de télémétrie
+          <p className="mt-2 text-sm text-white/50">
+            Santé système, alertes pipeline et gestion des incidents
           </p>
         </div>
-        <button
-          type="button"
-          className={GHOST_BTN}
-          disabled={scanning}
-          onClick={() => void handleScan()}
-        >
-          {scanning ? "Scan en cours…" : "Lancer un scan"}
-        </button>
+        {health ? (
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${overallStatusBadgeClass(health.overall_status)}`}
+          >
+            {overallStatusLabel(health.overall_status)}
+          </span>
+        ) : null}
       </header>
 
-      <div className="flex flex-wrap gap-2">
+      <nav className="flex flex-wrap gap-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={
-              tab === t.id
-                ? "rounded-control border border-cf-gold/40 bg-cf-gold/15 px-3 py-1.5 text-xs font-semibold text-cf-gold"
-                : "rounded-control border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-cf-muted hover:text-cf-text"
-            }
+            className={`${TAB_BASE} rounded-control ${tab === t.id ? TAB_ACTIVE : ""}`}
           >
             {t.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {error ? (
         <p className="rounded-control border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
@@ -168,139 +224,145 @@ export function MonitoringPage() {
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
-      ) : tab === "overview" ? (
+        <p className="text-sm text-white/50 animate-pulse">Chargement…</p>
+      ) : tab === "global" ? (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                label: "Alertes ouvertes",
-                value: overview?.open_alerts_count ?? 0,
-                icon: "ti ti-bell-ringing",
-              },
-              {
-                label: "Critiques",
-                value: overview?.critical_alerts_count ?? 0,
-                icon: "ti ti-alert-triangle",
-              },
-              {
-                label: "Incidents ouverts",
-                value: overview?.open_incidents_count ?? 0,
-                icon: "ti ti-flame",
-              },
-              {
-                label: "Sources actives",
-                value: overview?.sources_active ?? 0,
-                icon: "ti ti-database",
-              },
-            ].map((card) => (
-              <div
-                key={card.label}
-                className="rounded-card border border-white/10 bg-white/5 p-4 backdrop-blur-xl"
-              >
-                <div className="flex items-center gap-2 text-cf-gold">
-                  <i className={card.icon} aria-hidden />
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cf-muted">
-                    {card.label}
-                  </span>
+            <HealthCard
+              title="API Backend"
+              icon="ti ti-server"
+              primary={health?.api.status === "online" ? "En ligne" : "Hors ligne"}
+              secondary={`${health?.api.latency_ms ?? 0} ms`}
+            />
+            <HealthCard
+              title="Agents"
+              icon="ti ti-robot"
+              primary={`${health?.agents.active ?? 0}/${health?.agents.total ?? 0} actifs`}
+              secondary={
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full bg-teal-400"
+                    style={{ width: `${agentPct}%` }}
+                  />
                 </div>
-                <p className="mt-2 text-3xl font-semibold tabular-nums text-cf-text">
-                  {card.value}
-                </p>
-              </div>
-            ))}
+              }
+            />
+            <HealthCard
+              title="Pipeline 30j"
+              icon="ti ti-heart-rate-monitor"
+              primary={`${Math.round((health?.pipeline.pass_rate ?? 0) * 100)}% validation`}
+              secondary={`Score ${Math.round(health?.pipeline.avg_quality_score ?? 0)}/100`}
+            />
+            <HealthCard
+              title="Coûts"
+              icon="ti ti-coin"
+              primary={`Jour ${formatUsdEur(health?.costs.today_usd ?? 0)}`}
+              secondary={`Mois ${formatUsdEur(health?.costs.month_usd ?? 0)}`}
+            />
           </div>
 
-          <section className="rounded-card border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
-            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-cf-muted">
-              Sources de monitoring
+          <section className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/40">
+              Alertes ouvertes
             </h2>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {sources.map((src) => (
-                <div
-                  key={src.id}
-                  className="flex items-center justify-between rounded-control border border-white/10 bg-white/5 px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-cf-text">
-                      {src.source_name}
-                    </p>
-                    <p className="text-[11px] text-cf-muted">{src.source_type}</p>
-                  </div>
-                  <span className="rounded-full border border-teal-400/30 bg-teal-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-teal-200">
-                    {src.status}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {openAlerts.length === 0 ? (
+              <p className="text-sm text-white/50">Aucune alerte ouverte.</p>
+            ) : (
+              <div className="space-y-3">
+                {openAlerts.map((alert) => (
+                  <AlertRow
+                    key={alert.id}
+                    alert={alert}
+                    actionId={actionId}
+                    onAck={() => void handleAckAlert(alert.id)}
+                    showResolve={false}
+                  />
+                ))}
+              </div>
+            )}
           </section>
         </div>
       ) : tab === "alerts" ? (
-        <section className="space-y-3">
-          {alerts.length === 0 ? (
-            <p className="text-sm text-cf-muted">Aucune alerte ouverte.</p>
-          ) : (
-            alerts.map((alert) => (
-              <article
-                key={alert.id}
-                className="rounded-card border border-white/10 bg-white/5 p-4 backdrop-blur-xl"
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-1">
+              {STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setStatusFilter(f.id)}
+                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                    statusFilter === f.id
+                      ? "border-cf-gold/40 bg-cf-gold/15 text-cf-gold"
+                      : "border-white/10 bg-white/5 text-white/50"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className={GHOST_BTN}
+              disabled={checking}
+              onClick={() => void handleCheck()}
+            >
+              {checking ? "Checks…" : "Lancer les checks"}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1">
+            {SEVERITY_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setSeverityFilter(f.id)}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                  severityFilter === f.id
+                    ? "border-white/25 bg-white/10 text-white"
+                    : "border-white/10 bg-white/5 text-white/45"
+                }`}
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold text-cf-text">
-                        {alert.title}
-                      </h3>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${severityBadgeClass(alert.severity)}`}
-                      >
-                        {alert.severity}
-                      </span>
-                    </div>
-                    {alert.message ? (
-                      <p className="mt-1 text-sm text-cf-body">{alert.message}</p>
-                    ) : null}
-                    <p className="mt-2 text-[11px] text-cf-muted">
-                      {alert.source ?? "—"} · {formatRelativeTime(alert.created_at)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    <button
-                      type="button"
-                      className={GHOST_BTN}
-                      disabled={actionId === alert.id}
-                      onClick={() => void handleAckAlert(alert.id)}
-                    >
-                      Accuser
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-control border border-cf-gold/40 bg-cf-gold/15 px-3 py-1.5 text-xs font-semibold text-cf-gold hover:bg-cf-gold/25 disabled:opacity-50"
-                      disabled={actionId === alert.id}
-                      onClick={() => void handleResolveAlert(alert.id)}
-                    >
-                      Résoudre
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {alerts.length === 0 ? (
+            <p className="text-sm text-white/50">Aucune alerte pour ces filtres.</p>
+          ) : (
+            <div className="space-y-3">
+              {alerts.map((alert) => (
+                <AlertRow
+                  key={alert.id}
+                  alert={alert}
+                  actionId={actionId}
+                  onAck={() => void handleAckAlert(alert.id)}
+                  onResolve={() => void handleResolveAlert(alert.id)}
+                  showResolve={alert.status !== "resolved"}
+                />
+              ))}
+            </div>
           )}
-        </section>
+        </div>
       ) : (
         <section className="space-y-3">
           {incidents.length === 0 ? (
-            <p className="text-sm text-cf-muted">Aucun incident ouvert.</p>
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-center">
+              <p className="text-sm text-teal-200">
+                Aucun incident — système opérationnel ✓
+              </p>
+            </div>
           ) : (
             incidents.map((incident) => (
               <article
                 key={incident.id}
-                className="rounded-card border border-white/10 bg-white/5 p-4 backdrop-blur-xl"
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold text-cf-text">
+                      <h3 className="text-sm font-semibold text-white">
                         {incident.title}
                       </h3>
                       <span
@@ -310,29 +372,123 @@ export function MonitoringPage() {
                       </span>
                     </div>
                     {incident.description ? (
-                      <p className="mt-1 text-sm text-cf-body">
+                      <p className="mt-1 text-sm text-white/60">
                         {incident.description}
                       </p>
                     ) : null}
-                    <p className="mt-2 text-[11px] text-cf-muted">
+                    <p className="mt-2 text-[11px] text-white/40">
                       {incident.source ?? "—"} ·{" "}
                       {formatRelativeTime(incident.detected_at)}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="rounded-control border border-cf-gold/40 bg-cf-gold/15 px-3 py-1.5 text-xs font-semibold text-cf-gold hover:bg-cf-gold/25 disabled:opacity-50"
-                    disabled={actionId === incident.id}
-                    onClick={() => void handleResolveIncident(incident.id)}
-                  >
-                    Résoudre
-                  </button>
                 </div>
+                <textarea
+                  className="mt-3 w-full rounded-control border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30"
+                  rows={2}
+                  placeholder="Notes de résolution…"
+                  value={resolveNotes[incident.id] ?? ""}
+                  onChange={(e) =>
+                    setResolveNotes((prev) => ({
+                      ...prev,
+                      [incident.id]: e.target.value,
+                    }))
+                  }
+                />
+                <button
+                  type="button"
+                  className="mt-2 rounded-control border border-cf-gold/40 bg-cf-gold/15 px-3 py-1.5 text-xs font-semibold text-cf-gold hover:bg-cf-gold/25 disabled:opacity-50"
+                  disabled={actionId === incident.id}
+                  onClick={() => void handleResolveIncident(incident.id)}
+                >
+                  Résoudre
+                </button>
               </article>
             ))
           )}
         </section>
       )}
     </div>
+  );
+}
+
+function HealthCard({
+  title,
+  icon,
+  primary,
+  secondary,
+}: {
+  title: string;
+  icon: string;
+  primary: string;
+  secondary: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex items-center gap-2 text-[#d4a843]">
+        <i className={icon} aria-hidden />
+        <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">
+          {title}
+        </span>
+      </div>
+      <p className="mt-2 text-lg font-semibold text-white">{primary}</p>
+      <div className="mt-1 text-sm text-white/50">{secondary}</div>
+    </div>
+  );
+}
+
+function AlertRow({
+  alert,
+  actionId,
+  onAck,
+  onResolve,
+  showResolve,
+}: {
+  alert: MonitoringAlert;
+  actionId: string | null;
+  onAck: () => void;
+  onResolve?: () => void;
+  showResolve: boolean;
+}) {
+  return (
+    <article className="flex flex-wrap items-start justify-between gap-3 rounded-control border border-white/10 bg-white/5 p-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold text-white">{alert.title}</h3>
+          <span
+            className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${severityBadgeClass(alert.severity)}`}
+          >
+            {alert.severity}
+          </span>
+        </div>
+        {alert.message ? (
+          <p className="mt-1 text-sm text-white/60">{alert.message}</p>
+        ) : null}
+        <p className="mt-2 text-[11px] text-white/40">
+          {alert.source ?? "—"} · {formatRelativeTime(alert.created_at)}
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        {alert.status === "open" ? (
+          <button
+            type="button"
+            className={GHOST_BTN}
+            disabled={actionId === alert.id}
+            onClick={onAck}
+          >
+            Acquitter
+          </button>
+        ) : null}
+        {showResolve && onResolve ? (
+          <button
+            type="button"
+            className="rounded-control border border-cf-gold/40 bg-cf-gold/15 px-3 py-1.5 text-xs font-semibold text-cf-gold hover:bg-cf-gold/25 disabled:opacity-50"
+            disabled={actionId === alert.id}
+            onClick={onResolve}
+          >
+            Résoudre
+          </button>
+        ) : null}
+      </div>
+    </article>
   );
 }

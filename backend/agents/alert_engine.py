@@ -202,6 +202,15 @@ class AlertEngine:
         return {"created": created, "skipped": skipped, "metrics": metrics}
 
 
+async def run_checks(days: int = 30) -> dict[str, Any]:
+    """Point d'entrée pipeline + API — exécute les règles de détection."""
+    try:
+        return await AlertEngine(days=days).scan()
+    except Exception as exc:
+        logger.warning("[AlertEngine] run_checks échoué — %s", exc)
+        return {"created": [], "skipped": [], "metrics": {}, "error": str(exc)}
+
+
 _engine: AlertEngine | None = None
 
 

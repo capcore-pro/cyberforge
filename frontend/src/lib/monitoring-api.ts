@@ -2,22 +2,18 @@ import { API_PREFIX } from "@shared/constants";
 import { apiRequest } from "@/lib/api-client";
 import { apiErrorMessage } from "@/lib/api-errors";
 
-export interface MonitoringOverview {
-  open_alerts_count: number;
-  acknowledged_alerts_count: number;
-  critical_alerts_count: number;
-  warning_alerts_count: number;
-  open_incidents_count: number;
-  sources_count: number;
-  sources_active: number;
-}
+export type OverallStatus = "healthy" | "degraded" | "critical";
 
-export interface MonitoringSource {
-  id: string;
-  source_name: string;
-  source_type: string;
-  status: string;
-  created_at: string;
+export interface MonitoringHealth {
+  overall_status: OverallStatus;
+  api: { status: string; latency_ms: number };
+  agents: { active: number; total: number };
+  pipeline: {
+    pass_rate: number;
+    avg_quality_score: number;
+    days: number;
+  };
+  costs: { today_usd: number; month_usd: number };
 }
 
 export interface MonitoringAlert {
@@ -48,20 +44,19 @@ export interface MonitoringIncident {
   created_at: string;
 }
 
-export interface MonitoringScanResult {
+export interface MonitoringCheckResult {
   created: MonitoringAlert[];
   skipped: string[];
   metrics: Record<string, number>;
+  error?: string;
 }
 
-const EMPTY_OVERVIEW: MonitoringOverview = {
-  open_alerts_count: 0,
-  acknowledged_alerts_count: 0,
-  critical_alerts_count: 0,
-  warning_alerts_count: 0,
-  open_incidents_count: 0,
-  sources_count: 0,
-  sources_active: 0,
+const EMPTY_HEALTH: MonitoringHealth = {
+  overall_status: "healthy",
+  api: { status: "offline", latency_ms: 0 },
+  agents: { active: 0, total: 0 },
+  pipeline: { pass_rate: 0, avg_quality_score: 0, days: 30 },
+  costs: { today_usd: 0, month_usd: 0 },
 };
 
 function normalizeAlert(row: Record<string, unknown>): MonitoringAlert {
@@ -98,50 +93,34 @@ function normalizeIncident(row: Record<string, unknown>): MonitoringIncident {
   };
 }
 
-function normalizeSource(row: Record<string, unknown>): MonitoringSource {
-  return {
-    id: String(row.id ?? ""),
-    source_name: String(row.source_name ?? ""),
-    source_type: String(row.source_type ?? ""),
-    status: String(row.status ?? "active"),
-    created_at: String(row.created_at ?? ""),
-  };
-}
-
-export async function fetchMonitoringOverview(): Promise<MonitoringOverview> {
-  const res = await apiRequest<MonitoringOverview>({
+export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
+  const res = await apiRequest<MonitoringHealth>({
     method: "GET",
-    path: `${API_PREFIX}/monitoring/overview`,
+    path: `${API_PREFIX}/monitoring/health`,
   });
   if (!res.ok) {
-    console.warn(
-      apiErrorMessage(res, "Impossible de charger l'aperçu monitoring."),
-    );
-    return EMPTY_OVERVIEW;
+    console.warn(apiErrorMessage(res, "Health monitoring indisponible."));
+    return EMPTY_HEALTH;
   }
-  return { ...EMPTY_OVERVIEW, ...(res.data ?? {}) };
+  return { ...EMPTY_HEALTH, ...(res.data ?? {}) };
 }
 
-export async function fetchMonitoringSources(): Promise<MonitoringSource[]> {
-  const res = await apiRequest<{ items?: unknown[] }>({
-    method: "GET",
-    path: `${API_PREFIX}/monitoring/sources`,
-  });
-  if (!res.ok) {
-    return [];
+export async function fetchMonitoringAlerts(opts?: {
+  status?: string;
+  severity?: string;
+}): Promise<MonitoringAlert[]> {
+  const params = new URLSearchParams({ limit: "50" });
+  if (opts?.status && opts.status !== "all") {
+    params.set("status", opts.status);
+  } else if (!opts?.status) {
+    params.set("status", "open");
   }
-  const items = Array.isArray(res.data?.items) ? res.data.items : [];
-  return items.map((row) =>
-    normalizeSource(row as Record<string, unknown>),
-  );
-}
-
-export async function fetchMonitoringAlerts(
-  status = "open",
-): Promise<MonitoringAlert[]> {
+  if (opts?.severity) {
+    params.set("severity", opts.severity);
+  }
   const res = await apiRequest<{ items?: unknown[] }>({
     method: "GET",
-    path: `${API_PREFIX}/monitoring/alerts?status=${encodeURIComponent(status)}&limit=50`,
+    path: `${API_PREFIX}/monitoring/alerts?${params.toString()}`,
   });
   if (!res.ok) {
     return [];
@@ -210,15 +189,15 @@ export async function resolveMonitoringIncident(
   return normalizeIncident(res.data ?? {});
 }
 
-export async function runMonitoringScan(): Promise<MonitoringScanResult> {
-  const res = await apiRequest<MonitoringScanResult>({
+export async function runMonitoringCheck(): Promise<MonitoringCheckResult> {
+  const res = await apiRequest<MonitoringCheckResult>({
     method: "POST",
-    path: `${API_PREFIX}/monitoring/scan`,
+    path: `${API_PREFIX}/monitoring/check`,
   });
   if (!res.ok) {
-    throw new Error(apiErrorMessage(res, "Scan monitoring impossible."));
+    throw new Error(apiErrorMessage(res, "Checks monitoring impossible."));
   }
-  const data = res.data ?? ({} as MonitoringScanResult);
+  const data = res.data ?? ({} as MonitoringCheckResult);
   return {
     created: Array.isArray(data.created)
       ? data.created.map((row) =>
@@ -228,6 +207,7 @@ export async function runMonitoringScan(): Promise<MonitoringScanResult> {
     skipped: Array.isArray(data.skipped) ? data.skipped : [],
     metrics:
       data.metrics && typeof data.metrics === "object" ? data.metrics : {},
+    error: data.error,
   };
 }
 
@@ -240,4 +220,24 @@ export function severityBadgeClass(severity: string): string {
     return "border-amber-400/35 bg-amber-500/15 text-amber-200";
   }
   return "border-teal-400/35 bg-teal-500/15 text-teal-200";
+}
+
+export function overallStatusBadgeClass(status: OverallStatus): string {
+  if (status === "healthy") {
+    return "border-teal-400/35 bg-teal-500/15 text-teal-200";
+  }
+  if (status === "degraded") {
+    return "border-amber-400/35 bg-amber-500/15 text-amber-200";
+  }
+  return "border-red-400/35 bg-red-500/15 text-red-200 animate-pulse";
+}
+
+export function formatUsdEur(usd: number): string {
+  const eur = usd * 0.92;
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(eur);
 }

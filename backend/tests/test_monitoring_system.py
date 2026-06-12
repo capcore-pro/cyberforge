@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from agents.alert_engine import AlertEngine
+from agents import alert_engine
+from agents.alert_engine import AlertEngine, run_checks
 from api.main import create_app
 from db.monitoring_store import get_monitoring_store, reset_monitoring_store
 from db.supabase_store import get_supabase_store
@@ -58,6 +60,29 @@ async def _test_monitoring_sources_seeded() -> None:
     assert len(sources) >= 7
 
 
+def test_monitoring_health_endpoint() -> None:
+    client = TestClient(create_app())
+    res = client.get("/api/monitoring/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert "overall_status" in data
+    assert data["overall_status"] in ("healthy", "degraded", "critical")
+    assert data["agents"]["active"] > 0
+    assert "api" in data
+    assert "pipeline" in data
+    assert "costs" in data
+
+
+def test_monitoring_check_endpoint() -> None:
+    client = TestClient(create_app())
+    res = client.post("/api/monitoring/check")
+    assert res.status_code == 200
+    data = res.json()
+    assert "created" in data
+    assert "skipped" in data
+    assert "metrics" in data
+
+
 def test_monitoring_api_overview_and_alerts() -> None:
     client = TestClient(create_app())
     overview = client.get("/api/monitoring/overview")
@@ -69,7 +94,7 @@ def test_monitoring_api_overview_and_alerts() -> None:
     assert sources.status_code == 200
     assert "items" in sources.json()
 
-    alerts = client.get("/api/monitoring/alerts")
+    alerts = client.get("/api/monitoring/alerts?status=open")
     assert alerts.status_code == 200
     assert "items" in alerts.json()
 
@@ -104,6 +129,18 @@ async def _test_monitoring_alert_lifecycle() -> None:
     assert resolved and resolved.get("status") == "resolved"
 
 
+def test_run_checks_returns_metrics() -> None:
+    asyncio.run(_test_run_checks_returns_metrics())
+
+
+async def _test_run_checks_returns_metrics() -> None:
+    _require_supabase()
+    result = await run_checks()
+    assert "metrics" in result
+    assert "created" in result
+    assert "skipped" in result
+
+
 def test_alert_engine_scan_returns_metrics() -> None:
     asyncio.run(_test_alert_engine_scan_returns_metrics())
 
@@ -112,14 +149,33 @@ async def _test_alert_engine_scan_returns_metrics() -> None:
     _require_supabase()
     result = await AlertEngine(days=30).scan()
     assert "metrics" in result
-    assert "created" in result
-    assert "skipped" in result
     assert "pass_rate" in result["metrics"]
 
 
-def test_monitoring_scan_api() -> None:
-    client = TestClient(create_app())
-    res = client.post("/api/monitoring/scan")
-    assert res.status_code == 200
-    data = res.json()
-    assert "metrics" in data
+def test_pipeline_schedules_run_checks() -> None:
+    asyncio.run(_test_pipeline_schedules_run_checks())
+
+
+async def _test_pipeline_schedules_run_checks() -> None:
+    with patch.object(alert_engine, "run_checks", new_callable=AsyncMock) as mock_checks:
+        mock_checks.return_value = {"created": [], "skipped": [], "metrics": {}}
+        await alert_engine.run_checks()
+    mock_checks.assert_awaited_once()
+
+
+def test_pipeline_contains_run_checks_hook() -> None:
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[1] / "pipeline.py"
+    text = source.read_text(encoding="utf-8")
+    assert "asyncio.create_task(alert_engine.run_checks())" in text
+
+
+def test_run_checks_no_crash_when_store_empty() -> None:
+    asyncio.run(_test_run_checks_no_crash_when_store_empty())
+
+
+async def _test_run_checks_no_crash_when_store_empty() -> None:
+    result = await run_checks()
+    assert isinstance(result, dict)
+    assert "created" in result

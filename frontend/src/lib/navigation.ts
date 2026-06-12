@@ -43,6 +43,13 @@ export const MAIN_NAV_GROUP: NavGroup = {
       iconClass: "ti ti-robot",
       enabled: true,
     },
+    {
+      id: "monitoring",
+      label: "Monitoring",
+      icon: "◉",
+      iconClass: "ti ti-activity",
+      enabled: true,
+    },
     { id: "perso", label: "Perso", icon: "◇", enabled: true },
     { id: "clients", label: "Clients", icon: "◎", enabled: true },
     { id: "accounting", label: "Comptabilité", icon: "€", enabled: true },
@@ -54,13 +61,6 @@ export const MAIN_NAV_GROUP: NavGroup = {
 export const SECONDARY_NAV_GROUP: NavGroup = {
   id: "secondary",
   items: [
-    {
-      id: "monitoring",
-      label: "Monitoring",
-      icon: "◉",
-      iconClass: "ti ti-heart-rate-monitor",
-      enabled: true,
-    },
     { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
   ],
 };

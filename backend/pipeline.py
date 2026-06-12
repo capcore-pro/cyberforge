@@ -1355,6 +1355,10 @@ async def _run_pipeline_body_inner(
 
         asyncio.create_task(_remember_generation())
 
+        from agents import alert_engine
+
+        asyncio.create_task(alert_engine.run_checks())
+
         _schedule_audit(
             _audit_log(
                 "project_generated",
@@ -1590,6 +1594,10 @@ async def _run_extension_pipeline(
                 )
 
         asyncio.create_task(_remember_extension_generation())
+
+        from agents import alert_engine
+
+        asyncio.create_task(alert_engine.run_checks())
 
         _schedule_audit(
             _audit_log(
