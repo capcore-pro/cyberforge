@@ -1,5 +1,7 @@
 """Tests statut agents pipeline v2 — prérequis clés coffre / .env / Settings."""
 
+from unittest.mock import AsyncMock
+
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
@@ -123,6 +125,10 @@ def test_media_requires_replicate(monkeypatch) -> None:
 
 
 def test_media_agent_status_endpoint(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "api.routes.agents_status._load_registry_catalog",
+        AsyncMock(return_value=None),
+    )
     monkeypatch.setattr("api.routes.agents_status.replicate_ready", lambda _s=None: True)
     monkeypatch.setattr(
         "api.routes.agents_status.agent_is_active",

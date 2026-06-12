@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from api.routes import (
+    agent_registry,
     agents_status,
     audit,
     clone_inspiration,
@@ -31,6 +32,7 @@ from api.routes import (
 API_ROUTERS: list[tuple[APIRouter, str]] = [
     (health.router, "/api"),
     (agents_status.router, "/api"),
+    (agent_registry.router, "/api"),
     (generate.router, "/api"),
     (projects.router, "/api"),
     (clients.router, "/api"),
@@ -56,6 +58,7 @@ API_ROUTERS: list[tuple[APIRouter, str]] = [
 
 __all__ = [
     "API_ROUTERS",
+    "agent_registry",
     "agents_status",
     "clone_inspiration",
     "clients",
