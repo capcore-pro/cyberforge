@@ -343,7 +343,66 @@ def _html_document_complete(html: str) -> bool:
     return low.endswith("</html>") or low.endswith("</body></html>")
 
 
-def _build_system_prompt(brief: dict[str, Any]) -> str:
+async def _get_appendix(brief: dict[str, Any]) -> str:
+    """Tente la bibliothèque Supabase, sinon fallback hardcodé."""
+    try:
+        from db.prompt_store import get_prompt_store
+
+        store = get_prompt_store()
+        if not store.is_configured():
+            return build_sector_generator_appendix(brief)
+
+        pt = str(brief.get("project_type") or "").strip().lower().replace("-", "_")
+        slug_map = {
+            "ecommerce": "ecommerce-appendix",
+            "saas_dashboard": "ecommerce-appendix",
+            "application_web": "app-web-appendix",
+            "real_app": "app-web-appendix",
+            "crm": "crm-appendix",
+            "site_reservation": "site-reservation-appendix",
+        }
+        slug = slug_map.get(pt)
+        if slug:
+            prompt = await store.get_by_slug(slug)
+            if prompt and prompt.get("content"):
+                await store.increment_usage(str(prompt["id"]))
+                return str(prompt["content"])
+    except Exception as exc:
+        logger.warning("[GeneratorAI] appendix bibliothèque ignoré — %s", exc)
+    return build_sector_generator_appendix(brief)
+
+
+async def _get_mode_appendix(brief: dict[str, Any], hardcoded: str) -> str:
+    """Appendice mode : bibliothèque prioritaire, sinon constante hardcodée."""
+    try:
+        from db.prompt_store import get_prompt_store
+
+        store = get_prompt_store()
+        if not store.is_configured():
+            return hardcoded
+
+        pt = str(brief.get("project_type") or "").strip().lower().replace("-", "_")
+        slug_map = {
+            "ecommerce": "ecommerce-appendix",
+            "saas_dashboard": "ecommerce-appendix",
+            "application_web": "app-web-appendix",
+            "real_app": "app-web-appendix",
+            "crm": "crm-appendix",
+            "site_reservation": "site-reservation-appendix",
+        }
+        slug = slug_map.get(pt)
+        if not slug:
+            return hardcoded
+        prompt = await store.get_by_slug(slug)
+        if prompt and prompt.get("content"):
+            await store.increment_usage(str(prompt["id"]))
+            return str(prompt["content"])
+    except Exception as exc:
+        logger.warning("[GeneratorAI] mode appendix bibliothèque ignoré — %s", exc)
+    return hardcoded
+
+
+async def _build_system_prompt(brief: dict[str, Any]) -> str:
     sector_appendix = build_sector_generator_appendix(brief)
     parts = [HTML_CLOSING_RULE]
     if _is_site_reservation_clone(brief):
@@ -355,13 +414,23 @@ def _build_system_prompt(brief: dict[str, Any]) -> str:
             ]
         )
     elif _is_site_reservation_brief(brief):
-        parts.extend([SYSTEM_PROMPT, SITE_RESERVATION_APPENDIX, sector_appendix])
+        res_appendix = await _get_mode_appendix(brief, SITE_RESERVATION_APPENDIX)
+        parts.extend([SYSTEM_PROMPT, res_appendix, sector_appendix])
     elif _is_ecommerce_brief(brief):
-        parts.extend([SYSTEM_PROMPT, ECOMMERCE_APPENDIX, sector_appendix])
+        eco_appendix = await _get_mode_appendix(brief, ECOMMERCE_APPENDIX)
+        parts.extend([SYSTEM_PROMPT, eco_appendix, sector_appendix])
     elif _is_crm_brief(brief):
-        parts.extend([SYSTEM_PROMPT_APP_WEB, sector_appendix])
+        crm_appendix = await _get_mode_appendix(brief, CRM_APPENDIX)
+        if crm_appendix != CRM_APPENDIX:
+            sector_lines = sector_appendix
+            if sector_lines.startswith(CRM_APPENDIX):
+                sector_lines = sector_lines[len(CRM_APPENDIX) :].lstrip("\n")
+            parts.extend([SYSTEM_PROMPT_APP_WEB, crm_appendix, sector_lines])
+        else:
+            parts.extend([SYSTEM_PROMPT_APP_WEB, sector_appendix])
     elif _is_app_web_brief(brief):
-        parts.extend([SYSTEM_PROMPT_APP_WEB, APP_WEB_APPENDIX, sector_appendix])
+        app_appendix = await _get_mode_appendix(brief, APP_WEB_APPENDIX)
+        parts.extend([SYSTEM_PROMPT_APP_WEB, app_appendix, sector_appendix])
     else:
         parts.extend([SYSTEM_PROMPT, sector_appendix])
     return "\n\n".join(parts)
@@ -482,7 +551,7 @@ class GeneratorAI:
 
         client = anthropic.Anthropic(api_key=api_key)
         reservation_clone = _is_site_reservation_clone(brief)
-        system_prompt = _build_system_prompt(brief)
+        system_prompt = await _build_system_prompt(brief)
         max_tokens = _max_tokens(brief)
         max_chars = _max_html_chars(brief)
         model = MODEL

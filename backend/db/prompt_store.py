@@ -114,6 +114,22 @@ class PromptStore:
             row = _first_row(resp.json())
             if not row:
                 raise SupabaseStoreError("Création prompt sans identifiant retourné.")
+            prompt_id = str(row.get("id") or "")
+            if prompt_id:
+                version_url = f"{self._rest_url()}/prompt_versions"
+                ver_resp = await client.post(
+                    version_url,
+                    headers=self._supabase._headers("return=representation"),
+                    json={
+                        "prompt_id": prompt_id,
+                        "version": str(row.get("version") or "1.0.0"),
+                        "content": content,
+                        "changelog": "Initial version",
+                    },
+                )
+                _raise_for_status(
+                    ver_resp, "create_initial_prompt_version", "POST", version_url, self._supabase
+                )
             return row
 
     async def get_by_slug(self, slug: str) -> dict[str, Any] | None:
@@ -235,6 +251,309 @@ class PromptStore:
             if not row:
                 raise SupabaseStoreError("Mise à jour prompt sans retour.")
             return row
+
+    async def get_by_id(self, prompt_id: str) -> dict[str, Any] | None:
+        if not self.is_configured() or not prompt_id.strip():
+            return None
+
+        url = f"{self._rest_url()}/prompts"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={"id": f"eq.{prompt_id}", "limit": "1"},
+            )
+            _raise_for_status(resp, "get_prompt_by_id", "GET", url, self._supabase)
+            rows = resp.json()
+            if isinstance(rows, list) and rows:
+                return rows[0]
+        return None
+
+    async def get_by_slug_any_status(self, slug: str) -> dict[str, Any] | None:
+        if not self.is_configured() or not slug.strip():
+            return None
+
+        url = f"{self._rest_url()}/prompts"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={"slug": f"eq.{slug.strip()}", "limit": "1"},
+            )
+            _raise_for_status(resp, "get_prompt_by_slug_any", "GET", url, self._supabase)
+            rows = resp.json()
+            if isinstance(rows, list) and rows:
+                return rows[0]
+        return None
+
+    async def upsert_seed(
+        self,
+        name: str,
+        slug: str,
+        content: str,
+        category_slug: str,
+        *,
+        agent_slug: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        existing = await self.get_by_slug_any_status(slug)
+        if not existing:
+            return await self.create(
+                name=name,
+                slug=slug,
+                content=content,
+                category_slug=category_slug,
+                agent_slug=agent_slug,
+                description=description,
+            )
+        prompt_id = str(existing.get("id") or "")
+        if str(existing.get("content") or "") == content:
+            return existing
+        return await self.update_content(
+            prompt_id,
+            content,
+            changelog="Seed sync — contenu mis à jour",
+        )
+
+    async def list_versions(self, prompt_id: str) -> list[dict[str, Any]]:
+        if not self.is_configured() or not prompt_id.strip():
+            return []
+
+        url = f"{self._rest_url()}/prompt_versions"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={
+                    "prompt_id": f"eq.{prompt_id}",
+                    "order": "created_at.desc",
+                },
+            )
+            _raise_for_status(resp, "list_prompt_versions", "GET", url, self._supabase)
+            rows = resp.json()
+            return rows if isinstance(rows, list) else []
+
+    async def get_version(
+        self,
+        prompt_id: str,
+        version: str,
+    ) -> dict[str, Any] | None:
+        if not self.is_configured() or not prompt_id.strip() or not version.strip():
+            return None
+
+        url = f"{self._rest_url()}/prompt_versions"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={
+                    "prompt_id": f"eq.{prompt_id}",
+                    "version": f"eq.{version.strip()}",
+                    "limit": "1",
+                },
+            )
+            _raise_for_status(resp, "get_prompt_version", "GET", url, self._supabase)
+            rows = resp.json()
+            if isinstance(rows, list) and rows:
+                return rows[0]
+        return None
+
+    async def rollback(self, prompt_id: str, version: str) -> dict[str, Any]:
+        target = await self.get_version(prompt_id, version)
+        if not target:
+            raise SupabaseStoreError(f"Version {version} introuvable.")
+        content = str(target.get("content") or "")
+        if not content:
+            raise SupabaseStoreError("Version cible sans contenu.")
+        return await self.update_content(
+            prompt_id,
+            content,
+            changelog=f"Rollback to {version}",
+        )
+
+    async def update_quality_score(self, prompt_id: str, score: int) -> dict[str, Any]:
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        safe_score = max(0, min(100, int(score)))
+        url = f"{self._rest_url()}/prompts"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            patch_resp = await client.patch(
+                url,
+                headers=self._supabase._headers("return=representation"),
+                params={"id": f"eq.{prompt_id}"},
+                json={
+                    "quality_score": safe_score,
+                    "updated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                },
+            )
+            _raise_for_status(patch_resp, "update_quality_score", "PATCH", url, self._supabase)
+            row = _first_row(patch_resp.json())
+            if not row:
+                raise SupabaseStoreError("Mise à jour quality_score sans retour.")
+
+            versions = await self.list_versions(prompt_id)
+            if versions:
+                latest = versions[0]
+                ver_url = f"{self._rest_url()}/prompt_versions"
+                await client.patch(
+                    ver_url,
+                    headers=self._supabase._headers(),
+                    params={"id": f"eq.{latest.get('id')}"},
+                    json={"quality_score": safe_score},
+                )
+            return row
+
+    async def archive(self, prompt_id: str) -> dict[str, Any]:
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        url = f"{self._rest_url()}/prompts"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.patch(
+                url,
+                headers=self._supabase._headers("return=representation"),
+                params={"id": f"eq.{prompt_id}"},
+                json={
+                    "status": "archived",
+                    "updated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                },
+            )
+            _raise_for_status(resp, "archive_prompt", "PATCH", url, self._supabase)
+            row = _first_row(resp.json())
+            if not row:
+                raise SupabaseStoreError("Archivage prompt sans retour.")
+            return row
+
+    async def list_categories(self) -> list[dict[str, Any]]:
+        if not self.is_configured():
+            return []
+
+        url = f"{self._rest_url()}/prompt_categories"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._supabase._headers(),
+                params={"order": "name.asc"},
+            )
+            _raise_for_status(resp, "list_prompt_categories", "GET", url, self._supabase)
+            rows = resp.json()
+            return rows if isinstance(rows, list) else []
+
+    async def add_benchmark(
+        self,
+        prompt_id: str,
+        prompt_version: str | None,
+        task_type: str,
+        model_used: str,
+        provider: str,
+        input_tokens: int,
+        output_tokens: int,
+        duration_ms: int,
+        quality_score: int,
+        cost_usd: float,
+        *,
+        notes: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        body: dict[str, Any] = {
+            "prompt_id": prompt_id,
+            "task_type": task_type.strip(),
+            "model_used": model_used.strip(),
+            "provider": provider.strip(),
+            "input_tokens": max(0, int(input_tokens or 0)),
+            "output_tokens": max(0, int(output_tokens or 0)),
+            "duration_ms": max(0, int(duration_ms or 0)),
+            "quality_score": max(0, min(100, int(quality_score or 0))),
+            "cost_usd": float(cost_usd or 0),
+        }
+        if prompt_version:
+            body["prompt_version"] = prompt_version.strip()
+        if notes:
+            body["notes"] = notes.strip()
+
+        url = f"{self._rest_url()}/prompt_benchmarks"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                resp = await client.post(
+                    url,
+                    headers=self._supabase._headers("return=representation"),
+                    json=body,
+                )
+            except httpx.HTTPError as exc:
+                _raise_transport_error(exc, "add_prompt_benchmark", "POST", url, self._supabase)
+            _raise_for_status(resp, "add_prompt_benchmark", "POST", url, self._supabase)
+            row = _first_row(resp.json())
+            if not row:
+                raise SupabaseStoreError("Création benchmark sans identifiant retourné.")
+            return row
+
+    async def list_benchmarks(
+        self,
+        *,
+        prompt_id: str | None = None,
+        task_type: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        if not self.is_configured():
+            return []
+
+        params: dict[str, str] = {
+            "order": "created_at.desc",
+            "limit": str(max(1, min(limit, 200))),
+        }
+        if prompt_id:
+            params["prompt_id"] = f"eq.{prompt_id}"
+        if task_type:
+            params["task_type"] = f"eq.{task_type.strip()}"
+
+        url = f"{self._rest_url()}/prompt_benchmarks"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url, headers=self._supabase._headers(), params=params)
+            _raise_for_status(resp, "list_prompt_benchmarks", "GET", url, self._supabase)
+            rows = resp.json()
+            return rows if isinstance(rows, list) else []
+
+    async def get_best_prompt_for_task(self, task_type: str) -> dict[str, Any] | None:
+        if not self.is_configured():
+            return None
+
+        task = (task_type or "").strip()
+        if not task:
+            return None
+
+        benchmarks = await self.list_benchmarks(task_type=task, limit=200)
+        if benchmarks:
+            scores: dict[str, list[int]] = {}
+            for row in benchmarks:
+                pid = str(row.get("prompt_id") or "")
+                if not pid:
+                    continue
+                scores.setdefault(pid, []).append(int(row.get("quality_score") or 0))
+            if scores:
+                best_id = max(
+                    scores,
+                    key=lambda pid: sum(scores[pid]) / len(scores[pid]),
+                )
+                return await self.get_by_id(best_id)
+
+        agent_map = {
+            "brief": "brief_ai",
+            "generation": "generator_ai",
+            "analysis": "generator_ai",
+            "review": "supervisor_ai",
+        }
+        agent_slug = agent_map.get(task, "generator_ai")
+        prompts = await self.get_by_agent(agent_slug)
+        if not prompts:
+            return None
+        return sorted(
+            prompts,
+            key=lambda p: int(p.get("quality_score") or 0),
+            reverse=True,
+        )[0]
 
     async def increment_usage(self, prompt_id: str) -> None:
         if not self.is_configured() or not prompt_id.strip():

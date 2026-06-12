@@ -15,7 +15,15 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from agents.brief_ai import SYSTEM_PROMPT as BRIEF_SYSTEM_PROMPT  # noqa: E402
-from agents.generator_ai import SYSTEM_PROMPT as GENERATOR_SYSTEM_PROMPT  # noqa: E402
+from agents.generator_ai import (  # noqa: E402
+    SITE_RESERVATION_APPENDIX,
+    SYSTEM_PROMPT as GENERATOR_SYSTEM_PROMPT,
+)
+from agents.sector_generator_prompts import (  # noqa: E402
+    APP_WEB_APPENDIX,
+    CRM_APPENDIX,
+    ECOMMERCE_APPENDIX,
+)
 from db.prompt_store import get_prompt_store  # noqa: E402
 
 SUPERVISOR_VALIDATION_RULES = """SupervisorAI — règles validate_html
@@ -75,6 +83,38 @@ SEEDS: list[dict[str, str]] = [
         "description": "Règles de validation HTML SupervisorAI",
         "content": SUPERVISOR_VALIDATION_RULES,
     },
+    {
+        "name": "E-commerce Appendix",
+        "slug": "ecommerce-appendix",
+        "agent_slug": "generator_ai",
+        "category_slug": "frontend",
+        "description": "Mode e-commerce GeneratorAI",
+        "content": ECOMMERCE_APPENDIX,
+    },
+    {
+        "name": "App Web Appendix",
+        "slug": "app-web-appendix",
+        "agent_slug": "generator_ai",
+        "category_slug": "frontend",
+        "description": "Mode application web GeneratorAI",
+        "content": APP_WEB_APPENDIX,
+    },
+    {
+        "name": "CRM Appendix",
+        "slug": "crm-appendix",
+        "agent_slug": "generator_ai",
+        "category_slug": "frontend",
+        "description": "Mode CRM GeneratorAI",
+        "content": CRM_APPENDIX,
+    },
+    {
+        "name": "Site Reservation Appendix",
+        "slug": "site-reservation-appendix",
+        "agent_slug": "generator_ai",
+        "category_slug": "frontend",
+        "description": "Mode site réservation GeneratorAI",
+        "content": SITE_RESERVATION_APPENDIX,
+    },
 ]
 
 
@@ -84,15 +124,9 @@ async def main() -> int:
         print("Supabase non configuré — seed ignoré.")
         return 1
 
-    created = 0
-    skipped = 0
+    upserted = 0
     for item in SEEDS:
-        existing = await store.get_by_slug(item["slug"])
-        if existing:
-            print(f"skip  {item['slug']} (déjà présent)")
-            skipped += 1
-            continue
-        row = await store.create(
+        row = await store.upsert_seed(
             name=item["name"],
             slug=item["slug"],
             content=item["content"],
@@ -100,11 +134,11 @@ async def main() -> int:
             agent_slug=item["agent_slug"],
             description=item.get("description"),
         )
-        print(f"created {item['slug']} -> {row.get('id')}")
-        created += 1
+        print(f"upsert {item['slug']} -> {row.get('id')} (v{row.get('version')})")
+        upserted += 1
 
-    print(f"Terminé — {created} créé(s), {skipped} ignoré(s).")
-    return 0 if created + skipped == len(SEEDS) else 1
+    print(f"Terminé — {upserted} prompt(s) synchronisé(s).")
+    return 0
 
 
 if __name__ == "__main__":

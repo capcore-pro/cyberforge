@@ -1,5 +1,5 @@
 """
-Routes API — Bibliothèque de prompts (Volume 3).
+Routes API — Bibliothèque de prompts (Volume 3 + 04D).
 """
 
 from __future__ import annotations
@@ -31,6 +31,26 @@ class UpdatePromptRequest(BaseModel):
     changelog: str | None = Field(default=None, max_length=2000)
 
 
+class RollbackRequest(BaseModel):
+    version: str = Field(..., min_length=1, max_length=50)
+
+
+class QualityScoreRequest(BaseModel):
+    score: int = Field(..., ge=0, le=100)
+
+
+class BenchmarkRequest(BaseModel):
+    task_type: str = Field(..., min_length=1, max_length=100)
+    model_used: str = Field(..., min_length=1, max_length=255)
+    provider: str = Field(..., min_length=1, max_length=100)
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+    duration_ms: int = Field(default=0, ge=0)
+    quality_score: int = Field(..., ge=0, le=100)
+    cost_usd: float = Field(default=0, ge=0)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
 @router.get("/prompts-library")
 async def list_prompts(
     category: str | None = Query(default=None, alias="category"),
@@ -50,18 +70,31 @@ async def list_prompts(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.get("/prompts-library/{slug}")
-async def get_prompt(slug: str) -> dict:
+@router.get("/prompts-library/categories")
+async def list_prompt_categories() -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        return {"items": [], "count": 0}
+    try:
+        items = await store.list_categories()
+        return {"items": items, "count": len(items)}
+    except SupabaseStoreError as exc:
+        logger.warning("list_prompt_categories: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/prompts-library/best/{task_type}")
+async def get_best_prompt(task_type: str) -> dict:
     store = get_prompt_store()
     if not store.is_configured():
         raise HTTPException(status_code=503, detail="Supabase non configuré")
     try:
-        row = await store.get_by_slug(slug)
+        row = await store.get_best_prompt_for_task(task_type)
         if not row:
-            raise HTTPException(status_code=404, detail="Prompt introuvable")
+            raise HTTPException(status_code=404, detail="Aucun prompt pour cette tâche")
         return row
     except SupabaseStoreError as exc:
-        logger.warning("get_prompt: %s", exc)
+        logger.warning("get_best_prompt: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -84,6 +117,125 @@ async def create_prompt(body: CreatePromptRequest) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@router.get("/prompts-library/{prompt_id}/versions")
+async def list_prompt_versions(prompt_id: str) -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail="Supabase non configuré")
+    try:
+        items = await store.list_versions(prompt_id)
+        return {"items": items, "count": len(items)}
+    except SupabaseStoreError as exc:
+        logger.warning("list_prompt_versions: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/prompts-library/{prompt_id}/versions/{version}")
+async def get_prompt_version(prompt_id: str, version: str) -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail="Supabase non configuré")
+    try:
+        row = await store.get_version(prompt_id, version)
+        if not row:
+            raise HTTPException(status_code=404, detail="Version introuvable")
+        return row
+    except SupabaseStoreError as exc:
+        logger.warning("get_prompt_version: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/prompts-library/{prompt_id}/rollback")
+async def rollback_prompt(prompt_id: str, body: RollbackRequest) -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail="Supabase non configuré")
+    try:
+        return await store.rollback(prompt_id, body.version)
+    except SupabaseStoreError as exc:
+        logger.warning("rollback_prompt: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.patch("/prompts-library/{prompt_id}/quality")
+async def update_prompt_quality(prompt_id: str, body: QualityScoreRequest) -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail="Supabase non configuré")
+    try:
+        return await store.update_quality_score(prompt_id, body.score)
+    except SupabaseStoreError as exc:
+        logger.warning("update_prompt_quality: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/prompts-library/{prompt_id}/archive")
+async def archive_prompt(prompt_id: str) -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail="Supabase non configuré")
+    try:
+        return await store.archive(prompt_id)
+    except SupabaseStoreError as exc:
+        logger.warning("archive_prompt: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/prompts-library/{prompt_id}/benchmark")
+async def add_prompt_benchmark(prompt_id: str, body: BenchmarkRequest) -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail="Supabase non configuré")
+    try:
+        prompt = await store.get_by_id(prompt_id)
+        if not prompt:
+            raise HTTPException(status_code=404, detail="Prompt introuvable")
+        benchmark = await store.add_benchmark(
+            prompt_id,
+            str(prompt.get("version") or ""),
+            body.task_type,
+            body.model_used,
+            body.provider,
+            body.input_tokens,
+            body.output_tokens,
+            body.duration_ms,
+            body.quality_score,
+            body.cost_usd,
+            notes=body.notes,
+        )
+        benchmarks = await store.list_benchmarks(prompt_id=prompt_id, limit=200)
+        if benchmarks:
+            avg = sum(int(b.get("quality_score") or 0) for b in benchmarks) / len(
+                benchmarks
+            )
+            await store.update_quality_score(prompt_id, int(round(avg)))
+        return benchmark
+    except SupabaseStoreError as exc:
+        logger.warning("add_prompt_benchmark: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/prompts-library/{prompt_id}/benchmarks")
+async def list_prompt_benchmarks(
+    prompt_id: str,
+    task_type: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=200),
+) -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        return {"items": [], "count": 0}
+    try:
+        items = await store.list_benchmarks(
+            prompt_id=prompt_id,
+            task_type=task_type,
+            limit=limit,
+        )
+        return {"items": items, "count": len(items)}
+    except SupabaseStoreError as exc:
+        logger.warning("list_prompt_benchmarks: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.patch("/prompts-library/{prompt_id}")
 async def update_prompt(prompt_id: str, body: UpdatePromptRequest) -> dict:
     store = get_prompt_store()
@@ -97,4 +249,19 @@ async def update_prompt(prompt_id: str, body: UpdatePromptRequest) -> dict:
         )
     except SupabaseStoreError as exc:
         logger.warning("update_prompt: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/prompts-library/{slug}")
+async def get_prompt(slug: str) -> dict:
+    store = get_prompt_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail="Supabase non configuré")
+    try:
+        row = await store.get_by_slug(slug)
+        if not row:
+            raise HTTPException(status_code=404, detail="Prompt introuvable")
+        return row
+    except SupabaseStoreError as exc:
+        logger.warning("get_prompt: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
