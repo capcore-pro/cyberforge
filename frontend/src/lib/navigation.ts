@@ -12,6 +12,7 @@ export type AppPage =
   | "perso"
   | "agents"
   | "monitoring"
+  | "workflows"
   | "tools"
   | "reports";
 
@@ -48,6 +49,13 @@ export const MAIN_NAV_GROUP: NavGroup = {
       label: "Monitoring",
       icon: "◉",
       iconClass: "ti ti-activity",
+      enabled: true,
+    },
+    {
+      id: "workflows",
+      label: "Workflows",
+      icon: "◉",
+      iconClass: "ti ti-git-branch",
       enabled: true,
     },
     { id: "perso", label: "Perso", icon: "◇", enabled: true },
