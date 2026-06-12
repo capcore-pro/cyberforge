@@ -32,6 +32,19 @@ import {
   fetchSystemNotifications,
   type SystemNotification,
 } from "@/lib/system-notifications-api";
+import {
+  fetchLLMStats,
+  fetchRecentGenerations,
+  fetchRecentSessions,
+  fetchSupervisorStats,
+  type AuditGenerationEvent,
+  type LLMStats,
+  type OrchestrationSession,
+  type SupervisorStats,
+} from "@/lib/dashboard-api";
+import { LLMCostWidget } from "@/components/dashboard/LLMCostWidget";
+import { PipelineHealthWidget } from "@/components/dashboard/PipelineHealthWidget";
+import { RecentGenerationsWidget } from "@/components/dashboard/RecentGenerationsWidget";
 
 interface DashboardPageProps {
   onNavigate: (page: AppPage) => void;
@@ -329,17 +342,6 @@ function KpiCard({
   );
 }
 
-function ProgressBar({ pct }: { pct: number }) {
-  const p = clamp(pct, 0, 100);
-  const color =
-    p >= 55 ? "bg-emerald-400" : p >= 30 ? "bg-orange-400" : "bg-red-400";
-  return (
-    <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5">
-      <div className={`h-full ${color}`} style={{ width: `${p}%` }} />
-    </div>
-  );
-}
-
 /**
  * Tableau de bord principal — métriques, générateur rapide, projets et alertes.
  */
@@ -357,14 +359,37 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [clients, setClients] = useState<LegalClient[]>([]);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+  const [llmStats, setLlmStats] = useState<LLMStats | null>(null);
+  const [supervisorStats, setSupervisorStats] = useState<SupervisorStats | null>(
+    null,
+  );
+  const [recentSessions, setRecentSessions] = useState<OrchestrationSession[]>(
+    [],
+  );
+  const [recentGenerations, setRecentGenerations] = useState<
+    AuditGenerationEvent[]
+  >([]);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
-    const [clientsRes, projectsRes, notifRes, stripeRes] = await Promise.all([
+    const [
+      clientsRes,
+      projectsRes,
+      notifRes,
+      stripeRes,
+      llmRes,
+      supervisorRes,
+      sessionsRes,
+      generationsRes,
+    ] = await Promise.all([
       fetchLegalClients(),
       apiRequest<ProjectRecord[]>({ method: "GET", path: `${API_PREFIX}/projects` }),
       fetchSystemNotifications(false),
       fetchStripeDashboard(STRIPE_CAPCORE_PROJECT_ID),
+      fetchLLMStats(),
+      fetchSupervisorStats(),
+      fetchRecentSessions(5),
+      fetchRecentGenerations(5),
     ]);
 
     if (clientsRes.ok && Array.isArray(clientsRes.data)) {
@@ -390,6 +415,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     } else {
       setRevenueMonth(0);
     }
+
+    setLlmStats(llmRes);
+    setSupervisorStats(supervisorRes);
+    setRecentSessions(sessionsRes);
+    setRecentGenerations(generationsRes);
 
     setLoading(false);
   }, []);
@@ -602,95 +632,59 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         />
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Crédits API */}
-        <GlassCard
-          className="p-5"
-          style={{
-            animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
-            animationDelay: "300ms",
-          }}
-        >
-          <SectionTitle
-            icon="⛽"
-            title="Crédits API"
-            action={
-              <button
-                type="button"
-                onClick={() => window.cyberforge?.openExternal?.("https://capcore.pro")}
-                className="text-[11px] font-semibold text-cf-gold hover:text-cf-gold-hover"
-              >
-                Recréditer →{/* lien externe */}
-              </button>
-            }
-          />
-          <div className="space-y-4">
-            {[
-              { label: "Anthropic", left: "62%", pct: 62 },
-              { label: "Pexels", left: "41%", pct: 41 },
-              { label: "Firecrawl", left: "28%", pct: 28 },
-              { label: "Brevo", left: "75%", pct: 75 },
-            ].map((row) => (
-              <div key={row.label} className="space-y-1.5">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-cf-text">{row.label}</p>
-                  <p className="text-[11px] font-semibold tabular-nums text-cf-muted">
-                    Restant estimé {row.left}
-                  </p>
-                </div>
-                <ProgressBar pct={row.pct} />
-              </div>
-            ))}
-          </div>
-          <p className="mt-4 text-[11px] text-cf-muted">
-            Valeurs statiques pour l’instant — connexion aux quotas à venir.
-          </p>
-        </GlassCard>
-
-        {/* Démarrer un projet */}
-        <GlassCard
-          className="p-5"
-          style={{
-            animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
-            animationDelay: "360ms",
-          }}
-        >
-          <SectionTitle icon="➕" title="Démarrer un projet" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {[
-              { id: "vitrine" as DashboardProjectKind, label: "Vitrine", icon: "◈" },
-              { id: "reservation" as DashboardProjectKind, label: "Réservation", icon: "⏱" },
-              { id: "ecommerce" as DashboardProjectKind, label: "E‑commerce", icon: "▤" },
-              { id: "app_web" as DashboardProjectKind, label: "App web", icon: "⚡" },
-              { id: "extension" as DashboardProjectKind, label: "Extension", icon: "◇" },
-              { id: "desktop" as DashboardProjectKind, label: "App desktop", icon: "▥" },
-            ].map((k) => (
-              <button
-                key={k.id}
-                type="button"
-                onClick={() => openGeneratorPreset(k.id)}
-                className="group flex flex-col gap-1.5 rounded-control border border-white/10 bg-white/5 p-3 text-left transition hover:border-cf-gold/35 hover:bg-white/7 hover:shadow-gold focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-gold/50"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-cf-gold" aria-hidden>
-                    {k.icon}
-                  </span>
-                  <span
-                    className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cf-muted transition group-hover:text-cf-gold"
-                    aria-hidden
-                  >
-                    →
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-cf-text">{k.label}</p>
-                <p className="text-[11px] text-cf-muted">
-                  Ouvrir le générateur
-                </p>
-              </button>
-            ))}
-          </div>
-        </GlassCard>
+      <div
+        className="grid gap-6 lg:grid-cols-2"
+        style={{
+          animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
+          animationDelay: "280ms",
+        }}
+      >
+        <PipelineHealthWidget data={supervisorStats} loading={loading} />
+        <LLMCostWidget data={llmStats} loading={loading} />
       </div>
+
+      <GlassCard
+        className="p-5"
+        style={{
+          animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
+          animationDelay: "340ms",
+        }}
+      >
+        <SectionTitle icon="➕" title="Démarrer un projet" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {[
+            { id: "vitrine" as DashboardProjectKind, label: "Vitrine", icon: "◈" },
+            { id: "reservation" as DashboardProjectKind, label: "Réservation", icon: "⏱" },
+            { id: "ecommerce" as DashboardProjectKind, label: "E‑commerce", icon: "▤" },
+            { id: "app_web" as DashboardProjectKind, label: "App web", icon: "⚡" },
+            { id: "extension" as DashboardProjectKind, label: "Extension", icon: "◇" },
+            { id: "desktop" as DashboardProjectKind, label: "App desktop", icon: "▥" },
+          ].map((k) => (
+            <button
+              key={k.id}
+              type="button"
+              onClick={() => openGeneratorPreset(k.id)}
+              className="group flex flex-col gap-1.5 rounded-control border border-white/10 bg-white/5 p-3 text-left transition hover:border-cf-gold/35 hover:bg-white/7 hover:shadow-gold focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-gold/50"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-cf-gold" aria-hidden>
+                  {k.icon}
+                </span>
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cf-muted transition group-hover:text-cf-gold"
+                  aria-hidden
+                >
+                  →
+                </span>
+              </div>
+              <p className="text-sm font-medium text-cf-text">{k.label}</p>
+              <p className="text-[11px] text-cf-muted">
+                Ouvrir le générateur
+              </p>
+            </button>
+          ))}
+        </div>
+      </GlassCard>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Projets récents */}
@@ -800,50 +794,56 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           )}
         </GlassCard>
 
-        {/* Activité récente */}
-        <GlassCard
-          className="p-5"
-          style={{
-            animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
-            animationDelay: "480ms",
-          }}
-        >
-          <SectionTitle icon="⏺" title="Activité récente" />
-          {loading ? (
-            <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
-          ) : activity.length === 0 ? (
-            <p className="text-sm text-cf-muted">
-              Aucune activité récente.
-            </p>
-          ) : (
-            <ol className="relative space-y-4 pl-5">
-              <div className="absolute bottom-0 left-[10px] top-0 w-px bg-white/10" />
-              {activity.map((n) => (
-                <li key={n.id} className="relative">
-                  <div className="absolute -left-[2px] top-1.5 h-3 w-3 rounded-full border border-white/20 bg-cf-gold shadow-gold" />
-                  <div className="rounded-control border border-white/10 bg-white/5 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-cf-text">
-                          {n.title}
-                        </p>
-                        {n.message ? (
-                          <p className="mt-1 line-clamp-2 text-[11px] text-cf-body">
-                            {n.message}
-                          </p>
-                        ) : null}
-                      </div>
-                      <span className="shrink-0 text-[11px] font-semibold text-cf-muted">
-                        {formatRelativeTime(n.created_at)}
-                      </span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </GlassCard>
+        <RecentGenerationsWidget
+          sessions={recentSessions}
+          generations={recentGenerations}
+          loading={loading}
+          onNavigate={onNavigate}
+        />
       </div>
+
+      <GlassCard
+        className="p-5"
+        style={{
+          animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
+          animationDelay: "520ms",
+        }}
+      >
+        <SectionTitle icon="⏺" title="Activité récente" />
+        {loading ? (
+          <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
+        ) : activity.length === 0 ? (
+          <p className="text-sm text-cf-muted">
+            Aucune activité récente.
+          </p>
+        ) : (
+          <ol className="relative space-y-4 pl-5">
+            <div className="absolute bottom-0 left-[10px] top-0 w-px bg-white/10" />
+            {activity.map((n) => (
+              <li key={n.id} className="relative">
+                <div className="absolute -left-[2px] top-1.5 h-3 w-3 rounded-full border border-white/20 bg-cf-gold shadow-gold" />
+                <div className="rounded-control border border-white/10 bg-white/5 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-cf-text">
+                        {n.title}
+                      </p>
+                      {n.message ? (
+                        <p className="mt-1 line-clamp-2 text-[11px] text-cf-body">
+                          {n.message}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 text-[11px] font-semibold text-cf-muted">
+                      {formatRelativeTime(n.created_at)}
+                    </span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </GlassCard>
     </div>
   );
 }

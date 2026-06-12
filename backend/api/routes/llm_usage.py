@@ -17,6 +17,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["llm_usage"])
 
 
+@router.get("/stats/llm")
+async def get_llm_dashboard_stats() -> dict:
+    """Coûts LLM mensuels (par agent) + série journalière pour le dashboard."""
+    store = get_llm_usage_store()
+    if not store.is_configured():
+        return {
+            "monthly": {
+                "total_cost_usd": 0.0,
+                "total_tokens": 0,
+                "by_agent": [],
+            },
+            "daily": [],
+        }
+    try:
+        return await store.get_dashboard_llm_stats()
+    except SupabaseStoreError as exc:
+        logger.warning("get_llm_dashboard_stats: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.get("/llm-usage/daily")
 async def get_daily_llm_usage() -> dict:
     """Agrégat journalier (table cost_tracking)."""

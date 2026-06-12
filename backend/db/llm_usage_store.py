@@ -306,6 +306,115 @@ class LLMUsageStore:
             rows = resp.json()
             return rows if isinstance(rows, list) else []
 
+    async def get_dashboard_llm_stats(
+        self,
+        *,
+        organization_id: str = DEFAULT_ORG_ID,
+    ) -> dict[str, Any]:
+        """Agrégats mensuels (par agent) + série journalière pour le dashboard."""
+        empty: dict[str, Any] = {
+            "monthly": {
+                "total_cost_usd": 0.0,
+                "total_tokens": 0,
+                "by_agent": [],
+            },
+            "daily": [],
+        }
+        if not self.is_configured():
+            return empty
+
+        today = date.today()
+        month_start = date(today.year, today.month, 1)
+        month_start_iso = f"{month_start.isoformat()}T00:00:00Z"
+
+        usage_url = f"{self._rest_url()}/llm_usage"
+        tracking_url = f"{self._rest_url()}/cost_tracking"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            usage_resp = await client.get(
+                usage_url,
+                headers=self._supabase._headers(),
+                params={
+                    "organization_id": f"eq.{organization_id}",
+                    "created_at": f"gte.{month_start_iso}",
+                    "select": "agent_name,cost_usd,total_tokens",
+                    "order": "created_at.desc",
+                    "limit": "5000",
+                },
+            )
+            _raise_for_status(usage_resp, "list_llm_usage_month", "GET", usage_url, self._supabase)
+            usage_rows = usage_resp.json()
+            if not isinstance(usage_rows, list):
+                usage_rows = []
+
+            tracking_resp = await client.get(
+                tracking_url,
+                headers=self._supabase._headers(),
+                params={
+                    "organization_id": f"eq.{organization_id}",
+                    "period": "eq.day",
+                    "period_date": f"gte.{month_start.isoformat()}",
+                    "select": "period_date,total_cost_usd,total_tokens",
+                    "order": "period_date.asc",
+                    "limit": "31",
+                },
+            )
+            _raise_for_status(
+                tracking_resp, "list_cost_tracking_month", "GET", tracking_url, self._supabase
+            )
+            tracking_rows = tracking_resp.json()
+            if not isinstance(tracking_rows, list):
+                tracking_rows = []
+
+        by_agent_map: dict[str, dict[str, float | int]] = {}
+        total_cost = 0.0
+        total_tokens = 0
+        for row in usage_rows:
+            if not isinstance(row, dict):
+                continue
+            agent = str(row.get("agent_name") or "unknown").strip() or "unknown"
+            cost = float(row.get("cost_usd") or 0)
+            tokens = int(row.get("total_tokens") or 0)
+            total_cost += cost
+            total_tokens += tokens
+            bucket = by_agent_map.setdefault(
+                agent, {"agent": agent, "cost_usd": 0.0, "tokens": 0}
+            )
+            bucket["cost_usd"] = float(bucket["cost_usd"]) + cost
+            bucket["tokens"] = int(bucket["tokens"]) + tokens
+
+        by_agent = sorted(
+            [
+                {
+                    "agent": str(item["agent"]),
+                    "cost_usd": round(float(item["cost_usd"]), 6),
+                    "tokens": int(item["tokens"]),
+                }
+                for item in by_agent_map.values()
+            ],
+            key=lambda x: x["cost_usd"],
+            reverse=True,
+        )
+
+        daily = [
+            {
+                "date": str(row.get("period_date") or ""),
+                "cost_usd": round(float(row.get("total_cost_usd") or 0), 6),
+                "tokens": int(row.get("total_tokens") or 0),
+            }
+            for row in tracking_rows
+            if isinstance(row, dict)
+        ]
+
+        return {
+            "monthly": {
+                "total_cost_usd": round(total_cost, 6),
+                "total_tokens": total_tokens,
+                "by_agent": by_agent,
+            },
+            "daily": daily,
+        }
+
 
 _store: LLMUsageStore | None = None
 

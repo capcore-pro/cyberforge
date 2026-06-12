@@ -83,6 +83,22 @@ def test_compute_llm_cost_usd() -> None:
     assert cost == 3.0
 
 
+def test_llm_dashboard_stats_api() -> None:
+    from fastapi.testclient import TestClient
+
+    from main import app
+
+    client = TestClient(app)
+    res = client.get("/api/stats/llm")
+    assert res.status_code == 200
+    body = res.json()
+    assert "monthly" in body
+    assert "daily" in body
+    assert "total_cost_usd" in body["monthly"]
+    assert "by_agent" in body["monthly"]
+    assert isinstance(body["daily"], list)
+
+
 def test_pipeline_emits_usage_in_done_event() -> None:
     import asyncio
 
