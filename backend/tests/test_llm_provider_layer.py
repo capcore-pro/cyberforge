@@ -57,11 +57,11 @@ async def _test_llm_provider_tables_exist() -> None:
         prov = await client.get(
             f"{url}/llm_providers",
             headers=headers,
-            params={"slug": "in.(anthropic,openai,deepseek)"},
+            params={"slug": "in.(anthropic,openai,deepseek,ollama)"},
         )
         assert prov.status_code == 200
         slugs = {row["slug"] for row in prov.json()}
-        assert slugs >= {"anthropic", "openai", "deepseek"}
+        assert slugs >= {"anthropic", "openai", "deepseek", "ollama"}
 
 
 def test_llm_providers_api() -> None:
@@ -73,7 +73,34 @@ def test_llm_providers_api() -> None:
     assert items["anthropic"]["available"] is True
     assert items["openai"]["available"] is True
     assert items["deepseek"]["available"] is True
-    assert items["ollama"]["available"] is False
+    assert "ollama" in items
+    assert isinstance(items["ollama"]["available"], bool)
+
+
+def test_ollama_provider_availability_no_crash() -> None:
+    asyncio.run(_test_ollama_provider_availability_no_crash())
+
+
+async def _test_ollama_provider_availability_no_crash() -> None:
+    from llm.providers.ollama_provider import OllamaProvider
+
+    with patch("llm.providers.ollama_provider.get_settings") as mock_settings:
+        mock_settings.return_value.ollama_base_url = None
+        assert OllamaProvider().is_available() is False
+
+    with patch("llm.providers.ollama_provider.get_settings") as mock_settings:
+        mock_settings.return_value.ollama_base_url = "http://127.0.0.1:11434"
+        with patch("httpx.Client") as client_cls:
+            client_cls.return_value.__enter__.return_value.get.return_value.status_code = 200
+            assert OllamaProvider().is_available() is True
+
+    with patch("llm.providers.ollama_provider.get_settings") as mock_settings:
+        mock_settings.return_value.ollama_base_url = "http://127.0.0.1:11434"
+        with patch("httpx.Client") as client_cls:
+            client_cls.return_value.__enter__.return_value.get.side_effect = OSError(
+                "connection refused"
+            )
+            assert OllamaProvider().is_available() is False
 
 
 def test_llm_router_primary_generation() -> None:
@@ -82,6 +109,7 @@ def test_llm_router_primary_generation() -> None:
 
 async def _test_llm_router_primary_generation() -> None:
     router = LLMRouter()
+    router._refresh_providers = lambda: None  # type: ignore[method-assign]
     mock_response = LLMResponse(
         content="<html><body>ok</body></html>",
         model="claude-sonnet-4-5",
@@ -112,6 +140,7 @@ def test_llm_router_fallback_with_audit() -> None:
 async def _test_llm_router_fallback_with_audit() -> None:
     _require_supabase()
     router = LLMRouter()
+    router._refresh_providers = lambda: None  # type: ignore[method-assign]
     anthropic_provider = MagicMock()
     anthropic_provider.provider_slug = "anthropic"
     anthropic_provider.is_available.return_value = True

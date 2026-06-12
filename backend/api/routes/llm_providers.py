@@ -69,15 +69,26 @@ async def get_llm_routing() -> dict:
     for task_type, rule in ROUTING_RULES.items():
         primary = rule["primary"]
         fallback = rule["fallback"]
-        tasks[task_type] = {
+        fallback2 = rule.get("fallback2")
+        active = primary
+        if active not in available:
+            active = fallback if fallback in available else active
+        if active not in available and fallback2:
+            active = fallback2 if fallback2 in available else active
+        task_info: dict = {
             "primary": primary,
             "primary_model": rule["primary_model"],
             "fallback": fallback,
             "fallback_model": rule["fallback_model"],
             "primary_available": primary in available,
             "fallback_available": fallback in available,
-            "active_provider": primary if primary in available else fallback,
+            "active_provider": active if active in available else None,
         }
+        if fallback2:
+            task_info["fallback2"] = fallback2
+            task_info["fallback2_model"] = rule.get("fallback2_model")
+            task_info["fallback2_available"] = fallback2 in available
+        tasks[task_type] = task_info
     return {
         "rules": ROUTING_RULES,
         "tasks": tasks,
