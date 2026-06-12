@@ -11,6 +11,7 @@ export type AppPage =
   /** Routes internes (hors sidebar) */
   | "perso"
   | "agents"
+  | "monitoring"
   | "tools"
   | "reports";
 
@@ -53,6 +54,13 @@ export const MAIN_NAV_GROUP: NavGroup = {
 export const SECONDARY_NAV_GROUP: NavGroup = {
   id: "secondary",
   items: [
+    {
+      id: "monitoring",
+      label: "Monitoring",
+      icon: "◉",
+      iconClass: "ti ti-heart-rate-monitor",
+      enabled: true,
+    },
     { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
   ],
 };

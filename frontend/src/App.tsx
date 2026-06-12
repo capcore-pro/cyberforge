@@ -33,6 +33,11 @@ const SettingsPage = lazy(() =>
 const AgentsPage = lazy(() =>
   import("./pages/AgentsPage").then((m) => ({ default: m.AgentsPage })),
 );
+const MonitoringPage = lazy(() =>
+  import("./pages/MonitoringPage").then((m) => ({
+    default: m.MonitoringPage,
+  })),
+);
 const MediaLibraryPage = lazy(() =>
   import("./pages/MediaLibraryPage").then((m) => ({ default: m.MediaLibraryPage })),
 );
@@ -162,6 +167,8 @@ function AppWithNotifications({
         );
       case "agents":
         return <AgentsPage />;
+      case "monitoring":
+        return <MonitoringPage />;
       case "clients":
         return <ClientsPage onOpenGenerator={() => setPage("generator")} />;
       case "perso":
