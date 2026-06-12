@@ -90,6 +90,129 @@ def _schedule_audit(coro: Awaitable[None]) -> None:
     asyncio.create_task(_runner())
 
 
+def _new_workflow_ctx() -> dict[str, Any]:
+    return {
+        "execution_id": None,
+        "step_by_agent_name": {},
+        "total_steps": 0,
+    }
+
+
+def _schedule_workflow(coro: Awaitable[None]) -> None:
+    """Workflow store non bloquant — ne doit jamais faire échouer le pipeline."""
+
+    async def _runner() -> None:
+        try:
+            await coro
+        except Exception as exc:
+            logger.warning("[WorkflowStore] ignoré — %s", exc)
+
+    asyncio.create_task(_runner())
+
+
+async def _workflow_init(
+    ctx: dict[str, Any],
+    *,
+    generation_id: str | None,
+    brief: dict[str, Any],
+    project_type: str,
+) -> None:
+    if not generation_id:
+        return
+    from db.workflow_store import get_workflow_store
+
+    store = get_workflow_store()
+    if not store.is_configured():
+        return
+
+    workflow = await store.get_workflow_for_project_type(project_type)
+    if not workflow:
+        return
+
+    workflow_uuid = str(workflow.get("id") or "")
+    if not workflow_uuid:
+        return
+
+    steps = await store.get_steps(workflow_uuid)
+    ctx["total_steps"] = len(steps)
+    ctx["step_by_agent_name"] = {
+        str(step.get("step_name") or ""): int(step.get("execution_order") or 0)
+        for step in steps
+        if step.get("step_name")
+    }
+
+    execution = await store.create_execution(
+        workflow_uuid,
+        generation_id,
+        project_id=str(brief.get("project_id") or "") or None,
+        total_steps=len(steps),
+    )
+    execution_id = str(execution.get("id") or "")
+    if not execution_id:
+        return
+
+    ctx["execution_id"] = execution_id
+    await store.update_execution(
+        execution_id,
+        current_step="BriefAI",
+        completed_steps=ctx["step_by_agent_name"].get("BriefAI", 1),
+    )
+
+
+async def _workflow_step_done(ctx: dict[str, Any], agent_name: str) -> None:
+    execution_id = ctx.get("execution_id")
+    if not execution_id:
+        return
+
+    step_number = (ctx.get("step_by_agent_name") or {}).get(agent_name)
+    if not step_number:
+        return
+
+    from db.workflow_store import get_workflow_store
+
+    await get_workflow_store().update_execution(
+        str(execution_id),
+        current_step=agent_name,
+        completed_steps=int(step_number),
+    )
+
+
+async def _workflow_complete(
+    ctx: dict[str, Any],
+    *,
+    status: str,
+    total_cost_usd: float = 0,
+    total_tokens: int = 0,
+    duration_ms: int = 0,
+    error_message: str | None = None,
+) -> None:
+    execution_id = ctx.get("execution_id")
+    if not execution_id:
+        return
+
+    from db.workflow_store import get_workflow_store
+
+    store = get_workflow_store()
+    total_steps = int(ctx.get("total_steps") or 0)
+    if status == "completed" and total_steps > 0:
+        await store.update_execution(
+            str(execution_id),
+            completed_steps=total_steps,
+        )
+    await store.complete_execution(
+        str(execution_id),
+        status,
+        total_cost_usd=total_cost_usd,
+        total_tokens=total_tokens,
+        duration_ms=duration_ms,
+        error_message=error_message,
+    )
+
+
+def _track_workflow_step(ctx: dict[str, Any], agent_name: str) -> None:
+    _schedule_workflow(_workflow_step_done(ctx, agent_name))
+
+
 async def _audit_log(
     event_type: str,
     brief: dict[str, Any],
@@ -236,6 +359,7 @@ async def _run_pipeline_body(
     brief_ai = BriefAI()
     llm_usage_svc = get_llm_usage_service()
     usage_totals = LLMUsageTotals()
+    workflow_ctx = _new_workflow_ctx()
     is_extension = (req.project_type or "").strip().lower() == "extension_navigateur"
     tracked_total = _EXT_TOTAL if is_extension else TRACKED_TOTAL
 
@@ -289,6 +413,15 @@ async def _run_pipeline_body(
 
     pt = (brief.get("project_type") or req.project_type or "").strip().lower()
 
+    _schedule_workflow(
+        _workflow_init(
+            workflow_ctx,
+            generation_id=generation_id,
+            brief=brief,
+            project_type=pt,
+        )
+    )
+
     if not is_extension:
         await _emit_agent_start(
             generation_id, agent="DesignSystemAI", step=2, total=tracked_total
@@ -305,6 +438,7 @@ async def _run_pipeline_body(
             duration_ms=int((time.perf_counter() - ds_t0) * 1000),
             total=tracked_total,
         )
+        _track_workflow_step(workflow_ctx, "DesignSystemAI")
 
     if pt == "extension_navigateur":
         return await _run_extension_pipeline(
@@ -312,6 +446,7 @@ async def _run_pipeline_body(
             brief,
             generation_id=generation_id,
             pipeline_t0=pipeline_t0,
+            workflow_ctx=workflow_ctx,
         )
 
     if pt not in ("vitrine_next",):
@@ -348,6 +483,7 @@ async def _run_pipeline_body(
             generation_id=generation_id,
             totals=usage_totals,
         )
+        _track_workflow_step(workflow_ctx, "DatabaseAI")
 
     if pt in ("application_web", "real_app", "crm"):
         from agents import auth_ai
@@ -387,6 +523,7 @@ async def _run_pipeline_body(
             generation_id=generation_id,
             totals=usage_totals,
         )
+        _track_workflow_step(workflow_ctx, "AuthAI")
 
     if pt in ("ecommerce", "site_reservation"):
         from agents import payment_ai
@@ -420,6 +557,7 @@ async def _run_pipeline_body(
             generation_id=generation_id,
             totals=usage_totals,
         )
+        _track_workflow_step(workflow_ctx, "PaymentAI")
 
     _apply_stripe_publishable_key(brief, req.stripe_publishable_key)
 
@@ -478,6 +616,7 @@ async def _run_pipeline_body(
         total=tracked_total,
         usage=gen_usage,
     )
+    _track_workflow_step(workflow_ctx, "GeneratorAI")
 
     await _emit_agent_start(
         generation_id, agent="SupervisorAI", step=4, total=tracked_total
@@ -532,10 +671,19 @@ async def _run_pipeline_body(
         duration_ms=int((time.perf_counter() - sup_t0) * 1000),
         total=tracked_total,
     )
+    _track_workflow_step(workflow_ctx, "SupervisorAI")
 
     if not result.get("success") or not result.get("html"):
         error_msg = "GeneratorAI n'a pas produit de HTML valide."
         await _emit(generation_id, "error", {"message": error_msg})
+        _schedule_workflow(
+            _workflow_complete(
+                workflow_ctx,
+                status="failed",
+                duration_ms=int((time.perf_counter() - pipeline_t0) * 1000),
+                error_message=error_msg,
+            )
+        )
         _schedule_audit(
             _audit_log(
                 "generation_failed",
@@ -599,6 +747,7 @@ async def _run_pipeline_body(
         duration_ms=int((time.perf_counter() - deploy_t0) * 1000),
         total=tracked_total,
     )
+    _track_workflow_step(workflow_ctx, "DeployAI")
 
     deploy_url = str(deployed.get("url") or "")
     persisted_project_id: str | None = None
@@ -714,6 +863,15 @@ async def _run_pipeline_body(
                 },
             )
         )
+        _schedule_workflow(
+            _workflow_complete(
+                workflow_ctx,
+                status="completed",
+                total_cost_usd=float(final_result.get("estimated_cost_usd") or 0),
+                total_tokens=int(final_result.get("total_tokens") or 0),
+                duration_ms=total_duration_ms,
+            )
+        )
     else:
         err = str(final_result.get("error") or "Déploiement échoué")
         await _emit(generation_id, "error", {"message": err})
@@ -727,6 +885,16 @@ async def _run_pipeline_body(
                 },
             )
         )
+        _schedule_workflow(
+            _workflow_complete(
+                workflow_ctx,
+                status="failed",
+                total_cost_usd=float(final_result.get("estimated_cost_usd") or 0),
+                total_tokens=int(final_result.get("total_tokens") or 0),
+                duration_ms=total_duration_ms,
+                error_message=err,
+            )
+        )
 
     return final_result
 
@@ -737,10 +905,12 @@ async def _run_extension_pipeline(
     *,
     generation_id: str | None,
     pipeline_t0: float,
+    workflow_ctx: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """BriefAI → ExtensionBuilder → DeployAI (pas Generator/DB/Auth/Payment)."""
     from tools.extension_pipeline import build_extension_files, build_extension_zip
 
+    wf_ctx = workflow_ctx or _new_workflow_ctx()
     supervisor = SupervisorAI()
     client_name = str(brief.get("client_name") or req.client_name or "CyberForge")
     primary_color = str(brief.get("couleur_primaire") or "#4f46e5")
@@ -776,6 +946,7 @@ async def _run_extension_pipeline(
         generation_id,
         f"ExtensionBuilder — {len(extension_files)} fichier(s), ZIP {len(zip_bytes)} octets",
     )
+    _track_workflow_step(wf_ctx, "ExtensionBuilder")
 
     deploy_ai = DeployAI()
 
@@ -817,6 +988,7 @@ async def _run_extension_pipeline(
             "total": _EXT_TOTAL,
         },
     )
+    _track_workflow_step(wf_ctx, "DeployAI")
 
     deploy_url = str(deployed.get("url") or "")
     if deployed.get("success") and deploy_url:
@@ -908,6 +1080,13 @@ async def _run_extension_pipeline(
                 },
             )
         )
+        _schedule_workflow(
+            _workflow_complete(
+                wf_ctx,
+                status="completed",
+                duration_ms=total_duration_ms,
+            )
+        )
     else:
         err = str(final_result.get("error") or "Déploiement extension échoué")
         await _emit(generation_id, "error", {"message": err})
@@ -919,6 +1098,14 @@ async def _run_extension_pipeline(
                     "error": err,
                     "project_type": "extension_navigateur",
                 },
+            )
+        )
+        _schedule_workflow(
+            _workflow_complete(
+                wf_ctx,
+                status="failed",
+                duration_ms=total_duration_ms,
+                error_message=err,
             )
         )
 
