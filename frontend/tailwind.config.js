@@ -5,15 +5,16 @@ export default {
     extend: {
       colors: {
         cf: {
-          main: "#0a0a0a",
+          main: "#0d0d0d",
           sidebar: "#111111",
           card: "#111111",
           secondary: "#161616",
           active: "#1c1a12",
           border: "#222222",
           "border-input": "#2a2a2a",
-          gold: "#d4a843",
-          "gold-hover": "#e3bc5f",
+          gold: "#c9a84c",
+          "gold-hover": "#e0be6a",
+          "gold-legacy": "#d4a843",
           "gold-subtle": "#1c1a12",
           text: "#f0f0f0",
           body: "#cccccc",
