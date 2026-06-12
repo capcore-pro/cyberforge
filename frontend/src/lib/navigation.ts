@@ -18,6 +18,8 @@ export interface NavItem {
   id: AppPage;
   label: string;
   icon: string;
+  /** Classe Tabler Icons (ex. ti ti-robot) — prioritaire sur `icon` si défini */
+  iconClass?: string;
   enabled: boolean;
 }
 
@@ -33,6 +35,13 @@ export const MAIN_NAV_GROUP: NavGroup = {
     { id: "dashboard", label: "Accueil", icon: "◈", enabled: true },
     { id: "generator", label: "Générateur", icon: "⚡", enabled: true },
     { id: "projects", label: "Projets", icon: "▤", enabled: true },
+    {
+      id: "agents",
+      label: "Agents IA",
+      icon: "◉",
+      iconClass: "ti ti-robot",
+      enabled: true,
+    },
     { id: "perso", label: "Perso", icon: "◇", enabled: true },
     { id: "clients", label: "Clients", icon: "◎", enabled: true },
     { id: "accounting", label: "Comptabilité", icon: "€", enabled: true },
@@ -75,5 +84,4 @@ export const NAV_ITEMS: NavItem[] = [
 export const ROUTED_PAGES: AppPage[] = [
   ...PRIMARY_NAV_ITEMS.map((i) => i.id),
   SETTINGS_NAV_ITEM.id,
-  "perso",
 ];

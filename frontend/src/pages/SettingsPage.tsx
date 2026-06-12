@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { AgentsSettingsPanel } from "@/components/settings/AgentsSettingsPanel";
+import { GOLD_BTN, GLASS_SECTION } from "@/components/settings/settings-theme";
 import { ApiKeysSettingsPanel } from "@/components/settings/ApiKeysSettingsPanel";
 import { ProfileSettingsPanel } from "@/components/settings/ProfileSettingsPanel";
 import { SystemSettingsPanel } from "@/components/settings/SystemSettingsPanel";
 import { TAB_ACTIVE, TAB_BASE } from "@/components/settings/settings-theme";
+import type { AppPage } from "@/lib/navigation";
 
 type SettingsTab = "profile" | "keys" | "agents" | "system";
 
@@ -14,10 +15,14 @@ const TABS: { id: SettingsTab; label: string }[] = [
   { id: "system", label: "Système" },
 ];
 
+interface SettingsPageProps {
+  onNavigate?: (page: AppPage) => void;
+}
+
 /**
  * Paramètres — profil, clés API, agents pipeline v2 et système.
  */
-export function SettingsPage() {
+export function SettingsPage({ onNavigate }: SettingsPageProps) {
   const [tab, setTab] = useState<SettingsTab>("profile");
 
   return (
@@ -48,7 +53,22 @@ export function SettingsPage() {
       <section>
         {tab === "profile" ? <ProfileSettingsPanel /> : null}
         {tab === "keys" ? <ApiKeysSettingsPanel /> : null}
-        {tab === "agents" ? <AgentsSettingsPanel /> : null}
+        {tab === "agents" ? (
+          <div className={`${GLASS_SECTION} space-y-4`}>
+            <p className="text-sm text-white/60">
+              La gestion détaillée des agents (registre, modèles, métriques) est
+              disponible sur la page dédiée Agents IA.
+            </p>
+            <button
+              type="button"
+              onClick={() => onNavigate?.("agents")}
+              className={`${GOLD_BTN} inline-flex items-center gap-2`}
+            >
+              <i className="ti ti-robot" aria-hidden />
+              Voir la page Agents IA
+            </button>
+          </div>
+        ) : null}
         {tab === "system" ? <SystemSettingsPanel /> : null}
       </section>
     </div>

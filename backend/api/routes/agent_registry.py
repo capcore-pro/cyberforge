@@ -96,6 +96,32 @@ async def update_agent_model(agent_id: str, body: UpdateModelRequest) -> dict:
     return updated
 
 
+@router.get("/agents/registry/{agent_id}/metrics")
+async def get_agent_registry_metrics(agent_id: str) -> dict:
+    store = get_agent_registry_store()
+    if not store.is_configured():
+        return {
+            "total_executions": 0,
+            "success_count": 0,
+            "failure_count": 0,
+            "avg_duration_ms": 0,
+            "total_cost": 0.0,
+        }
+    try:
+        row = await store.get_by_agent_id(agent_id)
+    except SupabaseStoreError as exc:
+        logger.warning("get_agent_registry_metrics: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' introuvable.")
+
+    from db.agent_execution_store import get_agent_execution_store
+
+    return await get_agent_execution_store().get_stats(
+        agent_name=str(row.get("name") or ""),
+    )
+
+
 @router.patch("/agents/registry/{agent_id}/enable")
 async def set_agent_enabled(agent_id: str, body: SetEnabledRequest) -> dict:
     store = get_agent_registry_store()
