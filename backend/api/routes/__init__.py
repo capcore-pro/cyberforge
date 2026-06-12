@@ -27,12 +27,14 @@ from api.routes import (
     secrets,
     settings,
     system,
+    tool_framework,
 )
 
 API_ROUTERS: list[tuple[APIRouter, str]] = [
     (health.router, "/api"),
     (agents_status.router, "/api"),
     (agent_registry.router, "/api"),
+    (tool_framework.router, "/api"),
     (generate.router, "/api"),
     (projects.router, "/api"),
     (clients.router, "/api"),
@@ -82,4 +84,5 @@ __all__ = [
     "secrets",
     "settings",
     "system",
+    "tool_framework",
 ]
