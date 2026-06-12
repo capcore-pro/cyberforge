@@ -32,6 +32,7 @@ import { copyTextToClipboard } from "@/lib/generation-export";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
 import { LighthouseScorePanel } from "@/components/LighthouseScorePanel";
 import { DataPaymentPanel } from "@/components/DataPaymentPanel";
+import { LazyProjectAnalyticsPanel } from "@/components/projects/ProjectAnalyticsPanel";
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
 
@@ -114,6 +115,8 @@ export function ProjectDetailView({
 
   const projectReportKey =
     project.supabaseProjectId ?? project.managedId ?? project.key;
+
+  const analyticsProjectId = project.supabaseProjectId?.trim() || null;
 
   const playwrightReport = getPlaywrightReport(projectReportKey);
   const lighthouseReport = getLighthouseReport(projectReportKey);
@@ -583,6 +586,13 @@ export function ProjectDetailView({
         authSchema={(project as any).authSchema ?? null}
         paymentConfig={(project as any).paymentConfig ?? null}
       />
+
+      {analyticsProjectId ? (
+        <LazyProjectAnalyticsPanel
+          project_id={analyticsProjectId}
+          generation_id={project.generationId}
+        />
+      ) : null}
 
       {duplicateError ? (
         <p className="rounded-card border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-200">
