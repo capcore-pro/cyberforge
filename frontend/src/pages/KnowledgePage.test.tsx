@@ -30,6 +30,7 @@ describe("KnowledgePage", () => {
     expect(html).toContain("Documents");
     expect(html).toContain("Ajouter");
     expect(html).toContain("Rechercher");
+    expect(html).toContain("Graphe");
     expect(html).toContain("Chargement des documents");
   });
 });

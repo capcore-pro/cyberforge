@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { KnowledgeGraphView } from "@/components/knowledge/KnowledgeGraphView";
 import { GLASS_SECTION } from "@/components/accounting/accounting-theme";
 import { TAB_ACTIVE, TAB_BASE } from "@/components/settings/settings-theme";
 import { Badge, Button, Card, Input } from "@/components/ui";
@@ -20,13 +21,14 @@ import {
   type KnowledgeDocument,
 } from "@/lib/knowledge-api";
 
-type KnowledgeTab = "documents" | "add" | "search";
+type KnowledgeTab = "documents" | "add" | "search" | "graph";
 type AddSubTab = "text" | "file";
 
 const MAIN_TABS: { id: KnowledgeTab; label: string }[] = [
   { id: "documents", label: "Documents" },
   { id: "add", label: "Ajouter" },
   { id: "search", label: "Rechercher" },
+  { id: "graph", label: "Graphe" },
 ];
 
 const ADD_TABS: { id: AddSubTab; label: string }[] = [
@@ -499,6 +501,12 @@ export function KnowledgePage() {
               })}
             </ul>
           )}
+        </section>
+      ) : null}
+
+      {tab === "graph" ? (
+        <section>
+          <KnowledgeGraphView />
         </section>
       ) : null}
     </div>

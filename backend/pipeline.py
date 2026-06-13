@@ -1413,6 +1413,25 @@ async def _run_pipeline_body_inner(
 
         asyncio.create_task(_remember_generation())
 
+        async def _add_to_knowledge_graph() -> None:
+            try:
+                from knowledge.graph_service import graph_service
+
+                await graph_service.add_generation_to_graph(
+                    brief=brief,
+                    generation_id=generation_id,
+                    project_id=str(
+                        brief.get("project_id") or persisted_project_id or ""
+                    )
+                    or None,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[KnowledgeGraph] add_generation_to_graph ignoré — %s", exc
+                )
+
+        asyncio.create_task(_add_to_knowledge_graph())
+
         from agents import alert_engine
 
         asyncio.create_task(alert_engine.run_checks())
@@ -1663,6 +1682,26 @@ async def _run_extension_pipeline(
                 )
 
         asyncio.create_task(_remember_extension_generation())
+
+        async def _add_extension_to_knowledge_graph() -> None:
+            try:
+                from knowledge.graph_service import graph_service
+
+                await graph_service.add_generation_to_graph(
+                    brief=brief,
+                    generation_id=generation_id,
+                    project_id=str(
+                        brief.get("project_id") or ext_project_id or ""
+                    )
+                    or None,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[KnowledgeGraph] add_generation_to_graph extension ignoré — %s",
+                    exc,
+                )
+
+        asyncio.create_task(_add_extension_to_knowledge_graph())
 
         from agents import alert_engine
 
