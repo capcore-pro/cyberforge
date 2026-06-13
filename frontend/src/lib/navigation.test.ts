@@ -23,6 +23,17 @@ describe("navigation — knowledge page", () => {
     expect(NAV_ITEMS.some((item) => item.id === "knowledge")).toBe(true);
   });
 
+  it("includes pipeline after clients in main nav", () => {
+    const idxClients = MAIN_NAV_GROUP.items.findIndex((i) => i.id === "clients");
+    const idxPipeline = MAIN_NAV_GROUP.items.findIndex((i) => i.id === "pipeline");
+    expect(idxPipeline).toBe(idxClients + 1);
+    expect(MAIN_NAV_GROUP.items[idxPipeline]).toMatchObject({
+      label: "Pipeline",
+      iconClass: "ti ti-chart-arrows-vertical",
+    });
+    expect(ROUTED_PAGES).toContain("pipeline");
+  });
+
   it("keeps existing primary pages without regression", () => {
     const expected: AppPage[] = [
       "dashboard",
@@ -33,6 +44,7 @@ describe("navigation — knowledge page", () => {
       "workflows",
       "perso",
       "clients",
+      "pipeline",
       "accounting",
       "newsletter",
     ];

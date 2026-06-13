@@ -4,6 +4,7 @@ export type AppPage =
   | "generator"
   | "projects"
   | "clients"
+  | "pipeline"
   | "accounting"
   | "newsletter"
   | "media_library"
@@ -61,6 +62,13 @@ export const MAIN_NAV_GROUP: NavGroup = {
     },
     { id: "perso", label: "Perso", icon: "◇", enabled: true },
     { id: "clients", label: "Clients", icon: "◎", enabled: true },
+    {
+      id: "pipeline",
+      label: "Pipeline",
+      icon: "◉",
+      iconClass: "ti ti-chart-arrows-vertical",
+      enabled: true,
+    },
     { id: "accounting", label: "Comptabilité", icon: "€", enabled: true },
     { id: "newsletter", label: "Newsletter", icon: "✉", enabled: true },
   ],

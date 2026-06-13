@@ -49,6 +49,9 @@ const MediaLibraryPage = lazy(() =>
 const KnowledgePage = lazy(() =>
   import("./pages/KnowledgePage").then((m) => ({ default: m.KnowledgePage })),
 );
+const PipelinePage = lazy(() =>
+  import("./pages/PipelinePage").then((m) => ({ default: m.PipelinePage })),
+);
 const AccountingPage = lazy(() =>
   import("./pages/AccountingPage").then((m) => ({ default: m.AccountingPage })),
 );
@@ -181,6 +184,8 @@ function AppWithNotifications({
         return <WorkflowsPage />;
       case "clients":
         return <ClientsPage onOpenGenerator={() => setPage("generator")} />;
+      case "pipeline":
+        return <PipelinePage />;
       case "perso":
         return <PersoPage onOpenGenerator={openGeneratorFromPerso} />;
       case "settings":
