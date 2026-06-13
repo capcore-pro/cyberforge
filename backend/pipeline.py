@@ -182,6 +182,20 @@ def _schedule_orchestration(coro: Awaitable[None]) -> None:
     asyncio.create_task(_runner())
 
 
+def _schedule_security_generation_failed(error_message: str) -> None:
+    async def _log() -> None:
+        from db.security_store import get_security_store
+
+        await get_security_store().log_event(
+            event_type="generation_failed_repeatedly",
+            severity="medium",
+            source="pipeline",
+            description=f"Génération échouée: {error_message[:100]}",
+        )
+
+    _schedule_audit(_log())
+
+
 def _track_orchestration_agent(
     orchestration_ctx: dict[str, Any],
     agent_name: str,
@@ -1206,6 +1220,7 @@ async def _run_pipeline_body_inner(
                 },
             )
         )
+        _schedule_security_generation_failed(error_msg)
         return {
             "url": "",
             "html": "",
@@ -1482,6 +1497,7 @@ async def _run_pipeline_body_inner(
                 error_message=err,
             )
         )
+        _schedule_security_generation_failed(err)
 
     return final_result
 
@@ -1749,5 +1765,6 @@ async def _run_extension_pipeline(
                 error_message=err,
             )
         )
+        _schedule_security_generation_failed(err)
 
     return final_result

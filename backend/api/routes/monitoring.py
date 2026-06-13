@@ -16,6 +16,7 @@ from api.routes.health import health_check
 from config import get_settings
 from db.llm_usage_store import get_llm_usage_store
 from db.monitoring_store import get_monitoring_store
+from db.security_store import get_security_store
 from db.supervisor_store import get_supervisor_store
 from db.supabase_store import SupabaseStoreError
 from security.llm_secrets import any_llm_key_configured
@@ -252,3 +253,35 @@ async def run_monitoring_check(days: int = Query(default=30, ge=1, le=365)) -> d
 async def run_monitoring_scan(days: int = Query(default=30, ge=1, le=365)) -> dict:
     """Alias rétrocompat — préférer POST /monitoring/check."""
     return await run_monitoring_check(days=days)
+
+
+@router.get("/monitoring/security-events")
+async def list_security_events(
+    limit: int = Query(default=20, ge=1, le=200),
+) -> dict:
+    store = get_security_store()
+    if not store.is_configured():
+        return {"items": [], "count": 0}
+    try:
+        items = await store.list_events(limit=limit)
+        return {"items": items, "count": len(items)}
+    except SupabaseStoreError as exc:
+        logger.warning("list_security_events: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/monitoring/security-stats")
+async def get_security_stats() -> dict:
+    store = get_security_store()
+    if not store.is_configured():
+        return {
+            "total": 0,
+            "by_severity": {"low": 0, "medium": 0, "high": 0, "critical": 0},
+            "by_type": {},
+            "unresolved": 0,
+        }
+    try:
+        return await store.get_stats()
+    except SupabaseStoreError as exc:
+        logger.warning("get_security_stats: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

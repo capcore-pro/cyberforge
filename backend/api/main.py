@@ -4,7 +4,9 @@ Factory FastAPI — assemble routes, CORS et métadonnées de l'API.
 
 import logging
 import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
+from time import time as _time
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +22,16 @@ APP_VERSION = "0.1.0"
 logger = logging.getLogger(__name__)
 
 REQUIRED_ROUTES = ("/api/health", "/api/projects", "/api/generate", "/api/agents/status")
+
+# Store en RAM — reset au redémarrage
+_rate_limit_store: dict = defaultdict(list)
+
+RATE_LIMITS = {
+    "/api/generate": (10, 60),
+    "/api/secrets/save": (5, 60),
+    "/api/knowledge/ingest": (20, 60),
+    "/api/pipeline/prospects": (30, 60),
+}
 
 
 def _collect_route_paths(application: FastAPI) -> set[str]:
@@ -99,6 +111,47 @@ def create_app() -> FastAPI:
                 duration_ms,
             )
         return response
+
+    @application.middleware("http")
+    async def rate_limit_middleware(request, call_next):
+        path = request.url.path
+        method = request.method
+
+        if method not in ("POST", "PATCH"):
+            return await call_next(request)
+
+        limit_config = None
+        for route_prefix, config in RATE_LIMITS.items():
+            if path.startswith(route_prefix):
+                limit_config = config
+                break
+
+        if not limit_config:
+            return await call_next(request)
+
+        max_requests, window_seconds = limit_config
+        client_key = f"{path}:{request.client.host}"
+        now = _time()
+
+        _rate_limit_store[client_key] = [
+            t for t in _rate_limit_store[client_key]
+            if now - t < window_seconds
+        ]
+
+        if len(_rate_limit_store[client_key]) >= max_requests:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "Rate limit dépassé",
+                    "retry_after": window_seconds,
+                },
+                headers={"Retry-After": str(window_seconds)},
+            )
+
+        _rate_limit_store[client_key].append(now)
+        return await call_next(request)
 
     for api_router, prefix in API_ROUTERS:
         application.include_router(api_router, prefix=prefix)

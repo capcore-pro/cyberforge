@@ -4,6 +4,7 @@ Routes secrets — coffre local chiffré pour les clés API.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -36,8 +37,6 @@ from security.secret_vault import (
 )
 from tools.api_key_tester import test_api_key
 
-router = APIRouter(tags=["secrets"])
-
 _PROVIDER_ENV: dict[str, tuple[str, str]] = {
     "openai": ("OPENAI_API_KEY", "openai_api_key"),
     "anthropic": ("ANTHROPIC_API_KEY", "anthropic_api_key"),
@@ -53,6 +52,57 @@ _PROVIDER_ENV: dict[str, tuple[str, str]] = {
     "brave_search": ("BRAVE_SEARCH_API_KEY", "brave_search_api_key"),
     "exa": ("EXA_API_KEY", "exa_api_key"),
 }
+
+router = APIRouter(tags=["secrets"])
+
+_VAULT_KEY_PROVIDER: dict[str, str] = {
+    env_name: provider for provider, (env_name, _) in _PROVIDER_ENV.items()
+}
+
+
+def _schedule_api_key_changed_event(key_name: str) -> None:
+    async def _log() -> None:
+        from db.security_store import get_security_store
+
+        await get_security_store().log_event(
+            event_type="api_key_changed",
+            severity="low",
+            source="settings",
+            description=f"Clé {key_name} modifiée",
+        )
+
+    asyncio.create_task(_log())
+
+
+def _validate_vault_secrets(
+    secrets: dict[str, str | None],
+) -> tuple[dict[str, str | None], list[str], list[dict[str, str]]]:
+    validated: dict[str, str | None] = {}
+    saved_keys: list[str] = []
+    warnings: list[dict[str, str]] = []
+
+    for key_name, value in secrets.items():
+        if value is None or not str(value).strip():
+            validated[key_name] = value
+            continue
+
+        provider = _VAULT_KEY_PROVIDER.get(key_name)
+        if provider:
+            valid, _message = test_api_key(provider, str(value))
+            if not valid:
+                warnings.append(
+                    {
+                        "key": key_name,
+                        "message": "Clé invalide — vérifiez la valeur",
+                    }
+                )
+                validated[key_name] = None
+                continue
+
+        validated[key_name] = value
+        saved_keys.append(key_name)
+
+    return validated, saved_keys, warnings
 
 
 def _env_nonempty(env_name: str) -> bool:
@@ -265,34 +315,37 @@ async def secrets_test(body: TestSecretRequest) -> TestSecretResponse:
 @router.post("/secrets/save")
 async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
     vault = get_secret_vault()
+    raw_secrets = {
+        "OPENAI_API_KEY": body.openai_api_key,
+        "ANTHROPIC_API_KEY": body.anthropic_api_key,
+        "DEEPSEEK_API_KEY": body.deepseek_api_key,
+        "GOOGLE_GENERATIVE_AI_API_KEY": body.google_generative_ai_api_key,
+        "V0_API_KEY": body.v0_api_key,
+        "REPLICATE_API_KEY": body.replicate_api_key,
+        "TAVILY_API_KEY": body.tavily_api_key,
+        "RAILWAY_API_KEY": body.railway_api_key,
+        "VERCEL_TOKEN": body.vercel_token,
+        "GITHUB_TOKEN": body.github_token,
+        "BREVO_API_KEY": body.brevo_api_key,
+        "STRIPE_SECRET_KEY": body.stripe_secret_key,
+        "BRAVE_SEARCH_API_KEY": body.brave_search_api_key,
+        "EXA_API_KEY": body.exa_api_key,
+    }
+    secrets, saved_keys, warnings = _validate_vault_secrets(raw_secrets)
+
     try:
-        vault.save(
-            body.password,
-            secrets={
-                "OPENAI_API_KEY": body.openai_api_key,
-                "ANTHROPIC_API_KEY": body.anthropic_api_key,
-                "DEEPSEEK_API_KEY": body.deepseek_api_key,
-                "GOOGLE_GENERATIVE_AI_API_KEY": body.google_generative_ai_api_key,
-                "V0_API_KEY": body.v0_api_key,
-                "REPLICATE_API_KEY": body.replicate_api_key,
-                "TAVILY_API_KEY": body.tavily_api_key,
-                "RAILWAY_API_KEY": body.railway_api_key,
-                "VERCEL_TOKEN": body.vercel_token,
-                "GITHUB_TOKEN": body.github_token,
-                "BREVO_API_KEY": body.brevo_api_key,
-                "STRIPE_SECRET_KEY": body.stripe_secret_key,
-                "BRAVE_SEARCH_API_KEY": body.brave_search_api_key,
-                "EXA_API_KEY": body.exa_api_key,
-            },
-        )
+        vault.save(body.password, secrets=secrets)
     except VaultInvalidPasswordError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
+    for key_name in saved_keys:
+        _schedule_api_key_changed_event(key_name)
+
     env_updates: dict[str, str | None] = {}
-    if body.brevo_api_key and body.brevo_api_key.strip():
-        env_updates["BREVO_API_KEY"] = body.brevo_api_key.strip()
-    if body.stripe_secret_key and body.stripe_secret_key.strip():
-        env_updates["STRIPE_SECRET_KEY"] = body.stripe_secret_key.strip()
+    if secrets.get("BREVO_API_KEY") and str(secrets["BREVO_API_KEY"]).strip():
+        env_updates["BREVO_API_KEY"] = str(secrets["BREVO_API_KEY"]).strip()
+    if secrets.get("STRIPE_SECRET_KEY") and str(secrets["STRIPE_SECRET_KEY"]).strip():
+        env_updates["STRIPE_SECRET_KEY"] = str(secrets["STRIPE_SECRET_KEY"]).strip()
     if body.pexels_api_key and body.pexels_api_key.strip():
         env_updates["PEXELS_API_KEY"] = body.pexels_api_key.strip()
     if body.firecrawl_api_key and body.firecrawl_api_key.strip():
@@ -315,5 +368,7 @@ async def secrets_save(body: SaveSecretsRequest) -> dict[str, object]:
         "locked": status.locked,
         "configured": configured,
         "effective": llm_provider_flags(settings),
+        "saved": saved_keys,
+        "warnings": warnings,
     }
 
