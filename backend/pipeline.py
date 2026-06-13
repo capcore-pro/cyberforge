@@ -182,7 +182,10 @@ def _schedule_orchestration(coro: Awaitable[None]) -> None:
     asyncio.create_task(_runner())
 
 
-def _schedule_security_generation_failed(error_message: str) -> None:
+def _schedule_security_generation_failed(
+    error_message: str,
+    brief: dict[str, Any] | None = None,
+) -> None:
     async def _log() -> None:
         from db.security_store import get_security_store
 
@@ -192,6 +195,17 @@ def _schedule_security_generation_failed(error_message: str) -> None:
             source="pipeline",
             description=f"Génération échouée: {error_message[:100]}",
         )
+        try:
+            from tools.push_notifications import send_push_notification
+
+            client_name = str((brief or {}).get("client_name") or "?")
+            await send_push_notification(
+                title="❌ Génération échouée",
+                body=f"{client_name} — {error_message[:80]}",
+                data={"error": True},
+            )
+        except Exception as exc:
+            logger.warning("[Push] notification échec ignorée — %s", exc)
 
     _schedule_audit(_log())
 
@@ -1220,7 +1234,7 @@ async def _run_pipeline_body_inner(
                 },
             )
         )
-        _schedule_security_generation_failed(error_msg)
+        _schedule_security_generation_failed(error_msg, brief)
         return {
             "url": "",
             "html": "",
@@ -1412,6 +1426,26 @@ async def _run_pipeline_body_inner(
 
         asyncio.create_task(_send_deploy_email())
 
+        async def _send_deploy_push() -> None:
+            try:
+                from tools.push_notifications import send_push_notification
+
+                await send_push_notification(
+                    title=f"✅ {brief.get('client_name', 'CyberForge')}",
+                    body=(
+                        f"Site {brief.get('project_type', '')} déployé — "
+                        f"{final_result.get('url', '')}"
+                    ),
+                    data={
+                        "url": str(final_result.get("url") or ""),
+                        "type": str(brief.get("project_type") or ""),
+                    },
+                )
+            except Exception as exc:
+                logger.warning("[Push] notification déploiement ignorée: %s", exc)
+
+        asyncio.create_task(_send_deploy_push())
+
         async def _remember_generation() -> None:
             try:
                 from memory.memory_service import get_memory_service
@@ -1497,7 +1531,7 @@ async def _run_pipeline_body_inner(
                 error_message=err,
             )
         )
-        _schedule_security_generation_failed(err)
+        _schedule_security_generation_failed(err, brief)
 
     return final_result
 
@@ -1765,6 +1799,6 @@ async def _run_extension_pipeline(
                 error_message=err,
             )
         )
-        _schedule_security_generation_failed(err)
+        _schedule_security_generation_failed(err, brief)
 
     return final_result
