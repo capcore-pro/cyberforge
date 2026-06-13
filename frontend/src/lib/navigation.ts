@@ -7,6 +7,7 @@ export type AppPage =
   | "accounting"
   | "newsletter"
   | "media_library"
+  | "knowledge"
   | "settings"
   /** Routes internes (hors sidebar) */
   | "perso"
@@ -70,6 +71,13 @@ export const SECONDARY_NAV_GROUP: NavGroup = {
   id: "secondary",
   items: [
     { id: "media_library", label: "Médiathèque", icon: "▥", enabled: true },
+    {
+      id: "knowledge",
+      label: "Base de connaissance",
+      icon: "◉",
+      iconClass: "ti ti-brain",
+      enabled: true,
+    },
   ],
 };
 

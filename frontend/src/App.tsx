@@ -46,6 +46,9 @@ const WorkflowsPage = lazy(() =>
 const MediaLibraryPage = lazy(() =>
   import("./pages/MediaLibraryPage").then((m) => ({ default: m.MediaLibraryPage })),
 );
+const KnowledgePage = lazy(() =>
+  import("./pages/KnowledgePage").then((m) => ({ default: m.KnowledgePage })),
+);
 const AccountingPage = lazy(() =>
   import("./pages/AccountingPage").then((m) => ({ default: m.AccountingPage })),
 );
@@ -184,6 +187,8 @@ function AppWithNotifications({
         return <SettingsPage onNavigate={setPage} />;
       case "media_library":
         return <MediaLibraryPage />;
+      case "knowledge":
+        return <KnowledgePage />;
       case "accounting":
         return <AccountingPage />;
       case "newsletter":
