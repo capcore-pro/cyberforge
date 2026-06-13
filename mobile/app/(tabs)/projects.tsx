@@ -36,7 +36,7 @@ export default function ProjectsScreen() {
 
   const filtered = useMemo(() => {
     if (filter === "all") return data;
-    return data.filter((p) => p.project_type === filter);
+    return data.filter((p: Project) => p.project_type === filter);
   }, [data, filter]);
 
   const renderItem = ({ item }: { item: Project }) => {

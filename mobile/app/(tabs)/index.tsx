@@ -133,7 +133,7 @@ export default function DashboardScreen() {
             <Text style={styles.muted}>Aucune génération récente</Text>
           </GlassCard>
         ) : (
-          (data?.generations?.items ?? []).map((event) => {
+          (data?.generations?.items ?? []).map((event: import("../../lib/api").AuditEvent) => {
             const payload = event.payload ?? {};
             return (
               <GlassCard key={event.id} style={styles.listItem}>
@@ -169,7 +169,7 @@ export default function DashboardScreen() {
             <Text style={styles.ok}>✓ Système opérationnel</Text>
           </GlassCard>
         ) : (
-          (data?.alerts?.items ?? []).slice(0, 5).map((alert) => (
+          (data?.alerts?.items ?? []).slice(0, 5).map((alert: import("../../lib/api").Alert) => (
             <GlassCard key={alert.id} style={styles.listItem}>
               <View style={styles.rowBetween}>
                 <Badge
