@@ -1214,6 +1214,33 @@ async def _run_pipeline_body_inner(
             "error": error_msg,
         }
 
+    from agents.hallucination_detector import hallucination_detector
+
+    html = str(result["html"])
+    hal_result = hallucination_detector.detect(html=html, brief=brief)
+    brief["hallucination_check"] = hal_result
+
+    if hal_result["severity"] == "high":
+        await _emit(
+            generation_id,
+            "log",
+            {
+                "message": (
+                    f"⚠️ Contenu potentiellement générique: "
+                    f"{hal_result['issues'][:2]}"
+                ),
+            },
+        )
+
+    _schedule_quality_review(
+        review_type="hallucination_check",
+        score=hal_result["score"],
+        passed=hal_result["hallucination_free"],
+        details=hal_result,
+        generation_id=generation_id,
+        project_id=project_id,
+    )
+
     deploy_ai = DeployAI()
     client_name = str(brief.get("client_name") or req.client_name or "CyberForge")
     sector = str(brief.get("sector") or "")
