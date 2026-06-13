@@ -15,8 +15,20 @@ from knowledge.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_UPLOAD_SUFFIXES = {".txt", ".md"}
-SIMILARITY_THRESHOLD = 0.5
+SUPPORTED_UPLOAD_SUFFIXES = {".txt", ".md", ".pdf"}
+COMBINED_SCORE_THRESHOLD = 0.3
+
+
+def extract_pdf_text(file_path: str) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(file_path)
+    pages: list[str] = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text and text.strip():
+            pages.append(text.strip())
+    return "\n\n".join(pages)
 
 
 class KnowledgeService:
@@ -98,13 +110,18 @@ class KnowledgeService:
         path = Path(file_path)
         suffix = path.suffix.lower()
         if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
-            raise ValueError("Formats supportés : .txt, .md")
-        content = path.read_text(encoding="utf-8")
+            raise ValueError("Formats supportés : .txt, .md, .pdf")
+        if suffix == ".pdf":
+            content = extract_pdf_text(file_path)
+            source_type = "pdf"
+        else:
+            content = path.read_text(encoding="utf-8")
+            source_type = "uploaded"
         return await self.ingest_text(
             title=title or path.stem,
             content=content,
             project_id=project_id,
-            source_type="uploaded",
+            source_type=source_type,
         )
 
     async def search(
@@ -117,9 +134,15 @@ class KnowledgeService:
         if not cleaned:
             return []
 
-        vector = await self._embeddings.embed_text(cleaned)
-        hits = await self._store.search_similar(
+        try:
+            vector = await self._embeddings.embed_text(cleaned)
+        except Exception as exc:
+            logger.warning("Knowledge search: embedding indisponible (%s)", exc)
+            return []
+
+        hits = await self._store.search_hybrid(
             vector,
+            cleaned,
             project_id=project_id,
             limit=limit,
         )
@@ -130,9 +153,12 @@ class KnowledgeService:
                 "document_title": row.get("document_title"),
                 "content": row.get("content"),
                 "similarity": float(row.get("similarity") or 0),
+                "keyword_score": float(row.get("keyword_score") or 0),
+                "combined_score": float(row.get("combined_score") or 0),
             }
             for row in hits
             if isinstance(row, dict)
+            and float(row.get("combined_score") or 0) > COMBINED_SCORE_THRESHOLD
         ]
 
     async def get_context_for_prompt(
@@ -142,9 +168,11 @@ class KnowledgeService:
         max_tokens: int = 4000,
     ) -> str:
         hits = await self.search(query, project_id=project_id, limit=10)
-        # Seuil abaissé — documents courts ou requêtes sémantiquement éloignées
-        # À remonter à 0.7 quand la base knowledge sera plus dense
-        relevant = [h for h in hits if float(h.get("similarity") or 0) >= SIMILARITY_THRESHOLD]
+        relevant = [
+            h
+            for h in hits
+            if float(h.get("combined_score") or 0) > COMBINED_SCORE_THRESHOLD
+        ]
         if not relevant:
             return ""
 
@@ -153,8 +181,8 @@ class KnowledgeService:
         for hit in relevant:
             title = str(hit.get("document_title") or "Document")
             content = str(hit.get("content") or "").strip()
-            similarity = float(hit.get("similarity") or 0)
-            block = f"### {title} (similarité {similarity:.2f})\n{content}\n"
+            combined = float(hit.get("combined_score") or 0)
+            block = f"### {title} (score {combined:.2f})\n{content}\n"
             block_tokens = int(len(block.split()) * 1.3)
             if used_tokens + block_tokens > max_tokens:
                 break

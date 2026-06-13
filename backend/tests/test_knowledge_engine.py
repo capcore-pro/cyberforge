@@ -12,11 +12,12 @@ from fastapi.testclient import TestClient
 from agents.generator_ai import _build_user_message
 from api.main import create_app
 from knowledge.chunking_service import ChunkingService
-from knowledge.knowledge_service import KnowledgeService
+from knowledge.knowledge_service import KnowledgeService, extract_pdf_text
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_SQL = REPO_ROOT / "supabase" / "migrations" / "011_knowledge_engine.sql"
+HYBRID_MIGRATION_SQL = REPO_ROOT / "supabase" / "migrations" / "026_hybrid_search.sql"
 
 FAKE_VECTOR = [0.1] * 1536
 
@@ -54,6 +55,9 @@ class _FakeKnowledgeStore:
         return row
 
     async def search_similar(self, query_embedding, **kwargs) -> list[dict]:
+        return await self.search_hybrid(query_embedding, "", **kwargs)
+
+    async def search_hybrid(self, query_embedding, query_text, **kwargs) -> list[dict]:
         return [
             {
                 "chunk_id": "chunk-1",
@@ -61,6 +65,8 @@ class _FakeKnowledgeStore:
                 "document_title": "Test CRM",
                 "content": "pipeline CRM ventes",
                 "similarity": 0.92,
+                "keyword_score": 0.45,
+                "combined_score": 0.78,
             }
         ]
 
@@ -120,17 +126,48 @@ def test_ingest_api_creates_document_chunks_embeddings(knowledge_api_client) -> 
     assert len(store.embeddings) == body["chunks_count"]
 
 
-def test_search_api_returns_similarity_scores(knowledge_api_client) -> None:
+def test_search_api_returns_hybrid_scores(knowledge_api_client) -> None:
     client, _store, _embed = knowledge_api_client
     res = client.post(
         "/api/knowledge/search",
-        json={"query": "CRM pipeline", "limit": 5},
+        json={"query": "génération site web", "limit": 5},
     )
     assert res.status_code == 200, res.text
     hits = res.json()
     assert len(hits) == 1
     assert hits[0]["similarity"] == pytest.approx(0.92)
+    assert hits[0]["keyword_score"] == pytest.approx(0.45)
+    assert hits[0]["combined_score"] == pytest.approx(0.78)
     assert "pipeline CRM" in hits[0]["content"]
+
+
+def test_search_api_returns_empty_when_embedding_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _FakeKnowledgeStore()
+    monkeypatch.setattr("api.routes.knowledge.get_knowledge_store", lambda: store)
+
+    fake_embeddings = AsyncMock()
+    fake_embeddings.model = "text-embedding-3-small"
+    fake_embeddings.embed_text = AsyncMock(
+        side_effect=ValueError("OPENAI_API_KEY absente")
+    )
+
+    service = KnowledgeService(
+        store=store,
+        embedding_service=fake_embeddings,
+        chunking_service=ChunkingService(),
+    )
+    monkeypatch.setattr("api.routes.knowledge.get_knowledge_service", lambda: service)
+
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.post(
+            "/api/knowledge/search",
+            json={"query": "génération site web"},
+        )
+    assert res.status_code == 200
+    assert res.json() == []
 
 
 def test_generator_includes_knowledge_context() -> None:
@@ -156,8 +193,8 @@ def test_get_context_graceful_without_openai_key() -> None:
     embeddings.embed_text = AsyncMock(side_effect=ValueError("OPENAI_API_KEY absente"))
     service = KnowledgeService(store=store, embedding_service=embeddings)
 
-    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
-        asyncio.run(service.search("CRM"))
+    hits = asyncio.run(service.search("CRM"))
+    assert hits == []
 
 
 async def _pipeline_knowledge_hook(brief: dict, prompt: str) -> None:
@@ -203,6 +240,14 @@ def test_migration_sql_defines_knowledge_schema() -> None:
         assert name in sql
 
 
+def test_hybrid_migration_defines_search_function() -> None:
+    assert HYBRID_MIGRATION_SQL.is_file()
+    sql = HYBRID_MIGRATION_SQL.read_text(encoding="utf-8")
+    assert "search_knowledge_hybrid" in sql
+    assert "combined_score" in sql
+    assert "keyword_score" in sql
+
+
 def test_chunking_produces_overlapping_chunks() -> None:
     svc = ChunkingService(chunk_size=100, overlap=20)
     text = _long_text(800)
@@ -229,3 +274,62 @@ def test_knowledge_service_ingest_flow() -> None:
     assert result["status"] == "indexed"
     assert result["chunks_count"] >= 1
     assert len(store.embeddings) == result["chunks_count"]
+
+
+def test_extract_pdf_text_reads_pages(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "sample.pdf"
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+
+        c = canvas.Canvas(str(pdf_path), pagesize=letter)
+        c.drawString(72, 720, "Page un CRM")
+        c.showPage()
+        c.drawString(72, 720, "Page deux pipeline")
+        c.save()
+    except ImportError:
+        pytest.skip("reportlab indisponible pour générer un PDF de test")
+
+    text = extract_pdf_text(str(pdf_path))
+    assert "Page un CRM" in text
+    assert "Page deux pipeline" in text
+
+
+def test_ingest_file_pdf_source_type(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "doc.pdf"
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+
+        c = canvas.Canvas(str(pdf_path), pagesize=letter)
+        c.drawString(72, 720, "Contenu PDF knowledge")
+        c.save()
+    except ImportError:
+        pytest.skip("reportlab indisponible pour générer un PDF de test")
+
+    store = _FakeKnowledgeStore()
+    embeddings = AsyncMock()
+    embeddings.model = "text-embedding-3-small"
+    embeddings.embed_texts = AsyncMock(
+        side_effect=lambda texts: [[0.2] * 1536 for _ in texts]
+    )
+    service = KnowledgeService(store=store, embedding_service=embeddings)
+
+    result = asyncio.run(
+        service.ingest_file(str(pdf_path), title="PDF Test")
+    )
+    assert result["status"] == "indexed"
+    assert store.documents[0]["source_type"] == "pdf"
+    assert "Contenu PDF knowledge" in store.documents[0]["content"]
+
+
+def test_ingest_file_api_rejects_oversized_upload(knowledge_api_client) -> None:
+    client, _store, _embed = knowledge_api_client
+    oversized = b"x" * (21 * 1024 * 1024)
+    res = client.post(
+        "/api/knowledge/ingest-file",
+        files={"file": ("big.pdf", oversized, "application/pdf")},
+        data={"title": "Too big"},
+    )
+    assert res.status_code == 400
+    assert "20 Mo" in res.json()["detail"]

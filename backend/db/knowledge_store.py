@@ -263,6 +263,42 @@ class KnowledgeStore:
             rows = resp.json()
             return rows if isinstance(rows, list) else []
 
+    async def search_hybrid(
+        self,
+        query_embedding: list[float],
+        query_text: str,
+        *,
+        project_id: str | None = None,
+        limit: int = 10,
+        vector_weight: float = 0.7,
+        keyword_weight: float = 0.3,
+        organization_id: str = DEFAULT_ORG_ID,
+    ) -> list[dict[str, Any]]:
+        if not self.is_configured():
+            return []
+
+        body: dict[str, Any] = {
+            "query_embedding": _vector_literal(query_embedding),
+            "query_text": query_text.strip(),
+            "match_org_id": organization_id,
+            "match_count": max(1, min(limit, 50)),
+            "vector_weight": float(vector_weight),
+            "keyword_weight": float(keyword_weight),
+        }
+        if project_id:
+            body["match_project_id"] = project_id
+
+        url = f"{self._rest_url()}/rpc/search_knowledge_hybrid"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                headers=self._supabase._headers(),
+                json=body,
+            )
+            _raise_for_status(resp, "search_hybrid", "POST", url, self._supabase)
+            rows = resp.json()
+            return rows if isinstance(rows, list) else []
+
 
 _store: KnowledgeStore | None = None
 

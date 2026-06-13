@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["knowledge"])
 
-ALLOWED_UPLOAD_SUFFIXES = {".txt", ".md"}
+ALLOWED_UPLOAD_SUFFIXES = {".txt", ".md", ".pdf"}
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 
 class IngestTextRequest(BaseModel):
@@ -47,6 +48,8 @@ class SearchHit(BaseModel):
     document_title: str | None = None
     content: str | None = None
     similarity: float = 0.0
+    keyword_score: float = 0.0
+    combined_score: float = 0.0
 
 
 class KnowledgeDocumentSummary(BaseModel):
@@ -94,9 +97,14 @@ async def ingest_knowledge_file(
     filename = (file.filename or "").strip()
     suffix = Path(filename).suffix.lower()
     if suffix not in ALLOWED_UPLOAD_SUFFIXES:
-        raise HTTPException(status_code=400, detail="Formats acceptés : .txt, .md")
+        raise HTTPException(status_code=400, detail="Formats acceptés : .txt, .md, .pdf")
 
     raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fichier trop volumineux (max {MAX_UPLOAD_BYTES // (1024 * 1024)} Mo).",
+        )
     if not raw:
         raise HTTPException(status_code=400, detail="Fichier vide.")
 
