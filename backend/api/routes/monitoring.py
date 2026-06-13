@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from agents.alert_engine import run_checks
 from api.routes.agents_status import get_agents_status
+from api.routes.health import health_check
 from config import get_settings
 from db.llm_usage_store import get_llm_usage_store
 from db.monitoring_store import get_monitoring_store
@@ -54,6 +55,10 @@ async def get_monitoring_health() -> dict:
     api_online = bool(settings.supabase_configured and any_llm_key_configured(settings))
     latency_ms = round((time.perf_counter() - t0) * 1000, 1)
 
+    health_t0 = time.perf_counter()
+    await health_check()
+    api_latency_ms = int((time.perf_counter() - health_t0) * 1000)
+
     agents_status = await get_agents_status()
     supervisor = await get_supervisor_store().get_supervisor_stats(days=30)
 
@@ -93,6 +98,7 @@ async def get_monitoring_health() -> dict:
 
     return {
         "overall_status": overall_status,
+        "api_latency_ms": api_latency_ms,
         "api": {
             "status": "online" if api_online else "offline",
             "latency_ms": latency_ms,

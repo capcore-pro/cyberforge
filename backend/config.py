@@ -51,6 +51,7 @@ class Settings(BaseSettings):
 
     app_name: str = Field(default="CyberForge", alias="APP_NAME")
     app_env: str = Field(default="development", alias="APP_ENV")
+    environment: str = Field(default="development", alias="ENVIRONMENT")
     app_debug: bool = Field(default=False, alias="APP_DEBUG")
 
     backend_host: str = Field(default="127.0.0.1", alias="BACKEND_HOST")
@@ -402,6 +403,14 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         """Liste des origines CORS autorisées."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+    @property
+    def is_development(self) -> bool:
+        return self.environment == "development"
 
     @property
     def backend_public_url(self) -> str:

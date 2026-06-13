@@ -3,6 +3,7 @@ Factory FastAPI — assemble routes, CORS et métadonnées de l'API.
 """
 
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -83,6 +84,21 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @application.middleware("http")
+    async def latency_middleware(request, call_next):
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        response.headers["X-Response-Time"] = f"{duration_ms}ms"
+        if duration_ms > 2000:
+            logger.warning(
+                "Slow request: %s %s — %sms",
+                request.method,
+                request.url.path,
+                duration_ms,
+            )
+        return response
 
     for api_router, prefix in API_ROUTERS:
         application.include_router(api_router, prefix=prefix)

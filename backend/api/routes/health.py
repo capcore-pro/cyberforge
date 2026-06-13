@@ -27,6 +27,7 @@ async def health_check() -> dict[str, str | bool | dict[str, bool]]:
     status = "ok" if settings.supabase_configured and llm_ready else "degraded"
     return {
         "status": status,
+        "environment": settings.environment,
         "app": settings.app_name,
         "version": APP_VERSION,
         "supabase": "configured" if settings.supabase_configured else "missing",

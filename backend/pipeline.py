@@ -381,6 +381,26 @@ async def _audit_log(
     )
 
 
+async def _record_deployment(
+    *,
+    project_id: str | None,
+    generation_id: str,
+    deployment_name: str | None,
+    url: str,
+    duration_ms: int,
+) -> None:
+    from db.deployment_store import get_deployment_store
+
+    await get_deployment_store().record_and_update(
+        project_id=project_id,
+        generation_id=generation_id,
+        deployment_name=deployment_name,
+        url=url,
+        duration_ms=duration_ms,
+        status="successful",
+    )
+
+
 async def _emit_agent_start(
     generation_id: str | None,
     *,
@@ -1253,6 +1273,7 @@ async def _run_pipeline_body_inner(
     )
 
     deploy_url = str(deployed.get("url") or "")
+    deploy_duration_ms = int((time.perf_counter() - deploy_t0) * 1000)
     persisted_project_id: str | None = None
     if deployed.get("success") and deploy_url:
         store = get_supabase_store()
@@ -1278,6 +1299,16 @@ async def _run_pipeline_body_inner(
                     persisted_project_id = persistence.project_id
             except SupabaseStoreError as exc:
                 logger.warning("[pipeline] persistance Supabase ignorée: %s", exc)
+
+        asyncio.create_task(
+            _record_deployment(
+                project_id=str(brief.get("project_id") or persisted_project_id or "") or None,
+                generation_id=generation_id,
+                deployment_name=str(brief.get("client_name") or client_name),
+                url=deploy_url,
+                duration_ms=deploy_duration_ms,
+            )
+        )
 
     total_duration_ms = int((time.perf_counter() - pipeline_t0) * 1000)
     usage_summary = usage_totals.as_dict()
@@ -1519,6 +1550,7 @@ async def _run_extension_pipeline(
     )
 
     deploy_url = str(deployed.get("url") or "")
+    deploy_duration_ms = int((time.perf_counter() - deploy_t0) * 1000)
     if deployed.get("success") and deploy_url:
         store = get_supabase_store()
         if store.is_configured():
@@ -1532,6 +1564,16 @@ async def _run_extension_pipeline(
                 )
             except SupabaseStoreError as exc:
                 logger.warning("[pipeline] persistance Supabase ignorée: %s", exc)
+
+        asyncio.create_task(
+            _record_deployment(
+                project_id=str(brief.get("project_id") or ext_project_id or "") or None,
+                generation_id=generation_id,
+                deployment_name=str(brief.get("client_name") or client_name),
+                url=deploy_url,
+                duration_ms=deploy_duration_ms,
+            )
+        )
 
     total_duration_ms = int((time.perf_counter() - pipeline_t0) * 1000)
     final_result = {
