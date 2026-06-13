@@ -13,6 +13,7 @@ from agents.generator_ai import _build_user_message
 from api.main import create_app
 from knowledge.chunking_service import ChunkingService
 from knowledge.knowledge_service import KnowledgeService, extract_pdf_text
+from knowledge.reranker import SimpleReranker
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -246,6 +247,42 @@ def test_hybrid_migration_defines_search_function() -> None:
     assert "search_knowledge_hybrid" in sql
     assert "combined_score" in sql
     assert "keyword_score" in sql
+
+
+def test_simple_reranker_returns_top_five_sorted() -> None:
+    chunks = [
+        {
+            "chunk_id": f"chunk-{i}",
+            "content": content,
+            "combined_score": 0.4 + i * 0.01,
+            "chunk_index": 0 if i == 3 else 1,
+        }
+        for i, content in enumerate(
+            [
+                "court",
+                "Le coût de génération d'un site web dépend du pipeline.",
+                "Texte sans rapport avec la requête utilisateur.",
+                "Analyse du coût génération LLM pour CyberForge.",
+                "Autre document marketing.",
+                "génération site vitrine standard",
+                "coût tokens OpenAI par agent",
+                "pipeline CRM ventes",
+                "déploiement Cloudflare rapide",
+                "brief client secteur boulangerie",
+            ]
+        )
+    ]
+
+    ranked = SimpleReranker().rerank(
+        query="coût génération",
+        chunks=chunks,
+        top_k=5,
+    )
+
+    assert len(ranked) == 5
+    scores = [item["rerank_score"] for item in ranked]
+    assert scores == sorted(scores, reverse=True)
+    assert any("coût" in item["content"].lower() for item in ranked)
 
 
 def test_chunking_produces_overlapping_chunks() -> None:

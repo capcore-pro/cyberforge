@@ -12,6 +12,7 @@ from typing import Any
 from db.knowledge_store import KnowledgeStore, get_knowledge_store
 from knowledge.chunking_service import ChunkingService
 from knowledge.embedding_service import EmbeddingService
+from knowledge.reranker import reranker
 
 logger = logging.getLogger(__name__)
 
@@ -168,21 +169,24 @@ class KnowledgeService:
         max_tokens: int = 4000,
     ) -> str:
         hits = await self.search(query, project_id=project_id, limit=10)
-        relevant = [
-            h
-            for h in hits
-            if float(h.get("combined_score") or 0) > COMBINED_SCORE_THRESHOLD
-        ]
-        if not relevant:
+        if not hits:
+            return ""
+
+        chunks = reranker.rerank(
+            query=query,
+            chunks=hits,
+            top_k=5,
+        )
+        if not chunks:
             return ""
 
         lines = ["## Contexte Knowledge Engine", ""]
         used_tokens = 0
-        for hit in relevant:
+        for hit in chunks:
             title = str(hit.get("document_title") or "Document")
             content = str(hit.get("content") or "").strip()
-            combined = float(hit.get("combined_score") or 0)
-            block = f"### {title} (score {combined:.2f})\n{content}\n"
+            score = float(hit.get("rerank_score") or hit.get("combined_score") or 0)
+            block = f"### {title} (score {score:.2f})\n{content}\n"
             block_tokens = int(len(block.split()) * 1.3)
             if used_tokens + block_tokens > max_tokens:
                 break
