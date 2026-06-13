@@ -51,6 +51,12 @@ class BenchmarkRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 
 
+class ABTestRequest(BaseModel):
+    prompt_slug_a: str = Field(..., min_length=1, max_length=255)
+    prompt_slug_b: str = Field(..., min_length=1, max_length=255)
+    min_samples: int = Field(default=3, ge=1, le=50)
+
+
 @router.get("/prompts-library")
 async def list_prompts(
     category: str | None = Query(default=None, alias="category"),
@@ -95,6 +101,24 @@ async def get_best_prompt(task_type: str) -> dict:
         return row
     except SupabaseStoreError as exc:
         logger.warning("get_best_prompt: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/prompts-library/ab-test")
+async def compare_prompts_ab_test(body: ABTestRequest) -> dict:
+    from agents.ab_testing_engine import ab_testing_engine
+
+    store = get_prompt_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail="Supabase non configuré")
+    try:
+        return await ab_testing_engine.compare(
+            prompt_slug_a=body.prompt_slug_a,
+            prompt_slug_b=body.prompt_slug_b,
+            min_samples=body.min_samples,
+        )
+    except SupabaseStoreError as exc:
+        logger.warning("compare_prompts_ab_test: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
