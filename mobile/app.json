@@ -29,8 +29,12 @@
         }
       ]
     ],
-    "experiments": {
-      "typedRoutes": true
-    }
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4805e9b5-8556-4f95-9a50-4d6c9c1be06e"
+      }
+    },
+    "owner": "cyberforge"
   }
 }

@@ -16,6 +16,13 @@
     "production": {
       "node": "20.0.0",
       "autoIncrement": true
+    },
+    "local": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      }
     }
   },
   "submit": {
