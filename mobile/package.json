@@ -20,9 +20,9 @@
     "react": "19.1.0",
     "react-dom": "19.2.7",
     "react-native": "0.81.5",
-    "react-native-gesture-handler": "~2.20.0",
+    "react-native-gesture-handler": "2.21.2",
     "react-native-safe-area-context": "^5.0.0",
-    "react-native-screens": "~4.10.0",
+    "react-native-screens": "4.6.0",
     "scheduler": "0.27.0",
     "zustand": "^5.0.0"
   },
