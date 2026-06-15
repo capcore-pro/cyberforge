@@ -16,9 +16,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassCard } from "../../components/ui/GlassCard";
 import {
   DEFAULT_BASE_URL,
-  fetchHealth,
   fetchMobileHealth,
+  normalizeBaseUrl,
   registerPushToken,
+  testBackendConnection,
 } from "../../lib/api";
 import { useAppStore } from "../../lib/store";
 import { colors, spacing } from "../../lib/theme";
@@ -59,9 +60,11 @@ export default function SettingsScreen() {
   const [testStatus, setTestStatus] = useState<string | null>(null);
 
   const testConnection = async () => {
-    setBaseUrl(urlInput);
+    const normalizedUrl = normalizeBaseUrl(urlInput);
+    setBaseUrl(normalizedUrl);
+    setUrlInput(normalizedUrl);
     try {
-      await fetchHealth();
+      await testBackendConnection(normalizedUrl);
       setTestStatus("Connexion OK");
     } catch {
       setTestStatus("Erreur de connexion");

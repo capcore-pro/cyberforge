@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import { DEFAULT_BASE_URL } from "./api";
+import { DEFAULT_BASE_URL, normalizeBaseUrl } from "./api";
 
 interface AppStore {
   baseUrl: string;
@@ -17,7 +17,7 @@ export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
       baseUrl: DEFAULT_BASE_URL,
-      setBaseUrl: (url) => set({ baseUrl: url.trim() || DEFAULT_BASE_URL }),
+      setBaseUrl: (url) => set({ baseUrl: normalizeBaseUrl(url) }),
       pushToken: null,
       setPushToken: (token) => set({ pushToken: token }),
       pushEnabled: false,

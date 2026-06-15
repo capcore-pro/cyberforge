@@ -17,7 +17,8 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#0d0d0d"
       },
-      "package": "pro.capcore.cyberforge"
+      "package": "pro.capcore.cyberforge",
+      "usesCleartextTraffic": true
     },
     "plugins": [
       "expo-router",

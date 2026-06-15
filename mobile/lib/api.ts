@@ -2,9 +2,24 @@ import { useAppStore } from "./store";
 
 export const DEFAULT_BASE_URL = "http://127.0.0.1:8002";
 
+export function normalizeBaseUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return DEFAULT_BASE_URL;
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+
 export function getBaseUrl(): string {
-  const url = useAppStore.getState().baseUrl?.trim();
-  return url || DEFAULT_BASE_URL;
+  return normalizeBaseUrl(useAppStore.getState().baseUrl || DEFAULT_BASE_URL);
+}
+
+export async function testBackendConnection(url: string): Promise<void> {
+  const baseUrl = normalizeBaseUrl(url);
+  const res = await fetch(`${baseUrl}/api/health`);
+  if (!res.ok) {
+    throw new Error(`Health check failed: ${res.status}`);
+  }
 }
 
 export async function apiCall<T>(
