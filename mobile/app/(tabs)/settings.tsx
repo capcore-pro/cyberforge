@@ -32,9 +32,17 @@ Notifications.setNotificationHandler({
   }),
 });
 
-async function requestPushPermissions(): Promise<string | null> {
+const PUSH_UNAVAILABLE_MESSAGE =
+  "Notifications push disponibles dans une prochaine version. Le backend envoie déjà des emails via Brevo.";
+
+type PushPermissionResult =
+  | { status: "granted"; token: string }
+  | { status: "denied" }
+  | { status: "unavailable" };
+
+async function requestPushPermissions(): Promise<PushPermissionResult> {
   if (!Device.isDevice) {
-    return null;
+    return { status: "unavailable" };
   }
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
@@ -43,10 +51,14 @@ async function requestPushPermissions(): Promise<string | null> {
     finalStatus = status;
   }
   if (finalStatus !== "granted") {
-    return null;
+    return { status: "denied" };
   }
-  const tokenData = await Notifications.getExpoPushTokenAsync();
-  return tokenData.data;
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    return { status: "granted", token: tokenData.data };
+  } catch {
+    return { status: "unavailable" };
+  }
 }
 
 export default function SettingsScreen() {
@@ -58,6 +70,7 @@ export default function SettingsScreen() {
 
   const [urlInput, setUrlInput] = useState(baseUrl);
   const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [pushNotice, setPushNotice] = useState<string | null>(null);
 
   const testConnection = async () => {
     const normalizedUrl = normalizeBaseUrl(urlInput);
@@ -75,32 +88,35 @@ export default function SettingsScreen() {
     if (!enabled) {
       setPushEnabled(false);
       setPushToken(null);
+      setPushNotice(null);
       return;
     }
+    setPushNotice(null);
     try {
-      const token = await requestPushPermissions();
-      if (!token) {
-        Alert.alert(
-          "Notifications",
-          "Permission refusée ou simulateur sans support push.",
-        );
+      const result = await requestPushPermissions();
+      if (result.status === "denied") {
         setPushEnabled(false);
+        setPushToken(null);
         return;
       }
-      setPushToken(token);
+      if (result.status === "unavailable") {
+        setPushEnabled(false);
+        setPushToken(null);
+        setPushNotice(PUSH_UNAVAILABLE_MESSAGE);
+        return;
+      }
+      setPushToken(result.token);
       setPushEnabled(true);
-      await registerPushToken(token, "android");
+      await registerPushToken(result.token, "android");
       const health = await fetchMobileHealth();
       Alert.alert(
         "Notifications",
         `Token enregistré (${health.tokens} appareil(s))`,
       );
-    } catch (err) {
+    } catch {
       setPushEnabled(false);
-      Alert.alert(
-        "Erreur",
-        err instanceof Error ? err.message : "Échec enregistrement push",
-      );
+      setPushToken(null);
+      setPushNotice(PUSH_UNAVAILABLE_MESSAGE);
     }
   };
 
@@ -150,6 +166,9 @@ export default function SettingsScreen() {
               trackColor={{ false: colors.border, true: colors.gold }}
             />
           </View>
+          {pushNotice ? (
+            <Text style={styles.pushNotice}>{pushNotice}</Text>
+          ) : null}
         </GlassCard>
 
         <GlassCard>
@@ -200,6 +219,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  pushNotice: {
+    marginTop: spacing.sm,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
   aboutLine: { color: colors.textSecondary, marginBottom: spacing.xs },
 });
