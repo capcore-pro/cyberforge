@@ -28,7 +28,7 @@ _UNGATED_PROJECT_TYPES = frozenset(
     {"vitrine_next", "ecommerce", "site_reservation", "extension_navigateur"},
 )
 _GATED_PROJECT_TYPES = frozenset(
-    {"application_web", "application_desktop", "real_app"},
+    {"application_web", "application_desktop", "real_app", "crm"},
 )
 
 

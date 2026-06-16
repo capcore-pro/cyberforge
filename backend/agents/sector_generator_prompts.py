@@ -9,7 +9,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Literal
 
-SectorKind = Literal["vitrine", "reservation", "ecommerce", "app_web"]
+SectorKind = Literal["vitrine", "reservation", "ecommerce", "app_web", "crm"]
 
 
 @dataclass(frozen=True)
@@ -48,12 +48,16 @@ def _brief_kind(brief: dict[str, Any]) -> SectorKind | None:
     prompt = str(b.get("prompt") or "")
     for key in ("project_type", "generation_mode"):
         val = str(b.get(key) or "").strip().lower().replace("-", "_")
+        if val == "crm":
+            return "crm"
         if val in ("application_web", "real_app"):
             return "app_web"
         if val == "site_reservation":
             return "reservation"
         if val in ("ecommerce", "saas_dashboard"):
             return "ecommerce"
+    if re.search(r"(?m)^TYPE:\s*crm\b", prompt, re.I):
+        return "crm"
     if re.search(r"(?m)^TYPE:\s*application_web\b", prompt, re.I):
         return "app_web"
     if re.search(r"(?m)^TYPE:\s*site_reservation\b", prompt, re.I):
@@ -332,13 +336,53 @@ SECTOR_GENERATOR_PROFILES: tuple[SectorGeneratorProfile, ...] = (
     ),
     SectorGeneratorProfile(
         id="crm-clients",
-        kind="app_web",
-        matcher_groups=(("crm", "clients"), ("crm",)),
-        instructions="""SECTEUR : CRM & Clients (app web)
-- Vue 1 (Dashboard) : liste clients en cards (nom, email, statut, dernière interaction)
-- Vue 2 : tableau clients filtrable (filtres Tous / Actifs / Prospects / Inactifs) avec 5-8 lignes
-- Vue 3 : formulaire nouveau client (nom, email, téléphone, statut, notes)
-- Sidebar : Dashboard, Clients, Nouveau client, Paramètres""",
+        kind="crm",
+        matcher_groups=(("crm", "clients"),),
+        instructions="""SECTEUR : CRM Clients (générique)
+- Terminologie : Clients, Contacts, Deals
+- Pipeline Kanban 5 colonnes : Lead → Qualif → Démo → Proposition → Closing
+- KPI Dashboard : contacts total, deals actifs, CA du mois, taux conversion
+- Données fictives B2B françaises (PME, SaaS, conseil)""",
+    ),
+    SectorGeneratorProfile(
+        id="crm-immobilier",
+        kind="crm",
+        matcher_groups=(("crm", "immobilier"),),
+        instructions="""SECTEUR : CRM Immobilier
+- Terminologie : Acquéreurs, Biens, Mandats (pas Clients/Deals génériques)
+- Pipeline Kanban 5 colonnes : Contact → Visite → Offre → Compromis → Acte
+- Contacts : acquéreurs et vendeurs, biens (appartement, maison) avec prix €
+- Montants élevés (150k–800k €), villes françaises, dates clôture 2026""",
+    ),
+    SectorGeneratorProfile(
+        id="crm-recrutement",
+        kind="crm",
+        matcher_groups=(("crm", "recrutement"),),
+        instructions="""SECTEUR : CRM Recrutement
+- Terminologie : Candidats, Postes, Process (pas Deals)
+- Pipeline Kanban 5 colonnes : Sourcing → Screening → Entretien → Offre → Intégration
+- Contacts : candidats avec poste visé, entreprises clientes, salaires €/an
+- Activités : entretiens RH, relances, notes de screening""",
+    ),
+    SectorGeneratorProfile(
+        id="crm-agence",
+        kind="crm",
+        matcher_groups=(("crm", "agence"),),
+        instructions="""SECTEUR : CRM Agence
+- Terminologie : Clients, Projets, Devis (pipeline = étapes projet)
+- Pipeline Kanban 5 colonnes : Brief → Devis → Validation → Production → Livraison
+- Deals = projets créatifs (refonte site, branding) avec montants devis €
+- Contacts : directeurs marketing, startups, PME""",
+    ),
+    SectorGeneratorProfile(
+        id="crm-coach",
+        kind="crm",
+        matcher_groups=(("crm", "coach"),),
+        instructions="""SECTEUR : CRM Coach / Consultant
+- Terminologie : Coachés, Sessions, Parcours (pas Clients/Deals)
+- Pipeline Kanban 5 colonnes : Découverte → Bilan → Programme → Suivi → Résultats
+- Contacts : coachés individuels ou dirigeants, forfaits coaching €
+- Activités : sessions, bilans, objectifs SMART""",
     ),
     SectorGeneratorProfile(
         id="planning-rdv",
@@ -391,6 +435,11 @@ _DEFAULT_BY_KIND: dict[SectorKind, str] = {
 - Données fictives cohérentes avec database_schema du brief
 - Formulaires alignés sur les colonnes des tables
 - Rôles auth_schema affichés dans Paramètres ou header""",
+    "crm": """SECTEUR : CRM générique
+- Terminologie : Contacts, Deals, Pipeline, Activités
+- Pipeline Kanban 5 colonnes avec étapes métier du secteur brief
+- 5 vues : Dashboard, Contacts, Pipeline, Activités, Fiche contact
+- Données fictives françaises, montants €, dates 2026""",
 }
 
 
@@ -425,6 +474,14 @@ def build_sector_generator_appendix(brief: dict[str, Any]) -> str:
         lines.append(profile.instructions)
     else:
         lines.append(_DEFAULT_BY_KIND[kind or "vitrine"])
+    if kind == "crm":
+        lines.append(
+            "Règles communes CRM : vocabulaire métier français du secteur, 5 vues minimum "
+            "avec switcher JS, pipeline Kanban visuel (cursor:grab), données fictives "
+            "réalistes (noms FR, €, dates 2026), champs alignés sur database_schema, "
+            "rôles auth_schema visibles dans Paramètres."
+        )
+        return CRM_APPENDIX + "\n\n" + "\n".join(lines)
     if kind == "app_web":
         lines.append(
             "Règles communes app web : vocabulaire métier français, 3 vues minimum "
@@ -442,6 +499,10 @@ def build_sector_generator_appendix(brief: dict[str, Any]) -> str:
 
 def is_app_web_brief(brief: dict[str, Any]) -> bool:
     return _brief_kind(brief) == "app_web"
+
+
+def is_crm_brief(brief: dict[str, Any]) -> bool:
+    return _brief_kind(brief) == "crm"
 
 
 APP_WEB_APPENDIX = """
@@ -544,6 +605,137 @@ Document COMPLET : <html><head><style>...</style></head><body>...</body></html>
 Minimum 4000 caractères. CSS compact (réutiliser classes .card, .btn, .table).
 Priorité absolue : document COMPLET terminé par </footer></body></html>.
 Si limite de place : réduire les données fictives, jamais couper la fin du document.
+"""
+
+
+CRM_APPENDIX = """
+MODE CRM (project_type crm ou TYPE: crm) :
+Page 100 % autonome — HTML + CSS + JavaScript inline. ZÉRO fetch/API externe.
+PAS de hero vitrine, PAS de Pexels — Inter uniquement.
+
+IDS OBLIGATOIRES (exactement ces attributs id) :
+- id="login-screen" : visible par défaut (display:flex ou block)
+- id="app-shell" : caché par défaut (display:none)
+- id="login-password" sur le champ mot de passe
+- id="view-dashboard", id="view-contacts", id="view-pipeline", id="view-activities",
+  id="view-contact-detail" (fiche contact — modal ou vue pleine page)
+- id="view-settings" pour Paramètres
+- Sidebar nav items avec data-view="view-dashboard" etc.
+
+STRUCTURE OBLIGATOIRE :
+
+1) ÉCRAN LOGIN (#login-screen, affiché par défaut)
+   - Pleine page centrée, fond #0f1117
+   - Logo client + nom de l'app (client_name du brief)
+   - Formulaire : email + mot de passe
+   - Bouton « Se connecter » couleur_primaire du brief
+   - JS onclick : mot de passe === "demo2024" → cache #login-screen, affiche #app-shell
+   - sinon alert("Mot de passe incorrect")
+   - Mention discrète : « Démo : demo2024 »
+
+2) APP SHELL (#app-shell, display:none par défaut)
+   - Layout flex horizontal, min-height 100vh, fond #0f1117
+
+   SIDEBAR (fixe gauche, 240px, fond #161b27) :
+   - Logo + nom client en haut
+   - Items navigation CRM avec icônes SVG inline (stroke, 20px) :
+     Dashboard, Contacts, Pipeline, Activités, Paramètres
+   - Item actif : couleur couleur_primaire, fond couleur_primaire à 10% opacity
+   - Bouton « Déconnexion » en bas → logout()
+   - Sous 768px : hamburger (☰, sidebar slide-in)
+
+   HEADER (zone contenu) :
+   - Titre vue active (id="view-title")
+   - Bouton « + Nouveau contact » couleur_primaire
+
+   ZONE CONTENU (flex:1, overflow-y:auto, padding 24px) :
+   - Une seule vue visible à la fois (les autres display:none)
+
+VUES OBLIGATOIRES (5 minimum) :
+
+Vue 1 — Dashboard (#view-dashboard) :
+   - 4 KPI cards : Contacts total / Deals actifs / CA du mois / Taux conversion
+   - Graphique pipeline : barres SVG inline par stage (5 étapes du secteur)
+   - Liste des 5 dernières activités
+
+Vue 2 — Contacts (#view-contacts) :
+   - Grille cards contacts (8 contacts fictifs)
+   - Chaque card : avatar initiales, nom, entreprise, email, téléphone,
+     badge statut (Prospect / Client / Inactif)
+   - Filtres pills : Tous / Prospects / Clients / Inactifs
+   - Champ recherche + bouton recherche
+   - Clic card → showView('view-contact-detail') ou ouvrir modal fiche
+
+Vue 3 — Pipeline Kanban (#view-pipeline) — VUE CLÉ :
+   - 5 colonnes selon secteur (voir instructions secteur)
+   - Chaque colonne : header avec nombre de deals + montant total €
+   - Cards deals : nom contact, montant €, date clôture estimée (2026), probabilité %
+   - Cards style draggable : cursor:grab (pas de JS drag réel)
+   - Colonne finale « Gagné » (ou équivalent secteur) : border-top couleur_primaire
+
+Vue 4 — Activités (#view-activities) :
+   - Timeline verticale
+   - Types : Appel / Email / RDV / Note avec icônes SVG inline
+   - Chaque activité : contact lié, date, description, statut
+
+Vue 5 — Fiche Contact (#view-contact-detail) :
+   - Nom complet, entreprise, coordonnées
+   - Score lead : jauge SVG 0-100
+   - Mini timeline interactions
+   - Deals associés (liste ou cards)
+   - Boutons : Appeler / Envoyer email / Créer deal
+
+RÈGLES PAR SECTEUR (brief.sector) :
+- CRM / clients : Clients, Contacts, Deals — Lead → Qualif → Démo → Proposition → Closing
+- CRM / immobilier : Acquéreurs, Biens, Mandats — Contact → Visite → Offre → Compromis → Acte
+- CRM / recrutement : Candidats, Postes, Process — Sourcing → Screening → Entretien → Offre → Intégration
+- CRM / agence : Clients, Projets, Devis — Brief → Devis → Validation → Production → Livraison
+- CRM / coach : Coachés, Sessions, Parcours — Découverte → Bilan → Programme → Suivi → Résultats
+
+JAVASCRIPT OBLIGATOIRE (scope global, avant </body>) :
+function showView(viewId) {
+  document.querySelectorAll('[id^="view-"]').forEach(v => v.style.display = 'none');
+  const el = document.getElementById(viewId);
+  if (el) el.style.display = 'block';
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const nav = document.querySelector('[data-view="' + viewId + '"]');
+  if (nav) nav.classList.add('active');
+  const title = document.getElementById('view-title');
+  if (title && nav) title.textContent = nav.textContent.trim();
+}
+function login() { /* même logique demo2024 que app web */ }
+function logout() { /* cache app-shell, affiche login-screen */ }
+function filterContacts(status) { /* filtre pills contacts */ }
+
+INJECTION AUTH & DATABASE (OBLIGATOIRE) :
+- Lire ## database_schema et ## auth_schema du message utilisateur
+- Noms de tables → sections CRM (ex: table "contacts" → vue Contacts)
+- Colonnes → champs cards/formulaires
+- auth_type et roles → vue Paramètres ou badge header
+- Si schemas absents → données fictives CRM génériques
+
+DESIGN CRM OBLIGATOIRE :
+- Fond global : #0f1117
+- Sidebar : #161b27
+- Cards contacts : #1e2535, border 1px solid rgba(255,255,255,0.08), border-radius 12px
+- Colonnes pipeline : #161b27, border-top 3px couleur_primaire sur colonne gagnée/active
+- Badges : vert=Gagné/Client, amber=En cours/Prospect actif, rouge=Perdu/Inactif
+- couleur_primaire : accents, boutons, KPI, colonne gagnée
+- Google Fonts : Inter uniquement
+- Texte principal #e2e8f0, secondaire #8892a4
+- Graphiques et jauges : SVG inline uniquement
+- Responsive : sidebar hamburger < 768px
+
+INTERDIT :
+- fetch(), XMLHttpRequest, API externes
+- Librairies JS/CSS externes (sauf Google Fonts Inter)
+- Hero vitrine, images Pexels
+- Placeholder visible
+
+Document COMPLET : <html><head><style>...</style></head><body>...</body></html>
+Minimum 5000 caractères. CSS compact (classes .card, .btn, .badge, .kanban-col).
+Priorité absolue : document COMPLET terminé par </footer></body></html>.
+Si limite de place : réduire données fictives, jamais couper la fin.
 """
 
 

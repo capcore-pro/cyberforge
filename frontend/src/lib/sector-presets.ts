@@ -360,13 +360,65 @@ export const SECTOR_PRESET_LIST: SectorPreset[] = [
     label: "CRM & Clients",
     emoji: "👥",
     kinds: ["app_web"],
-    project_type: "application_web",
+    project_type: "crm",
     couleur_primaire: "#0891b2",
     couleur_secondaire: "#164e63",
     description:
       "CRM métier : pipeline commercial, fiches clients enrichies et relances automatisées.",
     services: ["Contacts", "Devis", "Pipeline", "Relances", "Historique"],
     sector: "CRM / clients",
+  },
+  {
+    id: "crm-immobilier",
+    label: "CRM Immobilier",
+    emoji: "🏠",
+    kinds: ["crm"],
+    project_type: "crm",
+    couleur_primaire: "#0f766e",
+    couleur_secondaire: "#134e4a",
+    description:
+      "CRM immobilier : biens, acquéreurs, visites et suivi des compromis jusqu'à l'acte.",
+    services: ["Biens", "Prospects", "Visites", "Compromis", "Pipeline"],
+    sector: "CRM / immobilier",
+  },
+  {
+    id: "crm-recrutement",
+    label: "CRM Recrutement",
+    emoji: "🎯",
+    kinds: ["crm"],
+    project_type: "crm",
+    couleur_primaire: "#7c3aed",
+    couleur_secondaire: "#4c1d95",
+    description:
+      "CRM recrutement : candidats, offres, entretiens et pipeline d'intégration.",
+    services: ["Candidats", "Offres", "Entretiens", "Pipeline", "Onboarding"],
+    sector: "CRM / recrutement",
+  },
+  {
+    id: "crm-agence",
+    label: "CRM Agence",
+    emoji: "✨",
+    kinds: ["crm"],
+    project_type: "crm",
+    couleur_primaire: "#d4a843",
+    couleur_secondaire: "#78350f",
+    description:
+      "CRM agence créative : clients, projets, devis et facturation centralisés.",
+    services: ["Clients", "Projets", "Devis", "Factures", "Pipeline"],
+    sector: "CRM / agence",
+  },
+  {
+    id: "crm-coach",
+    label: "CRM Coach / Consultant",
+    emoji: "🧭",
+    kinds: ["crm"],
+    project_type: "crm",
+    couleur_primaire: "#0ea5e9",
+    couleur_secondaire: "#0c4a6e",
+    description:
+      "CRM coach : coachés, sessions, objectifs et suivi des parcours de transformation.",
+    services: ["Coachés", "Sessions", "Objectifs", "Suivi", "Facturation"],
+    sector: "CRM / coach",
   },
   {
     id: "planning-rdv",
@@ -632,6 +684,7 @@ export function buildGeneratorDetailsPrompt(
   form: GeneratorDetailsForm,
   clientName: string,
   sectorLabel: string,
+  sectorPreset?: SectorPreset | null,
 ): string {
   const lines: string[] = [];
   const name = clientName.trim();
@@ -651,7 +704,11 @@ export function buildGeneratorDetailsPrompt(
   if (form.phone.trim()) lines.push(`Téléphone : ${form.phone.trim()}`);
   if (form.email.trim()) lines.push(`Email : ${form.email.trim()}`);
   if (form.address.trim()) lines.push(`Adresse : ${form.address.trim()}`);
-  return buildGeneratorPipelinePrompt(kind, lines.join("\n"));
+  let prompt = buildGeneratorPipelinePrompt(kind, lines.join("\n"));
+  if (sectorPreset?.project_type === "crm") {
+    prompt = `TYPE: crm\n${prompt}`;
+  }
+  return prompt;
 }
 
 /** Mappe project_type preset → ProjectType session (approximation). */
@@ -659,7 +716,7 @@ export function presetToProjectType(preset: SectorPreset): ProjectType {
   const pt = preset.project_type;
   if (pt === "site_reservation") return "site_web";
   if (pt === "ecommerce") return "saas_dashboard";
-  if (pt === "application_web") return "application_web";
+  if (pt === "application_web" || pt === "crm") return "application_web";
   if (pt === "application_desktop") return "application_desktop";
   if (pt === "extension_navigateur") return "extension_navigateur";
   return "site_web";

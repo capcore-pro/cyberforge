@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from agents.sector_generator_prompts import (
     APP_WEB_APPENDIX,
+    CRM_APPENDIX,
     SECTOR_GENERATOR_PROFILES,
     _brief_kind,
     build_sector_generator_appendix,
     is_app_web_brief,
+    is_crm_brief,
     resolve_sector_generator_profile,
 )
 
@@ -38,6 +40,10 @@ def test_all_catalogued_sectors_have_profiles() -> None:
         "fleurs-cadeaux",
         "dashboard-analytics",
         "crm-clients",
+        "crm-immobilier",
+        "crm-recrutement",
+        "crm-agence",
+        "crm-coach",
         "planning-rdv",
         "gestion-entreprise",
         "stock-inventaire",
@@ -107,18 +113,27 @@ def test_application_web_brief_kind() -> None:
     assert is_app_web_brief(brief)
 
 
-def test_app_web_crm_profile() -> None:
+def test_crm_brief_kind_and_profile() -> None:
     brief = {
-        "project_type": "application_web",
+        "project_type": "crm",
         "sector": "CRM / clients",
         "client_name": "CapCore CRM",
     }
+    assert _brief_kind(brief) == "crm"
+    assert is_crm_brief(brief)
+    assert not is_app_web_brief(brief)
     profile = resolve_sector_generator_profile(brief)
     assert profile is not None
     assert profile.id == "crm-clients"
     appendix = build_sector_generator_appendix(brief)
-    assert "tableau clients" in appendix.lower()
-    assert "app web" in appendix.lower()
+    assert "MODE CRM" in appendix
+    assert "Pipeline Kanban" in appendix
+
+
+def test_crm_appendix_has_required_ids() -> None:
+    assert 'id="login-screen"' in CRM_APPENDIX
+    assert 'id="view-pipeline"' in CRM_APPENDIX
+    assert "demo2024" in CRM_APPENDIX
 
 
 def test_app_web_appendix_has_required_ids() -> None:
