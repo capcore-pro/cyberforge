@@ -114,6 +114,51 @@ ABSOLUMENT OBLIGATOIRE : Termine TOUJOURS par ces balises dans cet ordre exact :
 </html>
 Ne jamais arrêter la génération avant ces balises."""
 
+DESKTOP_APPENDIX = """
+## INSTRUCTIONS APPLICATION DESKTOP
+
+Tu génères une interface HTML complète pour une application desktop Windows.
+L'interface sera empaquetée par Electron.
+
+CONTRAINTES DESKTOP :
+- Interface autonome (pas de serveur)
+- Données stockées localement (localStorage ou APIs window.app via preload)
+- Navigation sans rechargement de page
+- Boutons et zones de clic larges (usage souris, pas mobile)
+- Sidebar de navigation fixe à gauche
+- Zone de contenu principale à droite
+- Pas de dépendances CDN externes (tout doit fonctionner offline)
+
+FONCTIONNALITÉS OBLIGATOIRES selon type :
+
+Logiciel de gestion artisan :
+  - Dashboard métriques (CA, devis, clients)
+  - Module Clients (liste, fiche, ajout)
+  - Module Devis (créer, PDF, envoyer)
+  - Module Facturation (suivi paiements)
+  - Module Planning (agenda semaine)
+
+Logiciel de caisse :
+  - Interface vente (produits + panier)
+  - Calcul monnaie rendue
+  - Historique transactions
+  - Rapport journalier
+
+Logiciel de suivi chantier :
+  - Liste chantiers actifs
+  - Photos et notes par chantier
+  - Suivi avancement (%)
+  - Export rapport PDF
+
+DESIGN :
+  - Couleurs professionnelles sobres
+  - Sidebar #1a1a2e avec icônes
+  - Zone contenu fond clair #f8f9fa
+  - Accent couleur primaire client
+  - Typographie lisible taille 14px min
+  - Tables avec pagination
+"""
+
 SITE_RESERVATION_APPENDIX = """
 MODE SITE RÉSERVATION (project_type ou generation_mode == site_reservation) :
 Page 100 % autonome — ZÉRO fetch, ZÉRO API externe. Tout en HTML + CSS + JavaScript inline.
@@ -271,7 +316,19 @@ def _is_crm_brief(brief: dict[str, Any]) -> bool:
 
 
 def _is_interactive_app_brief(brief: dict[str, Any]) -> bool:
-    return _is_app_web_brief(brief) or _is_crm_brief(brief)
+    return _is_app_web_brief(brief) or _is_crm_brief(brief) or _is_desktop_brief(brief)
+
+
+def _is_desktop_brief(brief: dict[str, Any]) -> bool:
+    b = brief or {}
+    for key in ("project_type", "generation_mode"):
+        val = str(b.get(key) or "").strip().lower().replace("-", "_")
+        if val == "application_desktop":
+            return True
+    prompt = str(b.get("prompt") or b.get("description") or "")
+    if re.search(r"(?m)^TYPE:\s*application_desktop\b", prompt, re.I):
+        return True
+    return False
 
 
 def _is_ecommerce_brief(brief: dict[str, Any]) -> bool:
@@ -359,6 +416,7 @@ async def _get_appendix(brief: dict[str, Any]) -> str:
             "application_web": "app-web-appendix",
             "real_app": "app-web-appendix",
             "crm": "crm-appendix",
+            "application_desktop": "desktop-appendix",
             "site_reservation": "site-reservation-appendix",
         }
         slug = slug_map.get(pt)
@@ -388,6 +446,7 @@ async def _get_mode_appendix(brief: dict[str, Any], hardcoded: str) -> str:
             "application_web": "app-web-appendix",
             "real_app": "app-web-appendix",
             "crm": "crm-appendix",
+            "application_desktop": "desktop-appendix",
             "site_reservation": "site-reservation-appendix",
         }
         slug = slug_map.get(pt)
@@ -428,6 +487,9 @@ async def _build_system_prompt(brief: dict[str, Any]) -> str:
             parts.extend([SYSTEM_PROMPT_APP_WEB, crm_appendix, sector_lines])
         else:
             parts.extend([SYSTEM_PROMPT_APP_WEB, sector_appendix])
+    elif _is_desktop_brief(brief):
+        desktop_appendix = await _get_mode_appendix(brief, DESKTOP_APPENDIX)
+        parts.extend([SYSTEM_PROMPT_APP_WEB, desktop_appendix, sector_appendix])
     elif _is_app_web_brief(brief):
         app_appendix = await _get_mode_appendix(brief, APP_WEB_APPENDIX)
         parts.extend([SYSTEM_PROMPT_APP_WEB, app_appendix, sector_appendix])

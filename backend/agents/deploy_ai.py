@@ -93,6 +93,10 @@ def _is_extension_project(project_type: str | None) -> bool:
     return (project_type or "").strip().lower().replace("-", "_") == "extension_navigateur"
 
 
+def _is_desktop_project(project_type: str | None) -> bool:
+    return (project_type or "").strip().lower().replace("-", "_") == "application_desktop"
+
+
 def build_extension_demo_page(
     *,
     extension_name: str,
@@ -431,6 +435,62 @@ class DeployAI:
                 "html": demo_html,
             }
 
+    async def run_desktop(
+        self,
+        html: str,
+        *,
+        title: str = "",
+        brief: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Empaquette HTML + fichiers Electron en ZIP (pas de déploiement Cloudflare)."""
+        import uuid
+
+        from agents.electron_ai import build_electron_files
+        from media_storage import save_local, sync_to_r2
+        from tools.desktop_zip_export import build_desktop_package_zip
+
+        raw = (html or "").strip()
+        if not raw:
+            return {"url": "", "success": False, "error": "HTML vide", "desktop_package": True}
+
+        app_title = (title or "CyberForge Desktop").strip()[:120]
+        brief_data = brief if isinstance(brief, dict) else {}
+        electron_files = brief_data.get("electron_files")
+        if not isinstance(electron_files, dict) or not electron_files:
+            electron_files = build_electron_files(
+                str(brief_data.get("description") or brief_data.get("prompt") or app_title),
+                app_name=app_title,
+            )
+
+        try:
+            zip_bytes, filename = build_desktop_package_zip(
+                raw,
+                electron_files,
+                app_title,
+            )
+        except ValueError as exc:
+            return {
+                "url": "",
+                "success": False,
+                "error": str(exc),
+                "html": raw,
+                "desktop_package": True,
+            }
+
+        local_path = save_local(zip_bytes, filename, "zip")
+        r2_key = f"desktop-packages/{uuid.uuid4().hex}/{filename}"
+        download_url = sync_to_r2(local_path, r2_key) or ""
+
+        return {
+            "url": download_url,
+            "success": True,
+            "html": raw,
+            "desktop_package": True,
+            "desktop_zip_filename": filename,
+            "electron_files": electron_files,
+            "unlock_url": download_url,
+        }
+
     async def run(
         self,
         html: str,
@@ -448,6 +508,13 @@ class DeployAI:
                 "success": False,
                 "error": "Utiliser run_extension() pour extension_navigateur",
             }
+
+        if _is_desktop_project(project_type):
+            return await self.run_desktop(
+                html,
+                title=title,
+                brief=brief,
+            )
 
         raw = (html or "").strip()
         if not raw:

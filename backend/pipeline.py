@@ -41,6 +41,7 @@ _AGENT_RECEIVER_SLUG: dict[str, str] = {
     "AuthAI": "auth_ai",
     "PaymentAI": "payment_ai",
     "GeneratorAI": "generator_ai",
+    "ElectronAI": "electron_ai",
     "DeployAI": "deploy_ai",
     "SupervisorAI": "supervisor_ai",
 }
@@ -53,6 +54,7 @@ _AGENT_PLAN_KEYS: dict[str, str] = {
     "AuthAI": "auth",
     "PaymentAI": "payment",
     "GeneratorAI": "generator",
+    "ElectronAI": "electron",
     "SupervisorAI": "supervisor",
     "DeployAI": "deploy",
     "ExtensionBuilder": "extension_builder",
@@ -1212,6 +1214,40 @@ async def _run_pipeline_body_inner(
             )
         )
 
+    pt_normalized = str(brief.get("project_type") or req.project_type or "").strip().lower().replace("-", "_")
+    if pt_normalized == "application_desktop":
+        from agents import electron_ai
+
+        await _emit_agent_start(
+            generation_id,
+            agent="ElectronAI",
+            step=5,
+            total=tracked_total,
+            session_id=orch_session_id,
+        )
+        await _emit_log(generation_id, "ElectronAI — fichiers Electron Windows")
+        electron_t0 = time.perf_counter()
+        electron_result = await electron_ai.run(
+            project_description=str(
+                brief.get("description") or brief.get("prompt") or req.prompt
+            ),
+            assembled_html=html_for_context,
+            database_schema=brief.get("database_schema") or {},
+        )
+        brief["electron_files"] = electron_result.get("files", {})
+        await _emit_agent_done(
+            generation_id,
+            agent="ElectronAI",
+            step=5,
+            duration_ms=int((time.perf_counter() - electron_t0) * 1000),
+            total=tracked_total,
+            session_id=orch_session_id,
+        )
+        _track_workflow_step(workflow_ctx, "ElectronAI")
+        _track_orchestration_agent(
+            orchestration_ctx, "ElectronAI", generation_id=generation_id
+        )
+
     if not result.get("success") or not result.get("html"):
         error_msg = "GeneratorAI n'a pas produit de HTML valide."
         orchestration_ctx["status"] = "failed"
@@ -1291,6 +1327,8 @@ async def _run_pipeline_body_inner(
         )
 
     async def _validate_deploy(deployed: dict[str, Any]) -> dict[str, Any]:
+        if deployed.get("desktop_package") and deployed.get("success"):
+            return {"valid": True, "errors": [], "corrected_prompt": ""}
         return await supervisor.validate_deployment(
             str(deployed.get("url") or ""),
             client_name,
@@ -1331,7 +1369,7 @@ async def _run_pipeline_body_inner(
     deploy_url = str(deployed.get("url") or "")
     deploy_duration_ms = int((time.perf_counter() - deploy_t0) * 1000)
     persisted_project_id: str | None = None
-    if deployed.get("success") and deploy_url:
+    if deployed.get("success") and (deploy_url or deployed.get("desktop_package")):
         store = get_supabase_store()
         if store.is_configured():
             try:
@@ -1350,6 +1388,9 @@ async def _run_pipeline_body_inner(
                     output_tokens=int(metrics.get("output_tokens") or 0),
                     total_tokens=int(metrics.get("total_tokens") or 0),
                     generation_id=generation_id,
+                    electron_files=brief.get("electron_files")
+                    if isinstance(brief.get("electron_files"), dict)
+                    else None,
                 )
                 if persistence:
                     persisted_project_id = persistence.project_id
@@ -1382,6 +1423,8 @@ async def _run_pipeline_body_inner(
         "demo_token": deployed.get("demo_token"),
         "demo_password": deployed.get("demo_password"),
         "error": deployed.get("error"),
+        "desktop_package": deployed.get("desktop_package"),
+        "electron_files": brief.get("electron_files"),
         "duration_ms": total_duration_ms,
         "input_tokens": usage_summary.get("input_tokens", 0),
         "output_tokens": usage_summary.get("output_tokens", 0),
@@ -1647,7 +1690,7 @@ async def _run_extension_pipeline(
 
     deploy_url = str(deployed.get("url") or "")
     deploy_duration_ms = int((time.perf_counter() - deploy_t0) * 1000)
-    if deployed.get("success") and deploy_url:
+    if deployed.get("success") and (deploy_url or deployed.get("desktop_package")):
         store = get_supabase_store()
         if store.is_configured():
             try:

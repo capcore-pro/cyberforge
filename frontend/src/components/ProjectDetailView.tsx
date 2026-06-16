@@ -39,7 +39,7 @@ import { LazyProjectDemoStatsPanel } from "@/components/projects/ProjectDemoStat
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
 import { createSubdomain, deleteSubdomain } from "@/lib/subdomains-api";
-import { exportZip, fetchProjectHTML, redeployHTML } from "@/lib/editor-api";
+import { exportZip, fetchProjectHTML, redeployHTML, downloadDesktopPackage } from "@/lib/editor-api";
 import { PreviewDevice } from "@/components/editor/PreviewDevice";
 import {
   PREVIEW_DEVICE_ORDER,
@@ -131,6 +131,11 @@ export function ProjectDetailView({
 
   const [zipBusy, setZipBusy] = useState(false);
   const [zipError, setZipError] = useState<string | null>(null);
+
+  const [desktopDownloadBusy, setDesktopDownloadBusy] = useState(false);
+  const [desktopDownloadError, setDesktopDownloadError] = useState<string | null>(null);
+
+  const isDesktopProject = project.projectType === "application_desktop";
 
   const [watermarkLoading, setWatermarkLoading] = useState(false);
   const [watermarkActive, setWatermarkActive] = useState<boolean | null>(null);
@@ -423,6 +428,21 @@ export function ProjectDetailView({
     }
   }
 
+  async function handleDownloadDesktopPackage() {
+    if (!project.supabaseProjectId) return;
+    setDesktopDownloadBusy(true);
+    setDesktopDownloadError(null);
+    try {
+      await downloadDesktopPackage(project.supabaseProjectId, project.name);
+    } catch (err) {
+      setDesktopDownloadError(
+        err instanceof Error ? err.message : "Téléchargement package impossible.",
+      );
+    } finally {
+      setDesktopDownloadBusy(false);
+    }
+  }
+
   async function handleDeliverWithoutWatermark() {
     if (!project.supabaseProjectId) return;
     setDeliverBusy(true);
@@ -579,7 +599,33 @@ export function ProjectDetailView({
           ) : (
             <p className="mt-1 text-sm text-cf-muted">—</p>
           )}
-          {project.supabaseProjectId && demoUrl ? (
+          {isDesktopProject ? (
+            <div className="mt-2 space-y-2">
+              <span className="inline-flex items-center rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
+                💻 App Desktop
+              </span>
+              {project.supabaseProjectId ? (
+                <div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="ti ti-download"
+                    loading={desktopDownloadBusy}
+                    onClick={() => void handleDownloadDesktopPackage()}
+                  >
+                    Télécharger package Electron
+                  </Button>
+                  <p className="mt-2 text-xs text-cf-muted">
+                    Ouvrez le ZIP, lancez npm install puis npm run build pour générer le .exe.
+                  </p>
+                </div>
+              ) : null}
+              {desktopDownloadError ? (
+                <p className="text-xs text-red-300">{desktopDownloadError}</p>
+              ) : null}
+            </div>
+          ) : null}
+          {project.supabaseProjectId && demoUrl && !isDesktopProject ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {watermarkLoading ? (
                 <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cf-muted">

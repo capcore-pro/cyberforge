@@ -19,6 +19,7 @@ from db.supabase_store import SupabaseStoreError, get_supabase_store
 from media_storage import save_local, sync_to_r2
 from tools.export_cloudflare import CloudflareExportError, deploy_html_demo
 from tools.site_zip_export import build_site_export_zip
+from tools.desktop_zip_export import build_desktop_package_zip
 from tools.watermark import remove_watermark
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,9 @@ class EditorHtmlResponse(BaseModel):
     html: str
     demo_url: str | None = None
     project_title: str | None = None
+    project_type: str | None = None
+    is_desktop: bool = False
+    electron_files: dict[str, str] | None = None
 
 
 class SaveHtmlRequest(BaseModel):
@@ -104,6 +108,9 @@ async def get_editor_html(project_id: str) -> EditorHtmlResponse:
         html=str(payload["html"]),
         demo_url=payload.get("demo_url"),
         project_title=payload.get("project_title"),
+        project_type=payload.get("project_type"),
+        is_desktop=bool(payload.get("is_desktop")),
+        electron_files=payload.get("electron_files") or None,
     )
 
 
@@ -135,6 +142,47 @@ async def export_editor_zip(project_id: str) -> Response:
             title,
             remove_watermark=True,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/editor/{project_id}/download-desktop")
+async def download_desktop_package(project_id: str) -> Response:
+    """Télécharge le package Electron complet (index.html + fichiers build)."""
+    store = get_supabase_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail=_not_configured_detail(store))
+
+    try:
+        payload = await store.get_editor_html(project_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(
+            exc, f"GET /api/editor/{project_id}/download-desktop"
+        ) from exc
+
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Projet introuvable.")
+
+    html = str(payload.get("html") or "").strip()
+    if not html:
+        raise HTTPException(status_code=404, detail="HTML vide pour ce projet.")
+
+    electron_files = payload.get("electron_files")
+    if not isinstance(electron_files, dict) or not electron_files:
+        from agents.electron_ai import build_electron_files
+
+        title = str(payload.get("project_title") or "CyberForge Desktop")
+        electron_files = build_electron_files(title, app_name=title)
+
+    title = str(payload.get("project_title") or "projet")
+    try:
+        zip_bytes, filename = build_desktop_package_zip(html, electron_files, title)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

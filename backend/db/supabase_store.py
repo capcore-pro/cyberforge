@@ -16,6 +16,7 @@ from agents.coremind_agent import PROJECT_TYPE_LABELS, CoreMindRunResult, Projec
 from config import Settings, get_settings, plain_secret_str
 from tools.project_title import clean_project_title, short_project_name
 from tools.demo_preview_html import build_demo_preview_html
+from tools.desktop_zip_export import electron_files_from_generation_files
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +209,7 @@ class SupabaseStore:
         output_tokens: int = 0,
         total_tokens: int = 0,
         generation_id: str | None = None,
+        electron_files: dict[str, str] | None = None,
     ) -> PersistenceResult | None:
         """Enregistre un run pipeline v2 (brief → generate → deploy) dans Supabase."""
         if not self.is_configured():
@@ -218,7 +220,14 @@ class SupabaseStore:
         title = clean_project_title(client_name.strip()) or _title_from_prompt(trimmed)
         url = (demo_url or "").strip() or None
         code = (html or "").strip()
-        files = [{"path": "index.html", "content": code[:15000]}] if code else []
+        files: list[dict[str, str]] = []
+        if code:
+            files.append({"path": "index.html", "content": code[:15000]})
+        if isinstance(electron_files, dict):
+            for name in ("main.js", "preload.js", "package.json", "instructions_build.md"):
+                content = str(electron_files.get(name) or "").strip()
+                if content:
+                    files.append({"path": name, "content": content[:50000]})
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             find_resp = await client.get(
@@ -287,6 +296,8 @@ class SupabaseStore:
             }
             if generation_id:
                 analysis["generation_stream_id"] = generation_id
+            if isinstance(electron_files, dict) and electron_files:
+                analysis["desktop_package"] = True
 
             gen_payload = {
                 "project_id": project_id,
@@ -863,12 +874,17 @@ class SupabaseStore:
         html = (gen.preview_html or gen.code or "").strip()
         if not html:
             return None
+        electron_files = electron_files_from_generation_files(
+            gen.files if isinstance(gen.files, list) else None,
+        )
         return {
             "generation_id": gen.id,
             "html": html,
             "demo_url": detail.project.demo_url,
             "project_title": detail.project.title,
             "project_type": detail.project.project_type,
+            "electron_files": electron_files,
+            "is_desktop": detail.project.project_type == "application_desktop",
         }
 
     async def save_editor_html(

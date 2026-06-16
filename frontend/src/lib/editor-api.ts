@@ -9,6 +9,9 @@ export interface EditorHtmlPayload {
   html: string;
   demo_url: string | null;
   project_title?: string | null;
+  project_type?: string | null;
+  is_desktop?: boolean;
+  electron_files?: Record<string, string> | null;
 }
 
 export interface SaveHtmlResult {
@@ -73,6 +76,50 @@ function slugifyFilename(title: string): string {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .slice(0, 50) || "projet";
+}
+
+export async function downloadDesktopPackage(
+  projectId: string,
+  projectTitle: string,
+): Promise<void> {
+  const path = `${API_PREFIX}/editor/${encodeURIComponent(projectId)}/download-desktop`;
+  const url =
+    import.meta.env.DEV && typeof window !== "undefined"
+      ? path
+      : buildBackendApiUrl(path);
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    let detail = "Téléchargement package desktop impossible";
+    try {
+      const payload = await response.json();
+      detail = apiErrorMessage(
+        { ok: false, status: response.status, statusText: response.statusText, data: payload },
+        detail,
+      );
+    } catch {
+      detail = `Téléchargement package desktop impossible (${response.status})`;
+    }
+    throw new Error(detail);
+  }
+
+  const blob = await response.blob();
+  const date = new Date().toISOString().slice(0, 10);
+  const fallback = `${slugifyFilename(projectTitle)}-electron-${date}.zip`;
+  const filename = parseFilenameFromDisposition(
+    response.headers.get("Content-Disposition"),
+    fallback,
+  );
+
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export async function exportZip(projectId: string, projectTitle: string): Promise<void> {

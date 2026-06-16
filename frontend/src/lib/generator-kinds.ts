@@ -3,6 +3,7 @@ import type { GenerationMode, ProjectType } from "@shared/types";
 export type GeneratorKindId =
   | "vitrine"
   | "app_web"
+  | "crm"
   | "ecommerce"
   | "reservation"
   | "extension"
@@ -11,6 +12,7 @@ export type GeneratorKindId =
 export const GENERATOR_KIND_IDS: GeneratorKindId[] = [
   "vitrine",
   "app_web",
+  "crm",
   "ecommerce",
   "reservation",
   "extension",
@@ -76,6 +78,12 @@ export const GENERATOR_KIND_VISUAL: Record<
     ringClass: "ring-blue-400/30",
     shortDescription: "Application web avec logique métier et données.",
   },
+  crm: {
+    emoji: "👥",
+    colorClass: "text-cyan-300",
+    ringClass: "ring-cyan-400/30",
+    shortDescription: "CRM avec pipeline Kanban, contacts et activités.",
+  },
   ecommerce: {
     emoji: "🛒",
     colorClass: "text-emerald-300",
@@ -125,6 +133,18 @@ export const GENERATOR_KINDS: GeneratorKindOption[] = [
       "CRM simple pour artisans : clients, devis, suivi des chantiers",
       "Tableau de bord pour gérer des stocks et alertes de réapprovisionnement",
       "Portail interne avec authentification et rôles administrateur / employé",
+    ],
+  },
+  {
+    id: "crm",
+    icon: "◉",
+    title: "CRM",
+    description: "Pipeline commercial, contacts et suivi d'activités",
+    projectType: "application_web",
+    examples: [
+      "CRM immobilier : biens, visites, compromis et mandats acquéreurs",
+      "CRM recrutement : candidats, entretiens et offres d'emploi",
+      "CRM agence : projets clients, devis et facturation",
     ],
   },
   {
@@ -249,6 +269,12 @@ export function buildGeneratorPipelinePrompt(
   if (kind === "extension") {
     return `TYPE: extension_navigateur\n${body}`;
   }
+  if (kind === "crm") {
+    return `TYPE: crm\n${body}`;
+  }
+  if (kind === "desktop") {
+    return `TYPE: application_desktop\n${body}`;
+  }
   return body;
 }
 
@@ -285,6 +311,7 @@ export function kindToToolboxSecteur(kind: GeneratorKindId): string {
     case "ecommerce":
       return "commerce";
     case "app_web":
+    case "crm":
       return "technologie";
     case "extension":
       return "technologie";

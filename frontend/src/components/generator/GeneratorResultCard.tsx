@@ -24,6 +24,9 @@ interface GeneratorResultCardProps {
   costEur: number | null;
   durationMs: number;
   showProjectsLink: boolean;
+  isDesktop?: boolean;
+  desktopProjectId?: string | null;
+  onDownloadDesktop?: () => void;
   onOpenDemo: () => void;
   onOpenProjects?: () => void;
   onNewGeneration: () => void;
@@ -38,6 +41,9 @@ export function GeneratorResultCard({
   costEur,
   durationMs,
   showProjectsLink,
+  isDesktop = false,
+  desktopProjectId = null,
+  onDownloadDesktop,
   onOpenDemo,
   onOpenProjects,
   onNewGeneration,
@@ -62,7 +68,14 @@ export function GeneratorResultCard({
         </div>
       </div>
 
-      {demoUrl ? (
+      {isDesktop ? (
+        <p className="mt-4 text-sm text-emerald-300">
+          ✓ Logiciel généré — Téléchargez le package Electron pour builder le .exe
+          Windows.
+        </p>
+      ) : null}
+
+      {!isDesktop && demoUrl ? (
         <p className="mt-4 text-sm">
           <span className="text-white/50">URL démo : </span>
           <a
@@ -76,7 +89,7 @@ export function GeneratorResultCard({
         </p>
       ) : null}
 
-      {demoUrl || previewHtml ? (
+      {!isDesktop && (demoUrl || previewHtml) ? (
         <div className="mt-5 overflow-hidden rounded-card border border-white/10 bg-black/40">
           <div
             className="relative mx-auto"
@@ -106,14 +119,38 @@ export function GeneratorResultCard({
         </div>
       ) : null}
 
+      {isDesktop && previewHtml ? (
+        <div className="mt-5 overflow-hidden rounded-card border border-white/10 bg-black/40">
+          <div className="relative mx-auto" style={{ width: 400, height: 225 }}>
+            <iframe
+              title="Aperçu application desktop"
+              srcDoc={prepareInternalPreviewSrcDoc(previewHtml)}
+              sandbox={PREVIEW_IFRAME_SANDBOX}
+              className="absolute left-0 top-0 origin-top-left border-0"
+              style={{ width: 800, height: 450, transform: "scale(0.5)" }}
+            />
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-5 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={onOpenDemo}
-          className="inline-flex items-center gap-2 rounded-control border border-[#d4a843] bg-[#d4a843] px-5 py-2.5 text-sm font-semibold text-[#0a0a0a] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(212,168,67,0.35)]"
-        >
-          Voir la démo →
-        </button>
+        {isDesktop && desktopProjectId && onDownloadDesktop ? (
+          <button
+            type="button"
+            onClick={onDownloadDesktop}
+            className="inline-flex items-center gap-2 rounded-control border border-[#d4a843] bg-[#d4a843] px-5 py-2.5 text-sm font-semibold text-[#0a0a0a] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(212,168,67,0.35)]"
+          >
+            Télécharger .exe package
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenDemo}
+            className="inline-flex items-center gap-2 rounded-control border border-[#d4a843] bg-[#d4a843] px-5 py-2.5 text-sm font-semibold text-[#0a0a0a] transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(212,168,67,0.35)]"
+          >
+            Voir la démo →
+          </button>
+        )}
         {showProjectsLink && onOpenProjects ? (
           <button
             type="button"

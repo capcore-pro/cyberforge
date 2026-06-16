@@ -30,12 +30,17 @@ interface GenerateApiResponse {
   demo_token?: string | null;
   demo_password?: string | null;
   duration_ms?: number | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  total_tokens?: number | null;
+  estimated_cost_usd?: number | null;
 }
 
 const AGENT_TO_STEP: Record<string, PipelineAgentId> = {
   BriefAI: "architect",
   GeneratorAI: "builder",
   SupervisorAI: "bughunter",
+  ElectronAI: "builder",
   DeployAI: "export",
 };
 
@@ -43,6 +48,7 @@ const AGENT_START_MESSAGES: Record<string, string> = {
   BriefAI: "BriefAI — Analyse et enrichissement du brief",
   GeneratorAI: "GeneratorAI — Génération HTML premium",
   SupervisorAI: "SupervisorAI — Validation HTML",
+  ElectronAI: "ElectronAI — Package Electron Windows",
   DeployAI: "DeployAI — Images Pexels + Cloudflare",
 };
 
@@ -50,6 +56,7 @@ const AGENT_DONE_MESSAGES: Record<string, string> = {
   BriefAI: "Brief enrichi",
   GeneratorAI: "HTML généré",
   SupervisorAI: "Contrôle qualité validé",
+  ElectronAI: "Fichiers Electron générés",
   DeployAI: "Démo en ligne",
 };
 
@@ -95,6 +102,12 @@ function resolveApiProjectType(body: CoreMindRequest): string {
   }
   if (/^TYPE:\s*extension_navigateur/im.test(prompt)) {
     return "extension_navigateur";
+  }
+  if (/^TYPE:\s*crm/im.test(prompt)) {
+    return "crm";
+  }
+  if (/^TYPE:\s*application_desktop/im.test(prompt)) {
+    return "application_desktop";
   }
   const pt = (body.project_type || "site_web") as ProjectType;
   if (pt === "site_web" && body.generation_mode === "client_demo") {
@@ -162,7 +175,7 @@ function mapGenerateToRunResponse(
       complexity: "moyenne",
       complexity_score: 5,
       duration_ms: durationMs,
-      estimated_cost_usd: 0,
+      estimated_cost_usd: api.estimated_cost_usd ?? 0,
       project_type_selected: resolveApiProjectType(body),
     },
     planned_models: ["brief-ai", "generator-ai", "deploy-ai"],
@@ -306,6 +319,10 @@ function waitForGenerationSse(
           demo_token: data.demo_token,
           demo_password: data.demo_password,
           duration_ms: data.duration_ms,
+          input_tokens: data.input_tokens,
+          output_tokens: data.output_tokens,
+          total_tokens: data.total_tokens,
+          estimated_cost_usd: data.estimated_cost_usd,
         });
       });
     });

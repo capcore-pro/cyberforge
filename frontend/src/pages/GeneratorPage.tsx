@@ -44,6 +44,7 @@ import {
 } from "@/lib/clients-api";
 import { StripePublishableKeyField } from "@/components/StripePublishableKeyField";
 import { updateProject } from "@/lib/projects-api";
+import { downloadDesktopPackage } from "@/lib/editor-api";
 import {
   clearSelectedClientId,
   getSelectedClientId,
@@ -361,6 +362,9 @@ export function GeneratorPage({
   );
   const [linkedClientLabel, setLinkedClientLabel] = useState<string | null>(null);
   const [linkedClientPerso, setLinkedClientPerso] = useState(false);
+  const [savedSupabaseProjectId, setSavedSupabaseProjectId] = useState<string | null>(null);
+  const [desktopDownloadBusy, setDesktopDownloadBusy] = useState(false);
+  const [desktopDownloadError, setDesktopDownloadError] = useState<string | null>(null);
   const [stripePrefilledFromClient, setStripePrefilledFromClient] = useState(false);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [customizeSaveBusy, setCustomizeSaveBusy] = useState(false);
@@ -413,6 +417,7 @@ export function GeneratorPage({
         detailsForm,
         projectName,
         sectorPreset?.label ?? "",
+        sectorPreset,
       ),
     [selectedKind, detailsForm, projectName, sectorPreset],
   );
@@ -1145,6 +1150,7 @@ export function GeneratorPage({
         normalized.generation.code,
       );
       const persistedId = normalized.persistence?.project_id;
+      setSavedSupabaseProjectId(persistedId ?? null);
       if (persistedId) {
         if (effectiveProjectName) {
           void updateProject(persistedId, { title: effectiveProjectName });
@@ -2079,6 +2085,28 @@ export function GeneratorPage({
                 : result.metrics.duration_ms
             }
             showProjectsLink={cloudSaved && Boolean(onOpenProjects)}
+            isDesktop={selectedKind === "desktop"}
+            desktopProjectId={savedSupabaseProjectId}
+            onDownloadDesktop={
+              savedSupabaseProjectId
+                ? () => {
+                    setDesktopDownloadError(null);
+                    setDesktopDownloadBusy(true);
+                    void downloadDesktopPackage(
+                      savedSupabaseProjectId,
+                      projectName.trim() || projectTitleFromPrompt(prompt),
+                    )
+                      .catch((err) => {
+                        setDesktopDownloadError(
+                          err instanceof Error
+                            ? err.message
+                            : "Téléchargement impossible.",
+                        );
+                      })
+                      .finally(() => setDesktopDownloadBusy(false));
+                  }
+                : undefined
+            }
             onOpenDemo={() => {
               const url = productionUrl ?? result.production_url;
               if (url) {
@@ -2090,6 +2118,12 @@ export function GeneratorPage({
             onOpenProjects={onOpenProjects}
             onNewGeneration={resetForNewProject}
           />
+        ) : null}
+        {desktopDownloadError ? (
+          <p className="mt-2 text-sm text-red-300">{desktopDownloadError}</p>
+        ) : null}
+        {desktopDownloadBusy ? (
+          <p className="mt-2 text-sm text-cf-muted">Préparation du package Electron…</p>
         ) : null}
       </section>
       ) : null}
