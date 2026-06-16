@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BackButton } from "@/components/BackButton";
-import { Button } from "@/components/ui";
+import { Button, Modal } from "@/components/ui";
 import { PasswordRevealField } from "@/components/PasswordRevealField";
 import {
   ProjectClientStripeSection,
@@ -38,7 +38,13 @@ import { LazyProjectAnalyticsPanel } from "@/components/projects/ProjectAnalytic
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
 import { createSubdomain, deleteSubdomain } from "@/lib/subdomains-api";
-import { exportZip } from "@/lib/editor-api";
+import { exportZip, fetchProjectHTML } from "@/lib/editor-api";
+import { PreviewDevice } from "@/components/editor/PreviewDevice";
+import {
+  PREVIEW_DEVICE_ORDER,
+  PREVIEW_DEVICE_SPECS,
+  type PreviewDeviceType,
+} from "@/lib/preview-devices";
 
 interface ProjectDetailViewProps {
   project: UnifiedProject;
@@ -125,6 +131,12 @@ export function ProjectDetailView({
   const [zipBusy, setZipBusy] = useState(false);
   const [zipError, setZipError] = useState<string | null>(null);
 
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<PreviewDeviceType>("mobile");
+  const [projectHtml, setProjectHtml] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   const showClientStripe = projectSupportsClientStripe(project);
 
   const projectReportKey =
@@ -136,10 +148,26 @@ export function ProjectDetailView({
   const lighthouseReport = getLighthouseReport(projectReportKey);
 
   useEffect(() => {
-    // Debug temporaire : vérifier les champs persistés dans le projet
-    // eslint-disable-next-line no-console
-    console.log("[ProjectDetail] project loaded", project);
-  }, [project]);
+    if (!showPreview || !project.supabaseProjectId) {
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    void fetchProjectHTML(project.supabaseProjectId).then((res) => {
+      if (cancelled) return;
+      setPreviewLoading(false);
+      if (!res.ok || !res.data?.html) {
+        setPreviewError(apiErrorMessage(res, "Impossible de charger l'aperçu."));
+        setProjectHtml(null);
+        return;
+      }
+      setProjectHtml(res.data.html);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showPreview, project.supabaseProjectId]);
 
   useEffect(() => {
     if (!showClientStripe || !project.managedId) {
@@ -732,6 +760,15 @@ export function ProjectDetailView({
             Télécharger ZIP
           </Button>
         ) : null}
+        {project.supabaseProjectId ? (
+          <Button
+            variant="ghost"
+            icon="ti ti-devices"
+            onClick={() => setShowPreview(true)}
+          >
+            Aperçu multi-device
+          </Button>
+        ) : null}
         <button
           type="button"
           onClick={onEdit}
@@ -758,6 +795,44 @@ export function ProjectDetailView({
           Ouvrir
         </button>
       </footer>
+
+      <Modal
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        title={`Aperçu — ${project.name}`}
+        size="xl"
+        icon="ti ti-devices"
+      >
+        <div className="mb-4 flex flex-wrap gap-2">
+          {PREVIEW_DEVICE_ORDER.map((device) => (
+            <button
+              key={device}
+              type="button"
+              onClick={() => setPreviewDevice(device)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                previewDevice === device
+                  ? "border-cf-gold/50 bg-cf-gold/15 text-cf-gold"
+                  : "border-white/10 bg-white/5 text-cf-muted hover:text-cf-text"
+              }`}
+            >
+              {PREVIEW_DEVICE_SPECS[device].shortLabel}
+            </button>
+          ))}
+        </div>
+        {previewLoading ? (
+          <p className="py-16 text-center text-sm text-cf-muted animate-pulse">
+            Chargement de l&apos;aperçu…
+          </p>
+        ) : previewError ? (
+          <p className="py-16 text-center text-sm text-red-300">{previewError}</p>
+        ) : projectHtml ? (
+          <PreviewDevice html={projectHtml} device={previewDevice} className="min-h-[70vh]" />
+        ) : (
+          <p className="py-16 text-center text-sm text-cf-muted">
+            Aucun HTML disponible pour ce projet.
+          </p>
+        )}
+      </Modal>
     </div>
   );
 }

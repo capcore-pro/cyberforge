@@ -11,6 +11,11 @@ import {
 } from "@/lib/editor-api";
 import { isSelectedElementPayload, type SelectedElementPayload } from "@/lib/editor-inject";
 import { HTMLEditor } from "@/lib/html-editor";
+import {
+  PREVIEW_DEVICE_ORDER,
+  PREVIEW_DEVICE_SPECS,
+  type PreviewDeviceType,
+} from "@/lib/preview-devices";
 
 interface EditorPageProps {
   projectId: string;
@@ -27,7 +32,7 @@ export function EditorPage({ projectId, onBack }: EditorPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"save" | "deploy" | "export" | null>(null);
-  const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
+  const [viewport, setViewport] = useState<PreviewDeviceType>("desktop");
   const [selected, setSelected] = useState<SelectedElementPayload | null>(null);
   const [successUrl, setSuccessUrl] = useState<string | null>(null);
 
@@ -175,21 +180,21 @@ export function EditorPage({ projectId, onBack }: EditorPageProps) {
             Non sauvegardé
           </Badge>
         ) : null}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setViewport("desktop")}
-            className={`rounded px-2 py-1 text-xs ${viewport === "desktop" ? "bg-cf-gold/20 text-cf-gold" : "text-cf-muted"}`}
-          >
-            Desktop
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewport("mobile")}
-            className={`rounded px-2 py-1 text-xs ${viewport === "mobile" ? "bg-cf-gold/20 text-cf-gold" : "text-cf-muted"}`}
-          >
-            Mobile
-          </button>
+        <div className="flex flex-wrap items-center gap-1 rounded-control border border-cf-border-input bg-cf-secondary p-1">
+          {PREVIEW_DEVICE_ORDER.map((device) => (
+            <button
+              key={device}
+              type="button"
+              onClick={() => setViewport(device)}
+              className={`rounded px-2 py-1 text-xs transition ${
+                viewport === device
+                  ? "bg-cf-gold/20 text-cf-gold"
+                  : "text-cf-muted hover:text-cf-text"
+              }`}
+            >
+              {PREVIEW_DEVICE_SPECS[device].shortLabel} ({PREVIEW_DEVICE_SPECS[device].width}px)
+            </button>
+          ))}
         </div>
         <Button
           variant="ghost"
