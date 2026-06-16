@@ -36,6 +36,7 @@ import { DataPaymentPanel } from "@/components/DataPaymentPanel";
 import { LazyProjectAnalyticsPanel } from "@/components/projects/ProjectAnalyticsPanel";
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
+import { createSubdomain, deleteSubdomain } from "@/lib/subdomains-api";
 
 interface ProjectDetailViewProps {
   project: UnifiedProject;
@@ -114,6 +115,10 @@ export function ProjectDetailView({
   );
 
   const [demoUrl, setDemoUrl] = useState<string | null>(() => project.url?.trim() || null);
+
+  const [subdomainBusy, setSubdomainBusy] = useState(false);
+  const [subdomainToast, setSubdomainToast] = useState<string | null>(null);
+  const [subdomainError, setSubdomainError] = useState<string | null>(null);
 
   const showClientStripe = projectSupportsClientStripe(project);
 
@@ -304,6 +309,45 @@ export function ProjectDetailView({
     onDuplicate(result.project);
   }
 
+  const isPagesDevDemo = Boolean(
+    demoUrl && demoUrl.includes("cyberforge-demos.pages.dev"),
+  );
+  const isCapcoreSubdomain = Boolean(demoUrl && demoUrl.includes(".capcore.pro"));
+
+  async function handleCreateSubdomain() {
+    setSubdomainBusy(true);
+    setSubdomainError(null);
+    setSubdomainToast(null);
+    const res = await createSubdomain({
+      client_name: project.name,
+      project_id: project.supabaseProjectId,
+    });
+    setSubdomainBusy(false);
+    if (!res.ok || !res.data) {
+      setSubdomainError(apiErrorMessage(res, "Activation du sous-domaine impossible."));
+      return;
+    }
+    const newUrl = res.data.url;
+    setDemoUrl(newUrl);
+    onProjectUpdated({ ...project, url: newUrl });
+    setSubdomainToast(`✓ ${newUrl.replace(/^https?:\/\//, "")} activé`);
+    window.setTimeout(() => setSubdomainToast(null), 5000);
+  }
+
+  async function handleDeactivateSubdomain() {
+    setSubdomainBusy(true);
+    setSubdomainError(null);
+    setSubdomainToast(null);
+    const res = await deleteSubdomain(project.name);
+    setSubdomainBusy(false);
+    if (!res.ok) {
+      setSubdomainError(apiErrorMessage(res, "Désactivation du sous-domaine impossible."));
+      return;
+    }
+    setSubdomainToast("Sous-domaine capcore.pro désactivé");
+    window.setTimeout(() => setSubdomainToast(null), 4000);
+  }
+
   async function handleToggleAuth() {
     if (!project.managedId || !auth) return;
     setAuthBusy(true);
@@ -428,6 +472,43 @@ export function ProjectDetailView({
           ) : (
             <p className="mt-1 text-sm text-cf-muted">—</p>
           )}
+          {isCapcoreSubdomain ? (
+            <span className="mt-2 inline-flex items-center rounded-full border border-[#3b82f6]/40 bg-[#3b82f6]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#60a5fa]">
+              capcore.pro ✓
+            </span>
+          ) : null}
+          {isPagesDevDemo ? (
+            <div className="mt-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="ti ti-world"
+                loading={subdomainBusy}
+                onClick={() => void handleCreateSubdomain()}
+              >
+                Activer nom-client.capcore.pro
+              </Button>
+            </div>
+          ) : null}
+          {isCapcoreSubdomain ? (
+            <div className="mt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="ti ti-trash"
+                loading={subdomainBusy}
+                onClick={() => void handleDeactivateSubdomain()}
+              >
+                Désactiver
+              </Button>
+            </div>
+          ) : null}
+          {subdomainToast ? (
+            <p className="mt-2 text-xs text-emerald-300">{subdomainToast}</p>
+          ) : null}
+          {subdomainError ? (
+            <p className="mt-1 text-xs text-red-300">{subdomainError}</p>
+          ) : null}
         </div>
 
         <div>

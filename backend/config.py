@@ -251,6 +251,7 @@ class Settings(BaseSettings):
     cloudflare_api_token: SecretStr | None = Field(
         default=None, alias="CLOUDFLARE_API_TOKEN"
     )
+    cloudflare_zone_id: str = Field(default="", alias="CLOUDFLARE_ZONE_ID")
 
     # Médiathèque — Cloudflare R2 (API S3-compatible)
     cloudflare_r2_account_id: SecretStr | None = Field(
