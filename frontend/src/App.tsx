@@ -35,6 +35,9 @@ const SettingsPage = lazy(() =>
 const AgentsPage = lazy(() =>
   import("./pages/AgentsPage").then((m) => ({ default: m.AgentsPage })),
 );
+const AgentBuilderPage = lazy(() =>
+  import("./pages/AgentBuilder").then((m) => ({ default: m.AgentBuilder })),
+);
 const MonitoringPage = lazy(() =>
   import("./pages/MonitoringPage").then((m) => ({
     default: m.MonitoringPage,
@@ -211,6 +214,8 @@ function AppWithNotifications({
         );
       case "agents":
         return <AgentsPage />;
+      case "agent_builder":
+        return <AgentBuilderPage />;
       case "monitoring":
         return <MonitoringPage />;
       case "workflows":

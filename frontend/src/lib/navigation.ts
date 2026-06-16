@@ -13,6 +13,7 @@ export type AppPage =
   /** Routes internes (hors sidebar) */
   | "perso"
   | "agents"
+  | "agent_builder"
   | "monitoring"
   | "workflows"
   | "editor"
@@ -45,6 +46,13 @@ export const MAIN_NAV_GROUP: NavGroup = {
       label: "Agents IA",
       icon: "◉",
       iconClass: "ti ti-robot",
+      enabled: true,
+    },
+    {
+      id: "agent_builder",
+      label: "Agent Builder",
+      icon: "◉",
+      iconClass: "ti ti-bot",
       enabled: true,
     },
     {
