@@ -4,7 +4,6 @@ BriefAI — enrichit le brief client (Firecrawl optionnel) et produit un brief s
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -12,12 +11,10 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
-import anthropic
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
-from agents.llm_usage_utils import usage_from_anthropic_response
 from config import get_settings
 from security.llm_secrets import get_effective_llm_key
 from tools.firecrawl_client import FirecrawlError, firecrawl_scrape
@@ -158,8 +155,12 @@ class BriefAI:
         )
 
         api_key = get_effective_llm_key("ANTHROPIC_API_KEY", get_settings())
-        if not api_key:
-            logger.warning("[BriefAI] ANTHROPIC_API_KEY absente — brief minimal")
+        settings = get_settings()
+        has_llm = settings.mistral_configured or bool(api_key) or bool(
+            get_effective_llm_key("DEEPSEEK_API_KEY", settings)
+        )
+        if not has_llm:
+            logger.warning("[BriefAI] Aucune clé LLM — brief minimal")
             brief = dict(_DEFAULT_BRIEF)
             brief["project_type"] = pt
             if name_hint:
@@ -167,29 +168,9 @@ class BriefAI:
             brief["description"] = user_prompt[:500]
             return brief
 
-        client = anthropic.Anthropic(api_key=api_key)
-
-        def _call():
-            response = client.messages.create(
-                model=MODEL,
-                max_tokens=MAX_TOKENS,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_message}],
-            )
-            parts: list[str] = []
-            for block in response.content:
-                text = getattr(block, "text", None)
-                if text:
-                    parts.append(text)
-            return "".join(parts), response
-
         usage: dict[str, Any] | None = None
+        parsed: dict[str, Any] = {}
         try:
-            raw, response = await asyncio.to_thread(_call)
-            usage = usage_from_anthropic_response(response, MODEL)
-            parsed = _parse_json_response(raw)
-        except anthropic.APIError as exc:
-            logger.warning("[BriefAI] Anthropic failed: %s", exc)
             from llm.base_provider import LLMRequest
             from llm.router import llm_router
 
@@ -211,7 +192,7 @@ class BriefAI:
             }
             parsed = _parse_json_response(llm_response.content)
         except Exception as exc:
-            logger.warning("[BriefAI] échec Claude — brief minimal: %s", exc)
+            logger.warning("[BriefAI] LLM router échec — brief minimal: %s", exc)
             parsed = {}
 
         brief = dict(_DEFAULT_BRIEF)

@@ -10,6 +10,7 @@ from config import Settings, get_settings
 from llm.base_provider import BaseLLMProvider, LLMRequest, LLMResponse
 from llm.providers.anthropic_provider import AnthropicProvider
 from llm.providers.deepseek_provider import DeepSeekProvider
+from llm.providers.mistral_provider import MistralProvider
 from llm.providers.ollama_provider import OllamaProvider
 from llm.providers.openai_provider import OpenAIProvider
 
@@ -17,12 +18,12 @@ logger = logging.getLogger(__name__)
 
 ROUTING_RULES: dict[str, dict[str, str]] = {
     "brief": {
-        "primary": "anthropic",
-        "primary_model": "claude-haiku-4-5-20251001",
-        "fallback": "deepseek",
-        "fallback_model": "deepseek-chat",
-        "fallback2": "ollama",
-        "fallback2_model": "qwen3",
+        "primary": "mistral",
+        "primary_model": "mistral-small-latest",
+        "fallback": "anthropic",
+        "fallback_model": "claude-haiku-4-5-20251001",
+        "fallback2": "deepseek",
+        "fallback2_model": "deepseek-chat",
     },
     "generation": {
         "primary": "anthropic",
@@ -31,18 +32,26 @@ ROUTING_RULES: dict[str, dict[str, str]] = {
         "fallback_model": "gpt-4o",
     },
     "analysis": {
-        "primary": "anthropic",
-        "primary_model": "claude-haiku-4-5-20251001",
-        "fallback": "deepseek",
-        "fallback_model": "deepseek-chat",
-        "fallback2": "ollama",
-        "fallback2_model": "qwen3",
+        "primary": "mistral",
+        "primary_model": "mistral-small-latest",
+        "fallback": "anthropic",
+        "fallback_model": "claude-haiku-4-5-20251001",
+        "fallback2": "deepseek",
+        "fallback2_model": "deepseek-chat",
+    },
+    "content": {
+        "primary": "mistral",
+        "primary_model": "mistral-large-latest",
+        "fallback": "anthropic",
+        "fallback_model": "claude-haiku-4-5-20251001",
+        "fallback2": "deepseek",
+        "fallback2_model": "deepseek-chat",
     },
     "review": {
         "primary": "anthropic",
-        "primary_model": "claude-haiku-4-5-20251001",
-        "fallback": "deepseek",
-        "fallback_model": "deepseek-chat",
+        "primary_model": "claude-sonnet-4-5",
+        "fallback": "anthropic",
+        "fallback_model": "claude-haiku-4-5-20251001",
     },
 }
 
@@ -53,6 +62,7 @@ class LLMRouter:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
         self._provider_classes: list[type[BaseLLMProvider]] = [
+            MistralProvider,
             AnthropicProvider,
             OpenAIProvider,
             DeepSeekProvider,

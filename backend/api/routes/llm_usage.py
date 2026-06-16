@@ -27,6 +27,7 @@ async def get_llm_dashboard_stats() -> dict:
                 "total_cost_usd": 0.0,
                 "total_tokens": 0,
                 "by_agent": [],
+                "by_provider": [],
             },
             "daily": [],
         }

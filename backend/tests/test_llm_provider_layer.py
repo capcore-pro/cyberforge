@@ -184,32 +184,31 @@ async def _test_llm_router_fallback_with_audit() -> None:
     )
 
 
-def test_brief_ai_fallback_on_anthropic_error() -> None:
-    asyncio.run(_test_brief_ai_fallback_on_anthropic_error())
+def test_brief_ai_uses_llm_router() -> None:
+    asyncio.run(_test_brief_ai_uses_llm_router())
 
 
-async def _test_brief_ai_fallback_on_anthropic_error() -> None:
+async def _test_brief_ai_uses_llm_router() -> None:
     from agents.brief_ai import BriefAI
 
-    fallback_response = LLMResponse(
+    router_response = LLMResponse(
         content=VALID_BRIEF_JSON,
-        model="deepseek-chat",
-        provider="deepseek",
+        model="mistral-small-latest",
+        provider="mistral",
         input_tokens=50,
         output_tokens=20,
         total_tokens=70,
     )
 
-    async def _to_thread_raises(_fn):
-        raise anthropic.APIError("down", request=MagicMock(), body=None)
+    mock_settings = MagicMock()
+    mock_settings.mistral_configured = True
 
     with (
+        patch("agents.brief_ai.get_settings", return_value=mock_settings),
         patch("agents.brief_ai.get_effective_llm_key", return_value="test-key"),
-        patch("agents.brief_ai.anthropic.Anthropic") as anthropic_cls,
-        patch("agents.brief_ai.asyncio.to_thread", side_effect=_to_thread_raises),
         patch("llm.router.llm_router.route", new_callable=AsyncMock) as mock_route,
     ):
-        mock_route.return_value = fallback_response
+        mock_route.return_value = router_response
         brief = await BriefAI().run(
             prompt="Boulangerie artisanale à Lyon avec services pain et viennoiseries.",
             project_type="vitrine_next",
@@ -217,6 +216,5 @@ async def _test_brief_ai_fallback_on_anthropic_error() -> None:
 
     assert brief.get("project_type") == "vitrine_next"
     assert brief.get("sector") == "commerce"
-    assert brief.get("usage", {}).get("provider") == "deepseek"
+    assert brief.get("usage", {}).get("provider") == "mistral"
     mock_route.assert_awaited_once()
-    anthropic_cls.assert_called_once()

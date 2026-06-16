@@ -8,10 +8,17 @@ export interface LLMAgentCost {
   tokens: number;
 }
 
+export interface LLMProviderCost {
+  provider: string;
+  cost_usd: number;
+  tokens: number;
+}
+
 export interface LLMMonthlyStats {
   total_cost_usd: number;
   total_tokens: number;
   by_agent: LLMAgentCost[];
+  by_provider?: LLMProviderCost[];
 }
 
 export interface LLMDailyPoint {
@@ -63,7 +70,7 @@ export interface MergedGenerationEntry {
 }
 
 const EMPTY_LLM_STATS: LLMStats = {
-  monthly: { total_cost_usd: 0, total_tokens: 0, by_agent: [] },
+  monthly: { total_cost_usd: 0, total_tokens: 0, by_agent: [], by_provider: [] },
   daily: [],
 };
 
@@ -83,6 +90,9 @@ function normalizeLLMStats(data: unknown): LLMStats {
   const payload = (data ?? {}) as Record<string, unknown>;
   const monthlyRaw = (payload.monthly ?? {}) as Record<string, unknown>;
   const byAgentRaw = Array.isArray(monthlyRaw.by_agent) ? monthlyRaw.by_agent : [];
+  const byProviderRaw = Array.isArray(monthlyRaw.by_provider)
+    ? monthlyRaw.by_provider
+    : [];
   const dailyRaw = Array.isArray(payload.daily) ? payload.daily : [];
 
   return {
@@ -93,6 +103,14 @@ function normalizeLLMStats(data: unknown): LLMStats {
         const item = row as Record<string, unknown>;
         return {
           agent: String(item.agent ?? "unknown"),
+          cost_usd: safeNumber(item.cost_usd),
+          tokens: safeNumber(item.tokens),
+        };
+      }),
+      by_provider: byProviderRaw.map((row) => {
+        const item = row as Record<string, unknown>;
+        return {
+          provider: String(item.provider ?? "unknown"),
           cost_usd: safeNumber(item.cost_usd),
           tokens: safeNumber(item.tokens),
         };

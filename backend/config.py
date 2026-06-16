@@ -67,6 +67,7 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr | None = Field(default=None, alias="OPENAI_API_KEY")
     anthropic_api_key: SecretStr | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    mistral_api_key: SecretStr | None = Field(default=None, alias="MISTRAL_API_KEY")
     deepseek_api_key: SecretStr | None = Field(default=None, alias="DEEPSEEK_API_KEY")
     google_generative_ai_api_key: SecretStr | None = Field(
         default=None, alias="GOOGLE_GENERATIVE_AI_API_KEY"
@@ -430,6 +431,11 @@ class Settings(BaseSettings):
         if origins:
             return origins[0].rstrip("/")
         return "http://localhost:5173"
+
+    @property
+    def mistral_configured(self) -> bool:
+        """True si l'API Mistral est disponible (brief / analyse économiques)."""
+        return bool(plain_secret_str(self.mistral_api_key))
 
     @property
     def v0_configured(self) -> bool:

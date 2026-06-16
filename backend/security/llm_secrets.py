@@ -13,6 +13,7 @@ from security.secret_vault import get_secret_vault
 LLM_ENV_KEYS = (
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
+    "MISTRAL_API_KEY",
     "DEEPSEEK_API_KEY",
     "GOOGLE_GENERATIVE_AI_API_KEY",
 )
@@ -20,6 +21,7 @@ LLM_ENV_KEYS = (
 _SETTINGS_FIELD_BY_ENV: dict[str, str] = {
     "OPENAI_API_KEY": "openai_api_key",
     "ANTHROPIC_API_KEY": "anthropic_api_key",
+    "MISTRAL_API_KEY": "mistral_api_key",
     "DEEPSEEK_API_KEY": "deepseek_api_key",
     "GOOGLE_GENERATIVE_AI_API_KEY": "google_generative_ai_api_key",
 }
@@ -67,6 +69,7 @@ def llm_provider_flags(settings: Settings) -> dict[str, bool]:
     return {
         "openai": bool(get_effective_llm_key("OPENAI_API_KEY", settings)),
         "anthropic": bool(get_effective_llm_key("ANTHROPIC_API_KEY", settings)),
+        "mistral": settings.mistral_configured,
         "deepseek": bool(get_effective_llm_key("DEEPSEEK_API_KEY", settings)),
         "gemini": bool(
             get_effective_llm_key("GOOGLE_GENERATIVE_AI_API_KEY", settings)

@@ -317,6 +317,7 @@ class LLMUsageStore:
                 "total_cost_usd": 0.0,
                 "total_tokens": 0,
                 "by_agent": [],
+                "by_provider": [],
             },
             "daily": [],
         }
@@ -337,7 +338,7 @@ class LLMUsageStore:
                 params={
                     "organization_id": f"eq.{organization_id}",
                     "created_at": f"gte.{month_start_iso}",
-                    "select": "agent_name,cost_usd,total_tokens",
+                    "select": "agent_name,provider,cost_usd,total_tokens",
                     "order": "created_at.desc",
                     "limit": "5000",
                 },
@@ -367,12 +368,14 @@ class LLMUsageStore:
                 tracking_rows = []
 
         by_agent_map: dict[str, dict[str, float | int]] = {}
+        by_provider_map: dict[str, dict[str, float | int | str]] = {}
         total_cost = 0.0
         total_tokens = 0
         for row in usage_rows:
             if not isinstance(row, dict):
                 continue
             agent = str(row.get("agent_name") or "unknown").strip() or "unknown"
+            provider = str(row.get("provider") or "unknown").strip() or "unknown"
             cost = float(row.get("cost_usd") or 0)
             tokens = int(row.get("total_tokens") or 0)
             total_cost += cost
@@ -383,6 +386,13 @@ class LLMUsageStore:
             bucket["cost_usd"] = float(bucket["cost_usd"]) + cost
             bucket["tokens"] = int(bucket["tokens"]) + tokens
 
+            prov_bucket = by_provider_map.setdefault(
+                provider,
+                {"provider": provider, "cost_usd": 0.0, "tokens": 0},
+            )
+            prov_bucket["cost_usd"] = float(prov_bucket["cost_usd"]) + cost
+            prov_bucket["tokens"] = int(prov_bucket["tokens"]) + tokens
+
         by_agent = sorted(
             [
                 {
@@ -391,6 +401,19 @@ class LLMUsageStore:
                     "tokens": int(item["tokens"]),
                 }
                 for item in by_agent_map.values()
+            ],
+            key=lambda x: x["cost_usd"],
+            reverse=True,
+        )
+
+        by_provider = sorted(
+            [
+                {
+                    "provider": str(item["provider"]),
+                    "cost_usd": round(float(item["cost_usd"]), 6),
+                    "tokens": int(item["tokens"]),
+                }
+                for item in by_provider_map.values()
             ],
             key=lambda x: x["cost_usd"],
             reverse=True,
@@ -411,6 +434,7 @@ class LLMUsageStore:
                 "total_cost_usd": round(total_cost, 6),
                 "total_tokens": total_tokens,
                 "by_agent": by_agent,
+                "by_provider": by_provider,
             },
             "daily": daily,
         }

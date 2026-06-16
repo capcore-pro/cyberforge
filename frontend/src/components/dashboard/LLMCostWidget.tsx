@@ -17,10 +17,22 @@ function formatEurFromUsd(usd: number): string {
   return eurPreciseFmt.format(usd * USD_TO_EUR);
 }
 
-function formatAgentLabel(agent: string): string {
-  return agent
+function formatProviderLabel(provider: string): string {
+  const key = provider.toLowerCase();
+  if (key === "mistral") return "Mistral";
+  if (key.includes("mistral") && key.includes("small")) return "Mistral Small";
+  if (key.includes("mistral") && key.includes("large")) return "Mistral Large";
+  return provider
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function providerBarColor(provider: string): string {
+  const key = provider.toLowerCase();
+  if (key === "mistral") return "bg-[#f97316]";
+  if (key.includes("anthropic")) return "bg-cf-gold";
+  if (key.includes("openai")) return "bg-teal-400";
+  return "bg-white/40";
 }
 
 function SkeletonBars() {
@@ -48,7 +60,12 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
   const agents = [...(monthly?.by_agent ?? [])]
     .sort((a, b) => b.cost_usd - a.cost_usd)
     .slice(0, 5);
+  const providers = [...(monthly?.by_provider ?? [])]
+    .filter((row) => row.provider.toLowerCase() === "mistral" || row.cost_usd > 0)
+    .sort((a, b) => b.cost_usd - a.cost_usd);
   const maxAgentCost = agents.length > 0 ? agents[0].cost_usd : 0;
+  const maxProviderCost =
+    providers.length > 0 ? providers[0].cost_usd : 0;
 
   return (
     <div className="rounded-card border border-white/10 bg-white/5 p-5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] backdrop-blur-xl">
@@ -87,6 +104,9 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
 
           {agents.length > 0 ? (
             <div className="mt-5 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-muted">
+                Par agent
+              </p>
               {agents.map((row) => {
                 const pct =
                   maxAgentCost > 0
@@ -100,7 +120,9 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
                   <div key={row.agent} className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="truncate text-sm font-medium text-cf-text">
-                        {formatAgentLabel(row.agent)}
+                        {row.agent
+                          .replace(/_/g, " ")
+                          .replace(/\b\w/g, (c) => c.toUpperCase())}
                       </p>
                       <p className="shrink-0 text-[11px] font-semibold tabular-nums text-cf-muted">
                         {formatEurFromUsd(row.cost_usd)}
@@ -109,6 +131,48 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
                     <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5">
                       <div
                         className={`h-full ${barColor}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {providers.length > 0 ? (
+            <div className="mt-6 space-y-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-muted">
+                Par fournisseur
+              </p>
+              {providers.map((row) => {
+                const pct =
+                  maxProviderCost > 0
+                    ? Math.round((row.cost_usd / maxProviderCost) * 100)
+                    : 0;
+                const isMistral = row.provider.toLowerCase() === "mistral";
+                return (
+                  <div key={row.provider} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p
+                        className={`truncate text-sm font-medium ${
+                          isMistral ? "text-[#f97316]" : "text-cf-text"
+                        }`}
+                      >
+                        {formatProviderLabel(row.provider)}
+                        {isMistral ? (
+                          <span className="ml-2 text-[10px] text-[#f59e0b]">
+                            volume coulisses
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="shrink-0 text-[11px] font-semibold tabular-nums text-cf-muted">
+                        {formatEurFromUsd(row.cost_usd)}
+                      </p>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5">
+                      <div
+                        className={`h-full ${providerBarColor(row.provider)}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
