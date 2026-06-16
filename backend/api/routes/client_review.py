@@ -4,10 +4,11 @@ Routes API — Mode Client (validation démo par le client).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from agents.email_ai import notify_client_review_response
@@ -16,6 +17,7 @@ from db.client_review_store import (
     ClientReviewStore,
     get_client_review_store,
 )
+from db.demo_tracking_store import get_demo_tracking_store
 from db.supabase_store import SupabaseStoreError, get_supabase_store
 
 logger = logging.getLogger(__name__)
@@ -106,7 +108,7 @@ async def create_client_review(body: CreateClientReviewBody) -> dict[str, Any]:
 
 
 @router.get("/client-review/{token}")
-async def get_client_review(token: str) -> dict[str, Any]:
+async def get_client_review(token: str, request: Request) -> dict[str, Any]:
     store = get_client_review_store()
     if not store.is_configured():
         raise HTTPException(status_code=503, detail="Supabase non configuré.")
@@ -124,6 +126,28 @@ async def get_client_review(token: str) -> dict[str, Any]:
         logger.warning("mark_viewed ignoré: %s", exc)
 
     project_title, demo_url = await _project_context(str(review.get("project_id") or ""))
+
+    if demo_url:
+        tracking = get_demo_tracking_store()
+        forwarded = (request.headers.get("X-Forwarded-For") or "").strip()
+        visitor_ip = forwarded.split(",")[0].strip() if forwarded else None
+        if not visitor_ip and request.client:
+            visitor_ip = request.client.host
+
+        async def _record_demo_view() -> None:
+            try:
+                await tracking.record_view(
+                    project_id=str(review.get("project_id") or ""),
+                    demo_url=demo_url,
+                    visitor_ip=visitor_ip,
+                    user_agent=request.headers.get("User-Agent"),
+                    referer=request.headers.get("Referer"),
+                )
+            except Exception as exc:
+                logger.warning("[client-review] demo view tracking ignoré: %s", exc)
+
+        asyncio.create_task(_record_demo_view())
+
     return _public_review_payload(
         review,
         project_title=project_title,

@@ -35,6 +35,7 @@ import { LighthouseScorePanel } from "@/components/LighthouseScorePanel";
 import { DataPaymentPanel } from "@/components/DataPaymentPanel";
 import { ProjectClientReviewPanel } from "@/components/projects/ProjectClientReviewPanel";
 import { LazyProjectAnalyticsPanel } from "@/components/projects/ProjectAnalyticsPanel";
+import { LazyProjectDemoStatsPanel } from "@/components/projects/ProjectDemoStatsPanel";
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
 import { createSubdomain, deleteSubdomain } from "@/lib/subdomains-api";
@@ -724,6 +725,10 @@ export function ProjectDetailView({
         authSchema={(project as any).authSchema ?? null}
         paymentConfig={(project as any).paymentConfig ?? null}
       />
+
+      {analyticsProjectId ? (
+        <LazyProjectDemoStatsPanel project_id={analyticsProjectId} />
+      ) : null}
 
       {analyticsProjectId ? (
         <LazyProjectAnalyticsPanel
