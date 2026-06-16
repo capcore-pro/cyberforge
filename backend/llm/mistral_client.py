@@ -3,7 +3,19 @@
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Any
+
+# Force le bon chemin Python 3.11 (évite conflit mistralai / mauvais site-packages)
+mistralai_path = r"C:\Users\mathi\AppData\Local\Programs\Python\Python311\Lib\site-packages"
+if mistralai_path not in sys.path:
+    sys.path.insert(0, mistralai_path)
+
+try:
+    from mistralai import Mistral
+except ImportError:
+    # mistralai >= 2.x : package namespace, client dans mistralai.client
+    from mistralai.client import Mistral
 
 from config import get_settings, plain_secret_str
 
@@ -17,8 +29,6 @@ class MistralClient:
     self._api_key = api_key
     self.client: Any = None
     if api_key:
-      from mistralai import Mistral
-
       self.client = Mistral(api_key=api_key)
     self.small_model = "mistral-small-latest"
     self.large_model = "mistral-large-latest"
