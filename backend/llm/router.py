@@ -28,7 +28,11 @@ ROUTING_RULES: dict[str, dict[str, str]] = {
         "fallback3": "deepseek",
         "fallback3_model": "deepseek-chat",
         "fallback4": "ollama",
-        "fallback4_model": "qwen3",
+        "fallback4_model": "deepseek-r1",
+        "fallback5": "ollama",
+        "fallback5_model": "phi4",
+        "fallback6": "ollama",
+        "fallback6_model": "qwen3",
     },
     "generation": {
         "primary": "anthropic",
@@ -46,7 +50,11 @@ ROUTING_RULES: dict[str, dict[str, str]] = {
         "fallback3": "deepseek",
         "fallback3_model": "deepseek-chat",
         "fallback4": "ollama",
-        "fallback4_model": "qwen3",
+        "fallback4_model": "deepseek-r1",
+        "fallback5": "ollama",
+        "fallback5_model": "phi4",
+        "fallback6": "ollama",
+        "fallback6_model": "qwen3",
     },
     "content": {
         "primary": "mistral",
@@ -57,6 +65,10 @@ ROUTING_RULES: dict[str, dict[str, str]] = {
         "fallback2_model": "claude-haiku-4-5-20251001",
         "fallback3": "deepseek",
         "fallback3_model": "deepseek-chat",
+        "fallback4": "ollama",
+        "fallback4_model": "deepseek-r1",
+        "fallback5": "ollama",
+        "fallback5_model": "phi4",
     },
     "review": {
         "primary": "anthropic",
@@ -74,6 +86,8 @@ _CHAIN_SLOTS: list[tuple[str, str]] = [
     ("fallback2", "fallback2_model"),
     ("fallback3", "fallback3_model"),
     ("fallback4", "fallback4_model"),
+    ("fallback5", "fallback5_model"),
+    ("fallback6", "fallback6_model"),
 ]
 
 

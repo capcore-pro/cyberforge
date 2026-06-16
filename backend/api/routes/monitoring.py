@@ -101,6 +101,7 @@ async def get_monitoring_health() -> dict:
         "overall_status": overall_status,
         "api_latency_ms": api_latency_ms,
         "gemini_configured": settings.gemini_configured,
+        "ollama_models": ["qwen3", "deepseek-r1", "phi4"],
         "api": {
             "status": "online" if api_online else "offline",
             "latency_ms": latency_ms,
