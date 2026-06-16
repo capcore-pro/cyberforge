@@ -33,6 +33,7 @@ import { copyTextToClipboard } from "@/lib/generation-export";
 import { PlaywrightScoreBadge } from "@/components/PlaywrightScoreBadge";
 import { LighthouseScorePanel } from "@/components/LighthouseScorePanel";
 import { DataPaymentPanel } from "@/components/DataPaymentPanel";
+import { ProjectClientReviewPanel } from "@/components/projects/ProjectClientReviewPanel";
 import { LazyProjectAnalyticsPanel } from "@/components/projects/ProjectAnalyticsPanel";
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
@@ -508,6 +509,13 @@ export function ProjectDetailView({
           ) : null}
           {subdomainError ? (
             <p className="mt-1 text-xs text-red-300">{subdomainError}</p>
+          ) : null}
+          {project.supabaseProjectId ? (
+            <ProjectClientReviewPanel
+              projectId={project.supabaseProjectId}
+              projectName={project.name}
+              demoUrl={demoUrl}
+            />
           ) : null}
         </div>
 

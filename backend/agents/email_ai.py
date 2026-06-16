@@ -399,3 +399,59 @@ async def send_reservation_confirmation(
             exc,
         )
         return False
+
+
+async def notify_client_review_response(
+    *,
+    project_title: str,
+    client_name: str,
+    status: str,
+    feedback: str | None,
+    rating: int | None,
+    demo_url: str,
+) -> bool:
+    """Notifie Mat qu'un client a approuvé ou demandé des révisions."""
+    if not _brevo_configured():
+        logger.warning(
+            "[EmailAI] Brevo non configuré — notification review client ignorée"
+        )
+        return False
+
+    settings = get_settings()
+    to_email = (settings.capcore_notify_email or "").strip() or DEFAULT_NOTIFY_EMAIL
+    approved = status == "approved"
+    header_color = "#22c55e" if approved else "#f59e0b"
+    header_title = "Client a approuvé le site" if approved else "Révisions demandées"
+    stars = "⭐" * int(rating) if rating else "—"
+    rows = (
+        _body_paragraph(f"Projet : {project_title}", bold=True)
+        + _body_paragraph(f"Client : {client_name}")
+        + _body_paragraph(f"Note : {stars}")
+        + _body_paragraph(f"Statut : {'Approuvé' if approved else 'Révisions demandées'}")
+    )
+    if feedback and feedback.strip():
+        rows += _body_paragraph(f"Commentaire : {feedback.strip()}")
+
+    html = _build_email_html(
+        header_color=header_color,
+        header_title=header_title,
+        header_subtitle=project_title,
+        body_rows=rows,
+        cta_label="Voir la démo" if demo_url else None,
+        cta_url=demo_url or None,
+        footer_url=demo_url or None,
+        preview_line=header_title,
+    )
+    subject = f"{'✓' if approved else '↩'} Review client — {project_title}"
+    try:
+        await send_html_email(
+            to_email=to_email,
+            subject=subject,
+            html_content=html,
+            to_name="Mat Gibiard",
+        )
+        logger.info("[EmailAI] Notification review client envoyée → %s", to_email)
+        return True
+    except Exception as exc:
+        logger.warning("[EmailAI] Échec notification review client: %s", exc)
+        return False

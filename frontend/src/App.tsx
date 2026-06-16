@@ -9,8 +9,10 @@ import { GeneratorSessionProvider } from "@/context/GeneratorSessionContext";
 import { PipelineActivityProvider } from "@/context/PipelineActivityContext";
 import { ContactNotificationsProvider, useContactNotifications } from "@/context/ContactNotificationsContext";
 import { getPublicDemoToken } from "@/lib/demo-route";
+import { getPublicReviewToken } from "@/lib/review-route";
 import type { AppPage } from "./lib/navigation";
 import { ClientDemoPage } from "./pages/ClientDemoPage";
+import { ClientReviewPage } from "./pages/ClientReviewPage";
 
 const DashboardPage = lazy(() =>
   import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })),
@@ -65,8 +67,17 @@ const NewsletterPage = lazy(() =>
  * Composant racine — navigation entre les pages principales.
  */
 export default function App() {
+  const reviewToken = getPublicReviewToken();
   const demoToken = getPublicDemoToken();
   const [page, setPage] = useState<AppPage>("dashboard");
+
+  if (reviewToken) {
+    return (
+      <Layout>
+        <ClientReviewPage token={reviewToken} />
+      </Layout>
+    );
+  }
 
   if (demoToken) {
     return (
