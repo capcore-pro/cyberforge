@@ -18,6 +18,7 @@ from tools.export_cloudflare import (
     deploy_html_demo,
 )
 from tools.toolbox_media import PexelsImageRole, search_toolbox_photos
+from tools.watermark import inject_watermark
 
 logger = logging.getLogger(__name__)
 
@@ -480,6 +481,7 @@ class DeployAI:
             ds = build_design_system(brief)
         if ds:
             enriched = inject_design_system_into_html(enriched, ds)
+        enriched = inject_watermark(enriched)
         demo_title = (title or "CyberForge Demo").strip()[:120]
 
         try:

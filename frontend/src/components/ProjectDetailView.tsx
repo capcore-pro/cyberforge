@@ -39,7 +39,7 @@ import { LazyProjectDemoStatsPanel } from "@/components/projects/ProjectDemoStat
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
 import { createSubdomain, deleteSubdomain } from "@/lib/subdomains-api";
-import { exportZip, fetchProjectHTML } from "@/lib/editor-api";
+import { exportZip, fetchProjectHTML, redeployHTML } from "@/lib/editor-api";
 import { PreviewDevice } from "@/components/editor/PreviewDevice";
 import {
   PREVIEW_DEVICE_ORDER,
@@ -132,6 +132,13 @@ export function ProjectDetailView({
   const [zipBusy, setZipBusy] = useState(false);
   const [zipError, setZipError] = useState<string | null>(null);
 
+  const [watermarkLoading, setWatermarkLoading] = useState(false);
+  const [watermarkActive, setWatermarkActive] = useState<boolean | null>(null);
+  const [showDeliverModal, setShowDeliverModal] = useState(false);
+  const [deliverBusy, setDeliverBusy] = useState(false);
+  const [deliverError, setDeliverError] = useState<string | null>(null);
+  const [deliverToast, setDeliverToast] = useState<string | null>(null);
+
   const [showPreview, setShowPreview] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<PreviewDeviceType>("mobile");
   const [projectHtml, setProjectHtml] = useState<string | null>(null);
@@ -211,6 +218,27 @@ export function ProjectDetailView({
       cancelled = true;
     };
   }, [project.key, project.url, project.generationId]);
+
+  useEffect(() => {
+    if (!project.supabaseProjectId || !demoUrl) {
+      setWatermarkActive(null);
+      return;
+    }
+    let cancelled = false;
+    setWatermarkLoading(true);
+    void fetchProjectHTML(project.supabaseProjectId).then((res) => {
+      if (cancelled) return;
+      setWatermarkLoading(false);
+      if (!res.ok || !res.data?.html) {
+        setWatermarkActive(null);
+        return;
+      }
+      setWatermarkActive(res.data.html.includes("cyberforge-watermark"));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.supabaseProjectId, demoUrl, deliverToast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -395,6 +423,38 @@ export function ProjectDetailView({
     }
   }
 
+  async function handleDeliverWithoutWatermark() {
+    if (!project.supabaseProjectId) return;
+    setDeliverBusy(true);
+    setDeliverError(null);
+    try {
+      const res = await fetchProjectHTML(project.supabaseProjectId);
+      if (!res.ok || !res.data?.html || !res.data.generation_id) {
+        setDeliverError(apiErrorMessage(res, "Impossible de charger le HTML du projet."));
+        return;
+      }
+      const deployRes = await redeployHTML(
+        project.supabaseProjectId,
+        res.data.generation_id,
+        res.data.html,
+        { remove_watermark: true },
+      );
+      if (!deployRes.ok || !deployRes.data?.url) {
+        setDeliverError(apiErrorMessage(deployRes, "Livraison impossible."));
+        return;
+      }
+      const newUrl = deployRes.data.url.trim();
+      setDemoUrl(newUrl);
+      onProjectUpdated({ ...project, url: newUrl });
+      setWatermarkActive(false);
+      setShowDeliverModal(false);
+      setDeliverToast("✓ Site livré — watermark supprimé");
+      window.setTimeout(() => setDeliverToast(null), 5000);
+    } finally {
+      setDeliverBusy(false);
+    }
+  }
+
   async function handleToggleAuth() {
     if (!project.managedId || !auth) return;
     setAuthBusy(true);
@@ -519,6 +579,42 @@ export function ProjectDetailView({
           ) : (
             <p className="mt-1 text-sm text-cf-muted">—</p>
           )}
+          {project.supabaseProjectId && demoUrl ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {watermarkLoading ? (
+                <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cf-muted">
+                  Watermark…
+                </span>
+              ) : watermarkActive ? (
+                <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                  ⚡ Watermark actif
+                </span>
+              ) : watermarkActive === false ? (
+                <span className="inline-flex items-center rounded-full border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-300">
+                  ✓ Livré
+                </span>
+              ) : null}
+              {watermarkActive ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="ti ti-package-export"
+                  onClick={() => {
+                    setDeliverError(null);
+                    setShowDeliverModal(true);
+                  }}
+                >
+                  Livrer sans watermark
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {deliverToast ? (
+            <p className="mt-2 text-xs text-emerald-300">{deliverToast}</p>
+          ) : null}
+          {deliverError ? (
+            <p className="mt-1 text-xs text-red-300">{deliverError}</p>
+          ) : null}
           {isCapcoreSubdomain ? (
             <span className="mt-2 inline-flex items-center rounded-full border border-[#3b82f6]/40 bg-[#3b82f6]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#60a5fa]">
               capcore.pro ✓
@@ -837,6 +933,41 @@ export function ProjectDetailView({
             Aucun HTML disponible pour ce projet.
           </p>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={showDeliverModal}
+        onClose={() => {
+          if (!deliverBusy) setShowDeliverModal(false);
+        }}
+        title="Livrer sans watermark"
+        size="sm"
+        icon="ti ti-package-export"
+      >
+        <p className="text-sm text-cf-muted">
+          Êtes-vous sûr de vouloir livrer ce site sans watermark ? Cette action est
+          irréversible.
+        </p>
+        {deliverError ? (
+          <p className="mt-3 text-xs text-red-300">{deliverError}</p>
+        ) : null}
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button
+            variant="ghost"
+            disabled={deliverBusy}
+            onClick={() => setShowDeliverModal(false)}
+          >
+            Annuler
+          </Button>
+          <Button
+            variant="primary"
+            loading={deliverBusy}
+            icon="ti ti-check"
+            onClick={() => void handleDeliverWithoutWatermark()}
+          >
+            Confirmer la livraison
+          </Button>
+        </div>
       </Modal>
     </div>
   );

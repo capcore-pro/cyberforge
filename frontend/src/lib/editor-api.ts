@@ -39,13 +39,22 @@ export function saveHTML(projectId: string, generationId: string, html: string) 
   });
 }
 
-export function redeployHTML(projectId: string, generationId: string, html: string) {
+export function redeployHTML(
+  projectId: string,
+  generationId: string,
+  html: string,
+  options?: { remove_watermark?: boolean },
+) {
   return apiRequest<RedeployResult>({
     method: "POST",
     path: `${API_PREFIX}/editor/${encodeURIComponent(projectId)}/redeploy`,
-    body: { generation_id: generationId, html },
+    body: {
+      generation_id: generationId,
+      html,
+      remove_watermark: options?.remove_watermark ?? false,
+    },
     timeoutMs: 180_000,
-  }
+  });
 }
 
 function parseFilenameFromDisposition(header: string | null, fallback: string): string {

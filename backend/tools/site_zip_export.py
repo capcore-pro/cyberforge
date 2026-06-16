@@ -99,12 +99,18 @@ def prepare_site_export_files(
     project_title: str,
     *,
     on_date: datetime | None = None,
+    remove_watermark: bool = True,
 ) -> dict[str, str]:
     """Prépare index.html + assets pour l'archive ZIP."""
     when = on_date or datetime.now(UTC)
     raw_html = (html or "").strip()
     if not raw_html:
         raise ValueError("HTML vide")
+
+    if remove_watermark:
+        from tools.watermark import remove_watermark as strip_watermark
+
+        raw_html = strip_watermark(raw_html)
 
     without_styles, css = extract_inline_styles(raw_html)
     without_scripts, js = extract_inline_scripts(without_styles)
@@ -128,9 +134,15 @@ def build_site_export_zip(
     project_title: str,
     *,
     on_date: datetime | None = None,
+    remove_watermark: bool = True,
 ) -> tuple[bytes, str]:
     """Construit l'archive ZIP en mémoire."""
-    files = prepare_site_export_files(html, project_title, on_date=on_date)
+    files = prepare_site_export_files(
+        html,
+        project_title,
+        on_date=on_date,
+        remove_watermark=remove_watermark,
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(files):

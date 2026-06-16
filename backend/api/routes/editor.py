@@ -19,6 +19,7 @@ from db.supabase_store import SupabaseStoreError, get_supabase_store
 from media_storage import save_local, sync_to_r2
 from tools.export_cloudflare import CloudflareExportError, deploy_html_demo
 from tools.site_zip_export import build_site_export_zip
+from tools.watermark import remove_watermark
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ class SaveHtmlResponse(BaseModel):
 class RedeployRequest(BaseModel):
     generation_id: str = Field(..., min_length=1)
     html: str = Field(..., min_length=1)
+    remove_watermark: bool = False
 
 
 class RedeployResponse(BaseModel):
@@ -128,7 +130,11 @@ async def export_editor_zip(project_id: str) -> Response:
 
     title = str(payload.get("project_title") or "projet")
     try:
-        zip_bytes, filename = build_site_export_zip(html, title)
+        zip_bytes, filename = build_site_export_zip(
+            html,
+            title,
+            remove_watermark=True,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -178,17 +184,21 @@ async def redeploy_editor_html(project_id: str, body: RedeployRequest) -> Redepl
         project_type = str(editor_ctx.get("project_type") or "vitrine_next")
         title = str(editor_ctx.get("project_title") or "CyberForge")
 
+        html_to_deploy = body.html.strip()
+        if body.remove_watermark:
+            html_to_deploy = remove_watermark(html_to_deploy)
+
         await store.save_editor_html(
             project_id,
             body.generation_id.strip(),
-            body.html,
+            html_to_deploy,
             html_before=html_before,
             edit_type="redeploy",
         )
 
         try:
             production_url, _token, _password, unlock_url = await deploy_html_demo(
-                html=body.html.strip(),
+                html=html_to_deploy,
                 title=title,
                 project_type=project_type,
             )
@@ -206,6 +216,16 @@ async def redeploy_editor_html(project_id: str, body: RedeployRequest) -> Redepl
                 "url": live_url,
             },
         )
+
+        if body.remove_watermark:
+            await get_audit_store().log(
+                "watermark_removed",
+                project_id=project_id,
+                event_data={
+                    "generation_id": body.generation_id.strip(),
+                    "url": live_url,
+                },
+            )
 
         return RedeployResponse(url=live_url, saved=True)
     except HTTPException:

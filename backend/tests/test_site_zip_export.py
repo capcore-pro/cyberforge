@@ -107,10 +107,11 @@ def test_export_zip_route_returns_zip() -> None:
             wraps=build_site_export_zip,
         ) as mock_build:
             fixed = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
-            mock_build.side_effect = lambda html, title: build_site_export_zip(
+            mock_build.side_effect = lambda html, title, **kwargs: build_site_export_zip(
                 html,
                 title,
                 on_date=fixed,
+                **kwargs,
             )
             res = client.get("/api/editor/proj-1/export-zip")
 
