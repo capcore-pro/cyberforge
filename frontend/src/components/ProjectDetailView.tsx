@@ -38,6 +38,7 @@ import { LazyProjectAnalyticsPanel } from "@/components/projects/ProjectAnalytic
 import { getPlaywrightReport } from "@/lib/playwright-reports";
 import { getLighthouseReport } from "@/lib/lighthouse-reports";
 import { createSubdomain, deleteSubdomain } from "@/lib/subdomains-api";
+import { exportZip } from "@/lib/editor-api";
 
 interface ProjectDetailViewProps {
   project: UnifiedProject;
@@ -120,6 +121,9 @@ export function ProjectDetailView({
   const [subdomainBusy, setSubdomainBusy] = useState(false);
   const [subdomainToast, setSubdomainToast] = useState<string | null>(null);
   const [subdomainError, setSubdomainError] = useState<string | null>(null);
+
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipError, setZipError] = useState<string | null>(null);
 
   const showClientStripe = projectSupportsClientStripe(project);
 
@@ -347,6 +351,19 @@ export function ProjectDetailView({
     }
     setSubdomainToast("Sous-domaine capcore.pro désactivé");
     window.setTimeout(() => setSubdomainToast(null), 4000);
+  }
+
+  async function handleExportZip() {
+    if (!project.supabaseProjectId) return;
+    setZipBusy(true);
+    setZipError(null);
+    try {
+      await exportZip(project.supabaseProjectId, project.name);
+    } catch (err) {
+      setZipError(err instanceof Error ? err.message : "Export ZIP impossible.");
+    } finally {
+      setZipBusy(false);
+    }
   }
 
   async function handleToggleAuth() {
@@ -693,10 +710,26 @@ export function ProjectDetailView({
         </p>
       ) : null}
 
+      {zipError ? (
+        <p className="rounded-card border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+          {zipError}
+        </p>
+      ) : null}
+
       <footer className="flex flex-wrap gap-2">
         {onOpenEditor ? (
           <Button variant="primary" icon="ti ti-pencil" onClick={onOpenEditor}>
             Éditer le site
+          </Button>
+        ) : null}
+        {project.supabaseProjectId ? (
+          <Button
+            variant="ghost"
+            icon="ti ti-download"
+            loading={zipBusy}
+            onClick={() => void handleExportZip()}
+          >
+            Télécharger ZIP
           </Button>
         ) : null}
         <button

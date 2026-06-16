@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from config import get_settings
@@ -17,6 +18,7 @@ from db.audit_store import get_audit_store
 from db.supabase_store import SupabaseStoreError, get_supabase_store
 from media_storage import save_local, sync_to_r2
 from tools.export_cloudflare import CloudflareExportError, deploy_html_demo
+from tools.site_zip_export import build_site_export_zip
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +102,40 @@ async def get_editor_html(project_id: str) -> EditorHtmlResponse:
         html=str(payload["html"]),
         demo_url=payload.get("demo_url"),
         project_title=payload.get("project_title"),
+    )
+
+
+@router.get("/editor/{project_id}/export-zip")
+async def export_editor_zip(project_id: str) -> Response:
+    """Exporte le site complet en ZIP (index.html + assets CSS/JS + README)."""
+    store = get_supabase_store()
+    if not store.is_configured():
+        raise HTTPException(status_code=503, detail=_not_configured_detail(store))
+
+    try:
+        payload = await store.get_editor_html(project_id)
+    except SupabaseStoreError as exc:
+        raise _http_error_from_supabase(
+            exc, f"GET /api/editor/{project_id}/export-zip"
+        ) from exc
+
+    if payload is None:
+        raise HTTPException(status_code=404, detail="HTML introuvable pour ce projet.")
+
+    html = str(payload.get("html") or "").strip()
+    if not html:
+        raise HTTPException(status_code=404, detail="HTML vide pour ce projet.")
+
+    title = str(payload.get("project_title") or "projet")
+    try:
+        zip_bytes, filename = build_site_export_zip(html, title)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

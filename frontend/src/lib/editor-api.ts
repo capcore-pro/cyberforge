@@ -2,6 +2,7 @@ import { API_PREFIX } from "@shared/constants";
 import type { ApiResponsePayload } from "@shared/ipc";
 import { apiRequest } from "@/lib/api-client";
 import { buildBackendApiUrl } from "@/lib/backend-url";
+import { apiErrorMessage } from "@/lib/api-errors";
 
 export interface EditorHtmlPayload {
   generation_id: string;
@@ -44,7 +45,66 @@ export function redeployHTML(projectId: string, generationId: string, html: stri
     path: `${API_PREFIX}/editor/${encodeURIComponent(projectId)}/redeploy`,
     body: { generation_id: generationId, html },
     timeoutMs: 180_000,
-  });
+  }
+}
+
+function parseFilenameFromDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match?.[1]?.trim() || fallback;
+}
+
+function slugifyFilename(title: string): string {
+  return title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 50) || "projet";
+}
+
+export async function exportZip(projectId: string, projectTitle: string): Promise<void> {
+  const path = `${API_PREFIX}/editor/${encodeURIComponent(projectId)}/export-zip`;
+  const url =
+    import.meta.env.DEV && typeof window !== "undefined"
+      ? path
+      : buildBackendApiUrl(path);
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    let detail = "Export ZIP impossible";
+    try {
+      const payload = await response.json();
+      detail = apiErrorMessage(
+        { ok: false, status: response.status, statusText: response.statusText, data: payload },
+        detail,
+      );
+    } catch {
+      detail = `Export ZIP impossible (${response.status})`;
+    }
+    throw new Error(detail);
+  }
+
+  const blob = await response.blob();
+  const date = new Date().toISOString().slice(0, 10);
+  const fallback = `${slugifyFilename(projectTitle)}-${date}.zip`;
+  const filename = parseFilenameFromDisposition(
+    response.headers.get("Content-Disposition"),
+    fallback,
+  );
+
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export async function uploadImage(

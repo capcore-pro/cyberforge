@@ -4,6 +4,7 @@ import { EditorToolsPanel } from "@/components/editor/EditorToolsPanel";
 import { Badge, Button, Modal } from "@/components/ui";
 import { apiErrorMessage } from "@/lib/api-errors";
 import {
+  exportZip,
   fetchProjectHTML,
   redeployHTML,
   saveHTML,
@@ -25,7 +26,7 @@ export function EditorPage({ projectId, onBack }: EditorPageProps) {
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"save" | "deploy" | null>(null);
+  const [busy, setBusy] = useState<"save" | "deploy" | "export" | null>(null);
   const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
   const [selected, setSelected] = useState<SelectedElementPayload | null>(null);
   const [successUrl, setSuccessUrl] = useState<string | null>(null);
@@ -126,6 +127,18 @@ export function EditorPage({ projectId, onBack }: EditorPageProps) {
     applyHtml(fn(ed));
   }
 
+  async function handleExportZip() {
+    setBusy("export");
+    setError(null);
+    try {
+      await exportZip(projectId, projectTitle);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export ZIP impossible.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-cf-bg text-cf-muted">
@@ -178,6 +191,15 @@ export function EditorPage({ projectId, onBack }: EditorPageProps) {
             Mobile
           </button>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon="ti ti-download"
+          loading={busy === "export"}
+          onClick={() => void handleExportZip()}
+        >
+          Télécharger ZIP
+        </Button>
         <Button
           variant="ghost"
           size="sm"
