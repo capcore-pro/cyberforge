@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     google_generative_ai_api_key: SecretStr | None = Field(
         default=None, alias="GOOGLE_GENERATIVE_AI_API_KEY"
     )
+    gemini_api_key: SecretStr | None = Field(default=None, alias="GEMINI_API_KEY")
     ollama_base_url: str | None = Field(default=None, alias="OLLAMA_BASE_URL")
 
     coremind_deepseek_model: str = Field(
@@ -436,6 +437,14 @@ class Settings(BaseSettings):
     def mistral_configured(self) -> bool:
         """True si l'API Mistral est disponible (brief / analyse économiques)."""
         return bool(plain_secret_str(self.mistral_api_key))
+
+    @property
+    def gemini_configured(self) -> bool:
+        """True si l'API Gemini Flash est disponible (couche quasi-gratuite)."""
+        return bool(
+            plain_secret_str(self.gemini_api_key)
+            or plain_secret_str(self.google_generative_ai_api_key)
+        )
 
     @property
     def v0_configured(self) -> bool:

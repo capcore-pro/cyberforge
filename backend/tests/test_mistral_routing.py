@@ -16,7 +16,7 @@ def test_routing_rules_brief_prefers_mistral() -> None:
     rule = ROUTING_RULES["brief"]
     assert rule["primary"] == "mistral"
     assert rule["primary_model"] == "mistral-small-latest"
-    assert rule["fallback"] == "anthropic"
+    assert rule["fallback"] == "gemini"
 
 
 def test_routing_generation_keeps_sonnet() -> None:

@@ -34,6 +34,13 @@ def _rates_for_model(provider: str, model: str) -> tuple[float, float]:
             float(spec["cost_per_1k_output"]) * 1000,
         )
 
+    if prov == "gemini":
+        spec = PROVIDER_MODEL_SPECS["gemini-flash"]
+        return (
+            float(spec["cost_per_1k_input"]) * 1000,
+            float(spec["cost_per_1k_output"]) * 1000,
+        )
+
     for name, rates in _MODEL_RATES.items():
         if name in key or key in name:
             return rates

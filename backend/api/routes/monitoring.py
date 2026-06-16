@@ -100,6 +100,7 @@ async def get_monitoring_health() -> dict:
     return {
         "overall_status": overall_status,
         "api_latency_ms": api_latency_ms,
+        "gemini_configured": settings.gemini_configured,
         "api": {
             "status": "online" if api_online else "offline",
             "latency_ms": latency_ms,

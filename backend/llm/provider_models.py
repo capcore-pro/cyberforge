@@ -38,4 +38,12 @@ PROVIDER_MODEL_SPECS: dict[str, dict[str, object]] = {
         "max_tokens": 200000,
         "supports_system": True,
     },
+    "gemini-flash": {
+        "provider": "gemini",
+        "model": "gemini-2.0-flash",
+        "cost_per_1k_input": 0.0001,
+        "cost_per_1k_output": 0.0004,
+        "max_tokens": 8192,
+        "supports_system": True,
+    },
 }

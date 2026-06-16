@@ -10,6 +10,7 @@ from config import Settings, get_settings
 from llm.base_provider import BaseLLMProvider, LLMRequest, LLMResponse
 from llm.providers.anthropic_provider import AnthropicProvider
 from llm.providers.deepseek_provider import DeepSeekProvider
+from llm.providers.gemini_provider import GeminiProvider
 from llm.providers.mistral_provider import MistralProvider
 from llm.providers.ollama_provider import OllamaProvider
 from llm.providers.openai_provider import OpenAIProvider
@@ -20,10 +21,14 @@ ROUTING_RULES: dict[str, dict[str, str]] = {
     "brief": {
         "primary": "mistral",
         "primary_model": "mistral-small-latest",
-        "fallback": "anthropic",
-        "fallback_model": "claude-haiku-4-5-20251001",
-        "fallback2": "deepseek",
-        "fallback2_model": "deepseek-chat",
+        "fallback": "gemini",
+        "fallback_model": "gemini-2.0-flash",
+        "fallback2": "anthropic",
+        "fallback2_model": "claude-haiku-4-5-20251001",
+        "fallback3": "deepseek",
+        "fallback3_model": "deepseek-chat",
+        "fallback4": "ollama",
+        "fallback4_model": "qwen3",
     },
     "generation": {
         "primary": "anthropic",
@@ -34,18 +39,24 @@ ROUTING_RULES: dict[str, dict[str, str]] = {
     "analysis": {
         "primary": "mistral",
         "primary_model": "mistral-small-latest",
-        "fallback": "anthropic",
-        "fallback_model": "claude-haiku-4-5-20251001",
-        "fallback2": "deepseek",
-        "fallback2_model": "deepseek-chat",
+        "fallback": "gemini",
+        "fallback_model": "gemini-2.0-flash",
+        "fallback2": "anthropic",
+        "fallback2_model": "claude-haiku-4-5-20251001",
+        "fallback3": "deepseek",
+        "fallback3_model": "deepseek-chat",
+        "fallback4": "ollama",
+        "fallback4_model": "qwen3",
     },
     "content": {
         "primary": "mistral",
         "primary_model": "mistral-large-latest",
-        "fallback": "anthropic",
-        "fallback_model": "claude-haiku-4-5-20251001",
-        "fallback2": "deepseek",
-        "fallback2_model": "deepseek-chat",
+        "fallback": "gemini",
+        "fallback_model": "gemini-2.0-flash",
+        "fallback2": "anthropic",
+        "fallback2_model": "claude-haiku-4-5-20251001",
+        "fallback3": "deepseek",
+        "fallback3_model": "deepseek-chat",
     },
     "review": {
         "primary": "anthropic",
@@ -57,12 +68,31 @@ ROUTING_RULES: dict[str, dict[str, str]] = {
 
 _DEFAULT_RULE = ROUTING_RULES["analysis"]
 
+_CHAIN_SLOTS: list[tuple[str, str]] = [
+    ("primary", "primary_model"),
+    ("fallback", "fallback_model"),
+    ("fallback2", "fallback2_model"),
+    ("fallback3", "fallback3_model"),
+    ("fallback4", "fallback4_model"),
+]
+
+
+def _routing_chain(rule: dict[str, str]) -> list[tuple[str, str]]:
+    chain: list[tuple[str, str]] = []
+    for provider_key, model_key in _CHAIN_SLOTS:
+        slug = rule.get(provider_key)
+        model = rule.get(model_key)
+        if slug and model:
+            chain.append((str(slug), str(model)))
+    return chain
+
 
 class LLMRouter:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
         self._provider_classes: list[type[BaseLLMProvider]] = [
             MistralProvider,
+            GeminiProvider,
             AnthropicProvider,
             OpenAIProvider,
             DeepSeekProvider,
@@ -94,15 +124,10 @@ class LLMRouter:
     ) -> LLMResponse:
         self._refresh_providers()
         rule = ROUTING_RULES.get(task_type, _DEFAULT_RULE)
-        chain: list[tuple[str, str]] = [
-            (rule["primary"], rule["primary_model"]),
-            (rule["fallback"], rule["fallback_model"]),
-        ]
-        if rule.get("fallback2") and rule.get("fallback2_model"):
-            chain.append((rule["fallback2"], rule["fallback2_model"]))
+        chain = _routing_chain(rule)
 
         errors: list[str] = []
-        primary_slug = chain[0][0]
+        primary_slug = chain[0][0] if chain else ""
 
         for index, (slug, model_name) in enumerate(chain):
             provider = self._providers.get(slug)

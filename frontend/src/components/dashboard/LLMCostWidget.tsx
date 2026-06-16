@@ -20,6 +20,7 @@ function formatEurFromUsd(usd: number): string {
 function formatProviderLabel(provider: string): string {
   const key = provider.toLowerCase();
   if (key === "mistral") return "Mistral";
+  if (key === "gemini") return "Gemini Flash";
   if (key.includes("mistral") && key.includes("small")) return "Mistral Small";
   if (key.includes("mistral") && key.includes("large")) return "Mistral Large";
   return provider
@@ -30,6 +31,7 @@ function formatProviderLabel(provider: string): string {
 function providerBarColor(provider: string): string {
   const key = provider.toLowerCase();
   if (key === "mistral") return "bg-[#f97316]";
+  if (key === "gemini") return "bg-[#3b82f6]";
   if (key.includes("anthropic")) return "bg-cf-gold";
   if (key.includes("openai")) return "bg-teal-400";
   return "bg-white/40";
@@ -61,7 +63,12 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
     .sort((a, b) => b.cost_usd - a.cost_usd)
     .slice(0, 5);
   const providers = [...(monthly?.by_provider ?? [])]
-    .filter((row) => row.provider.toLowerCase() === "mistral" || row.cost_usd > 0)
+    .filter(
+      (row) =>
+        row.provider.toLowerCase() === "mistral" ||
+        row.provider.toLowerCase() === "gemini" ||
+        row.cost_usd > 0
+    )
     .sort((a, b) => b.cost_usd - a.cost_usd);
   const maxAgentCost = agents.length > 0 ? agents[0].cost_usd : 0;
   const maxProviderCost =
@@ -151,18 +158,28 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
                     ? Math.round((row.cost_usd / maxProviderCost) * 100)
                     : 0;
                 const isMistral = row.provider.toLowerCase() === "mistral";
+                const isGemini = row.provider.toLowerCase() === "gemini";
                 return (
                   <div key={row.provider} className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3">
                       <p
                         className={`truncate text-sm font-medium ${
-                          isMistral ? "text-[#f97316]" : "text-cf-text"
+                          isMistral
+                            ? "text-[#f97316]"
+                            : isGemini
+                              ? "text-[#3b82f6]"
+                              : "text-cf-text"
                         }`}
                       >
                         {formatProviderLabel(row.provider)}
                         {isMistral ? (
                           <span className="ml-2 text-[10px] text-[#f59e0b]">
                             volume coulisses
+                          </span>
+                        ) : null}
+                        {isGemini ? (
+                          <span className="ml-2 text-[10px] text-[#60a5fa]">
+                            quasi-gratuit
                           </span>
                         ) : null}
                       </p>

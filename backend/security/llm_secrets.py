@@ -16,6 +16,7 @@ LLM_ENV_KEYS = (
     "MISTRAL_API_KEY",
     "DEEPSEEK_API_KEY",
     "GOOGLE_GENERATIVE_AI_API_KEY",
+    "GEMINI_API_KEY",
 )
 
 _SETTINGS_FIELD_BY_ENV: dict[str, str] = {
@@ -24,6 +25,7 @@ _SETTINGS_FIELD_BY_ENV: dict[str, str] = {
     "MISTRAL_API_KEY": "mistral_api_key",
     "DEEPSEEK_API_KEY": "deepseek_api_key",
     "GOOGLE_GENERATIVE_AI_API_KEY": "google_generative_ai_api_key",
+    "GEMINI_API_KEY": "gemini_api_key",
 }
 
 LLM_KEYS_UNAVAILABLE_MSG = (
@@ -71,7 +73,5 @@ def llm_provider_flags(settings: Settings) -> dict[str, bool]:
         "anthropic": bool(get_effective_llm_key("ANTHROPIC_API_KEY", settings)),
         "mistral": settings.mistral_configured,
         "deepseek": bool(get_effective_llm_key("DEEPSEEK_API_KEY", settings)),
-        "gemini": bool(
-            get_effective_llm_key("GOOGLE_GENERATIVE_AI_API_KEY", settings)
-        ),
+        "gemini": settings.gemini_configured,
     }
