@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BackButton } from "@/components/BackButton";
+import { Button } from "@/components/ui";
 import { PasswordRevealField } from "@/components/PasswordRevealField";
 import {
   ProjectClientStripeSection,
@@ -43,6 +44,8 @@ interface ProjectDetailViewProps {
   onView: () => void;
   onProjectUpdated: (project: UnifiedProject) => void;
   onDuplicate: (project: UnifiedProject) => void;
+  /** Ouvre l'éditeur inline (projets Supabase uniquement). */
+  onOpenEditor?: () => void;
   /** Masque l'affiliation client (projets perso). */
   hideClientAffiliate?: boolean;
   extraSections?: ReactNode;
@@ -75,6 +78,7 @@ export function ProjectDetailView({
   onView,
   onProjectUpdated,
   onDuplicate,
+  onOpenEditor,
   hideClientAffiliate = false,
   extraSections,
 }: ProjectDetailViewProps) {
@@ -601,6 +605,11 @@ export function ProjectDetailView({
       ) : null}
 
       <footer className="flex flex-wrap gap-2">
+        {onOpenEditor ? (
+          <Button variant="primary" icon="ti ti-pencil" onClick={onOpenEditor}>
+            Éditer le site
+          </Button>
+        ) : null}
         <button
           type="button"
           onClick={onEdit}

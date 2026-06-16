@@ -854,6 +854,140 @@ class SupabaseStore:
                 json={"updated_at": datetime.now(UTC).isoformat()},
             )
 
+    async def get_editor_html(self, project_id: str) -> dict[str, Any] | None:
+        """HTML éditable de la dernière génération d'un projet."""
+        detail = await self.get_project(project_id)
+        if detail is None or not detail.generations:
+            return None
+        gen = detail.generations[0]
+        html = (gen.preview_html or gen.code or "").strip()
+        if not html:
+            return None
+        return {
+            "generation_id": gen.id,
+            "html": html,
+            "demo_url": detail.project.demo_url,
+            "project_title": detail.project.title,
+            "project_type": detail.project.project_type,
+        }
+
+    async def save_editor_html(
+        self,
+        project_id: str,
+        generation_id: str,
+        html: str,
+        *,
+        html_before: str | None = None,
+        edit_type: str = "manual",
+    ) -> None:
+        """Persiste le HTML modifié sur la génération + historique éditeur."""
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        trimmed = html.strip()
+        if not trimmed:
+            raise SupabaseStoreError("HTML vide.")
+
+        detail = await self.get_project(project_id)
+        if detail is None:
+            raise SupabaseStoreError("Projet introuvable.")
+
+        gen_ids = {g.id for g in detail.generations}
+        if generation_id not in gen_ids:
+            raise SupabaseStoreError("Génération introuvable pour ce projet.")
+
+        now = datetime.now(UTC).isoformat()
+        current_gen = next(g for g in detail.generations if g.id == generation_id)
+        edit_count = 0
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            gen_resp = await client.get(
+                f"{self._rest_url()}/generations",
+                headers=self._headers(),
+                params={
+                    "id": f"eq.{generation_id}",
+                    "select": "edit_count",
+                    "limit": "1",
+                },
+            )
+            if gen_resp.status_code < 400:
+                rows = gen_resp.json()
+                if isinstance(rows, list) and rows:
+                    try:
+                        edit_count = int(rows[0].get("edit_count") or 0)
+                    except (TypeError, ValueError):
+                        edit_count = 0
+
+            patch_resp = await client.patch(
+                f"{self._rest_url()}/generations",
+                headers=self._headers("return=representation"),
+                params={"id": f"eq.{generation_id}"},
+                json={
+                    "code": trimmed,
+                    "preview_html": trimmed,
+                    "edited_html": trimmed,
+                    "last_edited_at": now,
+                    "edit_count": edit_count + 1,
+                },
+            )
+            _raise_for_status(
+                patch_resp,
+                "save_editor_html",
+                "PATCH",
+                f"{self._rest_url()}/generations",
+                self,
+            )
+
+            history_body = {
+                "project_id": project_id,
+                "generation_id": generation_id,
+                "html_before": html_before or current_gen.preview_html or current_gen.code,
+                "html_after": trimmed,
+                "edit_type": edit_type,
+            }
+            hist_resp = await client.post(
+                f"{self._rest_url()}/editor_history",
+                headers=self._headers(),
+                json=history_body,
+            )
+            if hist_resp.status_code >= 400:
+                logger.warning(
+                    "editor_history insert ignored: %s %s",
+                    hist_resp.status_code,
+                    hist_resp.text[:300],
+                )
+
+            await client.patch(
+                f"{self._rest_url()}/projects",
+                headers=self._headers(),
+                params={"id": f"eq.{project_id}"},
+                json={"updated_at": now},
+            )
+
+    async def update_project_demo_url(self, project_id: str, demo_url: str) -> None:
+        """Met à jour l'URL publique du projet."""
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+        url = demo_url.strip().rstrip("/")
+        if not url:
+            raise SupabaseStoreError("URL invalide.")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.patch(
+                f"{self._rest_url()}/projects",
+                headers=self._headers(),
+                params={"id": f"eq.{project_id}"},
+                json={
+                    "demo_url": url,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                },
+            )
+            _raise_for_status(
+                resp,
+                "update_project_demo_url",
+                "PATCH",
+                f"{self._rest_url()}/projects",
+                self,
+            )
+
     async def _project_card_stats(
         self,
         client: httpx.AsyncClient,

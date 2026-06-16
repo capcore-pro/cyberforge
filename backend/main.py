@@ -49,6 +49,10 @@ from api.routes.legal import router as legal_router
 
 app.include_router(legal_router, prefix="/api/legal")
 
+import media_router
+
+app.include_router(media_router.router, prefix="/api/media")
+
 _legal_paths = {getattr(r, "path", "") for r in app.routes}
 if "/api/legal/clients" not in _legal_paths:
     logger.error(

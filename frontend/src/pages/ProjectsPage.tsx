@@ -26,9 +26,10 @@ const FILTER_BTN_ACTIVE =
 interface ProjectsPageProps {
   onNavigate?: (page: AppPage) => void;
   onOpenGenerator: () => void;
+  onOpenEditor?: (projectId: string) => void;
 }
 
-export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
+export function ProjectsPage({ onOpenGenerator, onOpenEditor }: ProjectsPageProps) {
   const { resetSession, patch } = useGeneratorSession();
 
   const [projects, setProjects] = useState<UnifiedProject[]>([]);
@@ -192,6 +193,11 @@ export function ProjectsPage({ onOpenGenerator }: ProjectsPageProps) {
           onView={() => handleView(selectedProject)}
           onProjectUpdated={upsertProject}
           onDuplicate={handleDuplicate}
+          onOpenEditor={
+            onOpenEditor && selectedProject.supabaseProjectId
+              ? () => onOpenEditor(selectedProject.supabaseProjectId!)
+              : undefined
+          }
         />
         {deleteTarget ? (
           <DeleteDialog

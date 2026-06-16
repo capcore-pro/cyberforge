@@ -15,6 +15,7 @@ export type AppPage =
   | "agents"
   | "monitoring"
   | "workflows"
+  | "editor"
   | "tools"
   | "reports";
 

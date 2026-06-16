@@ -55,6 +55,9 @@ const PipelinePage = lazy(() =>
 const AccountingPage = lazy(() =>
   import("./pages/AccountingPage").then((m) => ({ default: m.AccountingPage })),
 );
+const EditorPage = lazy(() =>
+  import("./pages/EditorPage").then((m) => ({ default: m.EditorPage })),
+);
 const NewsletterPage = lazy(() =>
   import("./pages/NewsletterPage").then((m) => ({ default: m.NewsletterPage })),
 );
@@ -114,6 +117,20 @@ function AppWithNotifications({
   const { markAllSeen } = useContactNotifications();
   const [generatorFromProjects, setGeneratorFromProjects] = useState(false);
   const [generatorFromPerso, setGeneratorFromPerso] = useState(false);
+  const [editorProjectId, setEditorProjectId] = useState<string | null>(null);
+
+  const openEditor = useCallback(
+    (projectId: string) => {
+      setEditorProjectId(projectId);
+      setPage("editor");
+    },
+    [setPage],
+  );
+
+  const closeEditor = useCallback(() => {
+    setEditorProjectId(null);
+    setPage("projects");
+  }, [setPage]);
 
   useEffect(() => {
     if (page === "clients") {
@@ -158,6 +175,10 @@ function AppWithNotifications({
   }, [setPage]);
 
   function renderPage() {
+    if (page === "editor" && editorProjectId) {
+      return <EditorPage projectId={editorProjectId} onBack={closeEditor} />;
+    }
+
     switch (page) {
       case "generator":
         return (
@@ -174,6 +195,7 @@ function AppWithNotifications({
           <ProjectsPage
             onNavigate={setPage}
             onOpenGenerator={openGeneratorFromProjects}
+            onOpenEditor={openEditor}
           />
         );
       case "agents":
@@ -207,11 +229,15 @@ function AppWithNotifications({
     <AgentsStatusProvider>
       <GeneratorSessionProvider>
         <PipelineActivityProvider>
-          <Layout>
-            <AppShell currentPage={page} onNavigate={setPage}>
-              <Suspense fallback={<PageLoader />}>{renderPage()}</Suspense>
-            </AppShell>
-          </Layout>
+          {page === "editor" && editorProjectId ? (
+            <Suspense fallback={<PageLoader />}>{renderPage()}</Suspense>
+          ) : (
+            <Layout>
+              <AppShell currentPage={page} onNavigate={setPage}>
+                <Suspense fallback={<PageLoader />}>{renderPage()}</Suspense>
+              </AppShell>
+            </Layout>
+          )}
         </PipelineActivityProvider>
       </GeneratorSessionProvider>
     </AgentsStatusProvider>
