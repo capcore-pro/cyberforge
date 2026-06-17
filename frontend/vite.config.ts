@@ -95,7 +95,7 @@ export default defineConfig(({ mode }) => {
             resolve: { alias: resolveAlias },
             build: {
               rollupOptions: {
-                external: ["electron"],
+                external: ["electron", "electron-updater"],
               },
             },
           },

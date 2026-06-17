@@ -2,6 +2,7 @@ import "./load-env.js";
 import { app, BrowserWindow, session, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { setupAutoUpdater } from "./auto-updater";
 import { registerIpcHandlers } from "./ipc-handlers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,10 @@ app.whenReady().then(() => {
 
   registerIpcHandlers();
   createWindow();
+
+  if (!isDev) {
+    setupAutoUpdater(() => mainWindow);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

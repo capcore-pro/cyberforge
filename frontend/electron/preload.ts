@@ -32,6 +32,16 @@ const notify = (title: string, body: string): void => {
   ipcRenderer.send(IPC_CHANNELS.NOTIFY, title, body);
 };
 
+const restartAndUpdate = (): void => {
+  ipcRenderer.send(IPC_CHANNELS.RESTART_AND_UPDATE);
+};
+
+const onUpdateReady = (callback: () => void): (() => void) => {
+  const listener = () => callback();
+  ipcRenderer.on(IPC_CHANNELS.UPDATE_READY, listener);
+  return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_READY, listener);
+};
+
 contextBridge.exposeInMainWorld("cyberforge", {
   getVersion: () => ELECTRON_VERSION,
   getPlatform: () => PLATFORM,
@@ -46,6 +56,12 @@ contextBridge.exposeInMainWorld("cyberforge", {
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.OPEN_EXTERNAL, url),
   notify,
+  restartAndUpdate,
+  onUpdateReady,
 });
 
-contextBridge.exposeInMainWorld("electronAPI", { notify });
+contextBridge.exposeInMainWorld("electronAPI", {
+  notify,
+  restartAndUpdate,
+  onUpdateReady,
+});

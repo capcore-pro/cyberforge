@@ -7,9 +7,20 @@ const monorepoRoot = path.resolve(
   "../..",
 );
 
-/** Charge backend/.env dans process.env (processus principal Electron). */
+/** Charge backend/.env et frontend/.env dans process.env (processus principal Electron). */
 export function loadBackendEnv(): void {
+  const frontendEnvPath = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    ".env",
+  );
+  loadEnvFile(frontendEnvPath);
+
   const envPath = path.join(monorepoRoot, "backend", ".env");
+  loadEnvFile(envPath);
+}
+
+function loadEnvFile(envPath: string): void {
   if (!fs.existsSync(envPath)) return;
 
   const text = fs.readFileSync(envPath, "utf8");

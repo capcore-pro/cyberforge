@@ -3,6 +3,7 @@ import {
   GLASS_CARD,
   GLASS_SECTION,
   GHOST_BTN,
+  GOLD_BTN,
   openExternalUrl,
 } from "@/components/settings/settings-theme";
 import { useBackendHealth } from "@/context/BackendHealthContext";
@@ -25,6 +26,8 @@ export function SystemSettingsPanel() {
   const [busy, setBusy] = useState<"cache" | "restart" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updateReady, setUpdateReady] = useState(false);
+  const isDesktopApp = Boolean(window.electronAPI?.restartAndUpdate);
 
   const loadInfo = useCallback(async () => {
     const [infoRes, logsRes] = await Promise.all([
@@ -44,6 +47,13 @@ export function SystemSettingsPanel() {
   useEffect(() => {
     void loadInfo();
   }, [loadInfo]);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onUpdateReady?.(() => {
+      setUpdateReady(true);
+    });
+    return () => unsubscribe?.();
+  }, []);
 
   const backendOnline = status === "online";
   const displayVersion = health?.version ?? version;
@@ -80,6 +90,10 @@ export function SystemSettingsPanel() {
 
   function handleExportLogs() {
     openExternalUrl(systemLogsExportUrl());
+  }
+
+  function handleRestartAndUpdate() {
+    window.electronAPI?.restartAndUpdate?.();
   }
 
   return (
@@ -140,6 +154,32 @@ export function SystemSettingsPanel() {
           </p>
         )}
       </div>
+
+      {isDesktopApp ? (
+        <div className={GLASS_SECTION}>
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/45">
+            Mise à jour CyberForge
+          </h3>
+          <p className="mb-4 text-sm text-white/55">
+            Les mises à jour sont vérifiées automatiquement au lancement de
+            l&apos;application installée. Une notification apparaît lorsqu&apos;une
+            nouvelle version est téléchargée depuis GitHub Releases.
+          </p>
+          {updateReady ? (
+            <button
+              type="button"
+              onClick={handleRestartAndUpdate}
+              className={GOLD_BTN}
+            >
+              Mettre à jour CyberForge
+            </button>
+          ) : (
+            <p className="text-sm text-white/45">
+              Aucune mise à jour en attente.
+            </p>
+          )}
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-3">
         <button

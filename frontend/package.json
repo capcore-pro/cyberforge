@@ -12,12 +12,18 @@
     "typecheck": "tsc -b --noEmit",
     "build:electron": "vite build && electron-builder",
     "build:exe": "vite build && electron-builder --win",
-    "build:portable": "vite build && electron-builder --win portable"
+    "build:portable": "vite build && electron-builder --win portable",
+    "release:win": "vite build && electron-builder --win --publish always"
   },
   "build": {
-    "appId": "pro.capcore.cyberforge",
+    "appId": "com.capcore.cyberforge",
     "productName": "CyberForge",
     "copyright": "Copyright © 2026 CapCore — Mat Gibiard",
+    "publish": {
+      "provider": "github",
+      "owner": "capcore-pro",
+      "repo": "cyberforge"
+    },
     "directories": {
       "output": "dist-build",
       "buildResources": "build-resources"
@@ -65,6 +71,7 @@
   },
   "dependencies": {
     "@xyflow/react": "^12.11.0",
+    "electron-updater": "^6.8.9",
     "fflate": "^0.8.3",
     "lucide-react": "^1.17.0",
     "qrcode.react": "^4.2.0",

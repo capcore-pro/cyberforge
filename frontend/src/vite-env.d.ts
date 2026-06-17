@@ -29,9 +29,13 @@ declare global {
       };
       openExternal?: (url: string) => Promise<void>;
       notify?: (title: string, body: string) => void;
+      restartAndUpdate?: () => void;
+      onUpdateReady?: (callback: () => void) => () => void;
     };
     electronAPI?: {
       notify?: (title: string, body: string) => void;
+      restartAndUpdate?: () => void;
+      onUpdateReady?: (callback: () => void) => () => void;
     };
   }
 }

@@ -8,6 +8,8 @@ export const IPC_CHANNELS = {
   PREVIEW_OPEN: "preview:open",
   OPEN_EXTERNAL: "shell:open-external",
   NOTIFY: "shell:notify",
+  UPDATE_READY: "app:update-ready",
+  RESTART_AND_UPDATE: "app:restart-and-update",
 } as const;
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
