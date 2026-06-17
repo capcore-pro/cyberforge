@@ -117,6 +117,11 @@ export function AppShell({
               key={group.id}
               className={groupIndex > 0 ? "mt-2 border-t border-cf-border pt-2" : ""}
             >
+              {group.id === "builders" ? (
+                <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-muted">
+                  Builders
+                </p>
+              ) : null}
               {group.items.map((item) => (
                 <NavButton
                   key={item.id}

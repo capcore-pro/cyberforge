@@ -11,6 +11,7 @@ import { ContactNotificationsProvider, useContactNotifications } from "@/context
 import { getPublicDemoToken } from "@/lib/demo-route";
 import { getPublicReviewToken } from "@/lib/review-route";
 import type { AppPage } from "./lib/navigation";
+import { hashForPage, pageFromHash } from "./lib/navigation";
 import { ClientDemoPage } from "./pages/ClientDemoPage";
 import { ClientReviewPage } from "./pages/ClientReviewPage";
 
@@ -37,6 +38,12 @@ const AgentsPage = lazy(() =>
 );
 const AgentBuilderPage = lazy(() =>
   import("./pages/AgentBuilder").then((m) => ({ default: m.AgentBuilder })),
+);
+const MobileBuilderPage = lazy(() =>
+  import("./pages/MobileBuilder").then((m) => ({ default: m.MobileBuilder })),
+);
+const ErpBuilderPage = lazy(() =>
+  import("./pages/ErpBuilder").then((m) => ({ default: m.ErpBuilder })),
 );
 const MonitoringPage = lazy(() =>
   import("./pages/MonitoringPage").then((m) => ({
@@ -72,7 +79,24 @@ const NewsletterPage = lazy(() =>
 export default function App() {
   const reviewToken = getPublicReviewToken();
   const demoToken = getPublicDemoToken();
-  const [page, setPage] = useState<AppPage>("dashboard");
+  const [page, setPage] = useState<AppPage>(() => pageFromHash(window.location.hash) ?? "dashboard");
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const fromHash = pageFromHash(window.location.hash);
+      if (fromHash) setPage(fromHash);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const navigate = useCallback((next: AppPage) => {
+    setPage(next);
+    const hash = hashForPage(next);
+    if (hash && window.location.hash !== hash) {
+      window.location.hash = hash;
+    }
+  }, []);
 
   if (reviewToken) {
     return (
@@ -94,7 +118,7 @@ export default function App() {
     <ErrorBoundary>
       <BackendHealthProvider>
         <ContactNotificationsProvider>
-          <AppWithNotifications page={page} setPage={setPage} />
+          <AppWithNotifications page={page} setPage={navigate} />
         </ContactNotificationsProvider>
       </BackendHealthProvider>
     </ErrorBoundary>
@@ -216,6 +240,10 @@ function AppWithNotifications({
         return <AgentsPage />;
       case "agent_builder":
         return <AgentBuilderPage />;
+      case "mobile_builder":
+        return <MobileBuilderPage />;
+      case "erp_builder":
+        return <ErpBuilderPage />;
       case "monitoring":
         return <MonitoringPage />;
       case "workflows":

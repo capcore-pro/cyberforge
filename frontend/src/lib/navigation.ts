@@ -14,6 +14,8 @@ export type AppPage =
   | "perso"
   | "agents"
   | "agent_builder"
+  | "mobile_builder"
+  | "erp_builder"
   | "monitoring"
   | "workflows"
   | "editor"
@@ -83,6 +85,27 @@ export const MAIN_NAV_GROUP: NavGroup = {
   ],
 };
 
+/** Builders — Mobile & ERP (section dédiée, visible dans la sidebar). */
+export const BUILDERS_NAV_GROUP: NavGroup = {
+  id: "builders",
+  items: [
+    {
+      id: "mobile_builder",
+      label: "Mobile Builder",
+      icon: "ti-device-mobile",
+      iconClass: "ti ti-device-mobile",
+      enabled: true,
+    },
+    {
+      id: "erp_builder",
+      label: "ERP Builder",
+      icon: "ti-building",
+      iconClass: "ti ti-building",
+      enabled: true,
+    },
+  ],
+};
+
 /** Outils infra — séparés visuellement dans la sidebar. */
 export const SECONDARY_NAV_GROUP: NavGroup = {
   id: "secondary",
@@ -100,6 +123,7 @@ export const SECONDARY_NAV_GROUP: NavGroup = {
 
 export const SIDEBAR_NAV_GROUPS: NavGroup[] = [
   MAIN_NAV_GROUP,
+  BUILDERS_NAV_GROUP,
   SECONDARY_NAV_GROUP,
 ];
 
@@ -120,6 +144,27 @@ export const NAV_ITEMS: NavItem[] = [
   ...PRIMARY_NAV_ITEMS,
   SETTINGS_NAV_ITEM,
 ];
+
+/** Hash URL pour navigation profonde (ex. #/erp-builder). */
+export const PAGE_HASH_PATHS: Partial<Record<AppPage, string>> = {
+  erp_builder: "erp-builder",
+  mobile_builder: "mobile-builder",
+  agent_builder: "agent-builder",
+};
+
+export function pageFromHash(hash: string): AppPage | null {
+  const normalized = hash.replace(/^#\/?/, "").trim().toLowerCase();
+  if (!normalized) return null;
+  for (const [page, path] of Object.entries(PAGE_HASH_PATHS) as [AppPage, string][]) {
+    if (normalized === path) return page;
+  }
+  return null;
+}
+
+export function hashForPage(page: AppPage): string | null {
+  const path = PAGE_HASH_PATHS[page];
+  return path ? `#/${path}` : null;
+}
 
 /** Pages routées dans App.tsx (sidebar + routes internes). */
 export const ROUTED_PAGES: AppPage[] = [
