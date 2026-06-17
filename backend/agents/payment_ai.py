@@ -16,7 +16,6 @@ Retour:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -28,12 +27,10 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
-import anthropic  # noqa: E402
+from agents.llm_usage_utils import merge_usage  # noqa: E402
+from llm.base_provider import LLMRequest  # noqa: E402
+from llm.router import llm_router  # noqa: E402
 
-from agents.llm_usage_utils import merge_usage, usage_from_anthropic_response  # noqa: E402
-
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = max(4000, int(os.getenv("PAYMENT_AI_MAX_TOKENS", "8000")))
 
 _PARSE_ERROR_PAYLOAD: dict[str, Any] = {
@@ -147,23 +144,30 @@ def _parse_payment_json(raw_text: str, *, detected: PaymentType) -> dict[str, An
     }
 
 
-async def _call_claude(
+async def _call_llm(
     system_prompt: str,
     user_prompt: str,
     *,
     max_tokens: int | None = None,
-):
+) -> tuple[str, dict[str, Any] | None]:
     tokens = max_tokens if max_tokens is not None else MAX_TOKENS
-
-    def _do_call():
-        return client.messages.create(
-            model=MODEL,
-            max_tokens=tokens,
-            system=system_prompt,
+    llm_response = await llm_router.route(
+        LLMRequest(
             messages=[{"role": "user", "content": user_prompt}],
-        )
-
-    return await asyncio.to_thread(_do_call)
+            system_prompt=system_prompt,
+            model=None,
+            max_tokens=tokens,
+        ),
+        task_type="content",
+    )
+    usage = {
+        "input_tokens": llm_response.input_tokens,
+        "output_tokens": llm_response.output_tokens,
+        "total_tokens": llm_response.total_tokens,
+        "model": llm_response.model,
+        "provider": llm_response.provider,
+    }
+    return llm_response.content, usage
 
 
 def _fallback_payload(payment_type: PaymentType) -> dict[str, Any]:
@@ -261,11 +265,8 @@ async def run(project_description: str, project_type: str, database_schema: dict
 
     usage_total: dict[str, Any] | None = None
     try:
-        response = await _call_claude(SYSTEM_PROMPT, user_prompt)
-        usage_total = merge_usage(
-            usage_total, usage_from_anthropic_response(response, MODEL)
-        )
-        raw_text = response.content[0].text
+        raw_text, usage = await _call_llm(SYSTEM_PROMPT, user_prompt)
+        usage_total = merge_usage(usage_total, usage)
         print(
             f"[PaymentAI DEBUG] Réponse brute (300 premiers chars):\n{raw_text[:300]}"
         )
@@ -286,15 +287,12 @@ async def run(project_description: str, project_type: str, database_schema: dict
                 "Génère uniquement payment_type et stripe_config compacts. "
                 "sql et frontend_code vides. summary en une phrase."
             )
-            retry = await _call_claude(
+            retry_text, retry_usage = await _call_llm(
                 _MINIMAL_RETRY_SYSTEM_PROMPT,
                 minimal_prompt,
                 max_tokens=2048,
             )
-            usage_total = merge_usage(
-                usage_total, usage_from_anthropic_response(retry, MODEL)
-            )
-            retry_text = retry.content[0].text
+            usage_total = merge_usage(usage_total, retry_usage)
             print(
                 f"[PaymentAI DEBUG] Retry minimal (300 chars):\n{retry_text[:300]}"
             )

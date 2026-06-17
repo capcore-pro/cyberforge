@@ -15,7 +15,6 @@ Retour:
 
 from __future__ import annotations
 
-import asyncio
 import os
 from typing import Any, Literal
 
@@ -23,12 +22,9 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../.env"))
 
-import anthropic  # noqa: E402
+from llm.base_provider import LLMRequest
+from llm.router import llm_router
 
-from agents.llm_usage_utils import usage_from_anthropic_response  # noqa: E402
-
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-MODEL = os.getenv("COREMIND_SONNET_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS = 4096
 
 AuthType = Literal["public", "single_user", "multi_user", "agency"]
@@ -230,44 +226,24 @@ def _fallback_sql_agency(tables: list[str]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-class _FallbackContent:
-    def __init__(self, text: str) -> None:
-        self.text = text
-
-
-class _FallbackResponse:
-    def __init__(self, text: str) -> None:
-        self.content = [_FallbackContent(text)]
-
-
-async def _call_claude(system_prompt: str, user_prompt: str):
-    def _do_call():
-        return client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=system_prompt,
+async def _call_llm(system_prompt: str, user_prompt: str) -> tuple[str, dict[str, Any] | None]:
+    llm_response = await llm_router.route(
+        LLMRequest(
             messages=[{"role": "user", "content": user_prompt}],
-        )
-
-    try:
-        return await asyncio.to_thread(_do_call)
-    except anthropic.APIError as exc:
-        import logging
-
-        logging.getLogger(__name__).warning("[AuthAI] Anthropic failed: %s", exc)
-        from llm.base_provider import LLMRequest
-        from llm.router import llm_router
-
-        llm_response = await llm_router.route(
-            LLMRequest(
-                messages=[{"role": "user", "content": user_prompt}],
-                system_prompt=system_prompt,
-                model=None,
-                max_tokens=MAX_TOKENS,
-            ),
-            task_type="analysis",
-        )
-        return _FallbackResponse(llm_response.content)
+            system_prompt=system_prompt,
+            model=None,
+            max_tokens=MAX_TOKENS,
+        ),
+        task_type="content",
+    )
+    usage = {
+        "input_tokens": llm_response.input_tokens,
+        "output_tokens": llm_response.output_tokens,
+        "total_tokens": llm_response.total_tokens,
+        "model": llm_response.model,
+        "provider": llm_response.provider,
+    }
+    return llm_response.content, usage
 
 
 async def run(project_description: str, project_type: str, database_schema: dict) -> dict:
@@ -296,8 +272,7 @@ async def run(project_description: str, project_type: str, database_schema: dict
     ).strip()
 
     try:
-        response = await _call_claude(SYSTEM_PROMPT, user_prompt)
-        raw_text = response.content[0].text
+        raw_text, usage = await _call_llm(SYSTEM_PROMPT, user_prompt)
 
         cleaned = raw_text.strip()
         cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
@@ -320,7 +295,6 @@ async def run(project_description: str, project_type: str, database_schema: dict
             "roles": parsed.get("roles") or [],
             "summary": parsed.get("summary") or "",
         }
-        usage = usage_from_anthropic_response(response, MODEL)
         if usage:
             result["usage"] = usage
         return result

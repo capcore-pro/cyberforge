@@ -21,7 +21,6 @@ from tools.firecrawl_client import FirecrawlError, firecrawl_scrape
 
 logger = logging.getLogger(__name__)
 
-MODEL = os.getenv("COREMIND_HAIKU_MODEL", "claude-haiku-4-5-20251001")
 MAX_TOKENS = 2000
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+", re.I)
