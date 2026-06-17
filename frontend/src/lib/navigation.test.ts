@@ -4,6 +4,7 @@ import {
   NAV_ITEMS,
   ROUTED_PAGES,
   SECONDARY_NAV_GROUP,
+  SIDEBAR_NAV_GROUPS,
   type AppPage,
 } from "./navigation";
 
@@ -32,6 +33,23 @@ describe("navigation — knowledge page", () => {
       iconClass: "ti ti-chart-arrows-vertical",
     });
     expect(ROUTED_PAGES).toContain("pipeline");
+  });
+
+  it("includes builder pages in sidebar nav groups", () => {
+    const builderIds = ["mobile_builder", "erp_builder"];
+    for (const id of builderIds) {
+      expect(
+        SIDEBAR_NAV_GROUPS.some((g) => g.items.some((item) => item.id === id)),
+      ).toBe(true);
+      expect(ROUTED_PAGES).toContain(id);
+      expect(NAV_ITEMS.some((item) => item.id === id)).toBe(true);
+    }
+    const erp = NAV_ITEMS.find((item) => item.id === "erp_builder");
+    expect(erp).toMatchObject({
+      label: "ERP Builder",
+      iconClass: "ti ti-building",
+      enabled: true,
+    });
   });
 
   it("keeps existing primary pages without regression", () => {

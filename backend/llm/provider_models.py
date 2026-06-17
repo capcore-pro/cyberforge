@@ -46,4 +46,20 @@ PROVIDER_MODEL_SPECS: dict[str, dict[str, object]] = {
         "max_tokens": 8192,
         "supports_system": True,
     },
+    "ollama-deepseek-r1": {
+        "provider": "ollama",
+        "model": "deepseek-r1",
+        "cost_per_1k_input": 0.0,
+        "cost_per_1k_output": 0.0,
+        "max_tokens": 8192,
+        "supports_system": True,
+    },
+    "ollama-phi4": {
+        "provider": "ollama",
+        "model": "phi4",
+        "cost_per_1k_input": 0.0,
+        "cost_per_1k_output": 0.0,
+        "max_tokens": 8192,
+        "supports_system": True,
+    },
 }
