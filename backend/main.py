@@ -34,6 +34,8 @@ from api.main import create_app
 
 _startup_mark("import api.main")
 
+from fastapi.staticfiles import StaticFiles
+
 from cockpit_db import init_db
 
 _startup_mark("import cockpit_db")
@@ -52,6 +54,11 @@ app.include_router(legal_router, prefix="/api/legal")
 import media_router
 
 app.include_router(media_router.router, prefix="/api/media")
+
+from api.video_router import router as video_router
+
+app.include_router(video_router)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _legal_paths = {getattr(r, "path", "") for r in app.routes}
 if "/api/legal/clients" not in _legal_paths:

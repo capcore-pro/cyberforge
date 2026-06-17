@@ -7,6 +7,7 @@ import { BackendHealthProvider } from "@/context/BackendHealthContext";
 import { AgentsStatusProvider } from "@/context/AgentsStatusContext";
 import { GeneratorSessionProvider } from "@/context/GeneratorSessionContext";
 import { PipelineActivityProvider } from "@/context/PipelineActivityContext";
+import { VideoGenerationProvider } from "@/context/VideoGenerationContext";
 import { ContactNotificationsProvider, useContactNotifications } from "@/context/ContactNotificationsContext";
 import { getPublicDemoToken } from "@/lib/demo-route";
 import { getPublicReviewToken } from "@/lib/review-route";
@@ -44,6 +45,9 @@ const MobileBuilderPage = lazy(() =>
 );
 const ErpBuilderPage = lazy(() =>
   import("./pages/ErpBuilder").then((m) => ({ default: m.ErpBuilder })),
+);
+const MediaBuilderVideoPage = lazy(() =>
+  import("./pages/MediaBuilderVideo"),
 );
 const MonitoringPage = lazy(() =>
   import("./pages/MonitoringPage").then((m) => ({
@@ -116,11 +120,13 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <BackendHealthProvider>
-        <ContactNotificationsProvider>
-          <AppWithNotifications page={page} setPage={navigate} />
-        </ContactNotificationsProvider>
-      </BackendHealthProvider>
+      <VideoGenerationProvider>
+        <BackendHealthProvider>
+          <ContactNotificationsProvider>
+            <AppWithNotifications page={page} setPage={navigate} />
+          </ContactNotificationsProvider>
+        </BackendHealthProvider>
+      </VideoGenerationProvider>
     </ErrorBoundary>
   );
 }
@@ -244,6 +250,8 @@ function AppWithNotifications({
         return <MobileBuilderPage />;
       case "erp_builder":
         return <ErpBuilderPage />;
+      case "video_builder":
+        return <MediaBuilderVideoPage />;
       case "monitoring":
         return <MonitoringPage />;
       case "workflows":

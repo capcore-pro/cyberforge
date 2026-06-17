@@ -28,6 +28,10 @@ const PLATFORM = readPlatform();
  * Script preload — expose une API minimale au renderer via contextBridge.
  * Ne jamais y placer de clés API ni de secrets.
  */
+const notify = (title: string, body: string): void => {
+  ipcRenderer.send(IPC_CHANNELS.NOTIFY, title, body);
+};
+
 contextBridge.exposeInMainWorld("cyberforge", {
   getVersion: () => ELECTRON_VERSION,
   getPlatform: () => PLATFORM,
@@ -41,4 +45,7 @@ contextBridge.exposeInMainWorld("cyberforge", {
   },
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.OPEN_EXTERNAL, url),
+  notify,
 });
+
+contextBridge.exposeInMainWorld("electronAPI", { notify });

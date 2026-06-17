@@ -7,6 +7,7 @@ export const IPC_CHANNELS = {
   API_REQUEST: "api:request",
   PREVIEW_OPEN: "preview:open",
   OPEN_EXTERNAL: "shell:open-external",
+  NOTIFY: "shell:notify",
 } as const;
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";

@@ -1,4 +1,4 @@
-import { ipcMain, shell } from "electron";
+import { ipcMain, Notification, shell } from "electron";
 import {
   IPC_CHANNELS,
   type ApiRequestPayload,
@@ -34,4 +34,17 @@ export function registerIpcHandlers(): void {
       await shell.openExternal(target);
     }
   });
+
+  ipcMain.on(
+    IPC_CHANNELS.NOTIFY,
+    (_event, title: unknown, body: unknown) => {
+      const notificationTitle =
+        typeof title === "string" && title.trim() ? title.trim() : "CyberForge";
+      const notificationBody = typeof body === "string" ? body : "";
+      new Notification({
+        title: notificationTitle,
+        body: notificationBody,
+      }).show();
+    },
+  );
 }

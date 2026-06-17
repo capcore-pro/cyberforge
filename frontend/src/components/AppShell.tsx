@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { Film } from "lucide-react";
 import { BackendStatusBanner } from "@/components/BackendStatusBanner";
 import { ContactNotificationToast } from "@/components/ContactNotificationToast";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -44,7 +45,13 @@ function NavButton({
       } ${!item.enabled ? "cursor-not-allowed opacity-40" : ""}`}
     >
       <span className="relative text-cf-gold" aria-hidden>
-        {item.iconClass ? <i className={item.iconClass} /> : item.icon}
+        {item.id === "video_builder" ? (
+          <Film size={16} strokeWidth={2} />
+        ) : item.iconClass ? (
+          <i className={item.iconClass} />
+        ) : (
+          item.icon
+        )}
         {item.id === "clients" && unreadCount > 0 ? (
           <span
             className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-cf-alert px-1 text-[9px] font-bold text-black"

@@ -28,7 +28,7 @@ const BackendHealthContext = createContext<BackendHealthContextValue | null>(
   null,
 );
 
-const POLL_MS = 3000;
+const POLL_MS = 60_000;
 
 export function BackendHealthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<BackendConnectionStatus>("loading");

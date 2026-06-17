@@ -5,6 +5,7 @@ Statut des agents IA — pipeline v2.
 from __future__ import annotations
 
 import logging
+import time
 
 from dotenv import load_dotenv
 from fastapi import APIRouter
@@ -22,6 +23,10 @@ from security.agent_readiness import (
 load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
+
+_registry_cache: list[dict] | None = None
+_registry_cache_time = 0.0
+CACHE_TTL = 60  # secondes
 
 router = APIRouter(tags=["agents"])
 
@@ -110,12 +115,23 @@ def _build_status_item(
 
 
 async def _load_registry_catalog() -> list[dict] | None:
+    global _registry_cache, _registry_cache_time
+
     store = get_agent_registry_store()
     if not store.is_configured():
         return None
+
+    now = time.time()
+    if _registry_cache is not None and (now - _registry_cache_time) < CACHE_TTL:
+        return _registry_cache
+
     try:
         rows = await store.list_all()
-        return rows if rows else None
+        if rows:
+            _registry_cache = rows
+            _registry_cache_time = now
+            return rows
+        return None
     except SupabaseStoreError as exc:
         logger.warning("agents/status registry indisponible: %s", exc)
         return None

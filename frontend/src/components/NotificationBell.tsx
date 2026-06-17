@@ -10,6 +10,8 @@ import {
   type SystemNotification,
 } from "@/lib/system-notifications-api";
 
+const POLL_MS = 30_000;
+
 function levelIcon(level: string): string {
   switch (level) {
     case "success":
@@ -80,7 +82,7 @@ export function NotificationBell() {
 
   useEffect(() => {
     if (backendStatus !== "online") return;
-    const pollId = window.setInterval(() => void refreshUnreadCount(), 30_000);
+    const pollId = window.setInterval(() => void refreshUnreadCount(), POLL_MS);
     return () => window.clearInterval(pollId);
   }, [backendStatus, refreshUnreadCount]);
 

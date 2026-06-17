@@ -29,7 +29,7 @@ interface AgentsStatusContextValue {
 
 const AgentsStatusContext = createContext<AgentsStatusContextValue | null>(null);
 
-const POLL_MS = 15_000;
+const POLL_MS = 30_000;
 
 /** Pipeline v2 — aligné sur GET /api/agents/status (8 agents). */
 const PIPELINE_AGENT_IDS = [

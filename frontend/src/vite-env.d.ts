@@ -28,6 +28,10 @@ declare global {
         open: (payload: PreviewOpenPayload) => Promise<void>;
       };
       openExternal?: (url: string) => Promise<void>;
+      notify?: (title: string, body: string) => void;
+    };
+    electronAPI?: {
+      notify?: (title: string, body: string) => void;
     };
   }
 }

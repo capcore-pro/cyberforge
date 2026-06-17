@@ -4,6 +4,8 @@ Notifications CyberForge — système (mémoire) + contacts démo (Supabase).
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -20,6 +22,15 @@ from api.notifications_memory import (
 from db.demos_store import DemoContactNotification, SupabaseStoreError, get_demos_store
 
 router = APIRouter(tags=["notifications"])
+
+_notif_cache: UnreadCountResponse | None = None
+_notif_cache_time = 0.0
+NOTIF_CACHE_TTL = 30  # secondes
+
+
+def _invalidate_notif_cache() -> None:
+    global _notif_cache
+    _notif_cache = None
 
 
 # --- Contacts démo (Supabase) -------------------------------------------------
@@ -128,15 +139,25 @@ async def list_notifications(
 
 @router.get("/notifications/unread-count", response_model=UnreadCountResponse)
 async def notifications_unread_count() -> UnreadCountResponse:
+    global _notif_cache, _notif_cache_time
+
+    now = time.time()
+    if _notif_cache is not None and (now - _notif_cache_time) < NOTIF_CACHE_TTL:
+        return _notif_cache
+
     count = await get_notification_store().unread_count()
-    return UnreadCountResponse(count=count)
+    result = UnreadCountResponse(count=count)
+
+    _notif_cache = result
+    _notif_cache_time = now
+    return result
 
 
 @router.post("/notifications", response_model=NotificationRow, status_code=201)
 @router.post("/notifications/", response_model=NotificationRow, status_code=201, include_in_schema=False)
 async def create_notification(body: NotificationCreate) -> NotificationRow:
     """Crée une notification système (test / intégrations internes)."""
-    return await notify(
+    row = await notify(
         body.title,
         body.type,
         body.level,
@@ -144,12 +165,15 @@ async def create_notification(body: NotificationCreate) -> NotificationRow:
         project_id=body.project_id,
         project_name=body.project_name,
     )
+    _invalidate_notif_cache()
+    return row
 
 
 async def _mark_read_handler(notification_id: str) -> NotificationRow:
     row = await get_notification_store().mark_read(notification_id)
     if row is None:
         raise _not_found(notification_id)
+    _invalidate_notif_cache()
     return row
 
 
@@ -167,6 +191,7 @@ async def mark_notification_read_patch(notification_id: str) -> NotificationRow:
 
 async def _mark_all_read_handler() -> MarkAllReadResponse:
     marked = await get_notification_store().mark_all_read()
+    _invalidate_notif_cache()
     return MarkAllReadResponse(marked=marked)
 
 
@@ -186,4 +211,5 @@ async def mark_all_notifications_read_patch() -> MarkAllReadResponse:
 async def clear_notifications() -> ClearResponse:
     """Supprime tout l'historique en mémoire."""
     deleted = await get_notification_store().clear()
+    _invalidate_notif_cache()
     return ClearResponse(deleted=deleted)
