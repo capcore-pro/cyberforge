@@ -2,6 +2,7 @@ import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
 import path from "node:path";
+import { version } from "./package.json";
 import { electronCspPlugin } from "./vite-csp-plugin";
 
 // Monorepo : backend/.env (réel) + .env racine optionnel
@@ -85,6 +86,9 @@ export default defineConfig(({ mode }) => {
   return {
     // Charge VITE_* depuis backend/.env (fichier réel du projet)
     envDir: backendDir,
+    define: {
+      __APP_VERSION__: JSON.stringify(version),
+    },
     plugins: [
       electronCspPlugin(),
       react(),

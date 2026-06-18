@@ -5,7 +5,8 @@
 
 export const APP_NAME = "CyberForge" as const;
 
-export const APP_VERSION = "0.1.0" as const;
+declare const __APP_VERSION__: string;
+export const APP_VERSION = __APP_VERSION__;
 
 /** Préfixe des routes API REST */
 export const API_PREFIX = "/api" as const;
