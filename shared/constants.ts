@@ -5,8 +5,10 @@
 
 export const APP_NAME = "CyberForge" as const;
 
-declare const __APP_VERSION__: string;
-export const APP_VERSION = __APP_VERSION__;
+/** Renderer : injecté par Vite (`define`). Main/preload : fallback via `app.getVersion()`. */
+declare const __APP_VERSION__: string | undefined;
+export const APP_VERSION =
+  typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
 /** Préfixe des routes API REST */
 export const API_PREFIX = "/api" as const;

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, app } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
   ApiRequestPayload,
@@ -7,11 +7,12 @@ import type {
 } from "@shared/ipc";
 
 /** Preload CJS : `process` est un global Node — pas `globalThis.process` (undefined en sandbox). */
-function readElectronVersion(): string {
-  if (typeof process !== "undefined" && process.versions?.electron) {
-    return process.versions.electron;
+function readAppVersion(): string {
+  try {
+    return app.getVersion();
+  } catch {
+    return "0.0.0";
   }
-  return "0.1.0";
 }
 
 function readPlatform(): string {
@@ -21,7 +22,7 @@ function readPlatform(): string {
   return "unknown";
 }
 
-const ELECTRON_VERSION = readElectronVersion();
+const APP_VERSION = readAppVersion();
 const PLATFORM = readPlatform();
 
 /**
@@ -94,7 +95,7 @@ const onBackendLog = (callback: (log: string) => void): (() => void) => {
 };
 
 contextBridge.exposeInMainWorld("cyberforge", {
-  getVersion: () => ELECTRON_VERSION,
+  getVersion: () => APP_VERSION,
   getPlatform: () => PLATFORM,
   api: {
     request: (payload: ApiRequestPayload): Promise<ApiResponsePayload> =>
