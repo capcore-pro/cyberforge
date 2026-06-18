@@ -17,6 +17,7 @@ export type AppPage =
   | "mobile_builder"
   | "erp_builder"
   | "video_builder"
+  | "video_client"
   | "monitoring"
   | "workflows"
   | "editor"
@@ -111,6 +112,12 @@ export const BUILDERS_NAV_GROUP: NavGroup = {
       iconClass: "ti ti-movie",
       enabled: true,
     },
+    {
+      id: "video_client",
+      label: "Vidéos clients",
+      icon: "🎬",
+      enabled: true,
+    },
   ],
 };
 
@@ -158,16 +165,26 @@ export const PAGE_HASH_PATHS: Partial<Record<AppPage, string>> = {
   erp_builder: "erp-builder",
   mobile_builder: "mobile-builder",
   video_builder: "video-builder",
+  video_client: "video-client",
   agent_builder: "agent-builder",
 };
 
 export function pageFromHash(hash: string): AppPage | null {
   const normalized = hash.replace(/^#\/?/, "").trim().toLowerCase();
   if (!normalized) return null;
+  const pathOnly = normalized.split("?")[0];
   for (const [page, path] of Object.entries(PAGE_HASH_PATHS) as [AppPage, string][]) {
-    if (normalized === path) return page;
+    if (pathOnly === path) return page;
   }
   return null;
+}
+
+/** Paramètres de requête dans le hash (ex. #/video-builder?project_id=…). */
+export function queryFromHash(hash: string): URLSearchParams {
+  const normalized = hash.replace(/^#\/?/, "").trim();
+  const qIndex = normalized.indexOf("?");
+  if (qIndex === -1) return new URLSearchParams();
+  return new URLSearchParams(normalized.slice(qIndex + 1));
 }
 
 export function hashForPage(page: AppPage): string | null {

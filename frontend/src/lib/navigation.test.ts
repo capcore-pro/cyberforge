@@ -36,7 +36,7 @@ describe("navigation — knowledge page", () => {
   });
 
   it("includes builder pages in sidebar nav groups", () => {
-    const builderIds = ["mobile_builder", "erp_builder", "video_builder"];
+    const builderIds = ["mobile_builder", "erp_builder", "video_builder", "video_client"];
     for (const id of builderIds) {
       expect(
         SIDEBAR_NAV_GROUPS.some((g) => g.items.some((item) => item.id === id)),

@@ -39,6 +39,9 @@ class GenerateScenesRequest(BaseModel):
     slogan: Optional[str] = ""
     key_message: Optional[str] = ""
     call_to_action: Optional[str] = ""
+    secteur: Optional[str] = ""
+    ton: Optional[str] = "professionnel"
+    nb_scenes: Optional[int] = 6
 
 class CreateProjectRequest(BaseModel):
     title: str
@@ -74,6 +77,9 @@ async def generate_scenes(req: GenerateScenesRequest):
             slogan=req.slogan or "",
             key_message=req.key_message or "",
             call_to_action=req.call_to_action or "",
+            secteur=req.secteur or "",
+            ton=req.ton or "professionnel",
+            nb_scenes=req.nb_scenes or 6,
         )
         return {"success": True, "data": scenes_data}
     except Exception as e:

@@ -49,6 +49,7 @@ const ErpBuilderPage = lazy(() =>
 const MediaBuilderVideoPage = lazy(() =>
   import("./pages/MediaBuilderVideo"),
 );
+const VideoClientPage = lazy(() => import("./pages/VideoClient"));
 const MonitoringPage = lazy(() =>
   import("./pages/MonitoringPage").then((m) => ({
     default: m.MonitoringPage,
@@ -252,6 +253,8 @@ function AppWithNotifications({
         return <ErpBuilderPage />;
       case "video_builder":
         return <MediaBuilderVideoPage />;
+      case "video_client":
+        return <VideoClientPage />;
       case "monitoring":
         return <MonitoringPage />;
       case "workflows":

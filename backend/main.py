@@ -56,8 +56,10 @@ import media_router
 app.include_router(media_router.router, prefix="/api/media")
 
 from api.video_router import router as video_router
+from routers.video_client import router as video_client_router
 
 app.include_router(video_router)
+app.include_router(video_client_router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _legal_paths = {getattr(r, "path", "") for r in app.routes}

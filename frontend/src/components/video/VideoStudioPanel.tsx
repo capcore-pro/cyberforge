@@ -3,12 +3,13 @@
 // Panneau central de création vidéo
 // ============================================
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Sparkles, Play, Loader, ChevronRight,
   Zap, AlertCircle
 } from "lucide-react";
 import { useVideoGeneration } from "@/context/VideoGenerationContext";
+import { apiClient } from "@/lib/api";
 import SceneEditor from "./SceneEditor";
 import MusicSelector from "./MusicSelector";
 
@@ -43,6 +44,66 @@ interface VideoStudioPanelProps {
   onProjectCreated?: () => void;
 }
 
+interface VideoProjectPayload {
+  id: string;
+  title?: string;
+  brand?: string;
+  brief?: string;
+  ambiance?: string;
+  scenes?: Scene[];
+  scenes_data?: Array<string | { description_fr?: string; prompt_en?: string; prompt?: string }>;
+  source?: string;
+}
+
+interface VideoProjectResponse {
+  success: boolean;
+  data: VideoProjectPayload;
+}
+
+const SCENE_MOODS = [
+  "opening",
+  "build",
+  "tension",
+  "climax",
+  "resolution",
+  "reveal",
+] as const;
+
+function scenesFromClientData(
+  rawScenes: VideoProjectPayload["scenes_data"],
+  totalDuration = 30,
+): Scene[] {
+  if (!rawScenes?.length) return [];
+
+  const clientScenes = rawScenes
+    .map((item) => {
+      if (typeof item === "string") {
+        const text = item.trim();
+        return text ? { description_fr: text, prompt_en: text } : null;
+      }
+      const prompt_en = (item.prompt_en || item.prompt || "").trim();
+      if (!prompt_en) return null;
+      return {
+        description_fr: (item.description_fr || prompt_en).trim(),
+        prompt_en,
+      };
+    })
+    .filter(Boolean) as Array<{ description_fr: string; prompt_en: string }>;
+
+  const count = clientScenes.length || 1;
+  const durationEach = Math.max(3, Math.floor(totalDuration / count));
+
+  return clientScenes.map((scene, index) => ({
+    scene_number: index + 1,
+    title: `Scène ${index + 1}`,
+    description_fr: scene.description_fr,
+    prompt: scene.prompt_en,
+    camera_move: "slow dolly forward",
+    mood: SCENE_MOODS[Math.min(index, SCENE_MOODS.length - 1)],
+    duration: durationEach,
+  }));
+}
+
 const BRANDS = [
   { id: "cyberforge", label: "CyberForge", color: "text-cyan-400" },
   { id: "capcopy", label: "Cap Copy", color: "text-blue-400" },
@@ -69,7 +130,7 @@ function notifyVideoReady(): void {
 }
 
 export default function VideoStudioPanel({
-  onProjectCreated
+  onProjectCreated,
 }: VideoStudioPanelProps) {
   const { setActive: setVideoGenerationActive } = useVideoGeneration();
   // Brief
@@ -103,6 +164,55 @@ export default function VideoStudioPanel({
   useEffect(() => {
     return () => setVideoGenerationActive(false);
   }, [setVideoGenerationActive]);
+
+  const loadClientProject = useCallback(async (projectId: string) => {
+    try {
+      const response = await apiClient.get<VideoProjectResponse>(
+        `/video/projects/${projectId}`,
+      );
+      const project = response.data;
+      if (!project?.id) return;
+
+      setCurrentProjectId(project.id);
+      setTitle(project.title || "");
+      setBrand(project.brand || "cyberforge");
+      setBrief(project.brief || "");
+      setAmbiance(project.ambiance || "cinématique premium");
+
+      const structuredScenes = Array.isArray(project.scenes) ? project.scenes : [];
+      const rawScenes = Array.isArray(project.scenes_data) ? project.scenes_data : [];
+
+      let loadedScenes: Scene[] = [];
+      if (structuredScenes.length > 0) {
+        loadedScenes = structuredScenes;
+      } else if (rawScenes.length > 0) {
+        loadedScenes = scenesFromClientData(rawScenes);
+      }
+
+      if (loadedScenes.length === 0) return;
+
+      setScenes(loadedScenes);
+      setScenesData({
+        concept: project.brief || "",
+        color_palette: "",
+        scenes: loadedScenes,
+      });
+      setTotalClips(loadedScenes.length);
+      setStep("scenes");
+    } catch (e) {
+      console.error("Erreur chargement projet client", e);
+      setError("Impossible de charger le projet client");
+    }
+  }, []);
+
+  // Détecter si on arrive avec un projet client pré-chargé (#/video-builder?project_id=…)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.split("?")[1] || "");
+    const projectId = params.get("project_id");
+    if (projectId) {
+      void loadClientProject(projectId);
+    }
+  }, [loadClientProject]);
 
   const markVideoReady = () => {
     if (videoReadyNotifiedRef.current) return;

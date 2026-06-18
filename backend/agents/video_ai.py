@@ -10,6 +10,8 @@ import httpx
 import logging
 from typing import Optional
 
+from agents.video_sector_prompts import format_sector_brief_block
+
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -117,10 +119,19 @@ class VideoAI:
         slogan: str = "",
         key_message: str = "",
         call_to_action: str = "",
+        secteur: str = "",
+        ton: str = "professionnel",
+        nb_scenes: int = 6,
     ) -> dict:
         """Génère 6 scènes cinématiques via Claude Sonnet."""
 
         brand_context = BRAND_CONTEXTS.get(brand, BRAND_CONTEXTS["cyberforge"])
+        sector_block = (
+            format_sector_brief_block(secteur, ton, nb_scenes=nb_scenes)
+            if secteur.strip()
+            else ""
+        )
+        sector_section = f"{sector_block}\n" if sector_block else ""
 
         user_prompt = f"""Marque : {brand.upper()}
 Contexte : {brand_context}
@@ -129,8 +140,7 @@ Slogan : {slogan or "À définir"}
 Message clé : {key_message or "À définir"}
 Call to action : {call_to_action or "À définir"}
 Ambiance : {ambiance}
-
-Génère 6 scènes cinématiques premium."""
+{sector_section}Génère {nb_scenes} scènes cinématiques premium."""
 
         logger.info(f"VideoAI generating scenes for {brand}...")
 
