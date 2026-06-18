@@ -10,6 +10,12 @@ export const IPC_CHANNELS = {
   NOTIFY: "shell:notify",
   UPDATE_READY: "app:update-ready",
   RESTART_AND_UPDATE: "app:restart-and-update",
+  CHECK_FOR_UPDATES: "check-for-updates",
+  UPDATE_STATUS: "update-status",
+  DOWNLOAD_PROGRESS: "download-progress",
+  RESTART_BACKEND: "restart-backend",
+  BACKEND_STATUS: "backend-status",
+  BACKEND_LOG: "backend-log",
 } as const;
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";

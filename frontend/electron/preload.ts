@@ -42,6 +42,57 @@ const onUpdateReady = (callback: () => void): (() => void) => {
   return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_READY, listener);
 };
 
+const checkForUpdates = (): Promise<void> =>
+  ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES);
+
+const onUpdateStatus = (
+  callback: (data: {
+    status: "checking" | "up-to-date" | "downloading" | "ready" | "error";
+    version?: string;
+    message?: string;
+  }) => void,
+): (() => void) => {
+  const listener = (_: unknown, data: unknown) => {
+    callback(data as Parameters<typeof callback>[0]);
+  };
+  ipcRenderer.on(IPC_CHANNELS.UPDATE_STATUS, listener);
+  return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_STATUS, listener);
+};
+
+const onDownloadProgress = (
+  callback: (data: { percent: number; transferred: number; total: number }) => void,
+): (() => void) => {
+  const listener = (_: unknown, data: unknown) => {
+    callback(data as Parameters<typeof callback>[0]);
+  };
+  ipcRenderer.on(IPC_CHANNELS.DOWNLOAD_PROGRESS, listener);
+  return () => ipcRenderer.removeListener(IPC_CHANNELS.DOWNLOAD_PROGRESS, listener);
+};
+
+const restartBackend = (): Promise<{ ok: boolean }> =>
+  ipcRenderer.invoke(IPC_CHANNELS.RESTART_BACKEND);
+
+const onBackendStatus = (
+  callback: (data: {
+    status: "starting" | "online" | "offline" | "error";
+    pid?: number;
+    code?: number;
+    message?: string;
+  }) => void,
+): (() => void) => {
+  const listener = (_: unknown, data: unknown) => {
+    callback(data as Parameters<typeof callback>[0]);
+  };
+  ipcRenderer.on(IPC_CHANNELS.BACKEND_STATUS, listener);
+  return () => ipcRenderer.removeListener(IPC_CHANNELS.BACKEND_STATUS, listener);
+};
+
+const onBackendLog = (callback: (log: string) => void): (() => void) => {
+  const listener = (_: unknown, log: string) => callback(log);
+  ipcRenderer.on(IPC_CHANNELS.BACKEND_LOG, listener);
+  return () => ipcRenderer.removeListener(IPC_CHANNELS.BACKEND_LOG, listener);
+};
+
 contextBridge.exposeInMainWorld("cyberforge", {
   getVersion: () => ELECTRON_VERSION,
   getPlatform: () => PLATFORM,
@@ -58,10 +109,22 @@ contextBridge.exposeInMainWorld("cyberforge", {
   notify,
   restartAndUpdate,
   onUpdateReady,
+  checkForUpdates,
+  onUpdateStatus,
+  onDownloadProgress,
+  restartBackend,
+  onBackendStatus,
+  onBackendLog,
 });
 
 contextBridge.exposeInMainWorld("electronAPI", {
   notify,
   restartAndUpdate,
   onUpdateReady,
+  checkForUpdates,
+  onUpdateStatus,
+  onDownloadProgress,
+  restartBackend,
+  onBackendStatus,
+  onBackendLog,
 });

@@ -12,7 +12,6 @@ import {
   clearSystemCache,
   fetchSystemInfo,
   fetchSystemLogs,
-  restartBackend,
   systemLogsExportUrl,
 } from "@/lib/settings-api";
 import { APP_VERSION } from "@shared/constants";
@@ -23,10 +22,20 @@ export function SystemSettingsPanel() {
   const [appName, setAppName] = useState("CyberForge");
   const [backendPort, setBackendPort] = useState(8002);
   const [logLines, setLogLines] = useState<string[]>([]);
-  const [busy, setBusy] = useState<"cache" | "restart" | null>(null);
+  const [busy, setBusy] = useState<"cache" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [updateReady, setUpdateReady] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<{
+    status: string;
+    version?: string;
+    message?: string;
+  } | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [backendStatus, setBackendStatus] = useState<{
+    status: string;
+    pid?: number;
+  }>({ status: "unknown" });
+  const [isRestarting, setIsRestarting] = useState(false);
   const isDesktopApp = Boolean(window.electronAPI?.restartAndUpdate);
 
   const loadInfo = useCallback(async () => {
@@ -49,10 +58,19 @@ export function SystemSettingsPanel() {
   }, [loadInfo]);
 
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.onUpdateReady?.(() => {
-      setUpdateReady(true);
-    });
-    return () => unsubscribe?.();
+    if (!window.electronAPI) return;
+    const unsubUpdate = window.electronAPI.onUpdateStatus?.(setUpdateStatus);
+    const unsubProgress = window.electronAPI.onDownloadProgress?.((d) =>
+      setDownloadProgress(d.percent),
+    );
+    const unsubBackend = window.electronAPI.onBackendStatus?.((data) =>
+      setBackendStatus({ status: data.status, pid: data.pid }),
+    );
+    return () => {
+      unsubUpdate?.();
+      unsubProgress?.();
+      unsubBackend?.();
+    };
   }, []);
 
   const backendOnline = status === "online";
@@ -73,27 +91,20 @@ export function SystemSettingsPanel() {
     void loadInfo();
   }
 
-  async function handleRestart() {
-    setBusy("restart");
-    setError(null);
-    setMessage(null);
-    const res = await restartBackend();
-    setBusy(null);
-    if (!res.ok || !res.data) {
-      setError(apiErrorMessage(res, "Action impossible."));
-      return;
-    }
-    setMessage(res.data.message);
+  async function handleCheckUpdate() {
+    setUpdateStatus({ status: "checking" });
+    await window.electronAPI?.checkForUpdates?.();
+  }
+
+  async function handleRestartBackend() {
+    setIsRestarting(true);
+    await window.electronAPI?.restartBackend?.();
+    setTimeout(() => setIsRestarting(false), 4000);
     void refresh();
-    void loadInfo();
   }
 
   function handleExportLogs() {
     openExternalUrl(systemLogsExportUrl());
-  }
-
-  function handleRestartAndUpdate() {
-    window.electronAPI?.restartAndUpdate?.();
   }
 
   return (
@@ -160,36 +171,97 @@ export function SystemSettingsPanel() {
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/45">
             Mise à jour CyberForge
           </h3>
-          <p className="mb-4 text-sm text-white/55">
-            Les mises à jour sont vérifiées automatiquement au lancement de
-            l&apos;application installée. Une notification apparaît lorsqu&apos;une
-            nouvelle version est téléchargée depuis GitHub Releases.
-          </p>
-          {updateReady ? (
-            <button
-              type="button"
-              onClick={handleRestartAndUpdate}
-              className={GOLD_BTN}
-            >
-              Mettre à jour CyberForge
-            </button>
-          ) : (
-            <p className="text-sm text-white/45">
-              Aucune mise à jour en attente.
-            </p>
+
+          <div className="mb-3 text-sm text-white/55">
+            {!updateStatus && "Vérification automatique au lancement."}
+            {updateStatus?.status === "checking" && "Vérification en cours..."}
+            {updateStatus?.status === "up-to-date" &&
+              `✓ CyberForge est à jour (v${updateStatus.version})`}
+            {updateStatus?.status === "downloading" && (
+              <span>
+                Téléchargement v{updateStatus.version}...
+                {downloadProgress !== null && ` ${downloadProgress}%`}
+              </span>
+            )}
+            {updateStatus?.status === "ready" &&
+              `✓ v${updateStatus.version} prête — redémarre pour installer`}
+            {updateStatus?.status === "error" && `Erreur : ${updateStatus.message}`}
+          </div>
+
+          {downloadProgress !== null && updateStatus?.status === "downloading" && (
+            <div className="mb-3 h-1.5 w-full rounded-full bg-white/10">
+              <div
+                className="h-1.5 rounded-full bg-amber-400 transition-all"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
           )}
+
+          <div className="flex gap-2">
+            {updateStatus?.status !== "ready" && (
+              <button
+                type="button"
+                onClick={() => void handleCheckUpdate()}
+                disabled={
+                  updateStatus?.status === "checking" ||
+                  updateStatus?.status === "downloading"
+                }
+                className={GOLD_BTN}
+              >
+                {updateStatus?.status === "checking"
+                  ? "Vérification..."
+                  : "Vérifier les mises à jour"}
+              </button>
+            )}
+            {updateStatus?.status === "ready" && (
+              <button
+                type="button"
+                onClick={() => window.electronAPI?.restartAndUpdate?.()}
+                className={GOLD_BTN}
+              >
+                Redémarrer et installer
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {isDesktopApp ? (
+        <div className={GLASS_SECTION}>
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/45">
+            Processus backend
+          </h3>
+          <div className="mb-3 flex items-center gap-2 text-sm">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                backendStatus.status === "online"
+                  ? "bg-green-400"
+                  : backendStatus.status === "starting"
+                    ? "animate-pulse bg-amber-400"
+                    : "bg-red-400"
+              }`}
+            />
+            <span className="text-white/70">
+              {backendStatus.status === "online" &&
+                `En ligne${backendStatus.pid ? ` · PID ${backendStatus.pid}` : ""}`}
+              {backendStatus.status === "starting" && "Démarrage..."}
+              {backendStatus.status === "offline" && "Hors ligne"}
+              {backendStatus.status === "error" && "Erreur"}
+              {backendStatus.status === "unknown" && "Statut inconnu"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleRestartBackend()}
+            disabled={isRestarting || backendStatus.status === "starting"}
+            className={GOLD_BTN}
+          >
+            {isRestarting ? "Redémarrage..." : "Redémarrer le backend"}
+          </button>
         </div>
       ) : null}
 
       <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={() => void handleRestart()}
-          className={GHOST_BTN}
-        >
-          {busy === "restart" ? "Rechargement…" : "Redémarrer le backend"}
-        </button>
         <button
           type="button"
           disabled={busy !== null}

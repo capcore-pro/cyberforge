@@ -31,11 +31,61 @@ declare global {
       notify?: (title: string, body: string) => void;
       restartAndUpdate?: () => void;
       onUpdateReady?: (callback: () => void) => () => void;
+      checkForUpdates?: () => Promise<void>;
+      onUpdateStatus?: (
+        callback: (data: {
+          status: "checking" | "up-to-date" | "downloading" | "ready" | "error";
+          version?: string;
+          message?: string;
+        }) => void,
+      ) => () => void;
+      onDownloadProgress?: (
+        callback: (data: {
+          percent: number;
+          transferred: number;
+          total: number;
+        }) => void,
+      ) => () => void;
+      restartBackend?: () => Promise<{ ok: boolean }>;
+      onBackendStatus?: (
+        callback: (data: {
+          status: "starting" | "online" | "offline" | "error";
+          pid?: number;
+          code?: number;
+          message?: string;
+        }) => void,
+      ) => () => void;
+      onBackendLog?: (callback: (log: string) => void) => () => void;
     };
     electronAPI?: {
       notify?: (title: string, body: string) => void;
       restartAndUpdate?: () => void;
       onUpdateReady?: (callback: () => void) => () => void;
+      checkForUpdates?: () => Promise<void>;
+      onUpdateStatus?: (
+        callback: (data: {
+          status: "checking" | "up-to-date" | "downloading" | "ready" | "error";
+          version?: string;
+          message?: string;
+        }) => void,
+      ) => () => void;
+      onDownloadProgress?: (
+        callback: (data: {
+          percent: number;
+          transferred: number;
+          total: number;
+        }) => void,
+      ) => () => void;
+      restartBackend?: () => Promise<{ ok: boolean }>;
+      onBackendStatus?: (
+        callback: (data: {
+          status: "starting" | "online" | "offline" | "error";
+          pid?: number;
+          code?: number;
+          message?: string;
+        }) => void,
+      ) => () => void;
+      onBackendLog?: (callback: (log: string) => void) => () => void;
     };
   }
 }
