@@ -10,6 +10,7 @@ import {
   stopBackend,
 } from "./backend-process";
 import { registerIpcHandlers } from "./ipc-handlers";
+import { getAppVersion } from "./app-version.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -61,6 +62,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  console.log("app.getVersion():", app.getVersion());
+  console.log("getAppVersion():", getAppVersion());
+  console.log("__dirname:", __dirname);
+
   // En dev, ne pas imposer de CSP au niveau session (Vite injecte des scripts inline).
   if (isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {

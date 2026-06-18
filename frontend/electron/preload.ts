@@ -1,5 +1,6 @@
-import { contextBridge, ipcRenderer, app } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
+import { getAppVersion } from "./app-version";
 import type {
   ApiRequestPayload,
   ApiResponsePayload,
@@ -9,7 +10,7 @@ import type {
 /** Preload CJS : `process` est un global Node — pas `globalThis.process` (undefined en sandbox). */
 function readAppVersion(): string {
   try {
-    return app.getVersion();
+    return getAppVersion();
   } catch {
     return "0.0.0";
   }
