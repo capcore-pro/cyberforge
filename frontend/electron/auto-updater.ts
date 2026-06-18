@@ -1,5 +1,7 @@
 import { Notification, ipcMain, type BrowserWindow } from "electron";
-import { autoUpdater } from "electron-updater";
+import pkg from "electron-updater";
+
+const { autoUpdater } = pkg;
 import { IPC_CHANNELS } from "@shared/ipc";
 
 /** Active les mises à jour automatiques via GitHub Releases (production uniquement). */

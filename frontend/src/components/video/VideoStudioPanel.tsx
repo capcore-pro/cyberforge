@@ -15,6 +15,7 @@ import MusicSelector from "./MusicSelector";
 interface Scene {
   scene_number: number;
   title: string;
+  description_fr: string;
   prompt: string;
   camera_move: string;
   mood: string;
@@ -500,6 +501,14 @@ export default function VideoStudioPanel({
           </div>
         )}
 
+        <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 mb-4">
+          <p className="text-xs text-gray-400">
+            💡 <strong className="text-white">Conseil économies</strong> — Lisez et
+            modifiez vos scènes en français avant de lancer la génération. Chaque
+            modification après génération coûte des crédits Kling.
+          </p>
+        </div>
+
         {/* Scènes */}
         <SceneEditor scenes={scenes} onChange={setScenes} />
 
@@ -631,7 +640,11 @@ export default function VideoStudioPanel({
           />
           <div className="flex gap-2">
             <a
-              href={`http://127.0.0.1:8002/api/video/download/${finalUrl.split("/")[3]?.split("_")[0]}`}
+              href={
+                currentProjectId
+                  ? `http://127.0.0.1:8002/api/video/download/${currentProjectId}`
+                  : undefined
+              }
               download
               className="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 
                          hover:bg-cyan-500 text-white text-sm rounded-lg 

@@ -357,11 +357,18 @@ async def get_music_library():
 
 @router.get("/download/{project_id}")
 async def download_final_video(project_id: str):
-    """Télécharge la vidéo finale assemblée."""
+    """Télécharge la vidéo finale assemblée (version brandée si disponible)."""
     try:
-        path = Path(f"static/videos/{project_id}_final.mp4")
-        if not path.exists():
+        branded_path = Path(f"static/videos/{project_id}_final_branded.mp4")
+        normal_path = Path(f"static/videos/{project_id}_final.mp4")
+
+        if branded_path.exists():
+            path = branded_path
+        elif normal_path.exists():
+            path = normal_path
+        else:
             raise HTTPException(404, "Vidéo non trouvée")
+
         return FileResponse(
             path,
             media_type="video/mp4",

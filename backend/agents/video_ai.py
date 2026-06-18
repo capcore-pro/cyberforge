@@ -29,6 +29,7 @@ FORMAT DE RÉPONSE — JSON uniquement, aucun texte autour :
     {
       "scene_number": 1,
       "title": "Titre court de la scène",
+      "description_fr": "Description en français de ce que l'on voit (2-3 phrases simples)",
       "prompt": "Prompt Kling optimisé 50-80 mots en anglais",
       "camera_move": "slow dolly forward",
       "mood": "opening",
@@ -36,6 +37,10 @@ FORMAT DE RÉPONSE — JSON uniquement, aucun texte autour :
     }
   ]
 }
+
+Pour chaque scène, génère AUSSI :
+- "description_fr" : description en français de ce que l'on voit dans la scène (2-3 phrases simples, vocabulaire accessible)
+- "prompt" : prompt Kling en anglais (inchangé, 50-80 mots)
 
 RÈGLES PROMPTS KLING :
 - Toujours commencer par le mouvement de caméra
@@ -46,6 +51,27 @@ RÈGLES PROMPTS KLING :
 - Progression dramatique : opening → build → climax → reveal
 - La progression narrative doit refléter le message clé fourni dans le brief
 - La scène 6 (reveal) doit TOUJOURS intégrer visuellement le call to action dans sa description
+
+RÈGLES PROMPTS VISUELS CONCRETS :
+- Toujours décrire UN sujet principal visible (une personne, un objet, un lieu précis)
+- Exemples de sujets concrets :
+  * "a developer typing on a keyboard"
+  * "a smartphone screen displaying a website"
+  * "a business owner looking at analytics dashboard"
+  * "hands typing on a laptop in a dark office"
+  * "a website loading and appearing on screen"
+- Éviter les concepts abstraits comme :
+  * "digital void" / "cyber space" / "data streams"
+  * "holographic interface" / "neural network sphere"
+- Toujours inclure l'environnement :
+  * "in a modern dark office"
+  * "on a sleek desk with monitors"
+  * "in front of multiple screens"
+- Toujours inclure l'action :
+  * "typing rapidly" / "clicking" / "scrolling"
+  * "presenting to a client" / "reviewing designs"
+- Les prompts anglais (prompt) doivent appliquer ces règles : sujet + lieu + action visibles
+- Les description_fr doivent décrire la même scène concrète en langage simple
 
 MOUVEMENTS DE CAMÉRA DISPONIBLES :
 slow dolly forward, slow dolly backward, pan left, pan right,
@@ -70,10 +96,14 @@ Réponds UNIQUEMENT en JSON valide. Zéro texte avant ou après."""
 
 
 BRAND_CONTEXTS = {
-    "cyberforge": "CyberForge est une usine logicielle IA premium qui génère des produits numériques complets en quelques minutes. Ambiance tech sombre, puissante, futuriste.",
-    "capcopy": "Cap Copy est une agence de copywriting IA premium. Ambiance professionnelle, élégante, convaincante.",
-    "lumio": "Lumio est une application d'apprentissage IA douce et intelligente. Ambiance chaleureuse, lumineuse, bienveillante.",
-    "vocali": "Vocali est une plateforme de voix IA ultra-réaliste. Ambiance sonore, vibrante, technologique."
+    "cyberforge": """CyberForge est une usine logicielle IA qui génère des sites web, apps et logiciels en quelques minutes.
+ÉLÉMENTS VISUELS : développeur devant des écrans générant du code, interface sombre avec des éléments cyan, sites web qui apparaissent magiquement, tableau de bord IA avec métriques, clavier mécanique avec éclairage cyan.""",
+    "capcopy": """Cap Copy est une agence de copywriting IA premium.
+ÉLÉMENTS VISUELS : rédacteur devant un MacBook, textes qui s'écrivent automatiquement, clients satisfaits lisant des propositions, bureau élégant avec livres et plantes.""",
+    "lumio": """Lumio est une application d'apprentissage IA.
+ÉLÉMENTS VISUELS : étudiant souriant avec tablette, flashcards qui apparaissent à l'écran, graphiques de progression, bibliothèque lumineuse.""",
+    "vocali": """Vocali est une plateforme de voix IA ultra-réaliste.
+ÉLÉMENTS VISUELS : microphone professionnel, ondes sonores visualisées, studio d'enregistrement, personne parlant avec des sous-titres qui apparaissent en temps réel.""",
 }
 
 
@@ -114,7 +144,7 @@ Génère 6 scènes cinématiques premium."""
                 },
                 json={
                     "model": MODEL,
-                    "max_tokens": 2000,
+                    "max_tokens": 3000,
                     "system": SYSTEM_PROMPT,
                     "messages": [
                         {"role": "user", "content": user_prompt}
@@ -149,13 +179,16 @@ Génère 6 scènes cinématiques premium."""
         """Affine un prompt de scène selon instruction utilisateur."""
 
         user_prompt = f"""Scène actuelle :
-Titre : {scene['title']}
-Prompt : {scene['prompt']}
-Caméra : {scene['camera_move']}
+Titre : {scene.get('title', '')}
+Description (fr) : {scene.get('description_fr', '')}
+Prompt (en) : {scene.get('prompt', '')}
+Caméra : {scene.get('camera_move', '')}
 
-Instruction de modification : {instruction}
+Instruction en français : {instruction}
+Modifie le prompt anglais ET génère une nouvelle description_fr en français correspondante.
 
-Retourne uniquement la scène modifiée en JSON avec les mêmes champs."""
+Retourne uniquement la scène modifiée en JSON avec les champs :
+scene_number, title, description_fr, prompt, camera_move, mood, duration."""
 
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
@@ -168,7 +201,11 @@ Retourne uniquement la scène modifiée en JSON avec les mêmes champs."""
                 json={
                     "model": MODEL,
                     "max_tokens": 500,
-                    "system": "Tu es VideoAI. Réponds uniquement en JSON valide.",
+                    "system": (
+                        "Tu es VideoAI. L'instruction utilisateur est en français. "
+                        "Réponds uniquement en JSON valide avec description_fr (français) "
+                        "et prompt (anglais Kling)."
+                    ),
                     "messages": [
                         {"role": "user", "content": user_prompt}
                     ]

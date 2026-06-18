@@ -64,6 +64,16 @@ const BRAND_COLORS: Record<string, string> = {
   vocali: "text-purple-400"
 };
 
+const API_BASE = "http://127.0.0.1:8002";
+
+/** Préfère la version brandée (overlay) pour preview et lecture. */
+function resolveFinalVideoUrl(project: VideoProject): string {
+  if (project.final_video_url?.includes("_final_branded")) {
+    return project.final_video_url;
+  }
+  return `/static/videos/${project.id}_final_branded.mp4`;
+}
+
 export default function VideoLibrary({
   onSelectProject,
   refreshTrigger
@@ -236,7 +246,7 @@ export default function VideoLibrary({
               <div className="px-4 pb-3">
                 {playingId === project.id ? (
                   <video
-                    src={`http://127.0.0.1:8002${project.final_video_url}`}
+                    src={`${API_BASE}${resolveFinalVideoUrl(project)}`}
                     controls
                     autoPlay
                     className="w-full rounded-lg max-h-48 bg-black"
