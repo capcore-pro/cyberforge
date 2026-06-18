@@ -3,13 +3,7 @@
 from __future__ import annotations
 
 import logging
-import sys
 from typing import Any
-
-# Force le bon chemin Python 3.11 (évite conflit mistralai / mauvais site-packages)
-mistralai_path = r"C:\Users\mathi\AppData\Local\Programs\Python\Python311\Lib\site-packages"
-if mistralai_path not in sys.path:
-    sys.path.insert(0, mistralai_path)
 
 try:
     from mistralai import Mistral

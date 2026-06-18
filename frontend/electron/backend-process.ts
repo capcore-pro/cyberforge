@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, ipcMain, type BrowserWindow } from "electron";
@@ -9,33 +9,63 @@ const monorepoRoot = path.resolve(__dirname, "../..");
 
 let backendProcess: ChildProcess | null = null;
 
-function getBackendConfig() {
-  const isDev = !app.isPackaged;
+const UVICORN_ARGS = [
+  "-m",
+  "uvicorn",
+  "main:app",
+  "--host",
+  "127.0.0.1",
+  "--port",
+  "8002",
+] as const;
 
-  if (isDev) {
+type BackendSpawnConfig = {
+  command: string;
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+};
+
+function getIsolatedPythonEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PYTHONPATH: "",
+    PYTHONNOUSERSITE: "1",
+  };
+}
+
+/** Python système en mode packagé (venv non embarqué). */
+function getPackagedPythonLauncher(): { command: string; prefixArgs: string[] } {
+  if (process.platform === "win32") {
+    return { command: "py", prefixArgs: ["-3.12"] };
+  }
+  return { command: "python3", prefixArgs: [] };
+}
+
+function getBackendConfig(): BackendSpawnConfig {
+  const backendCwd = app.isPackaged
+    ? path.join(process.resourcesPath, "backend")
+    : path.join(monorepoRoot, "backend");
+
+  if (!app.isPackaged) {
     const venvPython =
       process.platform === "win32"
         ? path.join(monorepoRoot, "backend", ".venv-py311-backup", "Scripts", "python.exe")
         : path.join(monorepoRoot, "backend", ".venv", "bin", "python");
     return {
-      python: venvPython,
-      cwd: path.join(monorepoRoot, "backend"),
+      command: venvPython,
+      args: [...UVICORN_ARGS],
+      cwd: backendCwd,
+      env: process.env,
     };
   }
 
-  const venvPython =
-    process.platform === "win32"
-      ? path.join(
-          process.resourcesPath,
-          "backend",
-          ".venv-py311-backup",
-          "Scripts",
-          "python.exe",
-        )
-      : path.join(process.resourcesPath, "backend", ".venv", "bin", "python");
+  const launcher = getPackagedPythonLauncher();
   return {
-    python: venvPython,
-    cwd: path.join(process.resourcesPath, "backend"),
+    command: launcher.command,
+    args: [...launcher.prefixArgs, ...UVICORN_ARGS],
+    cwd: backendCwd,
+    env: getIsolatedPythonEnv(),
   };
 }
 
@@ -43,21 +73,39 @@ export function isBackendProcessRunning(): boolean {
   return backendProcess !== null;
 }
 
+function isPackagedPythonAvailable(): boolean {
+  if (process.platform === "win32") {
+    const result = spawnSync("py", ["-3.12", "--version"], { encoding: "utf8" });
+    return result.status === 0;
+  }
+  const result = spawnSync("python3", ["--version"], { encoding: "utf8" });
+  return result.status === 0;
+}
+
 export function startBackend(getMainWindow: () => BrowserWindow | null): void {
   if (backendProcess) return;
 
-  const { python, cwd } = getBackendConfig();
   const send = (channel: string, data?: unknown) => {
     getMainWindow()?.webContents.send(channel, data);
   };
 
   send(IPC_CHANNELS.BACKEND_STATUS, { status: "starting" });
 
-  backendProcess = spawn(
-    python,
-    ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8002"],
-    { cwd, stdio: ["ignore", "pipe", "pipe"] },
-  );
+  if (app.isPackaged && !isPackagedPythonAvailable()) {
+    send(IPC_CHANNELS.BACKEND_STATUS, {
+      status: "error",
+      message: "Python 3.11+ requis",
+    });
+    return;
+  }
+
+  const { command, args, cwd, env } = getBackendConfig();
+
+  backendProcess = spawn(command, args, {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    env,
+  });
 
   const proc = backendProcess;
 

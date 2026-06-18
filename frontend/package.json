@@ -35,6 +35,24 @@
       "node_modules/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "**/.env",
+          "!**/.venv/**",
+          "!**/.venv-py311-backup/**",
+          "!**/node_modules/**",
+          "!**/__pycache__/**",
+          "!**/.pytest_cache/**",
+          "!**/temp/**",
+          "!**/temp_builds/**",
+          "!**/.vitrine-builds/**"
+        ]
+      }
+    ],
     "win": {
       "target": [
         {
