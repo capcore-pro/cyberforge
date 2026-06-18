@@ -162,6 +162,8 @@ export const NAV_ITEMS: NavItem[] = [
 
 /** Hash URL pour navigation profonde (ex. #/erp-builder). */
 export const PAGE_HASH_PATHS: Partial<Record<AppPage, string>> = {
+  clients: "clients",
+  generator: "generator",
   erp_builder: "erp-builder",
   mobile_builder: "mobile-builder",
   video_builder: "video-builder",

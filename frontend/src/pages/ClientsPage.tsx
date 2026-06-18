@@ -380,6 +380,16 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
   }, [view, selectedId, loadDetail]);
 
   useEffect(() => {
+    if (loading) return;
+    const openId = sessionStorage.getItem("open_client_id");
+    if (!openId) return;
+    sessionStorage.removeItem("open_client_id");
+    if (clients.some((c) => c.id === openId)) {
+      openDetail(openId);
+    }
+  }, [loading, clients]);
+
+  useEffect(() => {
     return () => {
       if (notesTimerRef.current) clearTimeout(notesTimerRef.current);
     };
@@ -425,7 +435,28 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
       actionError: null,
       result: null,
     });
+    sessionStorage.setItem("generator_back_client_id", client.id);
+    window.location.hash = "#/generator";
     onOpenGenerator?.();
+  }
+
+  function handleGenerateVideo(client: ClientRecord) {
+    const c = client as ClientRecord & {
+      nom?: string;
+      entreprise?: string;
+      telephone?: string;
+    };
+    sessionStorage.setItem(
+      "prefill_video_client",
+      JSON.stringify({
+        client_name: c.nom || c.name || "",
+        client_email: c.email || "",
+        client_company: c.entreprise || c.company || "",
+        client_phone: c.telephone || c.phone || "",
+      }),
+    );
+    sessionStorage.setItem("video_client_back_id", client.id);
+    window.location.hash = "#/video-client";
   }
 
   async function handleFormSubmit(values: ClientFormValues) {
@@ -818,6 +849,13 @@ export function ClientsPage({ onOpenGenerator }: ClientsPageProps) {
                   className={GOLD_BTN}
                 >
                   ⚡ Créer un projet
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleGenerateVideo(selectedClient)}
+                  className="flex items-center gap-2 rounded-lg border border-[#f5c842]/30 bg-[#f5c842]/10 px-4 py-2 text-sm font-medium text-[#f5c842] transition-colors hover:bg-[#f5c842]/20"
+                >
+                  🎬 Générer une vidéo
                 </button>
                 <button type="button" onClick={openEditForm} className={GHOST_BTN}>
                   Modifier

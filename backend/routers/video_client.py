@@ -21,7 +21,7 @@ from services.video_client_scenes import (
     build_client_scene_objects,
     generate_french_descriptions,
 )
-from utils.pdf_generator import generate_brief_pdf
+from utils.pdf_generator import generate_brief_pdf, generate_recap_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -142,17 +142,6 @@ def _normalize_client_scenes_payload(raw_scenes: list[ClientScenePayload]) -> li
     return normalized
 
 
-def _order_brief_text(order: dict) -> str:
-    parts = [order.get("objectif", "")]
-    if order.get("produits_services"):
-        parts.append(order["produits_services"])
-    if order.get("public_cible"):
-        parts.append(f"Public: {order['public_cible']}")
-    if order.get("notes_libres"):
-        parts.append(order["notes_libres"])
-    return " — ".join(p for p in parts if p).strip(" —")
-
-
 # ─── Estimateur de prix ──────────────────────────────────────────────────────
 
 def calculate_price(
@@ -176,6 +165,74 @@ def calculate_price(
         "prix_estime_min": base,
         "prix_estime_max": int(base * 1.6),
     }
+
+
+def _order_fields_from_create(data: VideoClientOrderCreate) -> dict:
+    prix = calculate_price(
+        nb_scenes=data.nb_scenes,
+        duree=data.duree_souhaitee,
+        musique_premium=data.musique_premium,
+        overlay_texte=data.overlay_texte,
+        livraison_express=data.livraison_express,
+    )
+    return {
+        "client_name": data.client_name,
+        "client_email": data.client_email,
+        "client_company": data.client_company,
+        "client_phone": data.client_phone,
+        "secteur": data.secteur,
+        "objectif": data.objectif,
+        "ton": data.ton,
+        "produits_services": data.produits_services,
+        "public_cible": data.public_cible,
+        "slogan": data.slogan,
+        "couleurs_marque": data.couleurs_marque,
+        "duree_souhaitee": data.duree_souhaitee,
+        "exemples_references": data.exemples_references,
+        "notes_libres": data.notes_libres,
+        "nb_scenes": data.nb_scenes,
+        "musique_premium": data.musique_premium,
+        "overlay_texte": data.overlay_texte,
+        "livraison_express": data.livraison_express,
+        "prix_estime_min": prix["prix_estime_min"],
+        "prix_estime_max": prix["prix_estime_max"],
+    }
+
+
+def _fetch_order(order_id: str) -> dict:
+    result = (
+        supabase.table("video_client_orders")
+        .select("*")
+        .eq("id", order_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+    return result.data
+
+
+def _crm_client_payload(order: dict) -> dict:
+    """Mappe une commande vidéo vers public.clients (colonnes FR)."""
+    return {
+        "nom": order["client_name"],
+        "email": order["client_email"],
+        "entreprise": order.get("client_company") or None,
+        "telephone": order.get("client_phone") or None,
+        "est_perso": False,
+        "actif": True,
+    }
+
+
+def _order_brief_text(order: dict) -> str:
+    parts = [order.get("objectif", "")]
+    if order.get("produits_services"):
+        parts.append(order["produits_services"])
+    if order.get("public_cible"):
+        parts.append(f"Public: {order['public_cible']}")
+    if order.get("notes_libres"):
+        parts.append(order["notes_libres"])
+    return " — ".join(p for p in parts if p).strip(" —")
 
 
 # ─── Route 1 — Générer le PDF brief ─────────────────────────────────────────
@@ -205,36 +262,9 @@ async def generate_pdf_brief(data: PdfBriefRequest):
 @router.post("/orders")
 async def create_order(data: VideoClientOrderCreate):
     """Sauvegarde le brief client reçu et retourne l'estimation de prix."""
-    prix = calculate_price(
-        nb_scenes=data.nb_scenes,
-        duree=data.duree_souhaitee,
-        musique_premium=data.musique_premium,
-        overlay_texte=data.overlay_texte,
-        livraison_express=data.livraison_express,
-    )
-
     order = {
         "id": str(uuid.uuid4()),
-        "client_name": data.client_name,
-        "client_email": data.client_email,
-        "client_company": data.client_company,
-        "client_phone": data.client_phone,
-        "secteur": data.secteur,
-        "objectif": data.objectif,
-        "ton": data.ton,
-        "produits_services": data.produits_services,
-        "public_cible": data.public_cible,
-        "slogan": data.slogan,
-        "couleurs_marque": data.couleurs_marque,
-        "duree_souhaitee": data.duree_souhaitee,
-        "exemples_references": data.exemples_references,
-        "notes_libres": data.notes_libres,
-        "nb_scenes": data.nb_scenes,
-        "musique_premium": data.musique_premium,
-        "overlay_texte": data.overlay_texte,
-        "livraison_express": data.livraison_express,
-        "prix_estime_min": prix["prix_estime_min"],
-        "prix_estime_max": prix["prix_estime_max"],
+        **_order_fields_from_create(data),
         "status": "brief_recu",
     }
 
@@ -245,8 +275,8 @@ async def create_order(data: VideoClientOrderCreate):
 
     return {
         "order_id": order["id"],
-        "prix_estime_min": prix["prix_estime_min"],
-        "prix_estime_max": prix["prix_estime_max"],
+        "prix_estime_min": order["prix_estime_min"],
+        "prix_estime_max": order["prix_estime_max"],
         "message": "Brief sauvegardé avec succès",
     }
 
@@ -259,18 +289,7 @@ async def generate_from_order(order_id: str):
     Prépare les prompts sectoriels adaptés au brief client.
     Retourne les scènes générées pour validation avant lancement Kling.
     """
-    result = (
-        supabase.table("video_client_orders")
-        .select("*")
-        .eq("id", order_id)
-        .single()
-        .execute()
-    )
-
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Commande introuvable")
-
-    order = result.data
+    order = _fetch_order(order_id)
 
     try:
         scene_objects = await _build_scenes_for_order(order)
@@ -278,9 +297,9 @@ async def generate_from_order(order_id: str):
         logger.exception("generate_from_order failed for %s", order_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    supabase.table("video_client_orders").update({"status": "en_generation"}).eq(
-        "id", order_id
-    ).execute()
+    supabase.table("video_client_orders").update(
+        {"status": "en_generation", "scenes_data": scene_objects}
+    ).eq("id", order_id).execute()
 
     return {
         "order_id": order_id,
@@ -302,18 +321,7 @@ async def launch_kling_from_order(order_id: str, body: LaunchKlingRequest):
     Crée un video_project depuis le brief client
     et retourne l'ID pour redirection vers le Video Builder.
     """
-    result = (
-        supabase.table("video_client_orders")
-        .select("*")
-        .eq("id", order_id)
-        .single()
-        .execute()
-    )
-
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Commande introuvable")
-
-    order = result.data
+    order = _fetch_order(order_id)
     client_scenes = _normalize_client_scenes_payload(body.scenes)
 
     if not client_scenes:
@@ -366,6 +374,7 @@ async def launch_kling_from_order(order_id: str, body: LaunchKlingRequest):
         {
             "status": "en_generation",
             "video_project_id": video_project_id,
+            "scenes_data": client_scenes,
         }
     ).eq("id", order_id).execute()
 
@@ -388,6 +397,90 @@ async def list_orders():
         .execute()
     )
     return result.data or []
+
+
+# ─── Route 4b — Détail d'une commande ───────────────────────────────────────
+
+@router.get("/orders/{order_id}")
+async def get_order(order_id: str):
+    return _fetch_order(order_id)
+
+
+@router.get("/orders/{order_id}/pdf-recap")
+async def download_order_recap(order_id: str):
+    """Génère un PDF récapitulatif : brief complet + estimation prix."""
+    order = _fetch_order(order_id)
+    try:
+        pdf_bytes = generate_recap_pdf(order)
+        filename = f"Recap_Video_{order['client_name'].replace(' ', '_')}.pdf"
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ─── Route 4c — Modifier une commande ───────────────────────────────────────
+
+@router.put("/orders/{order_id}")
+async def update_order(order_id: str, data: VideoClientOrderCreate):
+    _fetch_order(order_id)
+    result = (
+        supabase.table("video_client_orders")
+        .update(_order_fields_from_create(data))
+        .eq("id", order_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Erreur mise à jour")
+    return result.data[0]
+
+
+# ─── Route 4d — Supprimer une commande ──────────────────────────────────────
+
+@router.delete("/orders/{order_id}")
+async def delete_order(order_id: str):
+    _fetch_order(order_id)
+    supabase.table("video_client_orders").delete().eq("id", order_id).execute()
+    return {"message": "Commande supprimée"}
+
+
+# ─── Route 4e — Sync client CRM ───────────────────────────────────────────────
+
+@router.post("/orders/{order_id}/sync-crm")
+async def sync_to_crm(order_id: str):
+    """Ajoute ou met à jour le client dans la table clients CyberForge."""
+    order = _fetch_order(order_id)
+    client_data = _crm_client_payload(order)
+
+    existing = (
+        supabase.table("clients")
+        .select("id")
+        .eq("email", order["client_email"])
+        .limit(1)
+        .execute()
+    )
+
+    if existing.data:
+        supabase.table("clients").update(client_data).eq(
+            "email", order["client_email"]
+        ).execute()
+        return {
+            "message": "Client mis à jour dans le CRM",
+            "action": "updated",
+            "client_id": existing.data[0]["id"],
+        }
+
+    client_data["id"] = str(uuid.uuid4())
+    inserted = supabase.table("clients").insert(client_data).execute()
+    client_id = inserted.data[0]["id"] if inserted.data else client_data["id"]
+    return {
+        "message": "Client ajouté au CRM",
+        "action": "created",
+        "client_id": client_id,
+    }
 
 
 # ─── Route 5 — Secteurs disponibles ─────────────────────────────────────────

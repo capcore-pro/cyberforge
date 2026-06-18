@@ -375,6 +375,7 @@ export function GeneratorPage({
   const [inspirationAnalyzing, setInspirationAnalyzing] = useState(false);
   const [cloneInspirationBusy, setCloneInspirationBusy] = useState(false);
   const [cloneStatusMessage, setCloneStatusMessage] = useState<string | null>(null);
+  const [backClientId, setBackClientId] = useState<string | null>(null);
   const [inspirationScrapeMeta, setInspirationScrapeMeta] =
     useState<ScrapeInspirationResult | null>(null);
   const [inspirationError, setInspirationError] = useState<string | null>(null);
@@ -395,6 +396,14 @@ export function GeneratorPage({
     () => getSectorPreset(selectedSectorId),
     [selectedSectorId],
   );
+
+  useEffect(() => {
+    const backId = sessionStorage.getItem("generator_back_client_id");
+    if (backId) {
+      setBackClientId(backId);
+      sessionStorage.removeItem("generator_back_client_id");
+    }
+  }, []);
 
   const sectorOptions = useMemo(
     () => listSectorsForKind(selectedKind),
@@ -1280,6 +1289,18 @@ export function GeneratorPage({
 
   return (
     <div className="mx-auto max-w-6xl scroll-smooth space-y-6 pb-8">
+      {backClientId ? (
+        <button
+          type="button"
+          onClick={() => {
+            sessionStorage.setItem("open_client_id", backClientId);
+            window.location.hash = "#/clients";
+          }}
+          className="mb-4 flex items-center gap-2 text-sm text-cf-muted transition-colors hover:text-cf-text"
+        >
+          ← Retour à la fiche client
+        </button>
+      ) : null}
       {showBackToPerso && onOpenPerso ? (
         <div className="sticky top-0 z-20 -mx-1 border-b border-fuchsia-500/20 bg-cf-main/95 py-3 backdrop-blur-sm">
           <BackButton onClick={onOpenPerso} label="Retour vers Projets Perso" />

@@ -165,3 +165,173 @@ def generate_brief_pdf(
     doc.build(story)
     buffer.seek(0)
     return buffer.read()
+
+
+def generate_recap_pdf(order: dict) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=20 * mm,
+        leftMargin=20 * mm,
+        topMargin=20 * mm,
+        bottomMargin=20 * mm,
+    )
+
+    DARK = colors.HexColor("#0f1117")
+    GOLD = colors.HexColor("#f5c842")
+    GREY = colors.HexColor("#6b7280")
+    LIGHT = colors.HexColor("#f9fafb")
+    WHITE = colors.white
+
+    getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "title",
+        fontSize=22,
+        textColor=DARK,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+        spaceAfter=4,
+    )
+    subtitle_style = ParagraphStyle(
+        "subtitle",
+        fontSize=11,
+        textColor=GREY,
+        fontName="Helvetica",
+        alignment=TA_CENTER,
+        spaceAfter=16,
+    )
+    section_style = ParagraphStyle(
+        "section",
+        fontSize=11,
+        textColor=WHITE,
+        fontName="Helvetica-Bold",
+        alignment=TA_LEFT,
+        backColor=DARK,
+        leftIndent=8,
+        spaceBefore=10,
+        spaceAfter=6,
+    )
+    label_style = ParagraphStyle(
+        "label",
+        fontSize=9,
+        textColor=GREY,
+        fontName="Helvetica-Bold",
+        spaceAfter=1,
+    )
+    value_style = ParagraphStyle(
+        "value",
+        fontSize=10,
+        textColor=DARK,
+        fontName="Helvetica",
+        spaceAfter=8,
+    )
+
+    story: list = []
+
+    story.append(Paragraph("⚡ CyberForge", title_style))
+    story.append(Paragraph("Récapitulatif Commande Vidéo", subtitle_style))
+    story.append(HRFlowable(width="100%", thickness=2, color=GOLD, spaceAfter=12))
+
+    story.append(Paragraph("IDENTITÉ CLIENT", section_style))
+    client_data = [
+        ["Nom", order.get("client_name") or "—"],
+        ["Email", order.get("client_email") or "—"],
+        ["Entreprise", order.get("client_company") or "—"],
+        ["Téléphone", order.get("client_phone") or "—"],
+    ]
+    t = Table(client_data, colWidths=[45 * mm, 125 * mm])
+    t.setStyle(
+        TableStyle(
+            [
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("TEXTCOLOR", (0, 0), (0, -1), GREY),
+                ("TEXTCOLOR", (1, 0), (1, -1), DARK),
+                ("ROWBACKGROUNDS", (0, 0), (-1, -1), [LIGHT, WHITE]),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    story.append(t)
+
+    story.append(Paragraph("BRIEF VIDÉO", section_style))
+    secteur_raw = order.get("secteur") or "—"
+    ton_raw = order.get("ton") or "—"
+    brief_fields = [
+        ("Secteur", secteur_raw.upper() if secteur_raw != "—" else "—"),
+        ("Objectif", order.get("objectif") or "—"),
+        ("Ton", ton_raw.capitalize() if ton_raw != "—" else "—"),
+        ("Produits / services", order.get("produits_services") or "—"),
+        ("Public cible", order.get("public_cible") or "—"),
+        ("Slogan", order.get("slogan") or "—"),
+        ("Couleurs de marque", order.get("couleurs_marque") or "—"),
+        ("Références", order.get("exemples_references") or "—"),
+        ("Notes", order.get("notes_libres") or "—"),
+    ]
+    for label, value in brief_fields:
+        if value and value != "—":
+            story.append(Paragraph(label, label_style))
+            story.append(Paragraph(value, value_style))
+
+    story.append(Paragraph("OPTIONS & ESTIMATION DE PRIX", section_style))
+    nb = order.get("nb_scenes", 5)
+    duree = order.get("duree_souhaitee", 30)
+    musique = order.get("musique_premium", False)
+    overlay = order.get("overlay_texte", True)
+    express = order.get("livraison_express", False)
+
+    base = nb * 100
+    if duree > 30:
+        base += (duree - 30) * 10
+    if musique:
+        base += 150
+    if overlay:
+        base += 50
+    if express:
+        base += 200
+    prix_max = int(base * 1.6)
+
+    options_data = [
+        ["Nombre de scènes", str(nb), f"{nb * 100}€"],
+        ["Durée", f"{duree}s", f"+{(duree - 30) * 10}€" if duree > 30 else "inclus"],
+        ["Musique premium", "✓" if musique else "✗", "+150€" if musique else "—"],
+        ["Overlay texte", "✓" if overlay else "✗", "+50€" if overlay else "—"],
+        ["Livraison express", "✓" if express else "✗", "+200€" if express else "—"],
+        ["TOTAL ESTIMÉ", "", f"{base}€ – {prix_max}€"],
+    ]
+    ot = Table(options_data, colWidths=[80 * mm, 40 * mm, 50 * mm])
+    ot.setStyle(
+        TableStyle(
+            [
+                ("FONTNAME", (0, 0), (-1, -2), "Helvetica"),
+                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("TEXTCOLOR", (0, -1), (-1, -1), DARK),
+                ("BACKGROUND", (0, -1), (-1, -1), GOLD),
+                ("ROWBACKGROUNDS", (0, 0), (-1, -2), [LIGHT, WHITE]),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+            ]
+        )
+    )
+    story.append(ot)
+
+    story.append(Spacer(1, 12))
+    story.append(HRFlowable(width="100%", thickness=1, color=GOLD, spaceAfter=6))
+    story.append(
+        Paragraph(
+            "Document généré par CyberForge · CapCore Studio Digital · capcore.pro",
+            ParagraphStyle("footer", fontSize=8, textColor=GREY, alignment=TA_CENTER),
+        )
+    )
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.read()
