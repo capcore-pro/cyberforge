@@ -16,6 +16,7 @@ export const IPC_CHANNELS = {
   RESTART_BACKEND: "restart-backend",
   BACKEND_STATUS: "backend-status",
   BACKEND_LOG: "backend-log",
+  GET_VERSION: "get-version",
 } as const;
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";

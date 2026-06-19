@@ -26,7 +26,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
   const [tab, setTab] = useState<SettingsTab>("profile");
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto flex h-full min-h-0 max-w-4xl flex-col space-y-8">
       <header>
         <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#d4a843]/80">
           Configuration
@@ -50,7 +50,7 @@ export function SettingsPage({ onNavigate }: SettingsPageProps) {
         ))}
       </nav>
 
-      <section>
+      <section className="min-h-0 flex-1">
         {tab === "profile" ? <ProfileSettingsPanel /> : null}
         {tab === "keys" ? <ApiKeysSettingsPanel /> : null}
         {tab === "agents" ? (

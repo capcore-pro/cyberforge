@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 interface LayoutProps {
   children: ReactNode;
@@ -8,8 +9,16 @@ interface LayoutProps {
  * Mise en page principale : zone plein écran et pied de page système.
  */
 export function Layout({ children }: LayoutProps) {
-  const version = window.cyberforge?.getVersion?.() ?? "—";
+  const [version, setVersion] = useState("—");
   const platform = window.cyberforge?.getPlatform?.() ?? "—";
+
+  useEffect(() => {
+    const api = window.cyberforge ?? window.electronAPI;
+    if (!api?.getVersion) return;
+    void Promise.resolve(api.getVersion()).then((v) => {
+      if (typeof v === "string" && v) setVersion(v);
+    });
+  }, []);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-cf-main">

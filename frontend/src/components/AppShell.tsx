@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Film } from "lucide-react";
 import { BackendStatusBanner } from "@/components/BackendStatusBanner";
 import { ContactNotificationToast } from "@/components/ContactNotificationToast";
@@ -79,7 +79,15 @@ export function AppShell({
   const { activeCount, totalAgents, agentsCountKnown, loading } =
     useAgentsStatus();
   const { status: backendStatus, health } = useBackendHealth();
-  const version = window.cyberforge?.getVersion?.() ?? "—";
+  const [version, setVersion] = useState("—");
+
+  useEffect(() => {
+    const api = window.cyberforge ?? window.electronAPI;
+    if (!api?.getVersion) return;
+    void Promise.resolve(api.getVersion()).then((v) => {
+      if (typeof v === "string" && v) setVersion(v);
+    });
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 w-full">

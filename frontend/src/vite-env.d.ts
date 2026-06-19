@@ -19,7 +19,7 @@ interface ImportMeta {
 declare global {
   interface Window {
     cyberforge?: {
-      getVersion: () => string;
+      getVersion: () => Promise<string> | string;
       getPlatform: () => string;
       api?: {
         request: (payload: ApiRequestPayload) => Promise<ApiResponsePayload>;
@@ -58,6 +58,7 @@ declare global {
       onBackendLog?: (callback: (log: string) => void) => () => void;
     };
     electronAPI?: {
+      getVersion?: () => Promise<string> | string;
       notify?: (title: string, body: string) => void;
       restartAndUpdate?: () => void;
       onUpdateReady?: (callback: () => void) => () => void;

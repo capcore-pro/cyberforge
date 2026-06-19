@@ -19,9 +19,7 @@ import { APP_VERSION } from "@shared/constants";
 export function SystemSettingsPanel() {
   const { status, health, refresh } = useBackendHealth();
   const desktopApi = window.electronAPI ?? window.cyberforge;
-  const [appVersion, setAppVersion] = useState(
-    () => desktopApi?.getVersion?.() ?? APP_VERSION,
-  );
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
   const [appName, setAppName] = useState("CyberForge");
   const [backendPort, setBackendPort] = useState(8002);
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -61,11 +59,13 @@ export function SystemSettingsPanel() {
   }, [loadInfo]);
 
   useEffect(() => {
-    const version =
-      window.electronAPI?.getVersion?.() ??
-      window.cyberforge?.getVersion?.() ??
-      APP_VERSION;
-    setAppVersion(version);
+    const api = window.electronAPI ?? window.cyberforge;
+    if (!api?.getVersion) return;
+    void Promise.resolve(api.getVersion()).then((version) => {
+      if (typeof version === "string" && version) {
+        setAppVersion(version);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export function SystemSettingsPanel() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="h-full min-h-0 space-y-6 overflow-y-auto">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className={GLASS_CARD}>
           <p className="text-xs font-semibold uppercase tracking-wide text-white/45">

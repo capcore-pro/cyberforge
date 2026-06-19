@@ -1,5 +1,5 @@
 import "./load-env.js";
-import { app, BrowserWindow, session, shell } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setupAutoUpdater } from "./auto-updater";
@@ -11,6 +11,7 @@ import {
 } from "./backend-process";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { getAppVersion } from "./app-version.js";
+import { IPC_CHANNELS } from "@shared/ipc";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,6 +81,7 @@ app.whenReady().then(() => {
   }
 
   registerIpcHandlers();
+  ipcMain.handle(IPC_CHANNELS.GET_VERSION, () => getAppVersion());
   registerBackendIpc(() => mainWindow);
   createWindow();
   startBackend(() => mainWindow);
