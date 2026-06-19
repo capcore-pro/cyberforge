@@ -18,7 +18,10 @@ import { APP_VERSION } from "@shared/constants";
 
 export function SystemSettingsPanel() {
   const { status, health, refresh } = useBackendHealth();
-  const [version, setVersion] = useState(APP_VERSION);
+  const desktopApi = window.electronAPI ?? window.cyberforge;
+  const [appVersion, setAppVersion] = useState(
+    () => desktopApi?.getVersion?.() ?? APP_VERSION,
+  );
   const [appName, setAppName] = useState("CyberForge");
   const [backendPort, setBackendPort] = useState(8002);
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -36,7 +39,8 @@ export function SystemSettingsPanel() {
     pid?: number;
   }>({ status: "unknown" });
   const [isRestarting, setIsRestarting] = useState(false);
-  const isDesktopApp = Boolean(window.electronAPI?.restartAndUpdate);
+  const [backendLogs, setBackendLogs] = useState<string[]>([]);
+  const isDesktopApp = Boolean(window.electronAPI || window.cyberforge);
 
   const loadInfo = useCallback(async () => {
     const [infoRes, logsRes] = await Promise.all([
@@ -44,7 +48,6 @@ export function SystemSettingsPanel() {
       fetchSystemLogs(5),
     ]);
     if (infoRes.ok && infoRes.data) {
-      setVersion(infoRes.data.version);
       setAppName(infoRes.data.app_name);
     }
     if (logsRes.ok && logsRes.data) {
@@ -58,12 +61,21 @@ export function SystemSettingsPanel() {
   }, [loadInfo]);
 
   useEffect(() => {
-    if (!window.electronAPI) return;
-    const unsubUpdate = window.electronAPI.onUpdateStatus?.(setUpdateStatus);
-    const unsubProgress = window.electronAPI.onDownloadProgress?.((d) =>
+    const version =
+      window.electronAPI?.getVersion?.() ??
+      window.cyberforge?.getVersion?.() ??
+      APP_VERSION;
+    setAppVersion(version);
+  }, []);
+
+  useEffect(() => {
+    const api = window.electronAPI ?? window.cyberforge;
+    if (!api) return;
+    const unsubUpdate = api.onUpdateStatus?.(setUpdateStatus);
+    const unsubProgress = api.onDownloadProgress?.((d) =>
       setDownloadProgress(d.percent),
     );
-    const unsubBackend = window.electronAPI.onBackendStatus?.((data) =>
+    const unsubBackend = api.onBackendStatus?.((data) =>
       setBackendStatus({ status: data.status, pid: data.pid }),
     );
     return () => {
@@ -73,8 +85,15 @@ export function SystemSettingsPanel() {
     };
   }, []);
 
+  useEffect(() => {
+    const api = window.electronAPI ?? window.cyberforge;
+    const unsub = api?.onBackendLog?.((log) => {
+      setBackendLogs((prev) => [...prev.slice(-10), log]);
+    });
+    return () => unsub?.();
+  }, []);
+
   const backendOnline = status === "online";
-  const displayVersion = health?.version ?? version;
 
   async function handleClearCache() {
     setBusy("cache");
@@ -93,12 +112,12 @@ export function SystemSettingsPanel() {
 
   async function handleCheckUpdate() {
     setUpdateStatus({ status: "checking" });
-    await window.electronAPI?.checkForUpdates?.();
+    await desktopApi?.checkForUpdates?.();
   }
 
   async function handleRestartBackend() {
     setIsRestarting(true);
-    await window.electronAPI?.restartBackend?.();
+    await desktopApi?.restartBackend?.();
     setTimeout(() => setIsRestarting(false), 4000);
     void refresh();
   }
@@ -134,11 +153,9 @@ export function SystemSettingsPanel() {
 
         <div className={GLASS_CARD}>
           <p className="text-xs font-semibold uppercase tracking-wide text-white/45">
-            Version {appName}
+            Version CyberForge
           </p>
-          <p className="mt-3 text-lg font-semibold text-white">
-            v{displayVersion}
-          </p>
+          <p className="mt-3 text-lg font-semibold text-white">v{appVersion}</p>
         </div>
 
         <div className={GLASS_CARD}>
@@ -216,7 +233,7 @@ export function SystemSettingsPanel() {
             {updateStatus?.status === "ready" && (
               <button
                 type="button"
-                onClick={() => window.electronAPI?.restartAndUpdate?.()}
+                onClick={() => desktopApi?.restartAndUpdate?.()}
                 className={GOLD_BTN}
               >
                 Redémarrer et installer
@@ -258,6 +275,22 @@ export function SystemSettingsPanel() {
           >
             {isRestarting ? "Redémarrage..." : "Redémarrer le backend"}
           </button>
+          {backendLogs.length > 0 && (
+            <div
+              style={{
+                marginTop: 8,
+                fontFamily: "monospace",
+                fontSize: 11,
+                color: "rgba(255,255,255,0.4)",
+                maxHeight: 120,
+                overflow: "auto",
+              }}
+            >
+              {backendLogs.map((l, i) => (
+                <div key={i}>{l}</div>
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
 
