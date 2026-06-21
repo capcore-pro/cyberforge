@@ -63,10 +63,17 @@ RATE_LIMITS = {
 
 def _collect_route_paths(application: FastAPI) -> set[str]:
     paths: set[str] = set()
-    for route in application.routes:
-        path = getattr(route, "path", None)
-        if path:
-            paths.add(path)
+
+    def _walk(routes) -> None:
+        for route in routes:
+            path = getattr(route, "path", None)
+            if path:
+                paths.add(path)
+            sub_routes = getattr(route, "routes", None)
+            if sub_routes:
+                _walk(sub_routes)
+
+    _walk(application.routes)
     return paths
 
 
@@ -192,6 +199,11 @@ def create_app() -> FastAPI:
 
     # Module Toolbox UI retiré — pas de routes /api/toolbox.
     application.include_router(meta.router, prefix="/api")
+
+    logger.info(
+        "[STARTUP] application.routes types: %s",
+        [type(r).__name__ for r in application.routes[:10]],
+    )
 
     missing = [r for r in REQUIRED_ROUTES if r not in _collect_route_paths(application)]
     registered_paths = sorted(_collect_route_paths(application))
