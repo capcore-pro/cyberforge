@@ -18,7 +18,7 @@ from config import refresh_settings
 from db.managed_projects_store import reset_managed_projects_store
 from db.supabase_store import reset_supabase_store
 
-APP_VERSION = "0.8.0"
+APP_VERSION = "1.0.0"
 logger = logging.getLogger(__name__)
 
 REQUIRED_ROUTES = ("/api/health", "/api/projects", "/api/generate", "/api/agents/status")

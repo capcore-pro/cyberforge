@@ -11,7 +11,7 @@ from security.secret_vault import get_secret_vault
 
 router = APIRouter(tags=["health"])
 
-APP_VERSION = "0.8.0"
+APP_VERSION = "1.0.0"
 
 
 @router.get("/health")

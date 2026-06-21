@@ -6,17 +6,19 @@ import asyncio
 import logging
 from typing import Any
 
-from config import get_settings, plain_secret_str
+from config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
 def _effective_gemini_api_key() -> str:
     settings = get_settings()
-    key = plain_secret_str(settings.gemini_api_key)
+    from security.llm_secrets import get_effective_llm_key
+
+    key = get_effective_llm_key("GOOGLE_GENERATIVE_AI_API_KEY", settings)
     if key:
         return key
-    return plain_secret_str(settings.google_generative_ai_api_key)
+    return get_effective_llm_key("GEMINI_API_KEY", settings) or ""
 
 
 class GeminiClient:

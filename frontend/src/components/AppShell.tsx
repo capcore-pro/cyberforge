@@ -201,7 +201,7 @@ export function AppShell({
             </div>
 
             <div className="flex items-center justify-between gap-3 text-[11px] text-cf-muted">
-              <span>v{health?.version ?? version}</span>
+              <span>v{version !== "—" ? version : (health?.version ?? "—")}</span>
               <span className="truncate">{health?.app ?? "CapCore"}</span>
             </div>
           </div>

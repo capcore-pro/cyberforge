@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     )
     gemini_api_key: SecretStr | None = Field(default=None, alias="GEMINI_API_KEY")
     ollama_base_url: str | None = Field(default=None, alias="OLLAMA_BASE_URL")
+    ffmpeg_path: str | None = Field(default=None, alias="FFMPEG_PATH")
+    ffprobe_path: str | None = Field(default=None, alias="FFPROBE_PATH")
 
     coremind_deepseek_model: str = Field(
         default="deepseek-chat", alias="COREMIND_DEEPSEEK_MODEL"

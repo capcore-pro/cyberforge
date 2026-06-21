@@ -10,6 +10,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from utils.ffmpeg_bin import resolve_ffmpeg
+
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 MUSIC_DIR = BACKEND_ROOT / "static/music"
 MUSIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -47,7 +49,7 @@ def generate_fallback(filename: str, freq: str, duration: int = 60) -> None:
     path = MUSIC_DIR / filename
     subprocess.run(
         [
-            "ffmpeg",
+            resolve_ffmpeg(),
             "-y",
             "-f",
             "lavfi",

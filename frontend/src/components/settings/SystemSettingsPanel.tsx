@@ -19,7 +19,7 @@ import { APP_VERSION } from "@shared/constants";
 export function SystemSettingsPanel() {
   const { status, health, refresh } = useBackendHealth();
   const desktopApi = window.electronAPI ?? window.cyberforge;
-  const [appVersion, setAppVersion] = useState(APP_VERSION);
+  const [appVersion, setAppVersion] = useState("—");
   const [appName, setAppName] = useState("CyberForge");
   const [backendPort, setBackendPort] = useState(8002);
   const [logLines, setLogLines] = useState<string[]>([]);
@@ -60,12 +60,15 @@ export function SystemSettingsPanel() {
 
   useEffect(() => {
     const api = window.electronAPI ?? window.cyberforge;
-    if (!api?.getVersion) return;
-    void Promise.resolve(api.getVersion()).then((version) => {
-      if (typeof version === "string" && version) {
-        setAppVersion(version);
-      }
-    });
+    if (api?.getVersion) {
+      void Promise.resolve(api.getVersion()).then((version) => {
+        if (typeof version === "string" && version) {
+          setAppVersion(version);
+        }
+      });
+      return;
+    }
+    setAppVersion(APP_VERSION);
   }, []);
 
   useEffect(() => {

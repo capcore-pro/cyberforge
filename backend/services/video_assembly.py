@@ -3,11 +3,12 @@
 # Assemblage clips + musique via FFmpeg
 # ============================================
 
-import os
 import asyncio
 import logging
 import httpx
 from pathlib import Path
+
+from utils.ffmpeg_bin import resolve_ffmpeg, resolve_ffprobe
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class VideoAssembly:
         output_path: Path
     ):
         cmd = [
-            "ffmpeg", "-y",
+            resolve_ffmpeg(), "-y",
             "-f", "concat",
             "-safe", "0",
             "-i", str(list_file),
@@ -117,7 +118,7 @@ class VideoAssembly:
 
         # Les clips Kling n'ont souvent pas de piste audio — on mappe la musique seule.
         cmd = [
-            "ffmpeg", "-y",
+            resolve_ffmpeg(), "-y",
             "-f", "concat",
             "-safe", "0",
             "-i", str(list_file),
@@ -161,7 +162,7 @@ class VideoAssembly:
         safe_tagline = self._escape_drawtext(tagline)
 
         cmd = [
-            "ffmpeg", "-y",
+            resolve_ffmpeg(), "-y",
             "-i", str(video_path),
             "-vf",
             (
@@ -215,7 +216,7 @@ class VideoAssembly:
     # ─────────────────────────────────────────
     async def get_duration(self, video_path: Path) -> float:
         cmd = [
-            "ffprobe", "-v", "quiet",
+            resolve_ffprobe(), "-v", "quiet",
             "-print_format", "json",
             "-show_format",
             str(video_path)
