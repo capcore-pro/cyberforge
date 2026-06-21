@@ -212,14 +212,24 @@ def create_app() -> FastAPI:
         [type(r).__name__ for r in application.routes[:10]],
     )
 
-    for route in application.routes[:5]:
-        logger.info(
-            "[DEBUG] route type=%s path=%s has_app=%s app_type=%s",
-            type(route).__name__,
-            getattr(route, "path", "N/A"),
-            hasattr(route, "app"),
-            type(getattr(route, "app", None)).__name__,
-        )
+    for route in application.routes[:3]:
+        if type(route).__name__ == "_IncludedRouter":
+            all_attrs = {
+                k: str(type(getattr(route, k, None)).__name__)
+                for k in dir(route)
+                if not k.startswith("__")
+            }
+            logger.info("[DEBUG] _IncludedRouter attrs: %s", all_attrs)
+            for attr_name in dir(route):
+                if not attr_name.startswith("__"):
+                    val = getattr(route, attr_name, None)
+                    if val is not None and not callable(val):
+                        logger.info(
+                            "[DEBUG] _IncludedRouter.%s = %s",
+                            attr_name,
+                            repr(val)[:200],
+                        )
+            break
 
     missing = [r for r in REQUIRED_ROUTES if r not in _collect_route_paths(application)]
     registered_paths = sorted(_collect_route_paths(application))
