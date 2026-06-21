@@ -64,11 +64,32 @@ RATE_LIMITS = {
 def _collect_route_paths(application: FastAPI) -> set[str]:
     paths: set[str] = set()
 
+    def _add_path(path: str, prefix: str = "") -> None:
+        paths.add(path)
+        if prefix:
+            base = prefix.rstrip("/")
+            if not (path == base or path.startswith(base + "/")):
+                paths.add(f"{base}/{path.lstrip('/')}")
+
     def _walk(routes, prefix: str = "") -> None:
         for route in routes:
             path = getattr(route, "path", None)
             if path:
-                paths.add(path)
+                _add_path(path, prefix)
+
+            include_context = getattr(route, "include_context", None)
+            if include_context:
+                included_router = getattr(include_context, "included_router", None)
+                if included_router:
+                    ctx_prefix = getattr(include_context, "prefix", "") or ""
+                    sub_routes = getattr(included_router, "routes", [])
+                    _walk(sub_routes, ctx_prefix)
+
+            original_router = getattr(route, "original_router", None)
+            if original_router and original_router is not route:
+                sub_routes = getattr(original_router, "routes", [])
+                if sub_routes:
+                    _walk(sub_routes, prefix)
 
             app = getattr(route, "app", None)
             if app:
@@ -195,41 +216,10 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     for api_router, prefix in API_ROUTERS:
-        route_count = len(api_router.routes) if hasattr(api_router, "routes") else "N/A"
-        logger.info(
-            "[ROUTER] type=%s routes=%s prefix=%s",
-            type(api_router),
-            route_count,
-            prefix,
-        )
         application.include_router(api_router, prefix=prefix)
 
     # Module Toolbox UI retiré — pas de routes /api/toolbox.
     application.include_router(meta.router, prefix="/api")
-
-    logger.info(
-        "[STARTUP] application.routes types: %s",
-        [type(r).__name__ for r in application.routes[:10]],
-    )
-
-    for route in application.routes[:3]:
-        if type(route).__name__ == "_IncludedRouter":
-            all_attrs = {
-                k: str(type(getattr(route, k, None)).__name__)
-                for k in dir(route)
-                if not k.startswith("__")
-            }
-            logger.info("[DEBUG] _IncludedRouter attrs: %s", all_attrs)
-            for attr_name in dir(route):
-                if not attr_name.startswith("__"):
-                    val = getattr(route, attr_name, None)
-                    if val is not None and not callable(val):
-                        logger.info(
-                            "[DEBUG] _IncludedRouter.%s = %s",
-                            attr_name,
-                            repr(val)[:200],
-                        )
-            break
 
     missing = [r for r in REQUIRED_ROUTES if r not in _collect_route_paths(application)]
     registered_paths = sorted(_collect_route_paths(application))
