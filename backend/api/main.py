@@ -64,14 +64,21 @@ RATE_LIMITS = {
 def _collect_route_paths(application: FastAPI) -> set[str]:
     paths: set[str] = set()
 
-    def _walk(routes) -> None:
+    def _walk(routes, prefix: str = "") -> None:
         for route in routes:
             path = getattr(route, "path", None)
             if path:
                 paths.add(path)
+
+            app = getattr(route, "app", None)
+            if app:
+                sub_routes = getattr(app, "routes", None)
+                if sub_routes:
+                    _walk(sub_routes, prefix)
+
             sub_routes = getattr(route, "routes", None)
             if sub_routes:
-                _walk(sub_routes)
+                _walk(sub_routes, prefix)
 
     _walk(application.routes)
     return paths
@@ -204,6 +211,15 @@ def create_app() -> FastAPI:
         "[STARTUP] application.routes types: %s",
         [type(r).__name__ for r in application.routes[:10]],
     )
+
+    for route in application.routes[:5]:
+        logger.info(
+            "[DEBUG] route type=%s path=%s has_app=%s app_type=%s",
+            type(route).__name__,
+            getattr(route, "path", "N/A"),
+            hasattr(route, "app"),
+            type(getattr(route, "app", None)).__name__,
+        )
 
     missing = [r for r in REQUIRED_ROUTES if r not in _collect_route_paths(application)]
     registered_paths = sorted(_collect_route_paths(application))
