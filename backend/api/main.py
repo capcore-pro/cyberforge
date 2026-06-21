@@ -2,21 +2,48 @@
 Factory FastAPI — assemble routes, CORS et métadonnées de l'API.
 """
 
+import logging as _early_log
+
+_early_log.basicConfig(level=_early_log.DEBUG)
+_startup = _early_log.getLogger("startup")
+_startup.info("[EARLY] api.main loading started")
+
+_startup.info("[EARLY] importing stdlib...")
 import logging
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from time import time as _time
 
+_startup.info("[EARLY] stdlib OK")
+
+_startup.info("[EARLY] importing fastapi...")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+_startup.info("[EARLY] fastapi OK")
+
+_startup.info("[EARLY] importing api.recent_logs...")
 from api.recent_logs import attach_ring_buffer_handler
+
+_startup.info("[EARLY] api.recent_logs OK")
+
+_startup.info("[EARLY] importing api.routes...")
 from api.routes import API_ROUTERS
 from api.routes import meta
+
+_startup.info("[EARLY] api.routes OK — %s routers", len(API_ROUTERS))
+
+_startup.info("[EARLY] importing config...")
 from config import refresh_settings
+
+_startup.info("[EARLY] config OK")
+
+_startup.info("[EARLY] importing db stores...")
 from db.managed_projects_store import reset_managed_projects_store
 from db.supabase_store import reset_supabase_store
+
+_startup.info("[EARLY] db stores OK")
 
 APP_VERSION = "1.0.0"
 logger = logging.getLogger(__name__)
