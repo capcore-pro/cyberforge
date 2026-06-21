@@ -10,17 +10,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt ./requirements.txt
+COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install chromium --with-deps || playwright install chromium
 
-COPY backend/package.json backend/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY backend/. .
+COPY . .
 
-# Template vitrine (Next.js) requis pour le scaffold en prod
-COPY templates/vitrine-next ./templates/vitrine-next
+# templates/vitrine-next est hors du contexte backend/ — fallback GitHub dans scaffold_renderer.py
 
 # Railway injecte PORT (expansion shell requise)
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8002}"]
