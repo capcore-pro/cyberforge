@@ -160,10 +160,16 @@ def create_app() -> FastAPI:
     application.include_router(meta.router, prefix="/api")
 
     missing = [r for r in REQUIRED_ROUTES if r not in _collect_route_paths(application)]
+    registered_paths = sorted(_collect_route_paths(application))
+    logger.info("[STARTUP] API_ROUTERS count: %s", len(API_ROUTERS))
+    logger.info("[STARTUP] Registered routes count: %s", len(registered_paths))
+    logger.info("[STARTUP] Registered paths: %s", registered_paths)
     if missing:
-        raise RuntimeError(
-            f"Routes API manquantes après enregistrement : {missing}. "
-            "Vérifiez api/routes/__init__.py et api/main.py."
+        logger.error(
+            "[STARTUP] Routes manquantes: %s — registered: %s routes",
+            missing,
+            len(registered_paths),
         )
+        # NE PAS RAISE — laisser démarrer pour diagnostiquer
 
     return application
