@@ -22,9 +22,9 @@ pypdf>=5.0.0,<6.0.0
 # réintégrer quand le Dockerfile aura gcc + libcairo2-dev
 stripe>=11.0.0,<14.0.0
 Pillow>=11.0.0
-# OpenHands Software Agent SDK (Python ≥ 3.12 — voir backend/Dockerfile)
-openhands-sdk>=1.22.0; python_version >= "3.12"
-openhands-tools>=1.22.0; python_version >= "3.12"
+# openhands-sdk + openhands-tools supprimés —
+# agents/openhands_agent.py et agents/pipeline_graph.py absents du repo
+# conflit OpenTelemetry avec mistralai — réintégrer quand l'implémentation sera complète
 playwright>=1.49.0,<2.0.0
 exa-py>=1.8.0,<2.0.0
 exponent-server-sdk>=2.1.0,<3.0.0
