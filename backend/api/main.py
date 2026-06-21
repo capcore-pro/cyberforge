@@ -181,6 +181,13 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     for api_router, prefix in API_ROUTERS:
+        route_count = len(api_router.routes) if hasattr(api_router, "routes") else "N/A"
+        logger.info(
+            "[ROUTER] type=%s routes=%s prefix=%s",
+            type(api_router),
+            route_count,
+            prefix,
+        )
         application.include_router(api_router, prefix=prefix)
 
     # Module Toolbox UI retiré — pas de routes /api/toolbox.
