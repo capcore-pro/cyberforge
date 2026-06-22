@@ -18,7 +18,9 @@ from agents.deploy_ai import DeployAI
 from agents.design_system_ai import DesignSystemAgent
 from agents.generator_ai import GeneratorAI
 from agents.llm_usage_utils import pop_agent_usage
+from agents.openhands_pipeline import run_openhands_pipeline
 from agents.supervisor_ai import SupervisorAI
+from config import get_settings
 from llm.llm_usage_service import LLMUsageTotals, get_llm_usage_service
 from api.generation_stream import EXTENSION_TRACKED_TOTAL as _EXT_TOTAL
 from api.generation_stream import TRACKED_TOTAL, generation_event_store
@@ -41,6 +43,7 @@ _AGENT_RECEIVER_SLUG: dict[str, str] = {
     "AuthAI": "auth_ai",
     "PaymentAI": "payment_ai",
     "GeneratorAI": "generator_ai",
+    "OpenHands": "openhands",
     "ElectronAI": "electron_ai",
     "DeployAI": "deploy_ai",
     "SupervisorAI": "supervisor_ai",
@@ -54,6 +57,7 @@ _AGENT_PLAN_KEYS: dict[str, str] = {
     "AuthAI": "auth",
     "PaymentAI": "payment",
     "GeneratorAI": "generator",
+    "OpenHands": "openhands",
     "ElectronAI": "electron",
     "SupervisorAI": "supervisor",
     "DeployAI": "deploy",
@@ -113,15 +117,19 @@ class PipelineRequest(BaseModel):
     generation_mode: str | None = None
     inspiration_brief: str | None = None
     firecrawl_result: dict[str, Any] | None = None
+    openhands_enabled: bool | None = Field(
+        default=None,
+        description="Active OpenHands entre GeneratorAI et SupervisorAI.",
+    )
     stripe_publishable_key: str | None = None
 
 
 def _print_supervisor_fail(agent_name: str, errors: list[str]) -> None:
-    print(f"[SupervisorAI] ❌ {agent_name} invalide — erreurs: {errors}")
+    logger.warning("[SupervisorAI] FAIL %s invalide — erreurs: %s", agent_name, errors)
 
 
 def _print_supervisor_retry(agent_name: str, attempt: int) -> None:
-    print(f"[SupervisorAI] 🔄 {agent_name} relancé — tentative {attempt}")
+    logger.info("[SupervisorAI] RETRY %s relance — tentative %s", agent_name, attempt)
 
 
 async def _emit(
@@ -289,6 +297,28 @@ async def _orchestration_set_html_context(
         context_key="html",
         context_value={"length": html_length, "quality_score": quality_score},
         produced_by="generator_ai",
+    )
+
+
+async def _orchestration_set_openhands_context(
+    session_id: str,
+    shared_context: dict[str, Any],
+) -> None:
+    from db.orchestration_store import get_orchestration_store
+
+    await get_orchestration_store().set_shared_context(
+        session_id=session_id,
+        context_key="openhands",
+        context_value={
+            "status": shared_context.get("openhands_status"),
+            "iterations": shared_context.get("openhands_iterations", 0),
+            "issues_found": shared_context.get("openhands_issues_found", []),
+            "corrections_applied": shared_context.get("openhands_corrections_applied", []),
+            "quality_before": shared_context.get("openhands_quality_before", 0),
+            "quality_after": shared_context.get("openhands_quality_after", 0),
+            "report": shared_context.get("openhands_report", {}),
+        },
+        produced_by="openhands",
     )
 
 
@@ -578,8 +608,8 @@ async def _run_supervised(
                         channel_name="supervisor_corrections",
                     )
                 if success_log:
-                    msg = f"[SupervisorAI] ✅ {agent_name} validé — {success_log(last_result)}"
-                    print(msg)
+                    msg = f"[SupervisorAI] OK {agent_name} valide — {success_log(last_result)}"
+                    logger.info(msg)
                     await _emit_log(generation_id, msg)
                 return last_result
 
@@ -682,6 +712,7 @@ async def _run_pipeline_body_inner(
     is_extension = (req.project_type or "").strip().lower() == "extension_navigateur"
     tracked_total = _EXT_TOTAL if is_extension else TRACKED_TOTAL
     html_quality_score = 0
+    openhands_ctx: dict[str, Any] | None = None
 
     from agents.planning_engine import PlanningEngine
 
@@ -1081,6 +1112,71 @@ async def _run_pipeline_body_inner(
         orchestration_ctx, "GeneratorAI", generation_id=generation_id
     )
 
+    openhands_enabled = req.openhands_enabled
+    if openhands_enabled is None:
+        openhands_enabled = get_settings().openhands_enabled
+
+    shared_context: dict[str, Any] = {
+        "generated_html": str((result or {}).get("html") or ""),
+        "project_type": str(brief.get("project_type") or req.project_type or "vitrine_next"),
+        "project_name": str(
+            brief.get("client_name") or req.client_name or brief.get("project_name") or ""
+        ),
+        "openhands_enabled": openhands_enabled,
+    }
+
+    if shared_context.get("openhands_enabled", True) and shared_context.get("generated_html"):
+        logger.info("Pipeline — OpenHands analyse & correction...")
+        await _emit_log(generation_id, "OpenHands — analyse & correction…")
+        oh_t0 = time.perf_counter()
+        shared_context = await run_openhands_pipeline(
+            shared_context=shared_context,
+            project_type=str(shared_context.get("project_type", "vitrine_next")),
+            project_name=str(shared_context.get("project_name", "")),
+        )
+        corrected_html = str(
+            shared_context.get("generated_html")
+            or shared_context.get("generated_code")
+            or ""
+        )
+        if corrected_html and isinstance(result, dict):
+            result["html"] = corrected_html
+
+        await _emit(
+            generation_id,
+            "openhands_done",
+            {
+                "iterations": shared_context.get("openhands_iterations", 0),
+                "issues_fixed": len(
+                    shared_context.get("openhands_corrections_applied", [])
+                ),
+                "quality_score": shared_context.get("openhands_quality_after", 0),
+            },
+        )
+        await _emit_log(
+            generation_id,
+            (
+                f"OpenHands terminé — {shared_context.get('openhands_iterations', 0)} "
+                f"itération(s), score {shared_context.get('openhands_quality_after', 0)}"
+            ),
+        )
+        _track_workflow_step(workflow_ctx, "OpenHands")
+        _track_orchestration_agent(
+            orchestration_ctx, "OpenHands", generation_id=generation_id
+        )
+        if orch_session_id:
+            _schedule_orchestration(
+                _orchestration_set_openhands_context(
+                    str(orch_session_id),
+                    shared_context,
+                )
+            )
+        logger.info(
+            "OpenHands pipeline — %s ms",
+            int((time.perf_counter() - oh_t0) * 1000),
+        )
+        openhands_ctx = shared_context
+
     await _emit_agent_start(
         generation_id,
         agent="SupervisorAI",
@@ -1142,8 +1238,8 @@ async def _run_pipeline_body_inner(
                         payload={"html_length": len(html), "attempt": attempt},
                         channel_name="supervisor_corrections",
                     )
-                msg = f"[SupervisorAI] ✅ HTML validé — {len(html)} car."
-                print(msg)
+                msg = f"[SupervisorAI] OK HTML valide — {len(html)} car."
+                logger.info(msg)
                 await _emit_log(generation_id, msg)
                 return
 
@@ -1394,6 +1490,35 @@ async def _run_pipeline_body_inner(
                 )
                 if persistence:
                     persisted_project_id = persistence.project_id
+                    if (
+                        openhands_ctx
+                        and openhands_ctx.get("openhands_status") == "done"
+                    ):
+                        oh_report = dict(openhands_ctx.get("openhands_report") or {})
+                        try:
+                            await store.save_openhands_correction(
+                                persisted_project_id,
+                                iterations=int(
+                                    openhands_ctx.get("openhands_iterations") or 0
+                                ),
+                                issues_found=list(
+                                    openhands_ctx.get("openhands_issues_found") or []
+                                ),
+                                corrections_applied=list(
+                                    openhands_ctx.get("openhands_corrections_applied")
+                                    or []
+                                ),
+                                quality_score=float(
+                                    openhands_ctx.get("openhands_quality_after") or 0
+                                ),
+                                report=oh_report,
+                                redeployed=bool(deploy_url),
+                                deploy_url=deploy_url or None,
+                            )
+                        except SupabaseStoreError as exc:
+                            logger.warning(
+                                "[pipeline] openhands_corrections ignoré: %s", exc
+                            )
             except SupabaseStoreError as exc:
                 logger.warning("[pipeline] persistance Supabase ignorée: %s", exc)
 

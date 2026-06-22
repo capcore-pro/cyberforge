@@ -1065,6 +1065,85 @@ class SupabaseStore:
         )
         return count, model, cost, preview
 
+    async def save_openhands_correction(
+        self,
+        project_id: str,
+        *,
+        iterations: int,
+        issues_found: list[Any],
+        corrections_applied: list[Any],
+        quality_score: float,
+        report: dict[str, Any],
+        redeployed: bool = False,
+        deploy_url: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Persiste un rapport OpenHands (mode Debug)."""
+        if not self.is_configured():
+            raise SupabaseStoreError("Supabase non configuré.")
+
+        body: dict[str, Any] = {
+            "project_id": project_id.strip(),
+            "iterations": max(0, int(iterations)),
+            "issues_found": issues_found,
+            "corrections_applied": corrections_applied,
+            "quality_score": float(quality_score),
+            "report": report,
+            "redeployed": bool(redeployed),
+        }
+        if deploy_url:
+            body["deploy_url"] = deploy_url.strip()
+        url = f"{self._rest_url()}/openhands_corrections"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                headers=self._headers("return=representation"),
+                json=body,
+            )
+            if resp.status_code >= 400:
+                logger.warning(
+                    "openhands_corrections insert ignored: %s %s",
+                    resp.status_code,
+                    resp.text[:300],
+                )
+                return None
+            rows = resp.json()
+            if isinstance(rows, list) and rows:
+                return rows[0]
+            if isinstance(rows, dict):
+                return rows
+            return None
+
+    async def get_latest_openhands_correction(
+        self,
+        project_id: str,
+    ) -> dict[str, Any] | None:
+        """Dernier rapport OpenHands pour un projet."""
+        if not self.is_configured() or not project_id.strip():
+            return None
+
+        url = f"{self._rest_url()}/openhands_corrections"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={
+                    "project_id": f"eq.{project_id.strip()}",
+                    "order": "created_at.desc",
+                    "limit": "1",
+                },
+            )
+            if resp.status_code >= 400:
+                logger.warning(
+                    "openhands_corrections read failed: %s %s",
+                    resp.status_code,
+                    resp.text[:300],
+                )
+                return None
+            rows = resp.json()
+            if isinstance(rows, list) and rows:
+                return rows[0]
+            return None
+
     def _rest_url(self) -> str:
         if not self._url:
             raise SupabaseStoreError(

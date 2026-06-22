@@ -50,6 +50,7 @@ class GenerateRequest(BaseModel):
     inspiration_brief: str | None = None
     firecrawl_result: dict[str, Any] | None = None
     stripe_publishable_key: str | None = None
+    openhands_enabled: bool | None = None
     sync: bool | None = Field(
         default=None,
         description="Si true, exécute le pipeline de façon synchrone (legacy).",
@@ -94,6 +95,7 @@ def _pipeline_request(body: GenerateRequest) -> PipelineRequest:
         inspiration_brief=body.inspiration_brief,
         firecrawl_result=body.firecrawl_result,
         stripe_publishable_key=body.stripe_publishable_key,
+        openhands_enabled=body.openhands_enabled,
     )
 
 

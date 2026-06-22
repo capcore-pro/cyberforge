@@ -112,10 +112,15 @@ class Settings(BaseSettings):
     )
 
     openhands_enabled: bool = Field(default=True, alias="OPENHANDS_ENABLED")
+    openhands_api_key: SecretStr | None = Field(default=None, alias="OPENHANDS_API_KEY")
+    openhands_api_url: str = Field(
+        default="https://app.all-hands.dev/api/v1",
+        alias="OPENHANDS_API_URL",
+    )
     openhands_use_sdk: bool = Field(
-        default=True,
+        default=False,
         alias="OPENHANDS_USE_SDK",
-        description="Utiliser le SDK OpenHands si Python ≥ 3.12 ; sinon repli Anthropic direct.",
+        description="Obsolète — l'agent utilise l'API REST OpenHands Cloud (OPENHANDS_API_KEY).",
     )
     openhands_complexity_threshold: int = Field(
         default=7,

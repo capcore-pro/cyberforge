@@ -1,12 +1,20 @@
-import { memo, type ReactNode } from "react";
+import { memo, useCallback, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   Globe,
   LayoutDashboard,
+  Loader2,
   Puzzle,
   ShoppingBag,
+  Wrench,
 } from "lucide-react";
 import { ProjectPreviewThumbnail } from "@/components/ProjectPreviewThumbnail";
+import { apiErrorMessage } from "@/lib/api-errors";
+import {
+  debugOpenHandsProject,
+  openhandsProjectType,
+  type OpenHandsDebugReport,
+} from "@/lib/openhands-api";
 import {
   STATUS_LABELS,
   TYPE_LABELS,
@@ -133,6 +141,38 @@ export const ProjectCard = memo(function ProjectCard({
   deleteBusy,
 }: ProjectCardProps) {
   const demoUrl = project.url?.trim();
+  const supabaseProjectId = project.supabaseProjectId?.trim();
+  const canDebug = Boolean(supabaseProjectId);
+
+  const [debugging, setDebugging] = useState(false);
+  const [debugReport, setDebugReport] = useState<OpenHandsDebugReport | null>(null);
+  const [debugError, setDebugError] = useState<string | null>(null);
+
+  const handleDebugProject = useCallback(async () => {
+    if (!supabaseProjectId) return;
+    setDebugging(true);
+    setDebugError(null);
+    setDebugReport(null);
+    try {
+      const response = await debugOpenHandsProject(
+        supabaseProjectId,
+        openhandsProjectType(project),
+        { projectName: project.name, redeployAfter: true },
+      );
+      if (!response.ok || !response.data) {
+        setDebugError(apiErrorMessage(response, "Analyse OpenHands impossible."));
+        return;
+      }
+      setDebugReport(response.data);
+    } catch (error) {
+      console.error("Debug error:", error);
+      setDebugError(
+        error instanceof Error ? error.message : "Erreur lors de l'analyse OpenHands.",
+      );
+    } finally {
+      setDebugging(false);
+    }
+  }, [project, supabaseProjectId]);
 
   return (
     <article
@@ -207,6 +247,64 @@ export const ProjectCard = memo(function ProjectCard({
           >
             Convertir en app réelle
           </button>
+        </div>
+      ) : null}
+
+      {canDebug ? (
+        <div className="border-t border-white/10 px-3 pb-3">
+          <button
+            type="button"
+            onClick={() => void handleDebugProject()}
+            disabled={debugging}
+            className="flex w-full items-center justify-center gap-2 rounded-control bg-orange-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {debugging ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Analyse en cours…
+              </>
+            ) : (
+              <>
+                <Wrench className="h-4 w-4" aria-hidden />
+                Analyser &amp; Corriger
+              </>
+            )}
+          </button>
+
+          {debugError ? (
+            <p className="mt-2 text-xs text-red-300" role="alert">
+              {debugError}
+            </p>
+          ) : null}
+
+          {debugReport ? (
+            <div className="mt-3 rounded-control border border-white/10 bg-white/5 p-3 text-sm">
+              <p className="font-medium text-green-400">
+                {debugReport.iterations} itération(s) —{" "}
+                {debugReport.corrections_applied?.length ?? 0} correction(s) appliquée(s)
+              </p>
+              {debugReport.deploy_url ? (
+                <p className="mt-1 text-blue-400">
+                  Redéployé :{" "}
+                  <a
+                    href={debugReport.deploy_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline hover:text-blue-300"
+                  >
+                    {debugReport.deploy_url}
+                  </a>
+                </p>
+              ) : null}
+              {debugReport.corrections_applied?.length ? (
+                <ul className="mt-2 space-y-1 text-xs text-white/70">
+                  {debugReport.corrections_applied.map((correction, index) => (
+                    <li key={`${correction}-${index}`}>• {correction}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </article>
