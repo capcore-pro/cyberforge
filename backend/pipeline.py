@@ -19,6 +19,7 @@ from agents.design_system_ai import DesignSystemAgent
 from agents.generator_ai import GeneratorAI
 from agents.llm_usage_utils import pop_agent_usage
 from agents.openhands_pipeline import run_openhands_pipeline
+from agents.seo_agent import seo_agent
 from agents.supervisor_ai import SupervisorAI
 from config import get_settings
 from llm.llm_usage_service import LLMUsageTotals, get_llm_usage_service
@@ -1405,7 +1406,33 @@ async def _run_pipeline_body_inner(
     deploy_ai = DeployAI()
     client_name = str(brief.get("client_name") or req.client_name or "CyberForge")
     sector = str(brief.get("sector") or "")
+    project_type = str(brief.get("project_type") or req.project_type or "vitrine_next")
     html_in = str(result["html"])
+
+    try:
+        client_name_seo = str(brief.get("client_name") or req.client_name or "")
+        sector_seo = str(brief.get("sector") or "")
+        city_seo = str(brief.get("city") or brief.get("ville") or "")
+        description_seo = str(brief.get("description") or brief.get("tagline") or "")
+        project_type_seo = str(
+            brief.get("project_type") or req.project_type or "vitrine_next"
+        )
+
+        html_in = seo_agent.inject(
+            html=html_in,
+            client_name=client_name_seo,
+            sector=sector_seo,
+            project_type=project_type_seo,
+            city=city_seo,
+            description=description_seo,
+        )
+        result["html"] = html_in
+        logger.info("SEOAgent — injection OK pour %s", client_name_seo)
+    except Exception as seo_err:
+        logger.warning(
+            "SEOAgent — injection échouée (non bloquant) : %s",
+            seo_err,
+        )
 
     payment_config = brief.get("payment_config")
     if not isinstance(payment_config, dict):
@@ -1416,7 +1443,7 @@ async def _run_pipeline_body_inner(
             html_in,
             title=client_name,
             sector=sector,
-            project_type=str(brief.get("project_type") or req.project_type or "vitrine_next"),
+            project_type=project_type,
             payment_config=payment_config,
             design_system=brief.get("design_system"),
             brief=brief,
