@@ -122,6 +122,7 @@ contextBridge.exposeInMainWorld('app', {{
             "scripts": {
                 "start": "electron .",
                 "build": "electron-builder --win --x64",
+                "build:win": "electron-builder --win --x64",
                 "build-portable": "electron-builder --win portable",
             },
             "build": {

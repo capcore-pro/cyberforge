@@ -46,6 +46,9 @@ const MobileBuilderPage = lazy(() =>
 const ErpBuilderPage = lazy(() =>
   import("./pages/ErpBuilder").then((m) => ({ default: m.ErpBuilder })),
 );
+const DesktopBuilderPage = lazy(() =>
+  import("./pages/DesktopBuilder").then((m) => ({ default: m.DesktopBuilder })),
+);
 const MediaBuilderVideoPage = lazy(() =>
   import("./pages/MediaBuilderVideo"),
 );
@@ -249,6 +252,8 @@ function AppWithNotifications({
         return <AgentBuilderPage />;
       case "mobile_builder":
         return <MobileBuilderPage />;
+      case "desktop_builder":
+        return <DesktopBuilderPage />;
       case "erp_builder":
         return <ErpBuilderPage />;
       case "video_builder":

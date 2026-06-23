@@ -15,6 +15,7 @@ export type AppPage =
   | "agents"
   | "agent_builder"
   | "mobile_builder"
+  | "desktop_builder"
   | "erp_builder"
   | "video_builder"
   | "video_client"
@@ -99,6 +100,13 @@ export const BUILDERS_NAV_GROUP: NavGroup = {
       enabled: true,
     },
     {
+      id: "desktop_builder",
+      label: "Desktop Builder",
+      icon: "ti-device-desktop",
+      iconClass: "ti ti-device-desktop",
+      enabled: true,
+    },
+    {
       id: "erp_builder",
       label: "ERP Builder",
       icon: "ti-building",
@@ -165,6 +173,7 @@ export const PAGE_HASH_PATHS: Partial<Record<AppPage, string>> = {
   clients: "clients",
   generator: "generator",
   erp_builder: "erp-builder",
+  desktop_builder: "desktop-builder",
   mobile_builder: "mobile-builder",
   video_builder: "video-builder",
   video_client: "video-client",
