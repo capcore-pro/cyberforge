@@ -9,18 +9,30 @@ interface Props {
 
 export default function Dashboard({ client, sites, onEditSite, onLogout }: Props) {
   const planLabel =
-    {
-      starter: "Starter",
-      pro: "Pro",
-      agency: "Agence",
-    }[client.plan] || client.plan;
+    (
+      {
+        trial: "Essai",
+        essentiel: "Essentiel",
+        business: "Business",
+        studio: "Studio",
+        starter: "Starter",
+        pro: "Pro",
+        agency: "Agence",
+      } as Record<string, string>
+    )[client.plan] || client.plan;
 
   const planColor =
-    {
-      starter: "text-blue-400",
-      pro: "text-purple-400",
-      agency: "text-orange-400",
-    }[client.plan] || "text-gray-400";
+    (
+      {
+        trial: "text-gray-400",
+        essentiel: "text-blue-400",
+        business: "text-purple-400",
+        studio: "text-orange-400",
+        starter: "text-blue-400",
+        pro: "text-purple-400",
+        agency: "text-orange-400",
+      } as Record<string, string>
+    )[client.plan] || "text-gray-400";
 
   return (
     <div className="min-h-screen p-6 max-w-3xl mx-auto">

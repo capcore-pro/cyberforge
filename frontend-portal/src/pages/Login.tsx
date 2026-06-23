@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Client, Site } from "../App";
 
 const API =
@@ -22,6 +23,7 @@ function normalizeSite(row: Record<string, unknown>): Site {
 }
 
 export default function Login({ onLogin }: Props) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -46,9 +48,22 @@ export default function Login({ onLogin }: Props) {
       }
 
       onLogin(
-        data.client as Client,
+        {
+          id: String(data.client.id ?? ""),
+          email: String(data.client.email ?? ""),
+          full_name: String(data.client.full_name ?? ""),
+          company: String(data.client.company ?? ""),
+          plan: String(data.client.plan ?? "trial"),
+          subscription_status: String(
+            data.client.subscription_status ?? "trial",
+          ),
+          trial_ends_at: data.client.trial_ends_at ?? null,
+          subscription_ends_at: data.client.subscription_ends_at ?? null,
+          billing_interval: String(data.client.billing_interval ?? "monthly"),
+        },
         (data.sites as Record<string, unknown>[]).map(normalizeSite),
       );
+      navigate("/dashboard");
     } catch {
       setError("Impossible de se connecter au serveur");
     } finally {
