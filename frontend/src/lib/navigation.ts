@@ -16,6 +16,7 @@ export type AppPage =
   | "agent_builder"
   | "mobile_builder"
   | "desktop_builder"
+  | "idea_lab"
   | "erp_builder"
   | "video_builder"
   | "video_client"
@@ -45,6 +46,13 @@ export const MAIN_NAV_GROUP: NavGroup = {
   items: [
     { id: "dashboard", label: "Accueil", icon: "◈", enabled: true },
     { id: "generator", label: "Générateur", icon: "⚡", enabled: true },
+    {
+      id: "idea_lab",
+      label: "Idea Lab",
+      icon: "💡",
+      iconClass: "ti ti-bulb",
+      enabled: true,
+    },
     { id: "projects", label: "Projets", icon: "▤", enabled: true },
     {
       id: "agents",
@@ -172,6 +180,7 @@ export const NAV_ITEMS: NavItem[] = [
 export const PAGE_HASH_PATHS: Partial<Record<AppPage, string>> = {
   clients: "clients",
   generator: "generator",
+  idea_lab: "idea-lab",
   erp_builder: "erp-builder",
   desktop_builder: "desktop-builder",
   mobile_builder: "mobile-builder",

@@ -49,6 +49,9 @@ const ErpBuilderPage = lazy(() =>
 const DesktopBuilderPage = lazy(() =>
   import("./pages/DesktopBuilder").then((m) => ({ default: m.DesktopBuilder })),
 );
+const IdeaLabPage = lazy(() =>
+  import("./pages/IdeaLab").then((m) => ({ default: m.IdeaLab })),
+);
 const MediaBuilderVideoPage = lazy(() =>
   import("./pages/MediaBuilderVideo"),
 );
@@ -238,6 +241,8 @@ function AppWithNotifications({
             personalMode={generatorFromPerso}
           />
         );
+      case "idea_lab":
+        return <IdeaLabPage />;
       case "projects":
         return (
           <ProjectsPage

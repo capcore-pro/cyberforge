@@ -57,6 +57,7 @@ app.include_router(media_router.router, prefix="/api/media")
 
 from api.video_router import router as video_router
 from routers.electron_router import router as electron_router
+from routers.idea_router import router as idea_router
 from routers.openhands_router import router as openhands_router
 from routers.video_client import router as video_client_router
 
@@ -64,6 +65,7 @@ app.include_router(video_router)
 app.include_router(video_client_router)
 app.include_router(openhands_router)
 app.include_router(electron_router)
+app.include_router(idea_router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _legal_paths = {getattr(r, "path", "") for r in app.routes}
