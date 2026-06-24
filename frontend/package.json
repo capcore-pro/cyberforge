@@ -1,6 +1,6 @@
 {
   "name": "cyberforge-frontend",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Interface desktop CyberForge — Electron, React, TypeScript, TailwindCSS",
   "main": "dist-electron/main.js",
