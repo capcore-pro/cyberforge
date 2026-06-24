@@ -23,7 +23,8 @@
     "publish": {
       "provider": "github",
       "owner": "capcore-pro",
-      "repo": "cyberforge"
+      "repo": "cyberforge",
+      "releaseType": "release"
     },
     "directories": {
       "output": "dist-build",
