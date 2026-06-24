@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BackButton } from "@/components/BackButton";
 import { Button, Modal } from "@/components/ui";
+import DeliverModal from "@/components/DeliverModal";
+import ProjectPortalButton from "@/components/ProjectPortalButton";
 import { PasswordRevealField } from "@/components/PasswordRevealField";
 import {
   ProjectClientStripeSection,
@@ -443,7 +445,8 @@ export function ProjectDetailView({
     }
   }
 
-  async function handleDeliverWithoutWatermark() {
+  async function handleDeliverWithoutWatermark(options?: { closeModal?: boolean }) {
+    const closeModal = options?.closeModal ?? true;
     if (!project.supabaseProjectId) return;
     setDeliverBusy(true);
     setDeliverError(null);
@@ -467,7 +470,9 @@ export function ProjectDetailView({
       setDemoUrl(newUrl);
       onProjectUpdated({ ...project, url: newUrl });
       setWatermarkActive(false);
-      setShowDeliverModal(false);
+      if (closeModal) {
+        setShowDeliverModal(false);
+      }
       setDeliverToast("✓ Site livré — watermark supprimé");
       window.setTimeout(() => setDeliverToast(null), 5000);
     } finally {
@@ -660,6 +665,15 @@ export function ProjectDetailView({
           ) : null}
           {deliverError ? (
             <p className="mt-1 text-xs text-red-300">{deliverError}</p>
+          ) : null}
+          {watermarkActive === false && demoUrl && !isDesktopProject ? (
+            <div className="mt-3">
+              <ProjectPortalButton
+                projectName={project.name}
+                siteUrl={demoUrl}
+                isDelivered={watermarkActive === false}
+              />
+            </div>
           ) : null}
           {isCapcoreSubdomain ? (
             <span className="mt-2 inline-flex items-center rounded-full border border-[#3b82f6]/40 bg-[#3b82f6]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#60a5fa]">
@@ -981,40 +995,20 @@ export function ProjectDetailView({
         )}
       </Modal>
 
-      <Modal
-        isOpen={showDeliverModal}
-        onClose={() => {
-          if (!deliverBusy) setShowDeliverModal(false);
-        }}
-        title="Livrer sans watermark"
-        size="sm"
-        icon="ti ti-package-export"
-      >
-        <p className="text-sm text-cf-muted">
-          Êtes-vous sûr de vouloir livrer ce site sans watermark ? Cette action est
-          irréversible.
-        </p>
-        {deliverError ? (
-          <p className="mt-3 text-xs text-red-300">{deliverError}</p>
-        ) : null}
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <Button
-            variant="ghost"
-            disabled={deliverBusy}
-            onClick={() => setShowDeliverModal(false)}
-          >
-            Annuler
-          </Button>
-          <Button
-            variant="primary"
-            loading={deliverBusy}
-            icon="ti ti-check"
-            onClick={() => void handleDeliverWithoutWatermark()}
-          >
-            Confirmer la livraison
-          </Button>
-        </div>
-      </Modal>
+      {showDeliverModal && demoUrl ? (
+        <DeliverModal
+          projectName={project.name}
+          siteUrl={demoUrl}
+          onClose={() => {
+            if (!deliverBusy) setShowDeliverModal(false);
+          }}
+          onDelivered={(options) =>
+            handleDeliverWithoutWatermark({
+              closeModal: !options?.keepModalOpen,
+            })
+          }
+        />
+      ) : null}
     </div>
   );
 }

@@ -140,6 +140,9 @@ async def portal_login(request: LoginRequest) -> dict:
                 "trial_ends_at": client.get("trial_ends_at"),
                 "subscription_ends_at": client.get("subscription_ends_at"),
                 "billing_interval": client.get("billing_interval") or "monthly",
+                "onboarding_done": client.get("onboarding_done", False),
+                "site_url": client.get("site_url")
+                or (sites[0].get("site_url") if sites else None),
             },
             "sites": sites,
         }

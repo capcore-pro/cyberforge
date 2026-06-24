@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { Client, Site } from "../App";
 
 const API =
@@ -60,10 +60,17 @@ export default function Login({ onLogin }: Props) {
           trial_ends_at: data.client.trial_ends_at ?? null,
           subscription_ends_at: data.client.subscription_ends_at ?? null,
           billing_interval: String(data.client.billing_interval ?? "monthly"),
+          onboarding_done: data.client.onboarding_done !== false,
+          site_url: String(
+            data.client.site_url ??
+              (data.sites as Record<string, unknown>[])[0]?.site_url ??
+              "",
+          ),
         },
         (data.sites as Record<string, unknown>[]).map(normalizeSite),
       );
-      navigate("/dashboard");
+      const onboardingDone = data.client.onboarding_done !== false;
+      navigate(onboardingDone ? "/dashboard" : "/welcome");
     } catch {
       setError("Impossible de se connecter au serveur");
     } finally {
@@ -119,6 +126,15 @@ export default function Login({ onLogin }: Props) {
           >
             {loading ? "Connexion..." : "Se connecter"}
           </button>
+
+          <div className="text-center mt-3">
+            <Link
+              to="/forgot-password"
+              className="text-gray-500 hover:text-gray-400 text-xs"
+            >
+              Mot de passe oublié ?
+            </Link>
+          </div>
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-4">

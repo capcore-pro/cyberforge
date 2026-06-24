@@ -4,6 +4,9 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Editor from "./pages/Editor";
 import Pricing from "./pages/Pricing";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Welcome from "./pages/Welcome";
 import SubscriptionBanner from "./components/SubscriptionBanner";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 
@@ -17,6 +20,8 @@ export type Client = {
   trial_ends_at?: string | null;
   subscription_ends_at?: string | null;
   billing_interval?: string;
+  onboarding_done?: boolean;
+  site_url?: string;
 };
 
 export type Site = {
@@ -41,7 +46,8 @@ function AuthenticatedApp({
   onLogout: () => void;
 }) {
   const [editingSite, setEditingSite] = useState<Site | null>(null);
-  const clientId = localStorage.getItem("portal_client_id") || "";
+  const clientId = localStorage.getItem("portal_client_id") || client.id;
+  const needsOnboarding = client.onboarding_done === false;
 
   if (editingSite) {
     return (
@@ -63,19 +69,39 @@ function AuthenticatedApp({
     <>
       <SubscriptionBanner clientId={clientId} />
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route
-          path="/dashboard"
+          path="/"
           element={
-            <Dashboard
-              client={client}
-              sites={sites}
-              onEditSite={setEditingSite}
-              onLogout={onLogout}
+            <Navigate
+              to={needsOnboarding ? "/welcome" : "/dashboard"}
+              replace
             />
           }
         />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route
+          path="/dashboard"
+          element={
+            needsOnboarding ? (
+              <Navigate to="/welcome" replace />
+            ) : (
+              <Dashboard
+                client={client}
+                sites={sites}
+                onEditSite={setEditingSite}
+                onLogout={onLogout}
+              />
+            )
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to={needsOnboarding ? "/welcome" : "/dashboard"}
+              replace
+            />
+          }
+        />
       </Routes>
     </>
   );
@@ -84,6 +110,12 @@ function AuthenticatedApp({
 function AppShell() {
   const [client, setClient] = useState<Client | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
+
+  const clientId =
+    client?.id || localStorage.getItem("portal_client_id") || "";
+  const clientName = client?.full_name || client?.email || "";
+  const siteUrl =
+    client?.site_url || sites.find((s) => s.site_url)?.site_url || "";
 
   function handleLogin(c: Client, s: Site[]) {
     localStorage.setItem("portal_client_id", c.id);
@@ -97,15 +129,43 @@ function AppShell() {
     setSites([]);
   }
 
+  function handleOnboardingComplete() {
+    setClient((c) => (c ? { ...c, onboarding_done: true } : c));
+  }
+
+  const postLoginPath =
+    client?.onboarding_done === false ? "/welcome" : "/dashboard";
+
   return (
     <Routes>
       <Route
         path="/login"
         element={
           client ? (
-            <Navigate to="/dashboard" replace />
+            <Navigate to={postLoginPath} replace />
           ) : (
             <Login onLogin={handleLogin} />
+          )
+        }
+      />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route
+        path="/welcome"
+        element={
+          client ? (
+            client.onboarding_done === false ? (
+              <Welcome
+                clientId={clientId}
+                clientName={clientName}
+                siteUrl={siteUrl}
+                onComplete={handleOnboardingComplete}
+              />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          ) : (
+            <Navigate to="/login" replace />
           )
         }
       />
