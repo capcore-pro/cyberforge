@@ -352,6 +352,9 @@ export interface ProjectRecord {
   latest_model: string | null;
   latest_estimated_cost_usd: number | null;
   preview_html: string | null;
+  price_eur?: number | null;
+  price_paid_at?: string | null;
+  price_notes?: string | null;
 }
 
 /** Projet géré par CyberForge (V1) — vitrines Next.js */

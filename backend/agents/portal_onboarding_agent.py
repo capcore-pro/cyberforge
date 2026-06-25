@@ -603,3 +603,114 @@ def mark_onboarding_done(client_id: str, management_plan: str) -> dict[str, Any]
         }).execute()
 
     return {"success": True, "management_plan": management_plan}
+
+
+class PortalOnboardingAgent:
+    """Façade classe pour emails onboarding (évite imports circulaires depuis portal_agent)."""
+
+    def send_site_modification_email(
+        self, client_email: str, client_name: str, site_url: str
+    ) -> bool:
+        """Envoie un email de confirmation après modification du site par le client."""
+        now = datetime.now().strftime("%d/%m/%Y à %H:%M")
+
+        html_content = f"""
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modifications enregistrées</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0f0f13;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f0f13;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+          <tr>
+            <td style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:40px 40px 30px;border-radius:12px 12px 0 0;text-align:center;">
+              <div style="font-size:28px;font-weight:900;letter-spacing:2px;color:#f59e0b;">
+                ⚡ CAPCORE
+              </div>
+              <div style="color:#94a3b8;font-size:12px;letter-spacing:3px;margin-top:4px;">
+                STUDIO DIGITAL
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background-color:#1a1a2e;padding:40px;">
+
+              <div style="text-align:center;margin-bottom:24px;">
+                <div style="display:inline-block;width:64px;height:64px;background:linear-gradient(135deg,#065f46,#047857);border-radius:50%;line-height:64px;font-size:28px;">
+                  ✅
+                </div>
+              </div>
+
+              <h1 style="color:#f1f5f9;font-size:22px;font-weight:700;text-align:center;margin:0 0 8px;">
+                Modifications enregistrées
+              </h1>
+              <p style="color:#94a3b8;font-size:14px;text-align:center;margin:0 0 32px;">
+                Le {now}
+              </p>
+
+              <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 16px;">
+                Bonjour {client_name},
+              </p>
+              <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 32px;">
+                Vos modifications ont bien été enregistrées et <strong style="color:#f1f5f9;">mises en ligne sur votre site</strong>. Les changements sont visibles immédiatement.
+              </p>
+
+              <div style="text-align:center;margin:0 0 32px;">
+                <a href="{site_url}" target="_blank"
+                   style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f0f13;font-weight:700;font-size:15px;padding:14px 36px;border-radius:8px;text-decoration:none;letter-spacing:0.5px;">
+                  Voir mon site →
+                </a>
+              </div>
+
+              <div style="background-color:#0f0f13;border:1px solid #374151;border-left:4px solid #3b82f6;border-radius:8px;padding:16px 20px;margin:0 0 24px;">
+                <p style="color:#94a3b8;font-size:13px;margin:0 0 4px;">Site mis à jour</p>
+                <a href="{site_url}" style="color:#60a5fa;font-size:14px;text-decoration:none;word-break:break-all;">{site_url}</a>
+              </div>
+
+              <p style="color:#64748b;font-size:13px;line-height:1.6;margin:0;">
+                Si vous n'êtes pas à l'origine de ces modifications ou si vous constatez un problème, contactez-nous immédiatement en répondant à cet email.
+              </p>
+
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background-color:#0f0f13;padding:24px 40px;border-radius:0 0 12px 12px;border-top:1px solid #1e293b;text-align:center;">
+              <p style="color:#475569;font-size:12px;margin:0 0 4px;">
+                Mat · CapCore Studio Digital
+              </p>
+              <p style="color:#334155;font-size:11px;margin:0;">
+                Votre partenaire digital
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+
+        try:
+            _send_brevo_html(
+                to_email=client_email,
+                to_name=client_name,
+                subject="✅ Vos modifications sont en ligne — CapCore",
+                html_content=html_content,
+                reply_to={"email": FROM_EMAIL, "name": FROM_NAME},
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "[PortalOnboardingAgent] Erreur email confirmation modification: %s", e
+            )
+            return False

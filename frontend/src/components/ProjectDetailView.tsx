@@ -48,6 +48,14 @@ import {
   PREVIEW_DEVICE_SPECS,
   type PreviewDeviceType,
 } from "@/lib/preview-devices";
+import {
+  DEFAULT_API_BASE_URL,
+  normalizeBackendBaseUrl,
+} from "@shared/constants";
+
+const API_BASE = normalizeBackendBaseUrl(
+  import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL,
+);
 
 interface ProjectDetailViewProps {
   project: UnifiedProject;
@@ -106,6 +114,18 @@ export function ProjectDetailView({
   const [name, setName] = useState(project.name);
   const [nameBusy, setNameBusy] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
+
+  const [priceEur, setPriceEur] = useState<string>(
+    project.price_eur ? String(project.price_eur) : "",
+  );
+  const [pricePaidAt, setPricePaidAt] = useState<string>(
+    project.price_paid_at
+      ? new Date(project.price_paid_at).toISOString().split("T")[0]
+      : "",
+  );
+  const [priceNotes, setPriceNotes] = useState<string>(project.price_notes || "");
+  const [priceSaving, setPriceSaving] = useState(false);
+  const [priceSaved, setPriceSaved] = useState(false);
 
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [clientsLoading, setClientsLoading] = useState(true);
@@ -202,7 +222,14 @@ export function ProjectDetailView({
   useEffect(() => {
     setName(project.name);
     setClientId(project.clientId ?? "");
-  }, [project.key, project.name, project.clientId]);
+    setPriceEur(project.price_eur ? String(project.price_eur) : "");
+    setPricePaidAt(
+      project.price_paid_at
+        ? new Date(project.price_paid_at).toISOString().split("T")[0]
+        : "",
+    );
+    setPriceNotes(project.price_notes || "");
+  }, [project.key, project.name, project.clientId, project.price_eur, project.price_paid_at, project.price_notes]);
 
   useEffect(() => {
     const fromProject = project.url?.trim();
@@ -346,6 +373,46 @@ export function ProjectDetailView({
       return;
     }
     onProjectUpdated({ ...project, name: trimmed });
+  }
+
+  async function savePrice() {
+    if (priceSaving || !project.supabaseProjectId) return;
+    setPriceSaving(true);
+    try {
+      const body: Record<string, unknown> = {};
+      if (priceEur !== "") body.price_eur = parseFloat(priceEur);
+      if (pricePaidAt !== "") body.price_paid_at = new Date(pricePaidAt).toISOString();
+      if (priceNotes !== "") body.price_notes = priceNotes;
+
+      if (Object.keys(body).length === 0) return;
+
+      const res = await fetch(
+        `${API_BASE}/api/projects/${project.supabaseProjectId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      if (res.ok) {
+        setPriceSaved(true);
+        window.setTimeout(() => setPriceSaved(false), 2000);
+        onProjectUpdated({
+          ...project,
+          price_eur: body.price_eur != null ? Number(body.price_eur) : project.price_eur,
+          price_paid_at:
+            typeof body.price_paid_at === "string"
+              ? body.price_paid_at
+              : project.price_paid_at,
+          price_notes:
+            typeof body.price_notes === "string" ? body.price_notes : project.price_notes,
+        });
+      }
+    } catch (e) {
+      console.error("Erreur sauvegarde prix", e);
+    } finally {
+      setPriceSaving(false);
+    }
   }
 
   async function handleClientChange(nextId: string) {
@@ -604,32 +671,6 @@ export function ProjectDetailView({
           ) : (
             <p className="mt-1 text-sm text-cf-muted">—</p>
           )}
-          {isDesktopProject ? (
-            <div className="mt-2 space-y-2">
-              <span className="inline-flex items-center rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
-                💻 App Desktop
-              </span>
-              {project.supabaseProjectId ? (
-                <div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon="ti ti-download"
-                    loading={desktopDownloadBusy}
-                    onClick={() => void handleDownloadDesktopPackage()}
-                  >
-                    Télécharger package Electron
-                  </Button>
-                  <p className="mt-2 text-xs text-cf-muted">
-                    Ouvrez le ZIP, lancez npm install puis npm run build pour générer le .exe.
-                  </p>
-                </div>
-              ) : null}
-              {desktopDownloadError ? (
-                <p className="text-xs text-red-300">{desktopDownloadError}</p>
-              ) : null}
-            </div>
-          ) : null}
           {project.supabaseProjectId && demoUrl && !isDesktopProject ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {watermarkLoading ? (
@@ -718,6 +759,111 @@ export function ProjectDetailView({
               projectName={project.name}
               demoUrl={demoUrl}
             />
+          ) : null}
+
+          {project.supabaseProjectId ? (
+            <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-300">
+                  Facturation one-shot
+                </h3>
+                {priceSaved ? (
+                  <span className="text-xs text-green-400">✓ Enregistré</span>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-gray-500">
+                    Prix encaissé (€)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="ex : 1200"
+                    value={priceEur}
+                    onChange={(e) => setPriceEur(e.target.value)}
+                    onBlur={() => void savePrice()}
+                    disabled={priceSaving}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-amber-400/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs text-gray-500">
+                    Date de paiement
+                  </label>
+                  <input
+                    type="date"
+                    value={pricePaidAt}
+                    onChange={(e) => setPricePaidAt(e.target.value)}
+                    onBlur={() => void savePrice()}
+                    disabled={priceSaving}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-amber-400/50 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">
+                  Notes (optionnel)
+                </label>
+                <input
+                  type="text"
+                  placeholder="ex : acompte 50% reçu, solde à facturer..."
+                  value={priceNotes}
+                  onChange={(e) => setPriceNotes(e.target.value)}
+                  onBlur={() => void savePrice()}
+                  disabled={priceSaving}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-amber-400/50 focus:outline-none"
+                />
+              </div>
+
+              {priceEur ? (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-gray-500">Encaissé :</span>
+                  <span className="text-sm font-bold text-green-400">
+                    {parseFloat(priceEur).toLocaleString("fr-FR", {
+                      minimumFractionDigits: 2,
+                    })}{" "}
+                    €
+                  </span>
+                  {pricePaidAt ? (
+                    <span className="text-xs text-gray-500">
+                      le {new Date(pricePaidAt).toLocaleDateString("fr-FR")}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {isDesktopProject ? (
+            <div className="mt-2 space-y-2">
+              <span className="inline-flex items-center rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-300">
+                💻 App Desktop
+              </span>
+              {project.supabaseProjectId ? (
+                <div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="ti ti-download"
+                    loading={desktopDownloadBusy}
+                    onClick={() => void handleDownloadDesktopPackage()}
+                  >
+                    Télécharger package Electron
+                  </Button>
+                  <p className="mt-2 text-xs text-cf-muted">
+                    Ouvrez le ZIP, lancez npm install puis npm run build pour générer le .exe.
+                  </p>
+                </div>
+              ) : null}
+              {desktopDownloadError ? (
+                <p className="text-xs text-red-300">{desktopDownloadError}</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
 

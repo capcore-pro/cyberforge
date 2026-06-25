@@ -20,6 +20,7 @@ export type AppPage =
   | "erp_builder"
   | "video_builder"
   | "video_client"
+  | "studio_capcore"
   | "monitoring"
   | "workflows"
   | "editor"
@@ -134,6 +135,13 @@ export const BUILDERS_NAV_GROUP: NavGroup = {
       icon: "🎬",
       enabled: true,
     },
+    {
+      id: "studio_capcore",
+      label: "Studio CapCore",
+      icon: "✦",
+      iconClass: "ti ti-sparkles",
+      enabled: true,
+    },
   ],
 };
 
@@ -186,6 +194,7 @@ export const PAGE_HASH_PATHS: Partial<Record<AppPage, string>> = {
   mobile_builder: "mobile-builder",
   video_builder: "video-builder",
   video_client: "video-client",
+  studio_capcore: "studio-capcore",
   agent_builder: "agent-builder",
 };
 

@@ -4,6 +4,7 @@ import {
   ACC_TAB_BASE,
 } from "@/components/accounting/accounting-theme";
 import { PageLoader } from "@/components/PageLoader";
+import ClientsAbonnesPanel from "@/components/accounting/ClientsAbonnesPanel";
 
 const AccountingOverviewPanel = lazy(() =>
   import("@/components/accounting/AccountingOverviewPanel").then((m) => ({
@@ -24,10 +25,11 @@ const LegalPage = lazy(() =>
   import("@/pages/LegalPage").then((m) => ({ default: m.LegalPage })),
 );
 
-type AccountingTab = "overview" | "legal" | "stripe" | "export";
+type AccountingTab = "overview" | "clients" | "legal" | "stripe" | "export";
 
 const TABS: { id: AccountingTab; label: string }[] = [
   { id: "overview", label: "Vue d'ensemble" },
+  { id: "clients", label: "Clients abonnés" },
   { id: "legal", label: "Devis & Factures" },
   { id: "stripe", label: "Mes revenus" },
   { id: "export", label: "Export" },
@@ -68,6 +70,7 @@ export function AccountingPage() {
       <section>
         <Suspense fallback={<PageLoader />}>
           {tab === "overview" ? <AccountingOverviewPanel /> : null}
+          {tab === "clients" && <ClientsAbonnesPanel />}
           {tab === "legal" ? <LegalPage embedded /> : null}
           {tab === "stripe" ? <StripeCapcorePanel /> : null}
           {tab === "export" ? <AccountingExportPanel /> : null}

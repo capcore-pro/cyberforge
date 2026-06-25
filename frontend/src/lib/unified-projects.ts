@@ -66,6 +66,9 @@ export interface UnifiedProject {
   databaseSchema?: unknown;
   authSchema?: unknown;
   paymentConfig?: unknown;
+  price_eur?: number | null;
+  price_paid_at?: string | null;
+  price_notes?: string | null;
 }
 
 export type UnifiedProjectTypeFilter = "all" | UnifiedProjectType;
@@ -266,6 +269,9 @@ async function mapSupabaseProject(
       (analysis as { auth_schema?: unknown } | null)?.auth_schema ?? null,
     paymentConfig:
       (analysis as { payment_config?: unknown } | null)?.payment_config ?? null,
+    price_eur: project.price_eur ?? null,
+    price_paid_at: project.price_paid_at ?? null,
+    price_notes: project.price_notes ?? null,
   };
 }
 

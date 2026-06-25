@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field
 from agents.electron_ai import run as electron_ai_run
 from agents.electron_compiler import electron_compiler
 from agents.license_manager import license_manager
+from utils.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,11 @@ class LicenseCheckRequest(BaseModel):
 
 class LicenseDeactivateRequest(BaseModel):
     license_key: str
+
+
+class NotifyUpdateRequest(BaseModel):
+    build_id: str
+    notes_maj: str = Field(default="", max_length=1000)
 
 
 def _supabase():
@@ -195,6 +202,57 @@ async def deactivate_license(request: LicenseDeactivateRequest) -> dict[str, boo
     """Désactive une licence (abonnement annulé)."""
     success = await license_manager.deactivate_license(request.license_key)
     return {"success": success}
+
+
+@router.post("/notify")
+async def notify_client_update(body: NotifyUpdateRequest):
+    """Envoie un email de notification de mise à jour au client."""
+    try:
+        supabase = get_supabase()
+
+        res = (
+            supabase.table("electron_builds")
+            .select("client_email, client_name, app_name, version, download_url")
+            .eq("id", body.build_id)
+            .single()
+            .execute()
+        )
+
+        if not res.data:
+            return {"success": False, "error": "Build introuvable"}
+
+        build = res.data
+
+        if not build.get("client_email"):
+            return {"success": False, "error": "Aucun email client sur ce build"}
+
+        if not build.get("download_url"):
+            return {"success": False, "error": "Aucun lien de téléchargement disponible"}
+
+        from agents.electron_ai import send_update_notification_email
+
+        sent = send_update_notification_email(
+            client_email=build["client_email"],
+            client_name=build["client_name"] or "Client",
+            app_name=build["app_name"],
+            version=build["version"] or "1.0.0",
+            download_url=build["download_url"],
+            notes_maj=body.notes_maj,
+        )
+
+        if sent:
+            supabase.table("electron_builds").update(
+                {"updated_at": datetime.now(UTC).isoformat()}
+            ).eq("id", body.build_id).execute()
+
+        return {
+            "success": sent,
+            "message": "Email envoyé" if sent else "Échec envoi email",
+            "client_email": build["client_email"],
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 async def _compile_in_background(

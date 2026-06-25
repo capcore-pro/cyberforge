@@ -171,6 +171,9 @@ async def delete_project(project_id: str) -> dict[str, object]:
 class UpdateProjectRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     prompt: str | None = Field(default=None, min_length=3, max_length=8000)
+    price_eur: float | None = Field(default=None, ge=0)
+    price_paid_at: str | None = Field(default=None)  # ISO date string
+    price_notes: str | None = Field(default=None, max_length=500)
 
 
 class UpdateManagedProjectRequest(BaseModel):
@@ -184,8 +187,16 @@ async def update_project(project_id: str, body: UpdateProjectRequest) -> Project
     if not store.is_configured():
         raise HTTPException(status_code=503, detail=_not_configured_detail(store))
 
-    if body.title is None and body.prompt is None:
-        raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour.")
+    if not any(
+        [
+            body.title,
+            body.prompt,
+            body.price_eur is not None,
+            body.price_paid_at,
+            body.price_notes is not None,
+        ]
+    ):
+        raise HTTPException(status_code=400, detail="Au moins un champ requis")
 
     try:
         existing = await store.get_project(project_id)
@@ -200,6 +211,9 @@ async def update_project(project_id: str, body: UpdateProjectRequest) -> Project
             project_id,
             title=body.title,
             prompt=body.prompt,
+            price_eur=body.price_eur,
+            price_paid_at=body.price_paid_at,
+            price_notes=body.price_notes,
         )
     except SupabaseStoreError as exc:
         raise _http_error_from_supabase(exc, f"PATCH /api/projects/{project_id}") from exc

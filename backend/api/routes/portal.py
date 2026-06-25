@@ -6,11 +6,13 @@ Endpoints pour le portail client client.capcore.pro
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.portal_agent import portal_agent
+from utils.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
 
@@ -177,3 +179,108 @@ async def save_and_deploy(request: SaveDeployRequest) -> dict:
     except Exception as e:
         logger.exception("Portal save-deploy error")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/stats")
+async def get_portal_stats():
+    """Statistiques globales portail — clients abonnés + MRR + revenus one-shot."""
+    try:
+        supabase = get_supabase()
+        now = datetime.now(timezone.utc)
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # --- Clients portail ---
+        clients_res = (
+            supabase.table("portal_clients")
+            .select("id, subscription_status, trial_ends_at")
+            .execute()
+        )
+        clients = clients_res.data or []
+
+        clients_actifs = len([c for c in clients if c.get("subscription_status") == "active"])
+        clients_trial = len([c for c in clients if c.get("subscription_status") == "trial"])
+        clients_expires = len(
+            [c for c in clients if c.get("subscription_status") in ("expired", "canceled")]
+        )
+
+        # --- MRR abonnements Stripe (portal_subscriptions) ---
+        subs_res = (
+            supabase.table("portal_subscriptions")
+            .select("amount_eur, status")
+            .eq("status", "active")
+            .execute()
+        )
+        subs = subs_res.data or []
+        mrr_abonnements = round(sum(float(s.get("amount_eur") or 0) for s in subs), 2)
+
+        # --- MRR gestion déléguée (portal_management_plans) ---
+        plans_res = (
+            supabase.table("portal_management_plans")
+            .select("price_eur, status")
+            .eq("status", "active")
+            .execute()
+        )
+        plans = plans_res.data or []
+        mrr_gestion = round(sum(float(p.get("price_eur") or 0) for p in plans), 2)
+
+        # --- MRR total + ARR ---
+        mrr_total = round(mrr_abonnements + mrr_gestion, 2)
+        arr_total = round(mrr_total * 12, 2)
+
+        # --- Revenus one-shot projets ---
+        projects_res = (
+            supabase.table("projects")
+            .select("price_eur, price_paid_at")
+            .not_.is_("price_eur", "null")
+            .gt("price_eur", 0)
+            .execute()
+        )
+        projects = projects_res.data or []
+
+        revenus_oneshot_total = round(
+            sum(float(p.get("price_eur") or 0) for p in projects), 2
+        )
+        revenus_oneshot_mois = round(
+            sum(
+                float(p.get("price_eur") or 0)
+                for p in projects
+                if p.get("price_paid_at")
+                and p["price_paid_at"] >= current_month_start.isoformat()
+            ),
+            2,
+        )
+
+        return {
+            "success": True,
+            "clients_actifs": clients_actifs,
+            "clients_trial": clients_trial,
+            "clients_expires": clients_expires,
+            "clients_total": len(clients),
+            "mrr_abonnements": mrr_abonnements,
+            "mrr_gestion_deleguee": mrr_gestion,
+            "mrr_total": mrr_total,
+            "arr_total": arr_total,
+            "revenus_oneshot_mois": revenus_oneshot_mois,
+            "revenus_oneshot_total": revenus_oneshot_total,
+        }
+
+    except Exception as e:
+        logger.exception("Portal stats error")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/management-plans")
+async def get_management_plans():
+    """Liste tous les plans de gestion déléguée actifs."""
+    try:
+        supabase = get_supabase()
+        res = (
+            supabase.table("portal_management_plans")
+            .select("*, portal_clients(full_name, email)")
+            .eq("status", "active")
+            .execute()
+        )
+        return {"success": True, "plans": res.data or []}
+    except Exception as e:
+        logger.exception("Portal management-plans error")
+        return {"success": False, "plans": [], "error": str(e)}

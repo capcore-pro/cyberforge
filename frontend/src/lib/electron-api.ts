@@ -162,6 +162,35 @@ export async function listLicenses(): Promise<{ licenses: ElectronLicenseRow[] }
   };
 }
 
+export async function notifyClientUpdate(
+  buildId: string,
+  notesMaj: string = "",
+): Promise<{ success: boolean; message?: string; client_email?: string }> {
+  const res = await apiRequest<{
+    success?: boolean;
+    message?: string;
+    client_email?: string;
+    error?: string;
+  }>({
+    method: "POST",
+    path: `${API_PREFIX}/electron/notify`,
+    body: { build_id: buildId, notes_maj: notesMaj },
+    timeoutMs: 30_000,
+  });
+  if (!res.ok) {
+    throw new Error(apiErrorMessage(res, "Notification client impossible."));
+  }
+  if (!res.data?.success) {
+    throw new Error(res.data?.error ?? res.data?.message ?? "Notification client impossible.");
+  }
+  return {
+    success: true,
+    message: res.data?.message != null ? String(res.data.message) : undefined,
+    client_email:
+      res.data?.client_email != null ? String(res.data.client_email) : undefined,
+  };
+}
+
 export async function deactivateLicense(
   licenseKey: string,
 ): Promise<{ success: boolean }> {

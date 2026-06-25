@@ -221,11 +221,38 @@ class PortalAgent:
             logger.error("PortalAgent deploy error: %s", e)
             deploy_result["error"] = str(e)
 
-        return {
+        result = {
             "success": deploy_result["success"],
             "url": deploy_result.get("url"),
             "edits_saved": len(edits),
         }
+
+        if result.get("success"):
+            try:
+                site_url = str(site.get("site_url") or "").strip()
+                client_row = (
+                    self.supabase.table("portal_clients")
+                    .select("email, full_name, site_url")
+                    .eq("site_url", site_url)
+                    .limit(1)
+                    .execute()
+                )
+
+                if client_row.data:
+                    from agents.portal_onboarding_agent import PortalOnboardingAgent
+
+                    onboarding_agent = PortalOnboardingAgent()
+                    onboarding_agent.send_site_modification_email(
+                        client_email=client_row.data[0]["email"],
+                        client_name=client_row.data[0].get("full_name") or "",
+                        site_url=str(result.get("url") or site_url),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Erreur envoi email confirmation modification (non bloquant): %s", e
+                )
+
+        return result
 
     async def verify_client(self, email: str, password: str) -> dict[str, Any] | None:
         """Vérifie les credentials d'un client portail."""

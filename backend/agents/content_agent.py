@@ -1,0 +1,235 @@
+"""
+ContentAI — Génération contenu réseaux sociaux
+Mistral Small — ~$0.001/req
+Formats : LinkedIn / Instagram / TikTok / Twitter
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from typing import Any
+
+try:
+    from mistralai import Mistral
+except ImportError:
+    from mistralai.client import Mistral
+
+from config import get_settings, plain_secret_str
+
+logger = logging.getLogger(__name__)
+
+FORMATS = {
+    "linkedin": {
+        "label": "LinkedIn",
+        "ton": "professionnel et inspirant",
+        "longueur": "150-300 mots",
+        "style": "storytelling business, emojis modérés, appel à l'action final",
+    },
+    "instagram": {
+        "label": "Instagram",
+        "ton": "authentique et visuel",
+        "longueur": "80-150 mots",
+        "style": "phrases courtes, emojis expressifs, appel à l'action, hashtags en fin",
+    },
+    "tiktok": {
+        "label": "TikTok",
+        "ton": "dynamique et accrocheur",
+        "longueur": "50-100 mots",
+        "style": "phrase d'accroche forte, rythme rapide, call-to-action direct",
+    },
+    "twitter": {
+        "label": "Twitter / X",
+        "ton": "percutant et direct",
+        "longueur": "max 280 caractères",
+        "style": "message clé en une phrase, 1-2 hashtags max",
+    },
+}
+
+SECTEURS = [
+    "Artisan / Métier manuel",
+    "Restaurant / Food",
+    "Commerce local",
+    "Consultant / Coach",
+    "E-commerce",
+    "Immobilier",
+    "Santé / Bien-être",
+    "Tech / SaaS",
+    "Association",
+    "Autre",
+]
+
+
+class ContentAgent:
+    def __init__(self) -> None:
+        api_key = plain_secret_str(get_settings().mistral_api_key)
+        self.client: Any = Mistral(api_key=api_key) if api_key else None
+        self.model = "mistral-small-latest"
+
+    async def _call(self, prompt: str) -> str:
+        if not self.client:
+            raise RuntimeError("Mistral non configuré")
+
+        response = await self.client.chat.complete_async(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.85,
+            max_tokens=1500,
+        )
+        return response.choices[0].message.content.strip()
+
+    def _parse_json(self, raw: str) -> dict | list:
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+        return json.loads(cleaned)
+
+    async def generate_post(
+        self,
+        sujet: str,
+        secteur: str,
+        format_reseau: str,
+        ton_personnalise: str = "",
+        nom_entreprise: str = "",
+    ) -> dict:
+        """Génère un post pour un réseau social donné."""
+        fmt = FORMATS.get(format_reseau, FORMATS["linkedin"])
+        ton = ton_personnalise or fmt["ton"]
+        entreprise = f"pour l'entreprise « {nom_entreprise} »" if nom_entreprise else ""
+
+        prompt = f"""Tu es un expert en marketing digital et copywriting pour les PME françaises.
+
+Génère un post {fmt['label']} {entreprise} sur le sujet suivant :
+Sujet : {sujet}
+Secteur : {secteur}
+Ton : {ton}
+Longueur : {fmt['longueur']}
+Style : {fmt['style']}
+
+Réponds UNIQUEMENT en JSON valide, sans markdown, avec exactement ces clés :
+{{
+  "post": "le texte complet du post prêt à publier",
+  "accroche": "la première phrase d'accroche seule",
+  "conseil": "un conseil d'optimisation pour ce post (1 phrase)"
+}}"""
+
+        try:
+            raw = await self._call(prompt)
+            result = self._parse_json(raw)
+            if not isinstance(result, dict):
+                raise ValueError("Réponse JSON invalide")
+            return {
+                "post": result.get("post", ""),
+                "accroche": result.get("accroche", ""),
+                "conseil": result.get("conseil", ""),
+                "format": format_reseau,
+                "label": fmt["label"],
+            }
+        except json.JSONDecodeError as e:
+            logger.error("ContentAI JSON parse error (post): %s", e)
+            return {"error": "Erreur parsing réponse", "format": format_reseau}
+        except Exception as e:
+            logger.error("ContentAI error (post): %s", e)
+            return {"error": str(e), "format": format_reseau}
+
+    async def generate_hashtags(
+        self,
+        sujet: str,
+        secteur: str,
+        format_reseau: str,
+        nb_hashtags: int = 10,
+    ) -> dict:
+        """Génère une liste de hashtags optimisés."""
+        prompt = f"""Tu es un expert SEO réseaux sociaux pour les PME françaises.
+
+Génère {nb_hashtags} hashtags optimisés pour {format_reseau.capitalize()} sur :
+Sujet : {sujet}
+Secteur : {secteur}
+
+Mélange :
+- 3 hashtags très populaires (>500k posts)
+- 4 hashtags moyens (50k-500k posts)
+- 3 hashtags de niche (<50k posts, très ciblés)
+
+Réponds UNIQUEMENT en JSON valide, sans markdown :
+{{
+  "hashtags": ["#hashtag1", "#hashtag2", ...],
+  "conseil": "conseil d'utilisation en 1 phrase"
+}}"""
+
+        try:
+            raw = await self._call(prompt)
+            result = self._parse_json(raw)
+            if not isinstance(result, dict):
+                raise ValueError("Réponse JSON invalide")
+            return {
+                "hashtags": result.get("hashtags", []),
+                "conseil": result.get("conseil", ""),
+            }
+        except json.JSONDecodeError as e:
+            logger.error("ContentAI JSON parse error (hashtags): %s", e)
+            return {"error": "Erreur parsing réponse", "hashtags": []}
+        except Exception as e:
+            logger.error("ContentAI error (hashtags): %s", e)
+            return {"error": str(e), "hashtags": []}
+
+    async def generate_bio(
+        self,
+        nom_entreprise: str,
+        secteur: str,
+        valeur_ajoutee: str,
+        format_reseau: str,
+    ) -> dict:
+        """Génère une bio de profil réseau social."""
+        limites = {
+            "linkedin": "300 caractères max",
+            "instagram": "150 caractères max",
+            "tiktok": "80 caractères max",
+            "twitter": "160 caractères max",
+        }
+        limite = limites.get(format_reseau, "150 caractères max")
+
+        prompt = f"""Tu es expert en personal branding pour les PME françaises.
+
+Génère 3 versions de bio {format_reseau.capitalize()} pour :
+Entreprise : {nom_entreprise}
+Secteur : {secteur}
+Valeur ajoutée : {valeur_ajoutee}
+Limite : {limite}
+
+Réponds UNIQUEMENT en JSON valide, sans markdown :
+{{
+  "bios": [
+    {{"version": "Directe", "texte": "..."}},
+    {{"version": "Storytelling", "texte": "..."}},
+    {{"version": "Avec emojis", "texte": "..."}}
+  ]
+}}"""
+
+        try:
+            raw = await self._call(prompt)
+            result = self._parse_json(raw)
+            if not isinstance(result, dict):
+                raise ValueError("Réponse JSON invalide")
+            return {
+                "bios": result.get("bios", []),
+                "format": format_reseau,
+                "limite": limite,
+            }
+        except json.JSONDecodeError as e:
+            logger.error("ContentAI JSON parse error (bio): %s", e)
+            return {"error": "Erreur parsing réponse", "bios": [], "format": format_reseau}
+        except Exception as e:
+            logger.error("ContentAI error (bio): %s", e)
+            return {"error": str(e), "bios": [], "format": format_reseau}
+
+    def get_formats(self) -> list:
+        return [
+            {"id": k, "label": v["label"], "ton": v["ton"], "longueur": v["longueur"]}
+            for k, v in FORMATS.items()
+        ]
+
+    def get_secteurs(self) -> list:
+        return SECTEURS
+
+
+content_agent = ContentAgent()

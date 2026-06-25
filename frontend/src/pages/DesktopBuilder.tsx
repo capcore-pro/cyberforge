@@ -10,6 +10,8 @@ import {
   type ElectronLicenseRow,
 } from "@/lib/electron-api";
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
 type TabId = "new" | "builds" | "licenses";
 
 const STATUS_COLOR: Record<ElectronBuildStatusValue, string> = {
@@ -33,6 +35,10 @@ export function DesktopBuilder() {
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentBuild, setCurrentBuild] = useState<ElectronBuildStatus | null>(null);
+  const [notifyBuildId, setNotifyBuildId] = useState<string | null>(null);
+  const [notifyNotes, setNotifyNotes] = useState("");
+  const [notifySending, setNotifySending] = useState(false);
+  const [notifySuccess, setNotifySuccess] = useState(false);
 
   const [form, setForm] = useState({
     client_name: "",
@@ -122,6 +128,34 @@ export function DesktopBuilder() {
       await loadLicenses();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Désactivation impossible.");
+    }
+  }
+
+  async function handleNotifyClient() {
+    if (!notifyBuildId || notifySending) return;
+    setNotifySending(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/electron/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          build_id: notifyBuildId,
+          notes_maj: notifyNotes,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotifySuccess(true);
+        setTimeout(() => {
+          setNotifyBuildId(null);
+          setNotifyNotes("");
+          setNotifySuccess(false);
+        }, 2500);
+      }
+    } catch (e) {
+      console.error("Erreur notification client", e);
+    } finally {
+      setNotifySending(false);
     }
   }
 
@@ -371,6 +405,19 @@ export function DesktopBuilder() {
                     Télécharger .exe
                   </a>
                 ) : null}
+                {build.download_url && build.client_email ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotifyBuildId(build.id);
+                      setNotifyNotes("");
+                    }}
+                    className="mt-2 flex items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-400/20"
+                  >
+                    <i className="ti ti-bell" />
+                    Notifier le client
+                  </button>
+                ) : null}
               </div>
             </div>
           ))}
@@ -417,6 +464,74 @@ export function DesktopBuilder() {
               </div>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {/* Modal notification mise à jour */}
+      {notifyBuildId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-white/10 bg-[#1a1a2e] p-6">
+            {notifySuccess ? (
+              <div className="space-y-3 py-4 text-center">
+                <div className="text-4xl">✅</div>
+                <p className="font-semibold text-white">Email envoyé au client !</p>
+                <p className="text-sm text-gray-400">
+                  Notification de mise à jour envoyée avec succès.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Notifier le client</h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Un email de mise à jour sera envoyé automatiquement.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs text-gray-500">
+                    Notes de mise à jour{" "}
+                    <span className="text-gray-600">(optionnel)</span>
+                  </label>
+                  <textarea
+                    value={notifyNotes}
+                    onChange={(e) => setNotifyNotes(e.target.value)}
+                    placeholder="Ex : correction d'un bug sur l'export PDF, amélioration des performances..."
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-amber-400/50 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setNotifyBuildId(null)}
+                    className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-gray-300 transition-colors hover:bg-white/10"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleNotifyClient()}
+                    disabled={notifySending}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-300 disabled:opacity-50"
+                  >
+                    {notifySending ? (
+                      <>
+                        <i className="ti ti-loader animate-spin" />
+                        Envoi...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ti ti-send" />
+                        Envoyer la notification
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       ) : null}
     </div>

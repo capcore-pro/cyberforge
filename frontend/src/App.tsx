@@ -52,6 +52,9 @@ const DesktopBuilderPage = lazy(() =>
 const IdeaLabPage = lazy(() =>
   import("./pages/IdeaLab").then((m) => ({ default: m.IdeaLab })),
 );
+const StudioCapcorePage = lazy(() =>
+  import("./pages/StudioCapcore").then((m) => ({ default: m.StudioCapcorePage })),
+);
 const MediaBuilderVideoPage = lazy(() =>
   import("./pages/MediaBuilderVideo"),
 );
@@ -265,6 +268,8 @@ function AppWithNotifications({
         return <MediaBuilderVideoPage />;
       case "video_client":
         return <VideoClientPage />;
+      case "studio_capcore":
+        return <StudioCapcorePage />;
       case "monitoring":
         return <MonitoringPage />;
       case "workflows":

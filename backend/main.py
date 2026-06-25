@@ -57,6 +57,7 @@ app.include_router(media_router.router, prefix="/api/media")
 
 from api.video_router import router as video_router
 from routers.electron_router import router as electron_router
+from api.routes.content import router as content_router
 from routers.idea_router import router as idea_router
 from routers.portal_router import router as portal_router
 from routers.portal_onboarding_router import portal_onboarding_router
@@ -68,6 +69,7 @@ app.include_router(video_router)
 app.include_router(video_client_router)
 app.include_router(openhands_router)
 app.include_router(electron_router)
+app.include_router(content_router)
 app.include_router(idea_router)
 app.include_router(portal_router)
 app.include_router(portal_onboarding_router)

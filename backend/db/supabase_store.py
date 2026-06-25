@@ -21,7 +21,8 @@ from tools.desktop_zip_export import electron_files_from_generation_files
 logger = logging.getLogger(__name__)
 
 PROJECT_LIST_SELECT = (
-    "id,title,prompt,project_type,summary,created_at,updated_at,demo_url"
+    "id,title,prompt,project_type,summary,created_at,updated_at,demo_url,"
+    "price_eur,price_paid_at,price_notes"
 )
 
 
@@ -82,6 +83,9 @@ class ProjectRow(BaseModel):
     latest_model: str | None = None
     latest_estimated_cost_usd: float | None = None
     preview_html: str | None = None
+    price_eur: float | None = None
+    price_paid_at: str | None = None
+    price_notes: str | None = None
 
 
 class GenerationRow(BaseModel):
@@ -392,6 +396,13 @@ class SupabaseStore:
                         latest_model=latest_model,
                         latest_estimated_cost_usd=latest_cost,
                         preview_html=preview_html,
+                        price_eur=(
+                            float(row["price_eur"])
+                            if row.get("price_eur") is not None
+                            else None
+                        ),
+                        price_paid_at=row.get("price_paid_at"),
+                        price_notes=row.get("price_notes"),
                     )
                 )
             return result
@@ -440,6 +451,13 @@ class SupabaseStore:
                 latest_model=latest_model,
                 latest_estimated_cost_usd=latest_cost,
                 preview_html=preview_html,
+                price_eur=(
+                    float(row["price_eur"])
+                    if row.get("price_eur") is not None
+                    else None
+                ),
+                price_paid_at=row.get("price_paid_at"),
+                price_notes=row.get("price_notes"),
             )
 
             gens_resp = await client.get(
@@ -491,8 +509,11 @@ class SupabaseStore:
         *,
         title: str | None = None,
         prompt: str | None = None,
+        price_eur: float | None = None,
+        price_paid_at: str | None = None,
+        price_notes: str | None = None,
     ) -> ProjectRow | None:
-        """Met à jour le titre et/ou le prompt d'un projet."""
+        """Met à jour les métadonnées d'un projet (titre, prompt, facturation one-shot)."""
         if not self.is_configured():
             raise SupabaseStoreError("Supabase non configuré.")
 
@@ -507,6 +528,12 @@ class SupabaseStore:
             if len(trimmed) < 3:
                 raise SupabaseStoreError("Le prompt doit contenir au moins 3 caractères.")
             patch["prompt"] = trimmed
+        if price_eur is not None:
+            patch["price_eur"] = price_eur
+        if price_paid_at is not None:
+            patch["price_paid_at"] = price_paid_at
+        if price_notes is not None:
+            patch["price_notes"] = price_notes
 
         if len(patch) == 1:
             detail = await self.get_project(project_id)
@@ -539,6 +566,13 @@ class SupabaseStore:
                 created_at=str(row["created_at"]),
                 updated_at=str(row["updated_at"]),
                 demo_url=(row.get("demo_url") or "").strip() or None,
+                price_eur=(
+                    float(row["price_eur"])
+                    if row.get("price_eur") is not None
+                    else None
+                ),
+                price_paid_at=row.get("price_paid_at"),
+                price_notes=row.get("price_notes"),
             )
 
     async def duplicate_project(self, project_id: str) -> ProjectDetailResponse | None:

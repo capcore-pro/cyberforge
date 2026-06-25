@@ -200,3 +200,180 @@ async def run(
         "files": files,
         "summary": f"Package Electron généré pour {app_name}.",
     }
+
+
+def send_update_notification_email(
+    client_email: str,
+    client_name: str,
+    app_name: str,
+    version: str,
+    download_url: str,
+    notes_maj: str = "",
+) -> bool:
+    """Envoie un email de notification de mise à jour .exe au client."""
+    import httpx
+    import os
+    from datetime import datetime
+
+    now = datetime.now().strftime("%d/%m/%Y")
+    notes_html = f"""
+    <div style="background-color:#0f0f13;border:1px solid #374151;border-left:4px solid #f59e0b;
+                border-radius:8px;padding:16px 20px;margin:24px 0;">
+      <p style="color:#94a3b8;font-size:13px;margin:0 0 8px;font-weight:600;">
+        Notes de mise à jour
+      </p>
+      <p style="color:#cbd5e1;font-size:14px;margin:0;line-height:1.6;">
+        {notes_maj}
+      </p>
+    </div>
+    """ if notes_maj else ""
+
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#0f0f13;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f0f13;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+          <!-- HEADER -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
+                       padding:40px 40px 30px;border-radius:12px 12px 0 0;text-align:center;">
+              <div style="font-size:28px;font-weight:900;letter-spacing:2px;color:#f59e0b;">
+                ⚡ CAPCORE
+              </div>
+              <div style="color:#94a3b8;font-size:12px;letter-spacing:3px;margin-top:4px;">
+                STUDIO DIGITAL
+              </div>
+            </td>
+          </tr>
+
+          <!-- BODY -->
+          <tr>
+            <td style="background-color:#1a1a2e;padding:40px;">
+
+              <!-- Icone update -->
+              <div style="text-align:center;margin-bottom:24px;">
+                <div style="display:inline-block;width:64px;height:64px;
+                            background:linear-gradient(135deg,#1e3a5f,#1e40af);
+                            border-radius:50%;line-height:64px;font-size:28px;">
+                  🔄
+                </div>
+              </div>
+
+              <h1 style="color:#f1f5f9;font-size:22px;font-weight:700;
+                         text-align:center;margin:0 0 8px;">
+                Mise à jour disponible
+              </h1>
+              <p style="color:#94a3b8;font-size:14px;text-align:center;margin:0 0 32px;">
+                {app_name} — version {version} — {now}
+              </p>
+
+              <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 16px;">
+                Bonjour {client_name},
+              </p>
+              <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 24px;">
+                Une nouvelle version de votre logiciel
+                <strong style="color:#f1f5f9;">{app_name}</strong>
+                est disponible au téléchargement.
+              </p>
+
+              {notes_html}
+
+              <!-- Bouton CTA -->
+              <div style="text-align:center;margin:32px 0;">
+                <a href="{download_url}" target="_blank"
+                   style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#d97706);
+                          color:#0f0f13;font-weight:700;font-size:15px;padding:14px 36px;
+                          border-radius:8px;text-decoration:none;letter-spacing:0.5px;">
+                  Télécharger la version {version} →
+                </a>
+              </div>
+
+              <!-- Info version -->
+              <div style="background-color:#0f0f13;border:1px solid #374151;
+                          border-radius:8px;padding:16px 20px;margin:0 0 24px;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="color:#94a3b8;font-size:13px;">Logiciel</td>
+                    <td style="color:#f1f5f9;font-size:13px;text-align:right;
+                               font-weight:600;">{app_name}</td>
+                  </tr>
+                  <tr>
+                    <td style="color:#94a3b8;font-size:13px;padding-top:8px;">
+                      Nouvelle version
+                    </td>
+                    <td style="color:#f59e0b;font-size:13px;text-align:right;
+                               font-weight:600;padding-top:8px;">v{version}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <p style="color:#64748b;font-size:13px;line-height:1.6;margin:0;">
+                Si vous avez des questions sur cette mise à jour, répondez simplement
+                à cet email.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color:#0f0f13;padding:24px 40px;
+                       border-radius:0 0 12px 12px;border-top:1px solid #1e293b;
+                       text-align:center;">
+              <p style="color:#475569;font-size:12px;margin:0 0 4px;">
+                Mat · CapCore Studio Digital
+              </p>
+              <p style="color:#334155;font-size:11px;margin:0;">
+                Votre partenaire digital
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+
+    from config import get_settings, plain_secret_str
+
+    brevo_api_key = plain_secret_str(get_settings().brevo_api_key) or os.getenv(
+        "BREVO_API_KEY", ""
+    )
+    if not brevo_api_key:
+        print("[ElectronUpdaterAI] BREVO_API_KEY manquante")
+        return False
+
+    try:
+        with httpx.Client(timeout=15) as client:
+            response = client.post(
+                "https://api.brevo.com/v3/smtp/email",
+                headers={
+                    "api-key": brevo_api_key,
+                    "Content-Type": "application/json",
+                    "accept": "application/json",
+                },
+                json={
+                    "sender": {
+                        "name": "Mat · CapCore Studio Digital",
+                        "email": "contact@capcore.pro",
+                    },
+                    "to": [{"email": client_email, "name": client_name}],
+                    "subject": f"🔄 Mise à jour {app_name} — version {version} disponible",
+                    "htmlContent": html_content,
+                },
+            )
+            return response.status_code == 201
+    except Exception as e:
+        print(f"[ElectronUpdaterAI] Erreur envoi email : {e}")
+        return False

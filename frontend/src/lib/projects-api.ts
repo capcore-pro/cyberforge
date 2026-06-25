@@ -26,7 +26,13 @@ export async function deleteProject(projectId: string) {
 
 export async function updateProject(
   projectId: string,
-  body: { title?: string; prompt?: string },
+  body: {
+    title?: string;
+    prompt?: string;
+    price_eur?: number;
+    price_paid_at?: string;
+    price_notes?: string;
+  },
 ) {
   return apiRequest<ProjectRecord>({
     method: "PATCH",

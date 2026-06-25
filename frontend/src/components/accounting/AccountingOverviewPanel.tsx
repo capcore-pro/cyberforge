@@ -18,10 +18,18 @@ import { apiErrorMessage } from "@/lib/api-errors";
 import { formatDateFr, formatEur } from "@/lib/accounting-export";
 import { fetchCockpitDashboard } from "@/lib/cockpit-api";
 import {
+  DEFAULT_API_BASE_URL,
+  normalizeBackendBaseUrl,
+} from "@shared/constants";
+import {
   fetchStripeDashboard,
   STRIPE_CAPCORE_PROJECT_ID,
   type StripeTransaction,
 } from "@/lib/stripe-api";
+
+const API_BASE = normalizeBackendBaseUrl(
+  import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL,
+);
 
 function KpiCard({
   label,
@@ -62,14 +70,30 @@ export function AccountingOverviewPanel() {
   const [apiExpenses, setApiExpenses] = useState(0);
   const [recent, setRecent] = useState<StripeTransaction[]>([]);
   const [stripeAvailable, setStripeAvailable] = useState(true);
+  const [portalStats, setPortalStats] = useState<{
+    clients_actifs: number;
+    clients_trial: number;
+    clients_expires: number;
+    mrr_abonnements: number;
+    mrr_gestion_deleguee: number;
+    mrr_total: number;
+    arr_total: number;
+    revenus_oneshot_mois: number;
+    revenus_oneshot_total: number;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
 
-    const [stripeRes, cockpitRes] = await Promise.all([
+    const [stripeRes, cockpitRes, portalRes] = await Promise.all([
       fetchStripeDashboard(STRIPE_CAPCORE_PROJECT_ID),
       fetchCockpitDashboard(),
+      fetch(`${API_BASE}/api/portal/stats`).then((r) => r.json()),
     ]);
+
+    if (portalRes?.success) {
+      setPortalStats(portalRes);
+    }
 
     if (!stripeRes.ok) {
       const msg = apiErrorMessage(stripeRes, "Stripe indisponible.");
@@ -171,6 +195,90 @@ export function AccountingOverviewPanel() {
             valueClass={profit >= 0 ? "text-emerald-300" : "text-red-300"}
             icon={<Wallet className="h-6 w-6 text-white/50" aria-hidden />}
           />
+        </div>
+
+        {/* Séparateur */}
+        <div className="col-span-full my-2 border-t border-white/10" />
+
+        {/* Ligne 2 — MRR détaillé */}
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-1 text-xs text-gray-400">MRR Abonnements portail</div>
+          <div className="text-2xl font-bold text-white">
+            {portalStats ? `${portalStats.mrr_abonnements.toFixed(2)} €` : "—"}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">Stripe actifs</div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-1 text-xs text-gray-400">MRR Gestion déléguée</div>
+          <div className="text-2xl font-bold text-amber-400">
+            {portalStats
+              ? `${portalStats.mrr_gestion_deleguee.toFixed(2)} €`
+              : "—"}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">Plans 49 €/mois</div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-1 text-xs text-gray-400">MRR Total</div>
+          <div className="text-2xl font-bold text-green-400">
+            {portalStats ? `${portalStats.mrr_total.toFixed(2)} €` : "—"}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            ARR : {portalStats ? `${portalStats.arr_total.toFixed(2)} €` : "—"}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-1 text-xs text-gray-400">Revenus one-shot ce mois</div>
+          <div className="text-2xl font-bold text-blue-400">
+            {portalStats
+              ? `${portalStats.revenus_oneshot_mois.toFixed(2)} €`
+              : "—"}
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            Total :{" "}
+            {portalStats
+              ? `${portalStats.revenus_oneshot_total.toFixed(2)} €`
+              : "—"}
+          </div>
+        </div>
+
+        {/* Séparateur */}
+        <div className="col-span-full my-2 border-t border-white/10" />
+
+        {/* Clients portail */}
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-1 text-xs text-gray-400">Clients actifs</div>
+          <div className="text-2xl font-bold text-green-400">
+            {portalStats?.clients_actifs ?? "—"}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-1 text-xs text-gray-400">Clients en essai</div>
+          <div className="text-2xl font-bold text-amber-400">
+            {portalStats?.clients_trial ?? "—"}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-1 text-xs text-gray-400">Clients expirés</div>
+          <div className="text-2xl font-bold text-red-400">
+            {portalStats?.clients_expires ?? "—"}
+          </div>
+        </div>
+
+        {/* Bouton Stripe */}
+        <div className="col-span-full mt-2 flex justify-end">
+          <a
+            href="https://dashboard.stripe.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+          >
+            Accéder au Dashboard Stripe →
+          </a>
         </div>
       </div>
 
