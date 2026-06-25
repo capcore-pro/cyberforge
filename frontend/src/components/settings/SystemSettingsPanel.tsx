@@ -208,6 +208,15 @@ export function SystemSettingsPanel() {
             {updateStatus?.status === "error" && `Erreur : ${updateStatus.message}`}
           </div>
 
+          <a
+            href="https://github.com/capcore-pro/cyberforge/releases/latest"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${GOLD_BTN} mb-3`}
+          >
+            ⬇ Télécharger manuellement →
+          </a>
+
           {downloadProgress !== null && updateStatus?.status === "downloading" && (
             <div className="mb-3 h-1.5 w-full rounded-full bg-white/10">
               <div
@@ -243,17 +252,6 @@ export function SystemSettingsPanel() {
               </button>
             )}
           </div>
-
-          <a
-            href="https://github.com/capcore-pro/cyberforge/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-gray-300 text-xs mt-3 transition-colors"
-          >
-            <span>⬇️</span>
-            <span>Télécharger manuellement la dernière version</span>
-            <span>→</span>
-          </a>
         </div>
       ) : null}
 
