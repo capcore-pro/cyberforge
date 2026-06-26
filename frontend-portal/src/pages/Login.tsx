@@ -61,6 +61,9 @@ export default function Login({ onLogin }: Props) {
           subscription_ends_at: data.client.subscription_ends_at ?? null,
           billing_interval: String(data.client.billing_interval ?? "monthly"),
           onboarding_done: data.client.onboarding_done !== false,
+          management_plan: data.client.management_plan
+            ? String(data.client.management_plan)
+            : undefined,
           site_url: String(
             data.client.site_url ??
               (data.sites as Record<string, unknown>[])[0]?.site_url ??

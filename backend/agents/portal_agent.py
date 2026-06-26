@@ -259,7 +259,11 @@ class PortalAgent:
         password_hash = hashlib.sha256(password.encode()).hexdigest()
         result = (
             self.supabase.table("portal_clients")
-            .select("*")
+            .select(
+                "id, email, full_name, company, plan, subscription_status, "
+                "trial_ends_at, subscription_ends_at, billing_interval, "
+                "onboarding_done, site_url, management_plan"
+            )
             .eq("email", email)
             .eq("password_hash", password_hash)
             .eq("is_active", True)
