@@ -75,6 +75,53 @@ class KlingService:
         logger.info(f"Clip {scene_number} submitted — task_id: {task_id}")
         return {"task_id": task_id, "status": "processing"}
 
+    async def generate_image_to_video(
+        self,
+        image_base64: str,
+        prompt: str,
+        duration: int = 5,
+        aspect_ratio: str = "9:16",
+        model: str = "kling-v2-master",
+    ) -> dict:
+        url = f"{KLING_API_BASE}/v1/videos/image2video"
+        payload = {
+            "model_name": model,
+            "image": image_base64,
+            "prompt": prompt,
+            "duration": duration,
+            "aspect_ratio": aspect_ratio,
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(url, json=payload, headers=self.headers)
+            resp.raise_for_status()
+            data = resp.json()
+
+        if data.get("code") != 0:
+            raise Exception(f"Kling image2video error: {data.get('message', 'Unknown error')}")
+
+        task_id = data["data"]["task_id"]
+        return {"task_id": task_id, "status": "processing"}
+
+    async def check_image_video_status(self, task_id: str) -> dict:
+        url = f"{KLING_API_BASE}/v1/videos/image2video/{task_id}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url, headers=self.headers)
+            resp.raise_for_status()
+            data = resp.json()
+
+        if data.get("code") != 0:
+            raise Exception(f"Kling status error: {data.get('message', 'Unknown error')}")
+
+        task_data = data["data"]
+        status = task_data["task_status"]
+        result = {"status": status, "task_id": task_id}
+
+        if status == "succeed":
+            result["video_url"] = task_data["task_result"]["videos"][0]["url"]
+            result["duration"] = task_data["task_result"]["videos"][0].get("duration", 5)
+
+        return result
+
     # ─────────────────────────────────────────
     # VÉRIFIER STATUT
     # ─────────────────────────────────────────

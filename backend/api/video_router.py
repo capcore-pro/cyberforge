@@ -61,6 +61,12 @@ class RefineSceneRequest(BaseModel):
 class RechargeRequest(BaseModel):
     units: int
 
+class ImageToVideoRequest(BaseModel):
+    image_base64: str
+    prompt: str
+    duration: int = 5
+    aspect_ratio: str = "9:16"
+
 
 # ─────────────────────────────────────────
 # ROUTES SCÈNES
@@ -338,6 +344,33 @@ async def recharge_balance(req: RechargeRequest):
         return {"success": True, "data": updated}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# ─────────────────────────────────────────
+# IMAGE TO VIDEO (KLING)
+# ─────────────────────────────────────────
+
+@router.post("/image2video")
+async def generate_image_to_video(body: ImageToVideoRequest):
+    try:
+        result = await kling_service.generate_image_to_video(
+            image_base64=body.image_base64,
+            prompt=body.prompt,
+            duration=body.duration,
+            aspect_ratio=body.aspect_ratio,
+        )
+        return {"success": True, "task_id": result["task_id"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/image2video/{task_id}/status")
+async def check_image_video_status(task_id: str):
+    try:
+        result = await kling_service.check_image_video_status(task_id)
+        return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─────────────────────────────────────────

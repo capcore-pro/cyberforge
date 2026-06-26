@@ -7,9 +7,10 @@ import { useState } from "react";
 import { Film, Sparkles, Library } from "lucide-react";
 import VideoStudioPanel from "../components/video/VideoStudioPanel";
 import VideoLibrary from "../components/video/VideoLibrary";
+import VideoBuilderV2 from "../components/video/VideoBuilderV2";
 import KlingBalanceWidget from "../components/video/KlingBalanceWidget";
 
-type Tab = "studio" | "library";
+type Tab = "studio" | "library" | "image2video"
 
 export default function MediaBuilderVideo() {
   const [activeTab, setActiveTab] = useState<Tab>("studio");
@@ -52,12 +53,17 @@ export default function MediaBuilderVideo() {
       <div className="border-b border-gray-800 px-6">
         <div className="max-w-6xl mx-auto flex gap-1">
           {[
-            { id: "studio", label: "Studio", icon: Sparkles },
-            { id: "library", label: "Bibliothèque", icon: Library }
-          ].map(({ id, label, icon: Icon }) => (
+            { id: "studio" as Tab, label: "Studio", icon: <Sparkles size={15} /> },
+            { id: "library" as Tab, label: "Bibliothèque", icon: <Library size={15} /> },
+            {
+              id: "image2video" as Tab,
+              label: "Image-to-Video",
+              icon: <span className="text-sm">🎬</span>,
+            },
+          ].map(({ id, label, icon }) => (
             <button
               key={id}
-              onClick={() => setActiveTab(id as Tab)}
+              onClick={() => setActiveTab(id)}
               className={`flex items-center gap-2 px-4 py-3 text-sm 
                          border-b-2 transition-colors ${
                 activeTab === id
@@ -65,7 +71,7 @@ export default function MediaBuilderVideo() {
                   : "border-transparent text-gray-500 hover:text-gray-300"
               }`}
             >
-              <Icon size={15} />
+              {icon}
               {label}
             </button>
           ))}
@@ -74,7 +80,7 @@ export default function MediaBuilderVideo() {
 
       {/* Content */}
       <div className="max-w-6xl mx-auto px-6 py-6">
-        {activeTab === "studio" ? (
+        {activeTab === "studio" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
             {/* Studio Panel — colonne principale */}
@@ -152,9 +158,11 @@ export default function MediaBuilderVideo() {
               </div>
             </div>
           </div>
-        ) : (
+        )}
+        {activeTab === "library" && (
           <VideoLibrary refreshTrigger={libraryRefresh} />
         )}
+        {activeTab === "image2video" && <VideoBuilderV2 />}
       </div>
     </div>
   );
