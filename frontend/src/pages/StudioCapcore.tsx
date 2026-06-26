@@ -1,16 +1,30 @@
 import { useEffect, useState } from "react"
 import {
   fetchFormats,
+  fetchCapcoreSubjects,
   generatePost,
   generateHashtags,
   generateBio,
+  generateCapcorePost,
   type FormatInfo,
   type PostResult,
   type HashtagsResult,
   type BioResult,
+  type CapcoreSubject,
+  type CapcorePostResult,
 } from "@/lib/content-api"
+import {
+  fetchVisualConfig,
+  generateAvatarPose,
+  generateSocialVisual,
+  type VisualConfig,
+  type AvatarPoseResult,
+  type SocialVisualResult,
+} from "@/lib/visual-api"
 
+type Mode = "client" | "capcore"
 type Onglet = "posts" | "hashtags" | "bio"
+type OngletCapcore = "posts" | "visuels"
 
 const RESEAU_ICONS: Record<string, string> = {
   linkedin: "ti ti-brand-linkedin",
@@ -26,13 +40,23 @@ const RESEAU_COLORS: Record<string, string> = {
   twitter: "text-gray-300 border-gray-400/30 bg-gray-400/10",
 }
 
-function CopyButton({ texte }: { texte: string }) {
+const AVATAR_POSES_FALLBACK = [
+  { key: "presentation", label: "Présentation" },
+  { key: "explication", label: "Explication" },
+  { key: "cta", label: "Appel à l'action" },
+  { key: "celebration", label: "Célébration" },
+  { key: "working", label: "Derrière l'ordi" },
+  { key: "showing", label: "Montrant un site" },
+]
+
+function CopyButton({ texte, text }: { texte?: string; text?: string }) {
+  const content = text ?? texte ?? ""
   const [copie, setCopie] = useState(false)
   return (
     <button
       type="button"
       onClick={() => {
-        navigator.clipboard.writeText(texte)
+        navigator.clipboard.writeText(content)
         setCopie(true)
         setTimeout(() => setCopie(false), 2000)
       }}
@@ -44,6 +68,7 @@ function CopyButton({ texte }: { texte: string }) {
 }
 
 export function StudioCapcorePage() {
+  const [mode, setMode] = useState<Mode>("client")
   const [onglet, setOnglet] = useState<Onglet>("posts")
   const [formats, setFormats] = useState<FormatInfo[]>([])
   const [secteurs, setSecteurs] = useState<string[]>([])
@@ -67,10 +92,36 @@ export function StudioCapcorePage() {
   const [valeurAjoutee, setValeurAjoutee] = useState("")
   const [bioResult, setBioResult] = useState<BioResult | null>(null)
 
+  // Mode CapCore
+  const [capcoreSubjects, setCapcoreSubjects] = useState<CapcoreSubject[]>([])
+  const [capcoreSujet, setCapcoreSujet] = useState<string>("")
+  const [capcoreAngle, setCapcoreAngle] = useState<string>("")
+  const [capcoreResult, setCapcoreResult] = useState<CapcorePostResult | null>(null)
+  const [ongletCapcore, setOngletCapcore] = useState<OngletCapcore>("posts")
+
+  // Visuels CapCore
+  const [visualConfig, setVisualConfig] = useState<VisualConfig | null>(null)
+  const [visualFormat, setVisualFormat] = useState<string>("1:1")
+  const [visualStyle, setVisualStyle] = useState<string>("professionnel")
+  const [visualPose, setVisualPose] = useState<string>("presentation")
+  const [visualTexte, setVisualTexte] = useState<string>("")
+  const [visualSousTexte, setVisualSousTexte] = useState<string>("CapCore Studio Digital")
+  const [visualResult, setVisualResult] = useState<SocialVisualResult | null>(null)
+  const [avatarPoseResult, setAvatarPoseResult] = useState<AvatarPoseResult | null>(null)
+  const [avatarPoseKey, setAvatarPoseKey] = useState<string>("presentation")
+  const [loadingVisual, setLoadingVisual] = useState<boolean>(false)
+
   useEffect(() => {
     fetchFormats().then(data => {
       setFormats(data.formats || [])
       setSecteurs(data.secteurs || [])
+    })
+    fetchCapcoreSubjects().then(subjects => {
+      setCapcoreSubjects(subjects)
+      if (subjects.length > 0) setCapcoreSujet(subjects[0].key)
+    })
+    fetchVisualConfig().then(config => {
+      setVisualConfig(config)
     })
   }, [])
 
@@ -114,6 +165,42 @@ export function StudioCapcorePage() {
     }
   }
 
+  const handleGenererCapcore = async () => {
+    if (!capcoreSujet || !reseau) return
+    setLoading(true)
+    setCapcoreResult(null)
+    try {
+      const result = await generateCapcorePost(capcoreSujet, reseau, capcoreAngle)
+      setCapcoreResult(result)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGenererVisual = async () => {
+    if (!visualTexte) return
+    setLoadingVisual(true)
+    setVisualResult(null)
+    const result = await generateSocialVisual({
+      texte_principal: visualTexte,
+      sous_texte: visualSousTexte,
+      format_key: visualFormat,
+      style: visualStyle,
+      pose_key: visualPose,
+      sujet_context: capcoreSujet,
+    })
+    setVisualResult(result)
+    setLoadingVisual(false)
+  }
+
+  const handleGenererAvatarPose = async () => {
+    setLoadingVisual(true)
+    setAvatarPoseResult(null)
+    const result = await generateAvatarPose(avatarPoseKey, "1:1")
+    setAvatarPoseResult(result)
+    setLoadingVisual(false)
+  }
+
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
       {/* En-tête */}
@@ -126,279 +213,650 @@ export function StudioCapcorePage() {
         </p>
       </div>
 
-      {/* Onglets */}
-      <div className="flex gap-1 bg-white/5 p-1 rounded-xl w-fit">
-        {(["posts", "hashtags", "bio"] as Onglet[]).map(o => (
-          <button
-            key={o}
-            type="button"
-            onClick={() => setOnglet(o)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
-              onglet === o
-                ? "bg-amber-400 text-black"
-                : "text-gray-400 hover:text-white"
-            }`}
-          >
-            {o === "posts" ? "Posts" : o === "hashtags" ? "Hashtags" : "Bio profil"}
-          </button>
-        ))}
+      {/* Toggle Mode */}
+      <div className="flex items-center gap-2 mb-6">
+        <button
+          type="button"
+          onClick={() => setMode("client")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mode === "client"
+              ? "bg-amber-400 text-black"
+              : "bg-white/5 text-white/60 hover:text-white"
+          }`}
+        >
+          Mode Client
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("capcore")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mode === "capcore"
+              ? "bg-cyan-400 text-black"
+              : "bg-white/5 text-white/60 hover:text-white"
+          }`}
+        >
+          ✦ Mode CapCore
+        </button>
+        {mode === "capcore" && (
+          <span className="text-xs text-white/30 ml-2">
+            Contenu pour promouvoir CapCore Studio Digital
+          </span>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* ── Colonne gauche — Formulaire ── */}
-        <div className="space-y-4">
-
-          {/* Sélecteur réseau */}
-          <div>
-            <label className="text-xs text-gray-500 mb-2 block uppercase tracking-wider">Réseau social</label>
-            <div className="flex gap-2 flex-wrap">
-              {formats.map(f => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setReseau(f.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    reseau === f.id
-                      ? RESEAU_COLORS[f.id]
-                      : "text-gray-500 border-white/10 bg-white/5 hover:bg-white/10"
-                  }`}
-                >
-                  <i className={RESEAU_ICONS[f.id]} />
-                  {f.label}
-                </button>
-              ))}
-            </div>
+      {/* MODE CLIENT */}
+      {mode === "client" && (
+        <>
+          <div className="flex gap-1 bg-white/5 p-1 rounded-xl w-fit">
+            {(["posts", "hashtags", "bio"] as Onglet[]).map(o => (
+              <button
+                key={o}
+                type="button"
+                onClick={() => setOnglet(o)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                  onglet === o
+                    ? "bg-amber-400 text-black"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                {o === "posts" ? "Posts" : o === "hashtags" ? "Hashtags" : "Bio profil"}
+              </button>
+            ))}
           </div>
 
-          {/* Secteur */}
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Secteur d'activité</label>
-            <select
-              value={secteur}
-              onChange={e => setSecteur(e.target.value)}
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-amber-400/50"
-            >
-              <option value="">Choisir un secteur...</option>
-              {secteurs.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Champs spécifiques par onglet */}
-          {(onglet === "posts" || onglet === "hashtags") && (
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Sujet du post</label>
-              <textarea
-                value={sujet}
-                onChange={e => setSujet(e.target.value)}
-                placeholder="Ex : lancement de notre nouvelle collection printemps..."
-                rows={3}
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50 resize-none"
-              />
-            </div>
-          )}
-
-          {onglet === "posts" && (
-            <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">
-                  Nom de l'entreprise <span className="text-gray-600">(optionnel)</span>
-                </label>
-                <input
-                  type="text"
-                  value={nomEntreprise}
-                  onChange={e => setNomEntreprise(e.target.value)}
-                  placeholder="Ex : Boulangerie Martin"
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">
-                  Ton personnalisé <span className="text-gray-600">(optionnel)</span>
-                </label>
-                <input
-                  type="text"
-                  value={tonPerso}
-                  onChange={e => setTonPerso(e.target.value)}
-                  placeholder="Ex : chaleureux et familial"
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
-                />
-              </div>
-            </>
-          )}
-
-          {onglet === "hashtags" && (
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">
-                Nombre de hashtags : <span className="text-white">{nbHashtags}</span>
-              </label>
-              <input
-                type="range"
-                min={5}
-                max={20}
-                value={nbHashtags}
-                onChange={e => setNbHashtags(Number(e.target.value))}
-                className="w-full accent-amber-400"
-              />
-            </div>
-          )}
-
-          {onglet === "bio" && (
-            <>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Nom de l'entreprise</label>
-                <input
-                  type="text"
-                  value={nomEntreprise}
-                  onChange={e => setNomEntreprise(e.target.value)}
-                  placeholder="Ex : Atelier Dupont"
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Valeur ajoutée / promesse</label>
-                <input
-                  type="text"
-                  value={valeurAjoutee}
-                  onChange={e => setValeurAjoutee(e.target.value)}
-                  placeholder="Ex : meubles sur-mesure fabriqués à la main en 3 semaines"
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
-                />
-              </div>
-            </>
-          )}
-
-          {/* Bouton générer */}
-          <button
-            type="button"
-            onClick={
-              onglet === "posts" ? handleGenererPost :
-              onglet === "hashtags" ? handleGenererHashtags :
-              handleGenererBio
-            }
-            disabled={loading}
-            className="w-full py-3 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <i className="ti ti-loader animate-spin" />
-                Génération en cours...
-              </>
-            ) : (
-              <>
-                <i className="ti ti-sparkles" />
-                Générer avec ContentAI
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* ── Colonne droite — Résultats ── */}
-        <div className="space-y-4">
-
-          {/* Résultat Post */}
-          {onglet === "posts" && postResult?.success && (
-            <div className="space-y-3">
-              {/* Accroche */}
-              <div className="bg-amber-400/5 border border-amber-400/20 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-amber-400 font-medium uppercase tracking-wider">Accroche</span>
-                </div>
-                <p className="text-white text-sm">{postResult.accroche}</p>
-              </div>
-
-              {/* Post complet */}
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <i className={`${RESEAU_ICONS[postResult.format]} text-sm`} />
-                    <span className="text-xs text-gray-400 font-medium">{postResult.label}</span>
-                  </div>
-                  <CopyButton texte={postResult.post} />
-                </div>
-                <p className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">
-                  {postResult.post}
-                </p>
-              </div>
-
-              {/* Conseil */}
-              {postResult.conseil && (
-                <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-3">
-                  <span className="text-xs text-blue-400">💡 {postResult.conseil}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Résultat Hashtags */}
-          {onglet === "hashtags" && hashtagsResult?.success && (
-            <div className="space-y-3">
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-                    {hashtagsResult.hashtags.length} hashtags générés
-                  </span>
-                  <CopyButton texte={hashtagsResult.hashtags.join(" ")} />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {hashtagsResult.hashtags.map((h, i) => (
+                <label className="text-xs text-gray-500 mb-2 block uppercase tracking-wider">Réseau social</label>
+                <div className="flex gap-2 flex-wrap">
+                  {formats.map(f => (
                     <button
-                      key={i}
+                      key={f.id}
                       type="button"
-                      onClick={() => navigator.clipboard.writeText(h)}
-                      className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-blue-300 transition-colors"
-                      title="Cliquer pour copier"
+                      onClick={() => setReseau(f.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        reseau === f.id
+                          ? RESEAU_COLORS[f.id]
+                          : "text-gray-500 border-white/10 bg-white/5 hover:bg-white/10"
+                      }`}
                     >
-                      {h}
+                      <i className={RESEAU_ICONS[f.id]} />
+                      {f.label}
                     </button>
                   ))}
                 </div>
               </div>
-              {hashtagsResult.conseil && (
-                <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-3">
-                  <span className="text-xs text-blue-400">💡 {hashtagsResult.conseil}</span>
+
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Secteur d'activité</label>
+                <select
+                  value={secteur}
+                  onChange={e => setSecteur(e.target.value)}
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-amber-400/50"
+                >
+                  <option value="">Choisir un secteur...</option>
+                  {secteurs.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(onglet === "posts" || onglet === "hashtags") && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Sujet du post</label>
+                  <textarea
+                    value={sujet}
+                    onChange={e => setSujet(e.target.value)}
+                    placeholder="Ex : lancement de notre nouvelle collection printemps..."
+                    rows={3}
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50 resize-none"
+                  />
+                </div>
+              )}
+
+              {onglet === "posts" && (
+                <>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">
+                      Nom de l'entreprise <span className="text-gray-600">(optionnel)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={nomEntreprise}
+                      onChange={e => setNomEntreprise(e.target.value)}
+                      placeholder="Ex : Boulangerie Martin"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">
+                      Ton personnalisé <span className="text-gray-600">(optionnel)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={tonPerso}
+                      onChange={e => setTonPerso(e.target.value)}
+                      placeholder="Ex : chaleureux et familial"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
+                    />
+                  </div>
+                </>
+              )}
+
+              {onglet === "hashtags" && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">
+                    Nombre de hashtags : <span className="text-white">{nbHashtags}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={5}
+                    max={20}
+                    value={nbHashtags}
+                    onChange={e => setNbHashtags(Number(e.target.value))}
+                    className="w-full accent-amber-400"
+                  />
+                </div>
+              )}
+
+              {onglet === "bio" && (
+                <>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">Nom de l'entreprise</label>
+                    <input
+                      type="text"
+                      value={nomEntreprise}
+                      onChange={e => setNomEntreprise(e.target.value)}
+                      placeholder="Ex : Atelier Dupont"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">Valeur ajoutée / promesse</label>
+                    <input
+                      type="text"
+                      value={valeurAjoutee}
+                      onChange={e => setValeurAjoutee(e.target.value)}
+                      placeholder="Ex : meubles sur-mesure fabriqués à la main en 3 semaines"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
+                    />
+                  </div>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={
+                  onglet === "posts" ? handleGenererPost :
+                  onglet === "hashtags" ? handleGenererHashtags :
+                  handleGenererBio
+                }
+                disabled={loading}
+                className="w-full py-3 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <i className="ti ti-loader animate-spin" />
+                    Génération en cours...
+                  </>
+                ) : (
+                  <>
+                    <i className="ti ti-sparkles" />
+                    Générer avec ContentAI
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {onglet === "posts" && postResult?.success && (
+                <div className="space-y-3">
+                  <div className="bg-amber-400/5 border border-amber-400/20 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-amber-400 font-medium uppercase tracking-wider">Accroche</span>
+                    </div>
+                    <p className="text-white text-sm">{postResult.accroche}</p>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <i className={`${RESEAU_ICONS[postResult.format]} text-sm`} />
+                        <span className="text-xs text-gray-400 font-medium">{postResult.label}</span>
+                      </div>
+                      <CopyButton texte={postResult.post} />
+                    </div>
+                    <p className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">
+                      {postResult.post}
+                    </p>
+                  </div>
+
+                  {postResult.conseil && (
+                    <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-3">
+                      <span className="text-xs text-blue-400">💡 {postResult.conseil}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {onglet === "hashtags" && hashtagsResult?.success && (
+                <div className="space-y-3">
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">
+                        {hashtagsResult.hashtags.length} hashtags générés
+                      </span>
+                      <CopyButton texte={hashtagsResult.hashtags.join(" ")} />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {hashtagsResult.hashtags.map((h, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => navigator.clipboard.writeText(h)}
+                          className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-blue-300 transition-colors"
+                          title="Cliquer pour copier"
+                        >
+                          {h}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {hashtagsResult.conseil && (
+                    <div className="bg-blue-400/5 border border-blue-400/20 rounded-xl p-3">
+                      <span className="text-xs text-blue-400">💡 {hashtagsResult.conseil}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {onglet === "bio" && bioResult?.success && (
+                <div className="space-y-3">
+                  <div className="text-xs text-gray-500 flex items-center gap-2">
+                    <i className={RESEAU_ICONS[bioResult.format]} />
+                    Limite : {bioResult.limite}
+                  </div>
+                  {bioResult.bios.map((bio, i) => (
+                    <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-amber-400 font-medium">{bio.version}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">{bio.texte.length} car.</span>
+                          <CopyButton texte={bio.texte} />
+                        </div>
+                      </div>
+                      <p className="text-gray-200 text-sm leading-relaxed">{bio.texte}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {((onglet === "posts" && !postResult) ||
+                (onglet === "hashtags" && !hashtagsResult) ||
+                (onglet === "bio" && !bioResult)) && !loading && (
+                <div className="flex flex-col items-center justify-center h-48 text-center border border-dashed border-white/10 rounded-xl">
+                  <i className="ti ti-sparkles text-3xl text-gray-600 mb-2" />
+                  <p className="text-gray-500 text-sm">
+                    Remplis le formulaire et clique sur<br />
+                    <span className="text-amber-400">Générer avec ContentAI</span>
+                  </p>
                 </div>
               )}
             </div>
-          )}
+          </div>
+        </>
+      )}
 
-          {/* Résultat Bio */}
-          {onglet === "bio" && bioResult?.success && (
-            <div className="space-y-3">
-              <div className="text-xs text-gray-500 flex items-center gap-2">
-                <i className={RESEAU_ICONS[bioResult.format]} />
-                Limite : {bioResult.limite}
-              </div>
-              {bioResult.bios.map((bio, i) => (
-                <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-amber-400 font-medium">{bio.version}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">{bio.texte.length} car.</span>
-                      <CopyButton texte={bio.texte} />
-                    </div>
+      {/* MODE CAPCORE */}
+      {mode === "capcore" && (
+        <>
+          <div className="flex gap-2 mb-6">
+            <button
+              type="button"
+              onClick={() => setOngletCapcore("posts")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                ongletCapcore === "posts"
+                  ? "bg-cyan-400 text-black"
+                  : "bg-white/5 text-white/60 hover:text-white"
+              }`}
+            >
+              Posts
+            </button>
+            <button
+              type="button"
+              onClick={() => setOngletCapcore("visuels")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                ongletCapcore === "visuels"
+                  ? "bg-cyan-400 text-black"
+                  : "bg-white/5 text-white/60 hover:text-white"
+              }`}
+            >
+              ✦ Visuels FLUX
+            </button>
+          </div>
+
+          {ongletCapcore === "posts" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">Réseau social</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {formats.map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setReseau(f.id)}
+                        className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                          reseau === f.id
+                            ? "bg-cyan-400 text-black font-medium"
+                            : "bg-white/5 text-white/60 hover:text-white"
+                        }`}
+                      >
+                        <i className={`${RESEAU_ICONS[f.id]} mr-1`} />
+                        {f.label}
+                      </button>
+                    ))}
                   </div>
-                  <p className="text-gray-200 text-sm leading-relaxed">{bio.texte}</p>
                 </div>
-              ))}
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">Sujet</label>
+                  <select
+                    value={capcoreSujet}
+                    onChange={e => setCapcoreSujet(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-400"
+                  >
+                    {capcoreSubjects.map(s => (
+                      <option key={s.key} value={s.key} className="bg-[#0f0f13]">
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">
+                    Angle <span className="text-white/30">(optionnel)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={capcoreAngle}
+                    onChange={e => setCapcoreAngle(e.target.value)}
+                    placeholder="ex : mettre en avant le gain de temps..."
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleGenererCapcore()}
+                  disabled={loading || !capcoreSujet}
+                  className="w-full py-2.5 rounded-lg bg-cyan-400 text-black font-medium text-sm hover:bg-cyan-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? "Génération en cours..." : "✦ Générer avec ContentAI"}
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {capcoreResult?.success && (
+                  <>
+                    {capcoreResult.post && (
+                      <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-cyan-400 font-medium uppercase tracking-wide">Post</span>
+                          <CopyButton text={capcoreResult.post} />
+                        </div>
+                        <p className="text-white/90 text-sm whitespace-pre-wrap leading-relaxed">
+                          {capcoreResult.post}
+                        </p>
+                      </div>
+                    )}
+                    {capcoreResult.accroche && (
+                      <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-amber-400 font-medium uppercase tracking-wide">Accroche</span>
+                          <CopyButton text={capcoreResult.accroche} />
+                        </div>
+                        <p className="text-white/80 text-sm italic">{capcoreResult.accroche}</p>
+                      </div>
+                    )}
+                    {capcoreResult.hashtags && capcoreResult.hashtags.length > 0 && (
+                      <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <span className="text-xs text-white/40 font-medium uppercase tracking-wide block mb-2">Hashtags</span>
+                        <div className="flex flex-wrap gap-2">
+                          {capcoreResult.hashtags.map((tag, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(tag)}
+                              className="px-2 py-1 bg-cyan-400/10 text-cyan-400 rounded text-xs hover:bg-cyan-400/20 transition-colors"
+                            >
+                              {tag.startsWith("#") ? tag : `#${tag}`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {capcoreResult.conseil && (
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <p className="text-white/40 text-xs">💡 {capcoreResult.conseil}</p>
+                      </div>
+                    )}
+                  </>
+                )}
+                {capcoreResult && !capcoreResult.success && (
+                  <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
+                    <p className="text-red-400 text-sm">{capcoreResult.error}</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* État vide */}
-          {((onglet === "posts" && !postResult) ||
-            (onglet === "hashtags" && !hashtagsResult) ||
-            (onglet === "bio" && !bioResult)) && !loading && (
-            <div className="flex flex-col items-center justify-center h-48 text-center border border-dashed border-white/10 rounded-xl">
-              <i className="ti ti-sparkles text-3xl text-gray-600 mb-2" />
-              <p className="text-gray-500 text-sm">
-                Remplis le formulaire et clique sur<br />
-                <span className="text-amber-400">Générer avec ContentAI</span>
-              </p>
+          {ongletCapcore === "visuels" && (
+            <div className="space-y-6">
+              <div className="border border-white/10 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-white/80 mb-4">
+                  ✦ Visuel post réseaux sociaux
+                </h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-white/60 mb-2">Texte principal</label>
+                      <input
+                        type="text"
+                        value={visualTexte}
+                        onChange={e => setVisualTexte(e.target.value)}
+                        placeholder="ex : Votre site en 30 minutes"
+                        maxLength={80}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-cyan-400"
+                      />
+                      <span className="text-xs text-white/20 mt-1 block text-right">
+                        {visualTexte.length}/80
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-white/60 mb-2">Sous-texte</label>
+                      <input
+                        type="text"
+                        value={visualSousTexte}
+                        onChange={e => setVisualSousTexte(e.target.value)}
+                        placeholder="CapCore Studio Digital"
+                        maxLength={60}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-cyan-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-white/60 mb-2">Format</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {(visualConfig?.formats || [
+                          { key: "1:1", label: "Instagram Feed" },
+                          { key: "9:16", label: "Stories / TikTok" },
+                          { key: "16:9", label: "LinkedIn" },
+                        ]).map(f => (
+                          <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => setVisualFormat(f.key)}
+                            className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                              visualFormat === f.key
+                                ? "bg-cyan-400 text-black font-medium"
+                                : "bg-white/5 text-white/60 hover:text-white"
+                            }`}
+                          >
+                            {f.key} — {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-white/60 mb-2">Pose avatar</label>
+                      <select
+                        value={visualPose}
+                        onChange={e => setVisualPose(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-400"
+                      >
+                        {(visualConfig?.poses || AVATAR_POSES_FALLBACK).map(p => (
+                          <option key={p.key} value={p.key} className="bg-[#0f0f13]">
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-white/60 mb-2">Style</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {(visualConfig?.styles || [
+                          { key: "professionnel", label: "Professionnel" },
+                          { key: "moderne", label: "Moderne" },
+                          { key: "minimaliste", label: "Minimaliste" },
+                        ]).map(s => (
+                          <button
+                            key={s.key}
+                            type="button"
+                            onClick={() => setVisualStyle(s.key)}
+                            className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                              visualStyle === s.key
+                                ? "bg-cyan-400 text-black font-medium"
+                                : "bg-white/5 text-white/60 hover:text-white"
+                            }`}
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleGenererVisual()}
+                      disabled={loadingVisual || !visualTexte}
+                      className="w-full py-2.5 rounded-lg bg-cyan-400 text-black font-medium text-sm hover:bg-cyan-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {loadingVisual ? "Génération FLUX en cours (~20s)..." : "✦ Générer le visuel"}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-center">
+                    {visualResult?.success && visualResult.image_url ? (
+                      <div className="space-y-3 w-full">
+                        <img
+                          src={visualResult.image_url}
+                          alt="Visuel généré"
+                          className="w-full rounded-xl border border-white/10 object-cover"
+                        />
+                        <div className="flex gap-2">
+                          <a
+                            href={visualResult.image_url}
+                            download
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 py-2 rounded-lg bg-white/5 text-white/70 text-xs text-center hover:bg-white/10 transition-colors"
+                          >
+                            ↓ Télécharger
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(visualResult.image_url!)}
+                            className="flex-1 py-2 rounded-lg bg-white/5 text-white/70 text-xs hover:bg-white/10 transition-colors"
+                          >
+                            Copier l'URL
+                          </button>
+                        </div>
+                      </div>
+                    ) : visualResult && !visualResult.success ? (
+                      <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20 w-full">
+                        <p className="text-red-400 text-sm">{visualResult.error}</p>
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-square rounded-xl border border-white/5 bg-white/5 flex items-center justify-center">
+                        <p className="text-white/20 text-sm">Le visuel apparaîtra ici</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border border-white/10 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-white/80 mb-1">
+                  Avatar CapCore — Poses
+                </h3>
+                <p className="text-xs text-white/30 mb-4">
+                  Génère chaque pose une fois et réutilise-la dans tes visuels.
+                </p>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                  {(visualConfig?.poses || AVATAR_POSES_FALLBACK).map(p => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setAvatarPoseKey(p.key)}
+                      className={`px-3 py-2 rounded-lg text-xs text-left transition-colors border ${
+                        avatarPoseKey === p.key
+                          ? "border-cyan-400 bg-cyan-400/10 text-cyan-400"
+                          : "border-white/10 bg-white/5 text-white/60 hover:text-white"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-3 items-start flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => void handleGenererAvatarPose()}
+                    disabled={loadingVisual}
+                    className="px-4 py-2 rounded-lg bg-white/5 text-white/70 text-sm hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loadingVisual ? "Génération..." : "Générer cette pose"}
+                  </button>
+                  {avatarPoseResult?.success && avatarPoseResult.image_url && (
+                    <div className="flex gap-2 items-center">
+                      <img
+                        src={avatarPoseResult.image_url}
+                        alt={avatarPoseResult.pose_label}
+                        className="w-16 h-16 rounded-lg object-cover border border-white/10"
+                      />
+                      <a
+                        href={avatarPoseResult.image_url}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-cyan-400 hover:underline"
+                      >
+                        ↓ Télécharger
+                      </a>
+                    </div>
+                  )}
+                  {avatarPoseResult && !avatarPoseResult.success && (
+                    <p className="text-red-400 text-xs">{avatarPoseResult.error}</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 }

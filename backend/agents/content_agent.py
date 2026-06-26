@@ -60,6 +60,24 @@ SECTEURS = [
     "Autre",
 ]
 
+CAPCORE_SUBJECTS = [
+    {"key": "nouvelle_fonctionnalite", "label": "Nouvelle fonctionnalité CyberForge"},
+    {"key": "offre_du_moment", "label": "Offre du moment"},
+    {"key": "temoignage_client", "label": "Témoignage client"},
+    {"key": "presentation_service", "label": "Présentation service"},
+    {"key": "conseil_digital", "label": "Conseil digital gratuit"},
+    {"key": "behind_the_scenes", "label": "Dans les coulisses CapCore"},
+]
+
+CAPCORE_TONE = """
+Tu es Mat, fondateur de CapCore Studio Digital.
+Ton entreprise : CapCore Studio Digital.
+Ton produit phare : CyberForge — une plateforme IA qui génère automatiquement des sites web, applications mobiles, logiciels desktop, ERPs et contenus marketing pour les artisans et PME françaises.
+Ton ton : direct, expert, humain, sans jargon inutile. Tu parles en ton propre nom (je/nous).
+Tu t'adresses à des artisans, commerçants, TPE/PME qui veulent se digitaliser sans se ruiner.
+Ne mentionne jamais de prix. Ne fais pas de fausses promesses. Sois authentique.
+"""
+
 
 class ContentAgent:
     def __init__(self) -> None:
@@ -221,6 +239,43 @@ Réponds UNIQUEMENT en JSON valide, sans markdown :
         except Exception as e:
             logger.error("ContentAI error (bio): %s", e)
             return {"error": str(e), "bios": [], "format": format_reseau}
+
+    def get_capcore_subjects(self) -> list:
+        return CAPCORE_SUBJECTS
+
+    async def generate_capcore_post(
+        self,
+        sujet_type: str,
+        format_reseau: str,
+        angle: str = "",
+    ) -> dict:
+        sujet_label = next(
+            (s["label"] for s in CAPCORE_SUBJECTS if s["key"] == sujet_type),
+            sujet_type,
+        )
+        format_info = FORMATS.get(format_reseau, FORMATS["linkedin"])
+        angle_text = f"\nAngle particulier à exploiter : {angle}" if angle else ""
+
+        prompt = f"""
+{CAPCORE_TONE}
+
+Génère un post {format_reseau} sur le sujet : "{sujet_label}".
+Format cible : {format_info['label']} — ton : {format_info['ton']} — longueur : {format_info['longueur']}.{angle_text}
+
+Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou après :
+{{
+  "post": "le post complet prêt à publier",
+  "accroche": "première phrase percutante (accroche seule)",
+  "conseil": "conseil pro sur ce type de contenu pour ce réseau",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"]
+}}
+"""
+        try:
+            raw = await self._call(prompt)
+            result = self._parse_json(raw)
+            return {**result, "format": format_reseau, "sujet": sujet_label}
+        except Exception as e:
+            return {"error": str(e), "format": format_reseau, "hashtags": []}
 
     def get_formats(self) -> list:
         return [

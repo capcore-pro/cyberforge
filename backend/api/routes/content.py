@@ -32,6 +32,15 @@ class BioRequest(BaseModel):
     format_reseau: str = Field(..., pattern="^(linkedin|instagram|tiktok|twitter)$")
 
 
+# — Modèles Mode CapCore —
+class CapcorePostRequest(BaseModel):
+    sujet_type: str
+    format_reseau: str = Field(
+        pattern="^(linkedin|instagram|tiktok|twitter)$"
+    )
+    angle: str = ""
+
+
 @router.get("/formats")
 async def get_formats():
     return {"formats": content_agent.get_formats(), "secteurs": content_agent.get_secteurs()}
@@ -78,3 +87,21 @@ async def generate_bio(body: BioRequest):
         return {"success": True, **result}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# — Routes Mode CapCore —
+@router.get("/capcore-subjects")
+def get_capcore_subjects():
+    return {"subjects": content_agent.get_capcore_subjects()}
+
+
+@router.post("/capcore-post")
+async def generate_capcore_post(body: CapcorePostRequest):
+    result = await content_agent.generate_capcore_post(
+        sujet_type=body.sujet_type,
+        format_reseau=body.format_reseau,
+        angle=body.angle,
+    )
+    if "error" in result and "post" not in result:
+        return {"success": False, "error": result["error"]}
+    return {"success": True, **result}

@@ -76,3 +76,38 @@ export async function generateBio(params: {
   })
   return res.json()
 }
+
+export interface CapcoreSubject {
+  key: string
+  label: string
+}
+
+export interface CapcorePostResult {
+  success: boolean
+  post?: string
+  accroche?: string
+  conseil?: string
+  hashtags?: string[]
+  format?: string
+  sujet?: string
+  error?: string
+}
+
+export async function fetchCapcoreSubjects(): Promise<CapcoreSubject[]> {
+  const res = await fetch(`${API_BASE}/api/content/capcore-subjects`)
+  const data = await res.json()
+  return data.subjects || []
+}
+
+export async function generateCapcorePost(
+  sujet_type: string,
+  format_reseau: string,
+  angle: string = ""
+): Promise<CapcorePostResult> {
+  const res = await fetch(`${API_BASE}/api/content/capcore-post`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sujet_type, format_reseau, angle }),
+  })
+  return res.json()
+}
