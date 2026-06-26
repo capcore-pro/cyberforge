@@ -66,3 +66,54 @@ export async function saveAndDeploy(payload: {
   }
   return data;
 }
+
+export interface ClientFeatures {
+  plan: string;
+  management_plan: string;
+  can_edit_colors: boolean;
+  can_edit_fonts: boolean;
+  can_edit_sections: boolean;
+}
+
+export interface ModificationRequestPayload {
+  client_id: string;
+  site_id: string;
+  type_modification: string;
+  description: string;
+  priorite: "normale" | "urgente";
+}
+
+export async function getMyFeatures(clientId: string): Promise<ClientFeatures> {
+  const res = await fetch(`${API_BASE}/api/portal/my-features/${clientId}`);
+  const data = await res.json();
+  return {
+    plan: data.plan,
+    management_plan: data.management_plan,
+    can_edit_colors: data.can_edit_colors,
+    can_edit_fonts: data.can_edit_fonts,
+    can_edit_sections: data.can_edit_sections,
+  };
+}
+
+export async function delegateToCapcore(
+  clientId: string,
+  siteId: string,
+): Promise<{ success: boolean }> {
+  const res = await fetch(`${API_BASE}/api/portal-onboarding/delegate-to-capcore`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, site_id: siteId }),
+  });
+  return res.json();
+}
+
+export async function sendModificationRequest(
+  payload: ModificationRequestPayload,
+): Promise<{ success: boolean }> {
+  const res = await fetch(`${API_BASE}/api/portal-onboarding/modification-request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}

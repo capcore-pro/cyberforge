@@ -14,14 +14,15 @@ export type Client = {
   id: string;
   email: string;
   full_name: string;
-  company: string;
+  company?: string;
   plan: string;
   subscription_status?: string;
-  trial_ends_at?: string | null;
-  subscription_ends_at?: string | null;
+  trial_ends_at?: string;
+  subscription_ends_at?: string;
   billing_interval?: string;
   onboarding_done?: boolean;
   site_url?: string;
+  management_plan?: string; // "autonome" | "gere" | null
 };
 
 export type Site = {
@@ -38,11 +39,13 @@ function AuthenticatedApp({
   client,
   sites,
   setSites,
+  setClient,
   onLogout,
 }: {
   client: Client;
   sites: Site[];
   setSites: Dispatch<SetStateAction<Site[]>>;
+  setClient: Dispatch<SetStateAction<Client | null>>;
   onLogout: () => void;
 }) {
   const [editingSite, setEditingSite] = useState<Site | null>(null);
@@ -87,8 +90,9 @@ function AuthenticatedApp({
               <Dashboard
                 client={client}
                 sites={sites}
-                onEditSite={setEditingSite}
+                onEdit={setEditingSite}
                 onLogout={onLogout}
+                onClientUpdate={(updated) => setClient(updated)}
               />
             )
           }
@@ -179,6 +183,7 @@ function AppShell() {
               client={client}
               sites={sites}
               setSites={setSites}
+              setClient={setClient}
               onLogout={handleLogout}
             />
           ) : (

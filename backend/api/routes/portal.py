@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.portal_agent import portal_agent
+from agents.stripe_portal_agent import PLANS
 from utils.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -143,6 +144,7 @@ async def portal_login(request: LoginRequest) -> dict:
                 "subscription_ends_at": client.get("subscription_ends_at"),
                 "billing_interval": client.get("billing_interval") or "monthly",
                 "onboarding_done": client.get("onboarding_done", False),
+                "management_plan": client.get("management_plan"),
                 "site_url": client.get("site_url")
                 or (sites[0].get("site_url") if sites else None),
             },
@@ -166,16 +168,78 @@ async def get_client_sites(client_id: str) -> dict:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.get("/my-features/{client_id}")
+async def get_my_features(client_id: str):
+    """Retourne les features éditeur selon le plan du client."""
+    try:
+        supabase = get_supabase()
+        client_res = (
+            supabase.table("portal_clients")
+            .select("plan, subscription_status, trial_ends_at, management_plan")
+            .eq("id", client_id)
+            .single()
+            .execute()
+        )
+        client = client_res.data
+        if not client:
+            raise HTTPException(404, "Client introuvable")
+
+        plan = client.get("plan", "essentiel")
+        management_plan = client.get("management_plan", "autonome")
+        features = PLANS.get(plan, PLANS.get("essentiel", {}))
+
+        return {
+            "success": True,
+            "plan": plan,
+            "management_plan": management_plan,
+            "can_edit_colors": features.get("can_edit_colors", False),
+            "can_edit_fonts": features.get("can_edit_fonts", False),
+            "can_edit_sections": features.get("can_edit_sections", False),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/save-deploy")
 async def save_and_deploy(request: SaveDeployRequest) -> dict:
     """Sauvegarde les modifications et redéploie."""
     try:
+        supabase = get_supabase()
+        client_res = (
+            supabase.table("portal_clients")
+            .select("plan, subscription_status, management_plan")
+            .eq("id", request.client_id)
+            .single()
+            .execute()
+        )
+        client_data = client_res.data or {}
+        plan = client_data.get("plan", "essentiel")
+        features = PLANS.get(plan, PLANS.get("essentiel", {}))
+
+        for edit in request.edits:
+            if edit.type == "color" and not features.get("can_edit_colors", False):
+                raise HTTPException(
+                    403, "Édition couleurs réservée au plan Business et Studio"
+                )
+            if edit.type == "font" and not features.get("can_edit_fonts", False):
+                raise HTTPException(
+                    403, "Édition fonts réservée au plan Business et Studio"
+                )
+            if edit.type == "section" and not features.get("can_edit_sections", False):
+                raise HTTPException(
+                    403, "Gestion sections réservée au plan Business et Studio"
+                )
+
         return await portal_agent.save_and_deploy(
             site_id=request.site_id,
             client_id=request.client_id,
             edits=[e.model_dump() for e in request.edits],
             html_updated=request.html_updated,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Portal save-deploy error")
         raise HTTPException(status_code=500, detail=str(e)) from e

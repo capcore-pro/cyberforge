@@ -714,3 +714,160 @@ class PortalOnboardingAgent:
                 "[PortalOnboardingAgent] Erreur email confirmation modification: %s", e
             )
             return False
+
+    def send_delegation_request_email(
+        self,
+        client_email: str,
+        client_name: str,
+        site_url: str,
+        site_name: str,
+    ) -> bool:
+        """Email à Mat quand un client demande la gestion déléguée."""
+        mat_email = "mat@capcore.fr"
+        html = f"""
+    <div style="background:#0f0f13;padding:40px;font-family:Arial,sans-serif;color:#fff;">
+      <h2 style="color:#00d4ff;">🔔 Nouvelle demande de gestion déléguée</h2>
+      <p style="color:#ccc;">Un client souhaite déléguer la gestion de son site à CapCore.</p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+        <tr><td style="padding:8px;color:#888;">Client</td><td style="padding:8px;color:#fff;">{client_name}</td></tr>
+        <tr><td style="padding:8px;color:#888;">Email</td><td style="padding:8px;color:#00d4ff;">{client_email}</td></tr>
+        <tr><td style="padding:8px;color:#888;">Site</td><td style="padding:8px;color:#fff;">{site_name}</td></tr>
+        <tr><td style="padding:8px;color:#888;">URL</td><td style="padding:8px;color:#00d4ff;">{site_url}</td></tr>
+      </table>
+      <p style="color:#888;">L'abonnement Stripe du client a été annulé automatiquement.</p>
+      <p style="color:#888;">Pense à configurer la facturation 49€/mois pour ce client.</p>
+    </div>
+    """
+        try:
+            _send_brevo_html(
+                to_email=mat_email,
+                to_name="Mat — CapCore",
+                subject=f"🔔 Délégation demandée — {client_name} ({site_name})",
+                html_content=html,
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "[PortalOnboardingAgent] Erreur email demande délégation: %s", e
+            )
+            return False
+
+    def send_delegation_confirmation_email(
+        self,
+        client_email: str,
+        client_name: str,
+        site_name: str,
+    ) -> bool:
+        """Email au client confirmant la prise en charge par CapCore."""
+        html = f"""
+    <div style="background:#0f0f13;padding:40px;font-family:Arial,sans-serif;color:#fff;">
+      <h2 style="color:#00d4ff;">✅ CapCore prend en charge votre site</h2>
+      <p style="color:#ccc;">Bonjour {client_name},</p>
+      <p style="color:#ccc;">Votre demande a bien été reçue. CapCore Studio Digital gère désormais votre site <strong style="color:#fff;">{site_name}</strong>.</p>
+      <p style="color:#ccc;">Mat prendra contact avec vous très prochainement pour convenir des premières modifications.</p>
+      <div style="background:#1a1a2e;border-radius:8px;padding:20px;margin:20px 0;">
+        <p style="color:#00d4ff;margin:0;">📋 Pour demander des modifications</p>
+        <p style="color:#888;margin:8px 0 0;">Connectez-vous à votre espace client et utilisez le formulaire "Demander une modification".</p>
+      </div>
+    </div>
+    """
+        try:
+            _send_brevo_html(
+                to_email=client_email,
+                to_name=client_name,
+                subject=f"✅ CapCore prend en charge {site_name}",
+                html_content=html,
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "[PortalOnboardingAgent] Erreur email confirmation délégation: %s", e
+            )
+            return False
+
+    def send_back_to_autonome_email(
+        self,
+        client_email: str,
+        client_name: str,
+        site_name: str,
+        pricing_url: str = "https://client.capcore.pro/pricing",
+    ) -> bool:
+        """Email au client quand Mat le repasse en mode autonome."""
+        html = f"""
+    <div style="background:#0f0f13;padding:40px;font-family:Arial,sans-serif;color:#fff;">
+      <h2 style="color:#00d4ff;">🔄 Votre site est prêt pour une gestion autonome</h2>
+      <p style="color:#ccc;">Bonjour {client_name},</p>
+      <p style="color:#ccc;">Votre site <strong style="color:#fff;">{site_name}</strong> est désormais disponible en gestion autonome.</p>
+      <p style="color:#ccc;">Choisissez votre plan pour accéder à l'éditeur et modifier votre site en toute autonomie :</p>
+      <div style="text-align:center;margin:30px 0;">
+        <a href="{pricing_url}" style="background:#00d4ff;color:#000;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">
+          Choisir mon plan →
+        </a>
+      </div>
+    </div>
+    """
+        try:
+            _send_brevo_html(
+                to_email=client_email,
+                to_name=client_name,
+                subject=f"🔄 Choisissez votre plan — {site_name}",
+                html_content=html,
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "[PortalOnboardingAgent] Erreur email retour autonome: %s", e
+            )
+            return False
+
+    def send_modification_request_email(
+        self,
+        client_email: str,
+        client_name: str,
+        site_name: str,
+        site_url: str,
+        type_modification: str,
+        description: str,
+        priorite: str,
+        fichiers_joints: list[str] | None = None,
+    ) -> bool:
+        """Email à Mat avec la demande de modification du client géré."""
+        mat_email = "mat@capcore.fr"
+        fichiers_html = ""
+        if fichiers_joints:
+            fichiers_html = "<p style='color:#888;'>Fichiers joints :</p><ul>"
+            for f in fichiers_joints:
+                fichiers_html += f"<li style='color:#00d4ff;'>{f}</li>"
+            fichiers_html += "</ul>"
+
+        priorite_color = "#ff4444" if priorite == "urgente" else "#00d4ff"
+        html = f"""
+    <div style="background:#0f0f13;padding:40px;font-family:Arial,sans-serif;color:#fff;">
+      <h2 style="color:#00d4ff;">📝 Demande de modification — {site_name}</h2>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+        <tr><td style="padding:8px;color:#888;">Client</td><td style="padding:8px;color:#fff;">{client_name} ({client_email})</td></tr>
+        <tr><td style="padding:8px;color:#888;">Site</td><td style="padding:8px;color:#fff;">{site_name}</td></tr>
+        <tr><td style="padding:8px;color:#888;">URL</td><td style="padding:8px;color:#00d4ff;">{site_url}</td></tr>
+        <tr><td style="padding:8px;color:#888;">Type</td><td style="padding:8px;color:#fff;">{type_modification}</td></tr>
+        <tr><td style="padding:8px;color:#888;">Priorité</td><td style="padding:8px;color:{priorite_color};font-weight:bold;">{priorite.upper()}</td></tr>
+      </table>
+      <div style="background:#1a1a2e;border-radius:8px;padding:20px;margin:20px 0;">
+        <p style="color:#888;margin:0 0 8px;">Description :</p>
+        <p style="color:#fff;margin:0;">{description}</p>
+      </div>
+      {fichiers_html}
+    </div>
+    """
+        try:
+            _send_brevo_html(
+                to_email=mat_email,
+                to_name="Mat — CapCore",
+                subject=f"📝 Modif demandée — {client_name} — {site_name} [{priorite.upper()}]",
+                html_content=html,
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                "[PortalOnboardingAgent] Erreur email demande modification: %s", e
+            )
+            return False

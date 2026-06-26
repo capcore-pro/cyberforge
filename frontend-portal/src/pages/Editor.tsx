@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Client, Site } from "../App";
+import { getMyFeatures, type ClientFeatures } from "../lib/portal-api";
 
 const API =
   import.meta.env.VITE_API_URL ||
@@ -25,6 +26,103 @@ export default function Editor({ client, site, onBack, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [htmlForSave, setHtmlForSave] = useState(site.html_content);
+  const [features, setFeatures] = useState<ClientFeatures | null>(null);
+  const [activePanel, setActivePanel] = useState<
+    "colors" | "fonts" | "sections" | null
+  >(null);
+  const [selectedElement, setSelectedElement] = useState<string | null>(null);
+  const [sections, setSections] = useState<
+    Array<{ selector: string; label: string; visible: boolean }>
+  >([]);
+
+  const detectSections = () => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentDocument) return;
+    const sectionEls = iframe.contentDocument.querySelectorAll(
+      "section, [data-section], header, footer, nav, .hero, .features, .contact, .about",
+    );
+    const detected = Array.from(sectionEls).map((el, i) => ({
+      selector:
+        el.tagName.toLowerCase() +
+        (el.id ? `#${el.id}` : `:nth-of-type(${i + 1})`),
+      label:
+        el.id ||
+        el.getAttribute("data-section") ||
+        el.tagName.toLowerCase() + ` ${i + 1}`,
+      visible: (el as HTMLElement).style.display !== "none",
+    }));
+    setSections(detected);
+  };
+
+  const applyColor = (
+    selector: string,
+    property: "color" | "background-color",
+    value: string,
+  ) => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentDocument) return;
+    const el = iframe.contentDocument.querySelector(selector) as HTMLElement | null;
+    if (!el) return;
+    el.style[property === "color" ? "color" : "backgroundColor"] = value;
+    const newHtml = iframe.contentDocument.documentElement.outerHTML;
+    setHtmlForSave(newHtml);
+    setEdits((prev) => [
+      ...prev,
+      {
+        type: "color",
+        selector,
+        old_value: "",
+        new_value: JSON.stringify({ property, value }),
+      },
+    ]);
+  };
+
+  const applyFont = (selector: string, fontFamily: string, fontSize: string) => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentDocument) return;
+    const els = iframe.contentDocument.querySelectorAll(selector);
+    els.forEach((el) => {
+      (el as HTMLElement).style.fontFamily = fontFamily;
+      if (fontSize) (el as HTMLElement).style.fontSize = fontSize;
+    });
+    const newHtml = iframe.contentDocument.documentElement.outerHTML;
+    setHtmlForSave(newHtml);
+    setEdits((prev) => [
+      ...prev,
+      {
+        type: "font",
+        selector,
+        old_value: "",
+        new_value: JSON.stringify({ fontFamily, fontSize }),
+      },
+    ]);
+  };
+
+  const toggleSection = (sectionSelector: string, visible: boolean) => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentDocument) return;
+    const el = iframe.contentDocument.querySelector(
+      sectionSelector,
+    ) as HTMLElement | null;
+    if (!el) return;
+    el.style.display = visible ? "" : "none";
+    const newHtml = iframe.contentDocument.documentElement.outerHTML;
+    setHtmlForSave(newHtml);
+    setSections((prev) =>
+      prev.map((s) =>
+        s.selector === sectionSelector ? { ...s, visible } : s,
+      ),
+    );
+    setEdits((prev) => [
+      ...prev,
+      {
+        type: "section",
+        selector: sectionSelector,
+        old_value: visible ? "none" : "",
+        new_value: visible ? "" : "none",
+      },
+    ]);
+  };
 
   function injectEditorScript() {
     const iframe = iframeRef.current;
@@ -190,6 +288,15 @@ export default function Editor({ client, site, onBack, onSaved }: Props) {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
+  useEffect(() => {
+    void getMyFeatures(client.id).then((f) => {
+      setFeatures(f);
+      if (f.can_edit_sections) {
+        detectSections();
+      }
+    });
+  }, [client.id]);
+
   async function handleSave() {
     if (edits.length === 0) return;
     setSaving(true);
@@ -264,14 +371,216 @@ export default function Editor({ client, site, onBack, onSaved }: Props) {
         </div>
       </div>
 
-      <iframe
-        ref={iframeRef}
-        srcDoc={site.html_content}
-        onLoad={injectEditorScript}
-        className="flex-1 w-full border-0"
-        title="Éditeur de site"
-        sandbox="allow-scripts allow-same-origin"
-      />
+      {features &&
+        (features.can_edit_colors ||
+          features.can_edit_fonts ||
+          features.can_edit_sections) && (
+          <div className="flex gap-2 px-4 py-2 bg-[#0a0a12] border-b border-white/10 shrink-0">
+            {features.can_edit_colors && (
+              <button
+                type="button"
+                onClick={() =>
+                  setActivePanel(activePanel === "colors" ? null : "colors")
+                }
+                className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                  activePanel === "colors"
+                    ? "bg-cyan-400 text-black"
+                    : "bg-white/5 text-white/60 hover:text-white"
+                }`}
+              >
+                🎨 Couleurs
+              </button>
+            )}
+            {features.can_edit_fonts && (
+              <button
+                type="button"
+                onClick={() =>
+                  setActivePanel(activePanel === "fonts" ? null : "fonts")
+                }
+                className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                  activePanel === "fonts"
+                    ? "bg-cyan-400 text-black"
+                    : "bg-white/5 text-white/60 hover:text-white"
+                }`}
+              >
+                Aa Fonts
+              </button>
+            )}
+            {features.can_edit_sections && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePanel(
+                    activePanel === "sections" ? null : "sections",
+                  );
+                  detectSections();
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                  activePanel === "sections"
+                    ? "bg-cyan-400 text-black"
+                    : "bg-white/5 text-white/60 hover:text-white"
+                }`}
+              >
+                ☰ Sections
+              </button>
+            )}
+          </div>
+        )}
+
+      <div className="relative flex-1 min-h-0">
+        <iframe
+          ref={iframeRef}
+          srcDoc={site.html_content}
+          onLoad={injectEditorScript}
+          className="h-full w-full border-0"
+          title="Éditeur de site"
+          sandbox="allow-scripts allow-same-origin"
+        />
+
+        {activePanel && (
+          <div className="absolute right-0 top-0 h-full w-72 bg-[#0f0f13] border-l border-white/10 z-10 overflow-y-auto">
+            <div className="p-4 space-y-4">
+              {activePanel === "colors" && (
+                <>
+                  <h3 className="text-sm font-medium text-white">Couleurs</h3>
+                  {[
+                    {
+                      label: "Fond principal",
+                      selector: "body",
+                      property: "background-color" as const,
+                    },
+                    {
+                      label: "Texte principal",
+                      selector: "body",
+                      property: "color" as const,
+                    },
+                    {
+                      label: "Titres (h1)",
+                      selector: "h1",
+                      property: "color" as const,
+                    },
+                    {
+                      label: "Titres (h2)",
+                      selector: "h2",
+                      property: "color" as const,
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="text-xs text-white/60">{item.label}</span>
+                      <input
+                        type="color"
+                        defaultValue="#ffffff"
+                        onChange={(e) =>
+                          applyColor(item.selector, item.property, e.target.value)
+                        }
+                        className="w-8 h-8 rounded cursor-pointer border border-white/20 bg-transparent"
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {activePanel === "fonts" && (
+                <>
+                  <h3 className="text-sm font-medium text-white">Typographie</h3>
+                  {[
+                    { label: "Titres", selector: "h1, h2, h3" },
+                    { label: "Corps de texte", selector: "p, li, span" },
+                    { label: "Boutons", selector: "button, a.btn, .btn" },
+                  ].map((item) => (
+                    <div key={item.label} className="space-y-2">
+                      <p className="text-xs text-white/60">{item.label}</p>
+                      <select
+                        onChange={(e) =>
+                          applyFont(item.selector, e.target.value, "")
+                        }
+                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-cyan-400"
+                      >
+                        <option value="" className="bg-[#0f0f13]">
+                          Choisir une police
+                        </option>
+                        {[
+                          "Arial",
+                          "Georgia",
+                          "Helvetica",
+                          "Inter",
+                          "Montserrat",
+                          "Playfair Display",
+                          "Roboto",
+                          "Open Sans",
+                        ].map((f) => (
+                          <option key={f} value={f} className="bg-[#0f0f13]">
+                            {f}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        onChange={(e) =>
+                          applyFont(item.selector, "", e.target.value)
+                        }
+                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:border-cyan-400"
+                      >
+                        <option value="" className="bg-[#0f0f13]">
+                          Taille
+                        </option>
+                        {[
+                          "12px",
+                          "14px",
+                          "16px",
+                          "18px",
+                          "20px",
+                          "24px",
+                          "28px",
+                          "32px",
+                        ].map((s) => (
+                          <option key={s} value={s} className="bg-[#0f0f13]">
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {activePanel === "sections" && (
+                <>
+                  <h3 className="text-sm font-medium text-white">Sections</h3>
+                  {sections.length === 0 && (
+                    <p className="text-xs text-white/30">
+                      Aucune section détectée
+                    </p>
+                  )}
+                  {sections.map((s) => (
+                    <div
+                      key={s.selector}
+                      className="flex items-center justify-between"
+                    >
+                      <span className="text-xs text-white/60 capitalize">
+                        {s.label}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(s.selector, !s.visible)}
+                        className={`px-2 py-1 rounded text-xs transition-colors ${
+                          s.visible
+                            ? "bg-cyan-400/20 text-cyan-400"
+                            : "bg-white/5 text-white/30"
+                        }`}
+                      >
+                        {s.visible ? "Visible" : "Masqué"}
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
