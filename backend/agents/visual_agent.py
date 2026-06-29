@@ -77,6 +77,11 @@ AVATAR_POSES = [
         "label": "Montrant un écran",
         "description": "holding tablet showing a website, presenting screen to camera",
     },
+    {
+        "key": "montrant_logiciel",
+        "label": "Présentation logiciel",
+        "description": "standing slightly sideways, one arm extended pointing toward a large glowing screen interface on the left, other hand on hip, confident posture, looking at the screen with a proud expression, modern dark UI dashboard visible on screen with cyan accents and data visualizations",
+    },
 ]
 
 CAPCORE_AVATAR_BASE_PROMPT = """3D Pixar-style cartoon character, male founder, 

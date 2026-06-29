@@ -53,6 +53,12 @@ const AVATAR_POSES_FALLBACK = [
   { key: "celebration", label: "Célébration" },
   { key: "working", label: "Derrière l'ordi" },
   { key: "showing", label: "Montrant un site" },
+  {
+    key: "montrant_logiciel",
+    label: "Présentation logiciel",
+    description:
+      "standing slightly sideways, one arm extended pointing toward a large glowing screen interface on the left, other hand on hip, confident posture, looking at the screen with a proud expression, modern dark UI dashboard visible on screen with cyan accents and data visualizations",
+  },
 ]
 
 const ONGLETS_VISUELS = [
