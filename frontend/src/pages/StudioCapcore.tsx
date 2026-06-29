@@ -267,7 +267,11 @@ export function StudioCapcorePage() {
       style: visualStyle,
       pose_key: visualPose,
       sujet_context: capcoreSujet,
-      ...(referenceUrl ? { image_prompt: referenceUrl } : {}),
+      ...(referenceUrl
+        ? { image_prompt: referenceUrl }
+        : poseGallery[visualPose]
+        ? { image_prompt: poseGallery[visualPose] }
+        : {}),
     })
     setVisualResult(result)
     setLoadingVisual(false)
