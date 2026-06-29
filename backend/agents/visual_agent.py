@@ -25,6 +25,12 @@ VISUAL_FORMATS = {
         "height": 1024,
         "usage": "Instagram Feed, Facebook",
     },
+    "1:1_facebook": {
+        "label": "Facebook Post",
+        "width": 1024,
+        "height": 1024,
+        "usage": "Facebook Post, Facebook Story",
+    },
     "16:9": {
         "label": "LinkedIn / YouTube",
         "width": 1344,
@@ -207,8 +213,8 @@ class VisualAgent:
             f"{CAPCORE_AVATAR_BASE_PROMPT}, "
             f"{pose['description']}, "
             f"{CAPCORE_BACKGROUND}, "
-            f"full body or half body shot, "
-            f"{'portrait' if format_key == '1:1' else 'vertical composition' if format_key == '9:16' else 'horizontal composition'}"
+            f"full body or half body shot, clean composition, no text, "
+            f"{'portrait' if format_key in ('1:1', '1:1_facebook') else 'vertical composition' if format_key == '9:16' else 'horizontal composition'}"
         )
 
         try:
@@ -253,7 +259,7 @@ class VisualAgent:
             "portrait vertical composition, character top, text bottom"
             if format_key == "9:16"
             else "square composition, character left, text right"
-            if format_key == "1:1"
+            if format_key in ("1:1", "1:1_facebook")
             else "landscape composition, character left third, text center"
         )
 
@@ -262,11 +268,12 @@ class VisualAgent:
             f"{CAPCORE_AVATAR_BASE_PROMPT}, "
             f"{pose['description']}, "
             f"{CAPCORE_BACKGROUND}, "
-            f"large bold text overlay '{texte_principal}', "
-            f"subtitle text '{sous_texte}', "
+            f"large bold text overlay exactly '{texte_principal}', "
+            f"subtitle text exactly '{sous_texte}', "
+            f"all text in French language, text must be readable, "
             f"{style_desc}, "
             f"{composition}, "
-            f"{'vertical' if format_key == '9:16' else 'square' if format_key == '1:1' else 'horizontal'} format, "
+            f"{'vertical' if format_key == '9:16' else 'square' if format_key in ('1:1', '1:1_facebook') else 'horizontal'} format, "
             f"high end advertising visual, no watermark"
         )
 

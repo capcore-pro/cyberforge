@@ -67,6 +67,29 @@ function CopyButton({ texte, text }: { texte?: string; text?: string }) {
   )
 }
 
+function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div className="relative max-w-4xl max-h-[90vh] w-full mx-4" onClick={e => e.stopPropagation()}>
+        <img
+          src={url}
+          alt="Aperçu"
+          className="w-full h-auto rounded-xl object-contain max-h-[85vh]"
+        />
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors text-sm"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function StudioCapcorePage() {
   const [mode, setMode] = useState<Mode>("client")
   const [onglet, setOnglet] = useState<Onglet>("posts")
@@ -109,7 +132,9 @@ export function StudioCapcorePage() {
   const [visualResult, setVisualResult] = useState<SocialVisualResult | null>(null)
   const [avatarPoseResult, setAvatarPoseResult] = useState<AvatarPoseResult | null>(null)
   const [avatarPoseKey, setAvatarPoseKey] = useState<string>("presentation")
+  const [poseGallery, setPoseGallery] = useState<Record<string, string>>({})
   const [loadingVisual, setLoadingVisual] = useState<boolean>(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   useEffect(() => {
     fetchFormats().then(data => {
@@ -124,6 +149,15 @@ export function StudioCapcorePage() {
       setVisualConfig(config)
     })
   }, [])
+
+  useEffect(() => {
+    if (!lightboxUrl) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxUrl(null)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [lightboxUrl])
 
   async function handleGenererPost() {
     if (!sujet || !secteur) return
@@ -198,6 +232,9 @@ export function StudioCapcorePage() {
     setAvatarPoseResult(null)
     const result = await generateAvatarPose(avatarPoseKey, "1:1")
     setAvatarPoseResult(result)
+    if (result.success && result.image_url) {
+      setPoseGallery(prev => ({ ...prev, [avatarPoseKey]: result.image_url! }))
+    }
     setLoadingVisual(false)
   }
 
@@ -764,7 +801,8 @@ export function StudioCapcorePage() {
                         <img
                           src={visualResult.image_url}
                           alt="Visuel généré"
-                          className="w-full rounded-xl border border-white/10 object-cover"
+                          onClick={() => setLightboxUrl(visualResult.image_url!)}
+                          className="w-full rounded-xl border border-white/10 object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
                         />
                         <div className="flex gap-2">
                           <a
@@ -798,6 +836,7 @@ export function StudioCapcorePage() {
                 </div>
               </div>
 
+              {/* Section 2 — Bibliothèque poses avatar */}
               <div className="border border-white/10 rounded-xl p-5">
                 <h3 className="text-sm font-medium text-white/80 mb-1">
                   Avatar CapCore — Poses
@@ -805,49 +844,75 @@ export function StudioCapcorePage() {
                 <p className="text-xs text-white/30 mb-4">
                   Génère chaque pose une fois et réutilise-la dans tes visuels.
                 </p>
+
+                {/* Grille poses */}
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                  {(visualConfig?.poses || AVATAR_POSES_FALLBACK).map(p => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      onClick={() => setAvatarPoseKey(p.key)}
-                      className={`px-3 py-2 rounded-lg text-xs text-left transition-colors border ${
-                        avatarPoseKey === p.key
-                          ? "border-cyan-400 bg-cyan-400/10 text-cyan-400"
-                          : "border-white/10 bg-white/5 text-white/60 hover:text-white"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
+                  {(visualConfig?.poses || AVATAR_POSES_FALLBACK).map(p => {
+                    const stored = poseGallery[p.key]
+                    return (
+                      <div
+                        key={p.key}
+                        onClick={() => setAvatarPoseKey(p.key)}
+                        className={`rounded-xl border transition-colors cursor-pointer overflow-hidden ${
+                          avatarPoseKey === p.key
+                            ? "border-cyan-400"
+                            : "border-white/10"
+                        }`}
+                      >
+                        {stored ? (
+                          <div className="relative group">
+                            <img
+                              src={stored}
+                              alt={p.label}
+                              className="w-full aspect-square object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setLightboxUrl(stored) }}
+                                className="px-2 py-1 bg-white/20 text-white text-xs rounded-lg hover:bg-white/30"
+                              >
+                                Voir
+                              </button>
+                              <a
+                                href={stored}
+                                download
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="px-2 py-1 bg-cyan-400/80 text-black text-xs rounded-lg hover:bg-cyan-400"
+                              >
+                                ↓
+                              </a>
+                            </div>
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1">
+                              <p className="text-white text-xs truncate">{p.label}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="aspect-square bg-white/3 flex flex-col items-center justify-center gap-1 p-2">
+                            <span className="text-2xl opacity-20">👤</span>
+                            <p className="text-white/40 text-xs text-center">{p.label}</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-                <div className="flex gap-3 items-start flex-wrap">
+
+                {/* Bouton générer pose sélectionnée */}
+                <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => void handleGenererAvatarPose()}
                     disabled={loadingVisual}
                     className="px-4 py-2 rounded-lg bg-white/5 text-white/70 text-sm hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
-                    {loadingVisual ? "Génération..." : "Générer cette pose"}
+                    {loadingVisual
+                      ? "Génération..."
+                      : `Générer — ${(visualConfig?.poses || AVATAR_POSES_FALLBACK).find(p => p.key === avatarPoseKey)?.label || avatarPoseKey}`
+                    }
                   </button>
-                  {avatarPoseResult?.success && avatarPoseResult.image_url && (
-                    <div className="flex gap-2 items-center">
-                      <img
-                        src={avatarPoseResult.image_url}
-                        alt={avatarPoseResult.pose_label}
-                        className="w-16 h-16 rounded-lg object-cover border border-white/10"
-                      />
-                      <a
-                        href={avatarPoseResult.image_url}
-                        download
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-cyan-400 hover:underline"
-                      >
-                        ↓ Télécharger
-                      </a>
-                    </div>
-                  )}
                   {avatarPoseResult && !avatarPoseResult.success && (
                     <p className="text-red-400 text-xs">{avatarPoseResult.error}</p>
                   )}
@@ -857,6 +922,8 @@ export function StudioCapcorePage() {
           )}
         </>
       )}
+
+      {lightboxUrl && <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
     </div>
   )
 }
