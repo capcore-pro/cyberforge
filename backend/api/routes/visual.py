@@ -14,13 +14,13 @@ router = APIRouter(prefix="/api/visual", tags=["visual"])
 
 class AvatarPoseRequest(BaseModel):
     pose_key: str
-    format_key: Literal["9:16", "1:1", "16:9"] = "1:1"
+    format_key: Literal["9:16", "1:1", "1:1_facebook", "16:9"] = "1:1"
 
 
 class SocialVisualRequest(BaseModel):
     texte_principal: str = Field(min_length=1, max_length=80)
     sous_texte: str = Field(default="CapCore Studio Digital", max_length=60)
-    format_key: Literal["9:16", "1:1", "16:9"] = "1:1"
+    format_key: Literal["9:16", "1:1", "1:1_facebook", "16:9"] = "1:1"
     style: Literal["professionnel", "moderne", "minimaliste"] = "professionnel"
     pose_key: str = "presentation"
     sujet_context: str = ""
