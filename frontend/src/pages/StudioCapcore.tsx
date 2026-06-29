@@ -30,7 +30,7 @@ import {
 
 type Mode = "client" | "capcore"
 type Onglet = "posts" | "hashtags" | "bio"
-type OngletCapcore = "posts" | "visuels"
+type OngletCapcore = "posts" | "visuels" | "post_complet"
 
 const RESEAU_ICONS: Record<string, string> = {
   linkedin: "ti ti-brand-linkedin",
@@ -165,6 +165,21 @@ export function StudioCapcorePage() {
   const [referenceUploading, setReferenceUploading] = useState(false)
   const [referenceError, setReferenceError] = useState<string | null>(null)
   const [carouselError, setCarouselError] = useState<string | null>(null)
+  const [postCompletAngle, setPostCompletAngle] = useState<string>("")
+  const [postCompletPose, setPostCompletPose] = useState<string>("presentation")
+  const [postCompletFormat, setPostCompletFormat] = useState<string>("1:1")
+  const [postCompletReseau, setPostCompletReseau] = useState<string>("instagram")
+  const [postCompletLoading, setPostCompletLoading] = useState<boolean>(false)
+  const [postCompletResult, setPostCompletResult] = useState<{
+    post: string
+    accroche: string
+    hashtags: string[]
+    conseil: string
+    image_url: string
+    texte_principal: string
+    sous_texte: string
+  } | null>(null)
+  const [postCompletError, setPostCompletError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchFormats().then(data => {
@@ -275,6 +290,67 @@ export function StudioCapcorePage() {
     })
     setVisualResult(result)
     setLoadingVisual(false)
+  }
+
+  const handleGenererPostComplet = async () => {
+    if (!capcoreSujet) return
+    setPostCompletLoading(true)
+    setPostCompletResult(null)
+    setPostCompletError(null)
+
+    try {
+      const textResult = await generateCapcorePost(
+        capcoreSujet,
+        postCompletReseau,
+        postCompletAngle,
+      )
+
+      if (!textResult.success || !textResult.post) {
+        setPostCompletError(textResult.error || "Erreur génération texte")
+        return
+      }
+
+      const texte_principal = (textResult.accroche || textResult.post)
+        .slice(0, 80)
+        .trim()
+
+      const sous_texte = (textResult.sujet || "CapCore Studio Digital")
+        .slice(0, 60)
+        .trim()
+
+      const imagePromptFromGallery = poseGallery[postCompletPose] || undefined
+
+      const visualResult = await generateSocialVisual({
+        texte_principal,
+        sous_texte,
+        format_key: postCompletFormat,
+        style: "professionnel",
+        pose_key: postCompletPose,
+        sujet_context: capcoreSujet,
+        image_prompt: imagePromptFromGallery ?? null,
+      })
+
+      if (!visualResult.success || !visualResult.image_url) {
+        setPostCompletError(visualResult.error || "Erreur génération visuel")
+        return
+      }
+
+      setPostCompletResult({
+        post: textResult.post,
+        accroche: textResult.accroche || "",
+        hashtags: textResult.hashtags || [],
+        conseil: textResult.conseil || "",
+        image_url: visualResult.image_url,
+        texte_principal,
+        sous_texte,
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur inattendue"
+      setPostCompletError(message)
+      console.error("Erreur génération post complet:", err)
+    } finally {
+      setPostCompletLoading(false)
+    }
   }
 
   const handleGenererAvatarPose = async () => {
@@ -664,6 +740,17 @@ export function StudioCapcorePage() {
             >
               ✦ Visuels FLUX
             </button>
+            <button
+              type="button"
+              onClick={() => setOngletCapcore("post_complet")}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                ongletCapcore === "post_complet"
+                  ? "bg-cyan-400/20 border border-cyan-400 text-cyan-400"
+                  : "bg-white/5 border border-white/10 text-white/60 hover:border-white/30"
+              }`}
+            >
+              ⚡ Post Complet
+            </button>
           </div>
 
           {ongletCapcore === "posts" && (
@@ -775,6 +862,193 @@ export function StudioCapcorePage() {
                 {capcoreResult && !capcoreResult.success && (
                   <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
                     <p className="text-red-400 text-sm">{capcoreResult.error}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {ongletCapcore === "post_complet" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <p className="text-xs text-white/40">
+                  Décris ton angle — ContentAI génère le post, VisualAI le visuel avec avatar en une action.
+                </p>
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">Réseau social</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {formats.map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setPostCompletReseau(f.id)}
+                        className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                          postCompletReseau === f.id
+                            ? "bg-cyan-400 text-black font-medium"
+                            : "bg-white/5 text-white/60 hover:text-white"
+                        }`}
+                      >
+                        <i className={`${RESEAU_ICONS[f.id]} mr-1`} />
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">Sujet</label>
+                  <select
+                    value={capcoreSujet}
+                    onChange={e => setCapcoreSujet(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-400"
+                  >
+                    {capcoreSubjects.map(s => (
+                      <option key={s.key} value={s.key} className="bg-[#0f0f13]">
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">
+                    Idée / angle <span className="text-white/30">(langage naturel)</span>
+                  </label>
+                  <textarea
+                    value={postCompletAngle}
+                    onChange={e => setPostCompletAngle(e.target.value)}
+                    placeholder="ex : Mettre en avant CyberForge pour un artisan plombier qui veut plus de clients..."
+                    rows={4}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-white/20 focus:outline-none focus:border-cyan-400 resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">Format visuel</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {["1:1", "1:1_facebook", "9:16", "16:9"].map(fmt => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => setPostCompletFormat(fmt)}
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                          postCompletFormat === fmt
+                            ? "bg-cyan-400/20 border-cyan-400 text-cyan-400"
+                            : "bg-white/5 border-white/10 text-white/60 hover:border-white/30"
+                        }`}
+                      >
+                        {fmt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">Pose avatar</label>
+                  <select
+                    value={postCompletPose}
+                    onChange={e => setPostCompletPose(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-400"
+                  >
+                    {(visualConfig?.poses || AVATAR_POSES_FALLBACK).map(p => (
+                      <option key={p.key} value={p.key} className="bg-[#0f0f13]">
+                        {p.label}
+                        {poseGallery[p.key] ? " ✓" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {poseGallery[postCompletPose] && (
+                    <p className="text-xs text-green-400 mt-1">Pose galerie utilisée automatiquement comme référence</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleGenererPostComplet()}
+                  disabled={postCompletLoading || !capcoreSujet}
+                  className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-semibold transition-colors"
+                >
+                  {postCompletLoading
+                    ? "⏳ Génération post + visuel..."
+                    : "⚡ Générer le post complet"}
+                </button>
+                {postCompletError && (
+                  <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
+                    <p className="text-red-400 text-sm">{postCompletError}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {postCompletResult ? (
+                  <>
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                      <img
+                        src={postCompletResult.image_url}
+                        alt="Visuel post complet"
+                        onClick={() => setLightboxUrl(postCompletResult.image_url)}
+                        className="w-full rounded-lg border border-white/10 object-cover cursor-zoom-in hover:opacity-90 transition-opacity mb-3"
+                      />
+                      <div className="flex gap-2">
+                        <a
+                          href={postCompletResult.image_url}
+                          download
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 py-2 rounded-lg bg-white/5 text-white/70 text-xs text-center hover:bg-white/10 transition-colors"
+                        >
+                          ↓ Télécharger visuel
+                        </a>
+                      </div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-cyan-400 font-medium uppercase tracking-wide">Post</span>
+                        <CopyButton text={postCompletResult.post} />
+                      </div>
+                      <p className="text-white/90 text-sm whitespace-pre-wrap leading-relaxed">
+                        {postCompletResult.post}
+                      </p>
+                    </div>
+                    {postCompletResult.accroche && (
+                      <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-amber-400 font-medium uppercase tracking-wide">
+                            Accroche → visuel
+                          </span>
+                          <CopyButton text={postCompletResult.accroche} />
+                        </div>
+                        <p className="text-white/80 text-sm italic">{postCompletResult.accroche}</p>
+                        <p className="text-white/30 text-xs mt-1">
+                          Texte sur visuel : « {postCompletResult.texte_principal} »
+                        </p>
+                      </div>
+                    )}
+                    {postCompletResult.hashtags.length > 0 && (
+                      <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <span className="text-xs text-white/40 font-medium uppercase tracking-wide block mb-2">
+                          Hashtags
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {postCompletResult.hashtags.map((tag, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(tag)}
+                              className="px-2 py-1 bg-cyan-400/10 text-cyan-400 rounded text-xs hover:bg-cyan-400/20 transition-colors"
+                            >
+                              {tag.startsWith("#") ? tag : `#${tag}`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {postCompletResult.conseil && (
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <p className="text-white/40 text-xs">💡 {postCompletResult.conseil}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="h-full min-h-[320px] rounded-xl border border-white/5 bg-white/5 flex items-center justify-center">
+                    <p className="text-white/20 text-sm text-center px-6">
+                      Le post et le visuel apparaîtront ici
+                    </p>
                   </div>
                 )}
               </div>
