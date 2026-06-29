@@ -210,6 +210,37 @@ def sync_to_r2(local_path: str, r2_key: str) -> str | None:
         return None
 
 
+def upload_bytes_to_r2(
+    file_bytes: bytes,
+    r2_key: str,
+    content_type: str,
+) -> str | None:
+    """Upload bytes vers R2. Retourne l'URL publique ou None si indisponible / erreur."""
+    client, cfg = _s3_client()
+    if client is None or cfg is None:
+        logger.warning("R2 non configuré — upload ignoré (%s)", r2_key)
+        return None
+
+    clean_key = r2_key.strip().lstrip("/")
+    if not clean_key:
+        logger.warning("upload_bytes_to_r2 : r2_key vide")
+        return None
+
+    try:
+        client.put_object(
+            Bucket=cfg["bucket"],
+            Key=clean_key,
+            Body=file_bytes,
+            ContentType=content_type or "application/octet-stream",
+        )
+        url = _public_r2_url(clean_key, cfg)
+        logger.info("R2 upload OK : %s → %s", clean_key, url)
+        return url
+    except Exception as exc:
+        logger.warning("Échec upload R2 (%s): %s", clean_key, exc)
+        return None
+
+
 def delete_from_r2(r2_key: str) -> bool:
     """Supprime un objet R2 ; False si non configuré ou erreur."""
     client, cfg = _s3_client()

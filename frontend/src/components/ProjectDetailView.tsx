@@ -3,6 +3,7 @@ import { BackButton } from "@/components/BackButton";
 import { Button, Modal } from "@/components/ui";
 import DeliverModal from "@/components/DeliverModal";
 import ProjectPortalButton from "@/components/ProjectPortalButton";
+import ProjectMediaPanel from "@/components/ProjectMediaPanel";
 import { PasswordRevealField } from "@/components/PasswordRevealField";
 import {
   ProjectClientStripeSection,
@@ -837,6 +838,13 @@ export function ProjectDetailView({
                 </div>
               ) : null}
             </div>
+          ) : null}
+
+          {project.supabaseProjectId && demoUrl && !isDesktopProject ? (
+            <ProjectMediaPanel
+              siteUrl={demoUrl}
+              isDelivered={watermarkActive === false}
+            />
           ) : null}
 
           {isDesktopProject ? (

@@ -6,13 +6,15 @@ Endpoints pour le portail client client.capcore.pro
 from __future__ import annotations
 
 import logging
+import uuid as uuid_lib
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from agents.portal_agent import portal_agent
 from agents.stripe_portal_agent import PLANS
+from media_storage import delete_from_r2, r2_configured, upload_bytes_to_r2
 from utils.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,37 @@ class SaveDeployRequest(BaseModel):
 class ToggleClientRequest(BaseModel):
     client_id: str
     is_active: bool
+
+
+MEDIA_LIMITS_BY_PLAN: dict[str | None, int] = {
+    "essentiel": 10,
+    "business": 50,
+    "studio": 500,
+    None: 10,
+}
+
+
+class MediaUploadResponse(BaseModel):
+    success: bool
+    media_id: str
+    r2_url: str
+    file_name: str
+
+
+class MediaItem(BaseModel):
+    id: str
+    file_name: str
+    r2_url: str
+    file_type: str
+    file_size_bytes: int | None
+    uploaded_by: str
+    created_at: str
+
+
+def _media_limit_for_plan(plan: str | None) -> int:
+    if plan in MEDIA_LIMITS_BY_PLAN:
+        return MEDIA_LIMITS_BY_PLAN[plan]
+    return MEDIA_LIMITS_BY_PLAN[None]
 
 
 @router.post("/clients")
@@ -348,3 +381,168 @@ async def get_management_plans():
     except Exception as e:
         logger.exception("Portal management-plans error")
         return {"success": False, "plans": [], "error": str(e)}
+
+
+@router.post("/media/upload", response_model=MediaUploadResponse)
+async def upload_portal_media(
+    client_id: str = Form(...),
+    site_id: str | None = Form(default=None),
+    uploaded_by: str = Form(default="client"),
+    file: UploadFile = File(...),
+):
+    """Upload une photo client vers R2 + enregistrement portal_media."""
+    try:
+        if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Format non supporté — JPEG, PNG ou WebP uniquement",
+            )
+
+        if not r2_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Stockage média non configuré — contactez CapCore",
+            )
+
+        file_bytes = await file.read()
+        if len(file_bytes) > 5 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail="Fichier trop lourd — maximum 5Mo",
+            )
+
+        supabase = get_supabase()
+
+        client_result = (
+            supabase.table("portal_clients")
+            .select("plan")
+            .eq("id", client_id)
+            .execute()
+        )
+        if not client_result.data:
+            raise HTTPException(status_code=404, detail="Client non trouvé")
+
+        plan = client_result.data[0].get("plan")
+        limit = _media_limit_for_plan(plan)
+
+        count_result = (
+            supabase.table("portal_media")
+            .select("id", count="exact")
+            .eq("client_id", client_id)
+            .execute()
+        )
+        current_count = count_result.count if count_result.count is not None else 0
+
+        if current_count >= limit:
+            raise HTTPException(
+                status_code=403,
+                detail="Limite atteinte — passez au forfait supérieur pour ajouter plus de photos",
+            )
+
+        ext = (file.content_type or "image/jpeg").split("/")[-1]
+        r2_key = f"portal-media/{client_id}/{uuid_lib.uuid4().hex}.{ext}"
+
+        r2_url = upload_bytes_to_r2(file_bytes, r2_key, file.content_type or "image/jpeg")
+        if not r2_url:
+            raise HTTPException(status_code=500, detail="Échec upload stockage R2")
+
+        file_name = file.filename or f"photo_{uuid_lib.uuid4().hex[:8]}.{ext}"
+        insert_payload: dict = {
+            "client_id": client_id,
+            "file_name": file_name,
+            "r2_key": r2_key,
+            "r2_url": r2_url,
+            "file_type": file.content_type,
+            "file_size_bytes": len(file_bytes),
+            "uploaded_by": uploaded_by,
+        }
+        if site_id:
+            insert_payload["site_id"] = site_id
+
+        result = supabase.table("portal_media").insert(insert_payload).execute()
+
+        return MediaUploadResponse(
+            success=True,
+            media_id=result.data[0]["id"],
+            r2_url=r2_url,
+            file_name=file_name,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Portal media upload error")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/media/{client_id}")
+async def get_portal_media(client_id: str):
+    """Liste les photos d'un client portail avec quota forfait."""
+    try:
+        supabase = get_supabase()
+
+        client_result = (
+            supabase.table("portal_clients")
+            .select("plan")
+            .eq("id", client_id)
+            .execute()
+        )
+        plan = client_result.data[0].get("plan") if client_result.data else None
+        limit = _media_limit_for_plan(plan)
+
+        result = (
+            supabase.table("portal_media")
+            .select("*")
+            .eq("client_id", client_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        rows = result.data or []
+
+        return {
+            "media": [
+                MediaItem(
+                    id=row["id"],
+                    file_name=row["file_name"],
+                    r2_url=row["r2_url"],
+                    file_type=row["file_type"],
+                    file_size_bytes=row.get("file_size_bytes"),
+                    uploaded_by=row.get("uploaded_by") or "client",
+                    created_at=row["created_at"],
+                )
+                for row in rows
+            ],
+            "count": len(rows),
+            "limit": limit,
+            "plan": plan,
+        }
+    except Exception as e:
+        logger.exception("Portal media list error")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.delete("/media/{media_id}")
+async def delete_portal_media(media_id: str):
+    """Supprime une photo portail (R2 + Supabase)."""
+    try:
+        supabase = get_supabase()
+
+        result = (
+            supabase.table("portal_media")
+            .select("r2_key")
+            .eq("id", media_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Média non trouvé")
+
+        r2_key = result.data[0]["r2_key"]
+        delete_from_r2(r2_key)
+
+        supabase.table("portal_media").delete().eq("id", media_id).execute()
+
+        return {"success": True, "media_id": media_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Portal media delete error")
+        raise HTTPException(status_code=500, detail=str(e)) from e
