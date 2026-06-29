@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import uuid as uuid_lib
 from typing import Any
 
 import httpx
 
 from config import get_settings, plain_secret_str
+from utils.supabase_client import get_supabase
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 
@@ -70,6 +72,11 @@ AVATAR_POSES = [
         "label": "Montrant un site",
         "description": "holding tablet showing a website, presenting screen to camera",
     },
+    {
+        "key": "montrant_ecran",
+        "label": "Montrant un écran",
+        "description": "holding tablet showing a website, presenting screen to camera",
+    },
 ]
 
 CAPCORE_AVATAR_BASE_PROMPT = """3D Pixar-style cartoon character, male founder, 
@@ -81,6 +88,34 @@ professional digital art, octane render style"""
 CAPCORE_BACKGROUND = """dark background #0f0f13, 
 subtle cyan accent lighting #00d4ff, 
 tech atmosphere, depth of field"""
+
+CAROUSEL_SLIDE_ROLES = [
+    {
+        "role": "accroche",
+        "pose_key": "explication",
+        "composition": "bold problem statement, impactful typography, avatar left side",
+    },
+    {
+        "role": "argument_1",
+        "pose_key": "presentation",
+        "composition": "benefit highlight, clean layout, avatar right side",
+    },
+    {
+        "role": "argument_2",
+        "pose_key": "celebration",
+        "composition": "result proof, energetic composition, avatar left side",
+    },
+    {
+        "role": "demonstration",
+        "pose_key": "montrant_ecran",
+        "composition": "product showcase, avatar presenting screen, center focus",
+    },
+    {
+        "role": "cta",
+        "pose_key": "cta",
+        "composition": "call to action, CapCore Studio Digital branding bottom right, strong CTA",
+    },
+]
 
 
 class VisualAgent:
@@ -129,6 +164,8 @@ class VisualAgent:
         prompt: str,
         width: int,
         height: int,
+        image_prompt: str | None = None,
+        image_prompt_strength: float = 0.85,
         timeout: float = 120.0,
     ) -> str:
         if not self._configured:
@@ -137,20 +174,25 @@ class VisualAgent:
         owner, name = FLUX_MODEL_AVATAR.split("/")
         create_url = f"{REPLICATE_API_BASE}/models/{owner}/{name}/predictions"
 
-        input_payload = {
-            "prompt": prompt,
-            "width": width,
-            "height": height,
-            "num_inference_steps": 28,
-            "guidance": 3.5,
-            "output_format": "png",
-            "output_quality": 95,
+        payload = {
+            "input": {
+                "prompt": prompt,
+                "width": width,
+                "height": height,
+                "num_inference_steps": 28,
+                "guidance": 3.5,
+                "output_format": "png",
+                "output_quality": 95,
+            }
         }
+        if image_prompt:
+            payload["input"]["image_prompt"] = image_prompt
+            payload["input"]["image_prompt_strength"] = image_prompt_strength
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(
                 create_url,
-                json={"input": input_payload},
+                json=payload,
                 headers=self._headers(),
             )
             resp.raise_for_status()
@@ -241,6 +283,8 @@ class VisualAgent:
         style: str = "professionnel",
         pose_key: str = "presentation",
         sujet_context: str = "",
+        image_prompt: str | None = None,
+        image_prompt_strength: float = 0.85,
     ) -> dict:
         pose = next(
             (p for p in AVATAR_POSES if p["key"] == pose_key),
@@ -286,6 +330,8 @@ class VisualAgent:
                 prompt=prompt,
                 width=fmt["width"],
                 height=fmt["height"],
+                image_prompt=image_prompt,
+                image_prompt_strength=image_prompt_strength,
             )
             return {
                 "image_url": image_url,
@@ -297,6 +343,105 @@ class VisualAgent:
             }
         except Exception as e:
             return {"error": str(e), "format": format_key}
+
+    async def generate_carousel(
+        self,
+        textes: list[dict],
+        format_reseau: str,
+    ) -> list[dict]:
+        """Génère 5 visuels FLUX en parallèle pour un carrousel CapCore."""
+        fmt = VISUAL_FORMATS.get(format_reseau, VISUAL_FORMATS["1:1"])
+        width = fmt["width"]
+        height = fmt["height"]
+        format_label = fmt["label"]
+
+        prompts = []
+        for i, (slide_role, texte) in enumerate(zip(CAROUSEL_SLIDE_ROLES, textes)):
+            pose = next(
+                (p for p in AVATAR_POSES if p["key"] == slide_role["pose_key"]),
+                AVATAR_POSES[0],
+            )
+
+            if slide_role["role"] == "cta":
+                prompt = (
+                    f"Professional social media carousel final CTA slide, "
+                    f"{CAPCORE_AVATAR_BASE_PROMPT}, {pose['description']}, "
+                    f"{CAPCORE_BACKGROUND}, "
+                    f"large bold French text '{texte['titre']}' centered top, "
+                    f"subtitle '{texte['sous_texte']}' below, "
+                    f"'CapCore Studio Digital' branding bottom right, "
+                    f"strong call to action composition, premium advertising visual, "
+                    f"all text in French, no other text, no random text, no gibberish, "
+                    f"no hallucinated text, no watermark, {format_label} format"
+                )
+            else:
+                prompt = (
+                    f"Professional social media carousel slide {i + 1} of 5, "
+                    f"{CAPCORE_AVATAR_BASE_PROMPT}, {pose['description']}, "
+                    f"{CAPCORE_BACKGROUND}, "
+                    f"large bold French text '{texte['titre']}' on the right side, "
+                    f"small subtitle '{texte['sous_texte']}' bottom right, "
+                    f"slide indicator '{i + 1}/5' top right corner, "
+                    f"consistent visual series, all text in French, "
+                    f"no other text, no random text, no gibberish, no hallucinated text, "
+                    f"no watermark, {slide_role['composition']}, "
+                    f"{format_label} format, high end advertising carousel visual"
+                )
+            prompts.append(prompt)
+
+        if len(textes) != 5:
+            raise ValueError(f"5 textes attendus, {len(textes)} reçus")
+
+        tasks = [self._call_replicate(p, width, height) for p in prompts]
+        image_urls = await asyncio.gather(*tasks)
+
+        return [
+            {
+                "slide_index": i + 1,
+                "role": CAROUSEL_SLIDE_ROLES[i]["role"],
+                "image_url": url,
+                "titre": textes[i]["titre"],
+                "sous_texte": textes[i]["sous_texte"],
+            }
+            for i, url in enumerate(image_urls)
+        ]
+
+    async def save_pose_to_storage(
+        self,
+        image_url: str,
+        pose_key: str,
+        user_id: str,
+    ) -> dict:
+        """Télécharge l'image Replicate et l'upload dans Supabase Storage pose-gallery."""
+        storage_path = f"{user_id}/{pose_key}_{uuid_lib.uuid4().hex[:8]}.png"
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.get(image_url)
+            resp.raise_for_status()
+            image_bytes = resp.content
+
+        supabase = get_supabase()
+        supabase.storage.from_("pose-gallery").upload(
+            path=storage_path,
+            file=image_bytes,
+            file_options={"content-type": "image/png", "upsert": "true"},
+        )
+
+        return {"storage_path": storage_path}
+
+    async def get_pose_signed_url(self, storage_path: str) -> str:
+        """Génère une signed URL valable 1 heure pour une pose stockée."""
+        supabase = get_supabase()
+        result = supabase.storage.from_("pose-gallery").create_signed_url(
+            path=storage_path,
+            expires_in=3600,
+        )
+        return result["signedURL"]
+
+    async def delete_pose_from_storage(self, storage_path: str) -> None:
+        """Supprime une pose du Supabase Storage."""
+        supabase = get_supabase()
+        supabase.storage.from_("pose-gallery").remove([storage_path])
 
 
 visual_agent = VisualAgent()

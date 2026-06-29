@@ -68,11 +68,97 @@ export async function generateSocialVisual(params: {
   style: string
   pose_key: string
   sujet_context?: string
+  image_prompt?: string | null
+  image_prompt_strength?: number
 }): Promise<SocialVisualResult> {
   const res = await fetch(`${API_BASE}/api/visual/social-visual`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   })
+  return res.json()
+}
+
+// --- Galerie poses ---
+
+export interface PoseItem {
+  id: string
+  pose_key: string
+  image_url: string
+  storage_path: string
+  created_at: string
+}
+
+export interface SavePoseRequest {
+  pose_key: string
+  image_url: string
+}
+
+export async function fetchPoseGallery(): Promise<PoseItem[]> {
+  const res = await fetch(`${API_BASE}/api/visual/poses`)
+  if (!res.ok) throw new Error("Erreur chargement galerie poses")
+  const data = await res.json()
+  return data.poses as PoseItem[]
+}
+
+export async function savePoseToGallery(request: SavePoseRequest): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/visual/poses/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) throw new Error("Erreur sauvegarde pose")
+}
+
+export async function deletePoseFromGallery(poseKey: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/visual/poses/${poseKey}`, {
+    method: "DELETE",
+  })
+  if (!res.ok) throw new Error("Erreur suppression pose")
+}
+
+// --- Upload référence ---
+
+export async function uploadReferenceImage(
+  file: File,
+): Promise<{ reference_url: string; storage_path: string }> {
+  const formData = new FormData()
+  formData.append("file", file)
+  const res = await fetch(`${API_BASE}/api/visual/upload-reference`, {
+    method: "POST",
+    body: formData,
+  })
+  if (!res.ok) throw new Error("Erreur upload image référence")
+  return res.json()
+}
+
+// --- Carrousel ---
+
+export interface CarouselSlide {
+  slide_index: number
+  role: string
+  image_url: string
+  titre: string
+  sous_texte: string
+}
+
+export interface CarouselRequest {
+  sujet_type: string
+  sujet_label: string
+  format_reseau: string
+}
+
+export interface CarouselResponse {
+  slides: CarouselSlide[]
+  textes_utilises: Array<{ role: string; titre: string; sous_texte: string }>
+}
+
+export async function generateCarousel(request: CarouselRequest): Promise<CarouselResponse> {
+  const res = await fetch(`${API_BASE}/api/visual/carousel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) throw new Error("Erreur génération carrousel")
   return res.json()
 }

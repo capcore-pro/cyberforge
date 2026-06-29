@@ -78,6 +78,30 @@ Tu t'adresses à des artisans, commerçants, TPE/PME qui veulent se digitaliser 
 Ne mentionne jamais de prix. Ne fais pas de fausses promesses. Sois authentique.
 """
 
+CAROUSEL_TEXTS_PROMPT = """Tu es expert en marketing digital pour artisans et PME françaises.
+Génère les textes pour un carrousel publicitaire de 5 slides sur le sujet : {sujet_label}
+
+Contexte : CapCore Studio Digital — agence digitale IA pour artisans et PME françaises.
+
+Retourne UNIQUEMENT ce JSON valide, sans markdown, sans explication :
+{{
+  "slides": [
+    {{"role": "accroche", "titre": "...", "sous_texte": "..."}},
+    {{"role": "argument_1", "titre": "...", "sous_texte": "..."}},
+    {{"role": "argument_2", "titre": "...", "sous_texte": "..."}},
+    {{"role": "demonstration", "titre": "...", "sous_texte": "..."}},
+    {{"role": "cta", "titre": "...", "sous_texte": "..."}}
+  ]
+}}
+
+Règles strictes :
+- titre : 4 à 7 mots, impactant
+- sous_texte : 8 à 12 mots, bénéfice concret
+- Tout en français
+- Ton : direct, expert, humain
+- Slide cta : sous_texte = "Contactez-nous pour démarrer votre projet digital"
+"""
+
 
 class ContentAgent:
     def __init__(self) -> None:
@@ -94,6 +118,26 @@ class ContentAgent:
             messages=[{"role": "user", "content": prompt}],
             temperature=0.85,
             max_tokens=1500,
+        )
+        return response.choices[0].message.content.strip()
+
+    async def _call_mistral(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1500,
+    ) -> str:
+        if not self.client:
+            raise RuntimeError("Mistral non configuré")
+
+        response = await self.client.chat.complete_async(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.85,
+            max_tokens=max_tokens,
         )
         return response.choices[0].message.content.strip()
 
@@ -276,6 +320,24 @@ Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou après :
             return {**result, "format": format_reseau, "sujet": sujet_label}
         except Exception as e:
             return {"error": str(e), "format": format_reseau, "hashtags": []}
+
+    async def generate_carousel_texts(self, sujet_label: str) -> list[dict]:
+        """Génère les 5 titres + sous-textes pour un carrousel via Mistral Small."""
+        prompt = CAROUSEL_TEXTS_PROMPT.format(sujet_label=sujet_label)
+        raw = await self._call_mistral(
+            system_prompt="Tu es expert en marketing digital. Réponds uniquement en JSON valide.",
+            user_prompt=prompt,
+            max_tokens=600,
+        )
+        data = self._parse_json(raw)
+        if not isinstance(data, dict):
+            raise ValueError("Réponse JSON invalide")
+        slides = data.get("slides", [])
+        if not isinstance(slides, list):
+            raise ValueError("Réponse JSON invalide — slides manquant")
+        if len(slides) != 5:
+            raise ValueError(f"5 slides attendues, {len(slides)} reçues")
+        return slides
 
     def get_formats(self) -> list:
         return [

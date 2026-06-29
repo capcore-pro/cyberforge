@@ -15,11 +15,17 @@ import {
 } from "@/lib/content-api"
 import {
   fetchVisualConfig,
+  fetchPoseGallery,
+  savePoseToGallery,
+  deletePoseFromGallery,
   generateAvatarPose,
   generateSocialVisual,
+  uploadReferenceImage,
+  generateCarousel,
   type VisualConfig,
   type AvatarPoseResult,
   type SocialVisualResult,
+  type CarouselSlide,
 } from "@/lib/visual-api"
 
 type Mode = "client" | "capcore"
@@ -48,6 +54,14 @@ const AVATAR_POSES_FALLBACK = [
   { key: "working", label: "Derrière l'ordi" },
   { key: "showing", label: "Montrant un site" },
 ]
+
+const ONGLETS_VISUELS = [
+  { key: "visuel_post", label: "Visuel Post" },
+  { key: "poses_avatar", label: "Poses Avatar" },
+  { key: "carrousel", label: "Carrousel" },
+] as const
+
+type OngletVisuel = (typeof ONGLETS_VISUELS)[number]["key"]
 
 function CopyButton({ texte, text }: { texte?: string; text?: string }) {
   const content = text ?? texte ?? ""
@@ -121,6 +135,7 @@ export function StudioCapcorePage() {
   const [capcoreAngle, setCapcoreAngle] = useState<string>("")
   const [capcoreResult, setCapcoreResult] = useState<CapcorePostResult | null>(null)
   const [ongletCapcore, setOngletCapcore] = useState<OngletCapcore>("posts")
+  const [ongletVisuel, setOngletVisuel] = useState<OngletVisuel>("visuel_post")
 
   // Visuels CapCore
   const [visualConfig, setVisualConfig] = useState<VisualConfig | null>(null)
@@ -135,6 +150,15 @@ export function StudioCapcorePage() {
   const [poseGallery, setPoseGallery] = useState<Record<string, string>>({})
   const [loadingVisual, setLoadingVisual] = useState<boolean>(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([])
+  const [carouselFormat, setCarouselFormat] = useState<string>("1:1")
+  const [carouselLoading, setCarouselLoading] = useState(false)
+  const [carouselSujet, setCarouselSujet] = useState<string>("")
+  const [carouselSujetLabel, setCarouselSujetLabel] = useState<string>("")
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(null)
+  const [referenceUploading, setReferenceUploading] = useState(false)
+  const [referenceError, setReferenceError] = useState<string | null>(null)
+  const [carouselError, setCarouselError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchFormats().then(data => {
@@ -148,6 +172,21 @@ export function StudioCapcorePage() {
     fetchVisualConfig().then(config => {
       setVisualConfig(config)
     })
+  }, [])
+
+  // Chargement galerie poses au démarrage
+  useEffect(() => {
+    fetchPoseGallery()
+      .then(poses => {
+        const gallery: Record<string, string> = {}
+        poses.forEach(p => {
+          gallery[p.pose_key] = p.image_url
+        })
+        setPoseGallery(gallery)
+      })
+      .catch(() => {
+        // Silencieux — galerie vide si erreur réseau
+      })
   }, [])
 
   useEffect(() => {
@@ -222,6 +261,7 @@ export function StudioCapcorePage() {
       style: visualStyle,
       pose_key: visualPose,
       sujet_context: capcoreSujet,
+      ...(referenceUrl ? { image_prompt: referenceUrl } : {}),
     })
     setVisualResult(result)
     setLoadingVisual(false)
@@ -233,9 +273,53 @@ export function StudioCapcorePage() {
     const result = await generateAvatarPose(avatarPoseKey, "1:1")
     setAvatarPoseResult(result)
     if (result.success && result.image_url) {
-      setPoseGallery(prev => ({ ...prev, [avatarPoseKey]: result.image_url! }))
+      setPoseGallery(prev => ({
+        ...prev,
+        [avatarPoseKey]: result.image_url!,
+      }))
+      // Sauvegarde en background — non bloquant
+      savePoseToGallery({
+        pose_key: avatarPoseKey,
+        image_url: result.image_url,
+      }).catch(err => console.warn("Sauvegarde pose échouée silencieusement:", err))
     }
     setLoadingVisual(false)
+  }
+
+  const handleUploadReference = async (file: File) => {
+    setReferenceUploading(true)
+    setReferenceError(null)
+    try {
+      const result = await uploadReferenceImage(file)
+      setReferenceUrl(result.reference_url)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur upload image référence"
+      setReferenceError(message)
+      console.error("Erreur upload référence:", err)
+    } finally {
+      setReferenceUploading(false)
+    }
+  }
+
+  const handleGenererCarousel = async () => {
+    if (!carouselSujet) return
+    setCarouselLoading(true)
+    setCarouselSlides([])
+    setCarouselError(null)
+    try {
+      const result = await generateCarousel({
+        sujet_type: carouselSujet,
+        sujet_label: carouselSujetLabel,
+        format_reseau: carouselFormat,
+      })
+      setCarouselSlides(result.slides)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur génération carrousel"
+      setCarouselError(message)
+      console.error("Erreur génération carrousel:", err)
+    } finally {
+      setCarouselLoading(false)
+    }
   }
 
   return (
@@ -689,6 +773,24 @@ export function StudioCapcorePage() {
 
           {ongletCapcore === "visuels" && (
             <div className="space-y-6">
+              <div className="flex gap-2 flex-wrap">
+                {ONGLETS_VISUELS.map(tab => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setOngletVisuel(tab.key)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      ongletVisuel === tab.key
+                        ? "bg-cyan-400/20 border border-cyan-400 text-cyan-400"
+                        : "bg-white/5 text-white/60 hover:text-white border border-white/10"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {ongletVisuel === "visuel_post" && (
               <div className="border border-white/10 rounded-xl p-5">
                 <h3 className="text-sm font-medium text-white/80 mb-4">
                   ✦ Visuel post réseaux sociaux
@@ -785,6 +887,49 @@ export function StudioCapcorePage() {
                       </div>
                     </div>
 
+                    <div>
+                      <label className="block text-sm text-white/60 mb-2">
+                        Image de référence <span className="text-white/30">(optionnel)</span>
+                      </label>
+                      <div
+                        className="border border-dashed border-white/20 rounded-lg p-4 text-center cursor-pointer hover:border-white/40 transition-colors"
+                        onClick={() => document.getElementById("ref-upload")?.click()}
+                      >
+                        {referenceUrl ? (
+                          <div className="flex items-center gap-2 justify-center">
+                            <img src={referenceUrl} className="w-10 h-10 object-cover rounded" alt="ref" />
+                            <span className="text-xs text-green-400">✓ Image chargée</span>
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); setReferenceUrl(null); setReferenceError(null) }}
+                              className="text-xs text-white/40 hover:text-white/60"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-white/40">
+                            {referenceUploading ? "⏳ Upload..." : "+ Ajouter une image de référence"}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        id="ref-upload"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          if (file) void handleUploadReference(file)
+                        }}
+                      />
+                      {referenceError && (
+                        <div className="mt-2 bg-red-500/10 rounded-xl p-3 border border-red-500/20">
+                          <p className="text-red-400 text-sm">{referenceError}</p>
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       type="button"
                       onClick={() => void handleGenererVisual()}
@@ -835,8 +980,9 @@ export function StudioCapcorePage() {
                   </div>
                 </div>
               </div>
+              )}
 
-              {/* Section 2 — Bibliothèque poses avatar */}
+              {ongletVisuel === "poses_avatar" && (
               <div className="border border-white/10 rounded-xl p-5">
                 <h3 className="text-sm font-medium text-white/80 mb-1">
                   Avatar CapCore — Poses
@@ -884,6 +1030,22 @@ export function StudioCapcorePage() {
                               >
                                 ↓
                               </a>
+                              <button
+                                type="button"
+                                onClick={async e => {
+                                  e.stopPropagation()
+                                  await deletePoseFromGallery(p.key)
+                                  setPoseGallery(prev => {
+                                    const next = { ...prev }
+                                    delete next[p.key]
+                                    return next
+                                  })
+                                }}
+                                className="p-1.5 rounded bg-red-500/80 hover:bg-red-500 text-white text-xs"
+                                title="Supprimer"
+                              >
+                                🗑️
+                              </button>
                             </div>
                             <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1">
                               <p className="text-white text-xs truncate">{p.label}</p>
@@ -918,6 +1080,129 @@ export function StudioCapcorePage() {
                   )}
                 </div>
               </div>
+              )}
+
+              {ongletVisuel === "carrousel" && (
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm text-white/60 mb-2">Sujet du carrousel</label>
+                    <select
+                      value={carouselSujet}
+                      onChange={e => {
+                        const opt = capcoreSubjects.find(s => s.key === e.target.value)
+                        setCarouselSujet(e.target.value)
+                        setCarouselSujetLabel(opt?.label || "")
+                      }}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-400"
+                    >
+                      <option value="" className="bg-[#0f0f13]">-- Choisir un sujet --</option>
+                      {capcoreSubjects.map(s => (
+                        <option key={s.key} value={s.key} className="bg-[#0f0f13]">
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-white/60 mb-2">Format</label>
+                    <div className="flex gap-2">
+                      {["1:1", "1:1_facebook", "9:16", "16:9"].map(fmt => (
+                        <button
+                          key={fmt}
+                          type="button"
+                          onClick={() => setCarouselFormat(fmt)}
+                          className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                            carouselFormat === fmt
+                              ? "bg-cyan-400/20 border-cyan-400 text-cyan-400"
+                              : "bg-white/5 border-white/10 text-white/60 hover:border-white/30"
+                          }`}
+                        >
+                          {fmt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleGenererCarousel()}
+                    disabled={!carouselSujet || carouselLoading}
+                    className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-semibold transition-colors"
+                  >
+                    {carouselLoading ? "⏳ Génération en cours (5 visuels)..." : "✦ Générer le carrousel"}
+                  </button>
+
+                  {carouselError && (
+                    <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
+                      <p className="text-red-400 text-sm">{carouselError}</p>
+                    </div>
+                  )}
+
+                  {carouselSlides.length > 0 && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-white/60">{carouselSlides.length} slides générées</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            carouselSlides.forEach((slide, i) => {
+                              const a = document.createElement("a")
+                              a.href = slide.image_url
+                              a.download = `carrousel_slide_${i + 1}_${slide.role}.png`
+                              a.click()
+                            })
+                          }}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 transition-colors"
+                        >
+                          ↓ Tout télécharger
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        {carouselSlides.map(slide => (
+                          <div key={slide.slide_index} className="relative group">
+                            <div className="absolute top-2 left-2 z-10 flex gap-1">
+                              <span className="bg-cyan-500 text-black text-xs font-bold px-1.5 py-0.5 rounded">
+                                {slide.slide_index}/5
+                              </span>
+                              <span className="bg-black/60 text-white/80 text-xs px-1.5 py-0.5 rounded capitalize">
+                                {slide.role.replace("_", " ")}
+                              </span>
+                            </div>
+
+                            <img
+                              src={slide.image_url}
+                              alt={`Slide ${slide.slide_index}`}
+                              className="w-full aspect-square object-cover rounded-lg cursor-zoom-in"
+                              onClick={() => setLightboxUrl(slide.image_url)}
+                            />
+
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setLightboxUrl(slide.image_url)}
+                                className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium"
+                              >
+                                Voir
+                              </button>
+                              <a
+                                href={slide.image_url}
+                                download={`carrousel_slide_${slide.slide_index}.png`}
+                                className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium"
+                              >
+                                ↓
+                              </a>
+                            </div>
+
+                            <p className="mt-1 text-xs text-white/50 truncate">{slide.titre}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>
