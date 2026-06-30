@@ -275,6 +275,13 @@ async def redeploy_editor_html(project_id: str, body: RedeployRequest) -> Redepl
                 },
             )
 
+        try:
+            from agents.portal_onboarding_agent import notify_portal_client_site_updated
+
+            notify_portal_client_site_updated(project_id, live_url)
+        except Exception as e:
+            logger.warning("Notification email échouée (non bloquant): %s", e)
+
         return RedeployResponse(url=live_url, saved=True)
     except HTTPException:
         raise

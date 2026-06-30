@@ -209,4 +209,12 @@ async def _redeploy_project_html(
         project_id=project_id,
         event_data={"generation_id": generation_id, "url": live_url},
     )
+
+    try:
+        from agents.portal_onboarding_agent import notify_portal_client_site_updated
+
+        notify_portal_client_site_updated(project_id, live_url)
+    except Exception as e:
+        logger.warning("Notification email échouée (non bloquant): %s", e)
+
     return live_url

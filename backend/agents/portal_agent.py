@@ -232,8 +232,8 @@ class PortalAgent:
                 site_url = str(site.get("site_url") or "").strip()
                 client_row = (
                     self.supabase.table("portal_clients")
-                    .select("email, full_name, site_url")
-                    .eq("site_url", site_url)
+                    .select("email, full_name")
+                    .eq("id", client_id)
                     .limit(1)
                     .execute()
                 )

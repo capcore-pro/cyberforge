@@ -18,11 +18,18 @@ from utils.supabase_client import get_supabase
 logger = logging.getLogger(__name__)
 
 PORTAL_URL = os.getenv("PORTAL_URL", "https://client.capcore.pro")
-FROM_EMAIL = "contact@capcore.pro"
-FROM_NAME = "Mat · CapCore Studio Digital"
+REPLY_TO_EMAIL = "contact@capcore.pro"
+REPLY_TO_NAME = "Mat · CapCore Studio Digital"
 BREVO_SEND_URL = "https://api.brevo.com/v3/smtp/email"
 RESET_TOKEN_EXPIRY_HOURS = 1
 MAINTENANCE_PRICE_EUR = 49.00
+
+
+def _resolve_sender() -> tuple[str, str]:
+    settings = get_settings()
+    email = (settings.brevo_sender_email or "").strip() or REPLY_TO_EMAIL
+    name = (settings.brevo_sender_name or "").strip() or REPLY_TO_NAME
+    return email, name
 
 
 # ─────────────────────────────────────────────
@@ -50,8 +57,9 @@ def _send_brevo_html(
     if not api_key:
         raise RuntimeError("Brevo non configuré (BREVO_API_KEY).")
 
+    sender_email, sender_name = _resolve_sender()
     payload: dict[str, Any] = {
-        "sender": {"email": FROM_EMAIL, "name": FROM_NAME},
+        "sender": {"email": sender_email, "name": sender_name},
         "to": [{"email": to_email, "name": to_name}],
         "subject": subject,
         "htmlContent": html_content,
@@ -261,7 +269,7 @@ def send_welcome_email(
             to_name=client_name,
             subject="⚡ Votre site est en ligne — Accédez à votre espace CapCore",
             html_content=html_content,
-            reply_to={"email": FROM_EMAIL, "name": FROM_NAME},
+            reply_to={"email": REPLY_TO_EMAIL, "name": REPLY_TO_NAME},
         )
 
         supabase = get_supabase()
@@ -605,6 +613,57 @@ def mark_onboarding_done(client_id: str, management_plan: str) -> dict[str, Any]
     return {"success": True, "management_plan": management_plan}
 
 
+def notify_portal_client_site_updated(project_id: str, live_url: str) -> bool:
+    """
+    Envoie l'email de confirmation MAJ site au client portail si un compte est lié.
+    Non bloquant pour l'appelant — les erreurs doivent être catchées en amont.
+    """
+    supabase = get_supabase()
+
+    site_row = (
+        supabase.table("portal_sites")
+        .select("id, client_id, site_url")
+        .eq("project_id", project_id)
+        .limit(1)
+        .execute()
+    )
+
+    client_id: str | None = None
+    if site_row.data:
+        client_id = site_row.data[0]["client_id"]
+    else:
+        client_row = (
+            supabase.table("portal_clients")
+            .select("id")
+            .eq("site_url", live_url)
+            .limit(1)
+            .execute()
+        )
+        if client_row.data:
+            client_id = client_row.data[0]["id"]
+
+    if not client_id:
+        return False
+
+    client_info = (
+        supabase.table("portal_clients")
+        .select("email, full_name")
+        .eq("id", client_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not client_info.data:
+        return False
+
+    onboarding_agent = PortalOnboardingAgent()
+    return onboarding_agent.send_site_modification_email(
+        client_email=client_info.data[0]["email"],
+        client_name=client_info.data[0].get("full_name") or "",
+        site_url=live_url,
+    )
+
+
 class PortalOnboardingAgent:
     """Façade classe pour emails onboarding (évite imports circulaires depuis portal_agent)."""
 
@@ -706,7 +765,7 @@ class PortalOnboardingAgent:
                 to_name=client_name,
                 subject="✅ Vos modifications sont en ligne — CapCore",
                 html_content=html_content,
-                reply_to={"email": FROM_EMAIL, "name": FROM_NAME},
+                reply_to={"email": REPLY_TO_EMAIL, "name": REPLY_TO_NAME},
             )
             return True
         except Exception as e:
