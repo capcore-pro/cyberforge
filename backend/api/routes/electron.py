@@ -14,6 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.electron_ai import run as electron_ai_run
+from agents.electron_ai import send_update_notification_email
 from agents.electron_compiler import electron_compiler
 from agents.license_manager import license_manager
 from utils.supabase_client import get_supabase
@@ -229,8 +230,6 @@ async def notify_client_update(body: NotifyUpdateRequest):
         if not build.get("download_url"):
             return {"success": False, "error": "Aucun lien de téléchargement disponible"}
 
-        from agents.electron_ai import send_update_notification_email
-
         sent = send_update_notification_email(
             client_email=build["client_email"],
             client_name=build["client_name"] or "Client",
@@ -242,7 +241,10 @@ async def notify_client_update(body: NotifyUpdateRequest):
 
         if sent:
             supabase.table("electron_builds").update(
-                {"updated_at": datetime.now(UTC).isoformat()}
+                {
+                    "notified_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
             ).eq("id", body.build_id).execute()
 
         return {
@@ -253,6 +255,45 @@ async def notify_client_update(body: NotifyUpdateRequest):
 
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def _try_auto_notify_build_client(build_id: str) -> None:
+    """Envoie l'email post-build si pas encore notifié — non bloquant pour l'appelant."""
+    try:
+        supabase = get_supabase()
+        build_row = (
+            supabase.table("electron_builds")
+            .select(
+                "client_email, client_name, app_name, version, download_url, notified_at"
+            )
+            .eq("id", build_id)
+            .single()
+            .execute()
+        )
+
+        row = build_row.data
+        if not row:
+            return
+        if not row.get("client_email") or not row.get("download_url"):
+            return
+        if row.get("notified_at"):
+            return
+
+        sent = send_update_notification_email(
+            client_email=row["client_email"],
+            client_name=row.get("client_name") or "",
+            app_name=row.get("app_name") or "",
+            version=row.get("version") or "1.0.0",
+            download_url=row["download_url"],
+            notes_maj="",
+        )
+
+        if sent:
+            supabase.table("electron_builds").update(
+                {"notified_at": datetime.now(UTC).isoformat()}
+            ).eq("id", build_id).execute()
+    except Exception as exc:
+        logger.warning("Notification auto build échouée (non bloquant): %s", exc)
 
 
 async def _compile_in_background(
@@ -306,6 +347,7 @@ async def _compile_in_background(
                     build_id,
                     status.get("download_url"),
                 )
+                _try_auto_notify_build_client(build_id)
                 return
 
             if status["status"] == "failed":

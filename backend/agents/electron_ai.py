@@ -347,7 +347,11 @@ def send_update_notification_email(
 
     from config import get_settings, plain_secret_str
 
-    brevo_api_key = plain_secret_str(get_settings().brevo_api_key) or os.getenv(
+    settings = get_settings()
+    sender_email = (settings.brevo_sender_email or "").strip() or "contact@capcore.pro"
+    sender_name = (settings.brevo_sender_name or "").strip() or "Mat · CapCore Studio Digital"
+
+    brevo_api_key = plain_secret_str(settings.brevo_api_key) or os.getenv(
         "BREVO_API_KEY", ""
     )
     if not brevo_api_key:
@@ -365,8 +369,8 @@ def send_update_notification_email(
                 },
                 json={
                     "sender": {
-                        "name": "Mat · CapCore Studio Digital",
-                        "email": "contact@capcore.pro",
+                        "name": sender_name,
+                        "email": sender_email,
                     },
                     "to": [{"email": client_email, "name": client_name}],
                     "subject": f"🔄 Mise à jour {app_name} — version {version} disponible",

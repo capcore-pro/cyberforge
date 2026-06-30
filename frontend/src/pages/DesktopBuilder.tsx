@@ -146,6 +146,7 @@ export function DesktopBuilder() {
       const data = await res.json();
       if (data.success) {
         setNotifySuccess(true);
+        await loadBuilds();
         setTimeout(() => {
           setNotifyBuildId(null);
           setNotifyNotes("");
@@ -406,17 +407,24 @@ export function DesktopBuilder() {
                   </a>
                 ) : null}
                 {build.download_url && build.client_email ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNotifyBuildId(build.id);
-                      setNotifyNotes("");
-                    }}
-                    className="mt-2 flex items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-400/20"
-                  >
-                    <i className="ti ti-bell" />
-                    Notifier le client
-                  </button>
+                  <div className="mt-2 flex flex-col items-end gap-1">
+                    {build.notified_at ? (
+                      <p className="text-xs text-green-400">
+                        ✓ Client notifié automatiquement
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNotifyBuildId(build.id);
+                        setNotifyNotes("");
+                      }}
+                      className="flex items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-400/20"
+                    >
+                      <i className="ti ti-bell" />
+                      {build.notified_at ? "Renvoyer la notification" : "Notifier le client"}
+                    </button>
+                  </div>
                 ) : null}
               </div>
             </div>

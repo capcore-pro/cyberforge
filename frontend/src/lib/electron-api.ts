@@ -37,6 +37,7 @@ export interface ElectronBuildStatus {
   github_repo: string | null;
   version: string;
   created_at: string;
+  notified_at?: string | null;
 }
 
 export interface ElectronLicenseRow {
@@ -71,6 +72,7 @@ export function normalizeElectronBuild(row: Record<string, unknown>): ElectronBu
     github_repo: row.github_repo != null ? String(row.github_repo) : null,
     version: String(row.version ?? "1.0.0"),
     created_at: String(row.created_at ?? ""),
+    notified_at: row.notified_at != null ? String(row.notified_at) : null,
   };
 }
 
