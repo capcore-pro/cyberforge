@@ -1,8 +1,8 @@
-﻿"""
-TemplateAI ΓÇö Agent 2.
+"""
+TemplateAI — Agent 2.
 
-S├⌐lectionne et charge le template HTML sectoriel de base, puis remplit les placeholders.
-Une seule responsabilit├⌐ : livrer un HTML complet pr├¬t pour les agents suivants.
+Sélectionne et charge le template HTML sectoriel de base, puis remplit les placeholders.
+Une seule responsabilité : livrer un HTML complet prêt pour les agents suivants.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ _AGENT_NAME = "TemplateAI"
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "sectors"
 
-# Famille visuelle / secteur ΓåÆ fichier template
+# Famille visuelle / secteur → fichier template
 _SECTOR_TEMPLATE_FILES: dict[str, str] = {
     "alimentaire": "vitrine_alimentaire.html",
     "restauration": "vitrine_alimentaire.html",
@@ -67,18 +67,18 @@ _SECTOR_TEMPLATE_FILES: dict[str, str] = {
 
 _DEFAULT_TEMPLATE = "vitrine_default.html"
 
-# D├⌐sambigu├»sation prompt ΓåÆ fichier (prioritaire sur ┬½ cabinet ┬╗ juridique, etc.)
+# Désambiguïsation prompt → fichier (prioritaire sur « cabinet » juridique, etc.)
 _PROMPT_TEMPLATE_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("dentaire", "dentiste", "kin├⌐", "kine", "ost├⌐o", "osteo", "psychologue", "clinique m├⌐dicale"), "vitrine_sante.html"),
+    (("dentaire", "dentiste", "kiné", "kine", "ostéo", "osteo", "psychologue", "clinique médicale"), "vitrine_sante.html"),
     (("avocat", "notaire", "juridique", "finance", "comptable"), "vitrine_default.html"),
-    (("voilerie", "├⌐cole de voile", "ecole de voile", "chantier naval", "location bateau"), "vitrine_nautisme.html"),
+    (("voilerie", "école de voile", "ecole de voile", "chantier naval", "location bateau"), "vitrine_nautisme.html"),
 )
 
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
 
 class SectorTemplateResult(BaseModel):
-    """R├⌐sultat TemplateAI ΓÇö HTML sectoriel rempli."""
+    """Résultat TemplateAI — HTML sectoriel rempli."""
 
     template_id: str
     template_file: str
@@ -90,7 +90,7 @@ class SectorTemplateResult(BaseModel):
 
 
 def list_sector_templates() -> dict[str, str]:
-    """Catalogue template_id ΓåÆ nom de fichier."""
+    """Catalogue template_id → nom de fichier."""
     return dict(_SECTOR_TEMPLATE_FILES)
 
 
@@ -100,7 +100,7 @@ def resolve_sector_template_file(
     plan: Any | None = None,
 ) -> tuple[str, str]:
     """
-    Retourne (template_id, filename) selon project_type, cat├⌐gorie tarifaire et secteur.
+    Retourne (template_id, filename) selon project_type, catégorie tarifaire et secteur.
     """
     if plan is not None:
         from tools.sector_template_catalog import resolve_sector_template_from_plan
@@ -335,7 +335,7 @@ def render_sector_template(
                 agent_name=_AGENT_NAME,
                 code="missing_placeholders",
                 message=f"Placeholders non remplis : {', '.join(missing)}",
-                detail="V├⌐rifiez le template HTML sectoriel.",
+                detail="Vérifiez le template HTML sectoriel.",
             )
 
         if len(html.strip()) < 500:
@@ -364,7 +364,7 @@ def render_sector_template(
             detail=exc.detail,
         )
     except Exception as exc:
-        logger.exception("[TemplateAI] ├⌐chec rendu template sectoriel")
+        logger.exception("[TemplateAI] échec rendu template sectoriel")
         return AgentResult.failure(
             agent_id=_AGENT_ID,
             agent_name=_AGENT_NAME,
@@ -409,7 +409,7 @@ class TemplateAgent(BaseAgent):
             raise AgentContractError(
                 agent_id=_AGENT_ID,
                 code=err.code if err else "failure",
-                message=err.message if err else "├ëchec TemplateAI",
+                message=err.message if err else "Échec TemplateAI",
                 detail=err.detail if err else None,
             )
         return result.data.html

@@ -1,8 +1,8 @@
-﻿"""
-ResearchAgent ΓÇö enrichissement contenu via Brave Search + Exa AI.
+"""
+ResearchAgent — enrichissement contenu via Brave Search + Exa AI.
 
-Appel├⌐ apr├¿s ArchitectAI pour alimenter BuilderAI / CoreMindAI avec des
-donn├⌐es r├⌐elles (tendances, concurrents, mots-cl├⌐s, exemples).
+Appelé après ArchitectAI pour alimenter BuilderAI / CoreMindAI avec des
+données réelles (tendances, concurrents, mots-clés, exemples).
 """
 
 from __future__ import annotations
@@ -33,20 +33,20 @@ except ImportError:
     Exa = None  # type: ignore[assignment,misc]
 
 _CITY_RE = re.compile(
-    r"(?:\b(?:├á|a|sur|dans|ville de|based in)\s+)"
-    r"([A-Z├Ç-├û├Ö-├¥][a-z├á-├╢├╣-├┐\-]+(?:\s+[A-Z├Ç-├û├Ö-├¥][a-z├á-├╢├╣-├┐\-]+)?)",
+    r"(?:\b(?:à|a|sur|dans|ville de|based in)\s+)"
+    r"([A-ZÀ-ÖÙ-Ý][a-zà-öù-ÿ\-]+(?:\s+[A-ZÀ-ÖÙ-Ý][a-zà-öù-ÿ\-]+)?)",
     re.UNICODE,
 )
 _COMPANY_RE = re.compile(
-    r"(?:pour|entreprise|soci├⌐t├⌐|restaurant|cabinet|salon|agence|studio|"
-    r"site (?:web|vitrine) (?:pour|de))\s+[┬½\"']?"
-    r"([^┬╗,.\n\"']{2,80})",
+    r"(?:pour|entreprise|société|restaurant|cabinet|salon|agence|studio|"
+    r"site (?:web|vitrine) (?:pour|de))\s+[«\"']?"
+    r"([^»,.\n\"']{2,80})",
     re.IGNORECASE,
 )
 
 
 class ResearchBrief(BaseModel):
-    """Brief enrichi pour la g├⌐n├⌐ration de contenu."""
+    """Brief enrichi pour la génération de contenu."""
 
     agent_id: str = "research"
     agent_name: str = "ResearchAI"
@@ -74,7 +74,7 @@ class ResearchBrief(BaseModel):
 
 
 def research_brief_has_context(brief: ResearchBrief) -> bool:
-    """True si le brief apporte au moins le contexte client (m├¬me sans listes API)."""
+    """True si le brief apporte au moins le contexte client (même sans listes API)."""
     return bool(
         brief.enriched
         or (brief.secteur or "").strip()
@@ -92,14 +92,14 @@ def format_research_brief_for_prompt(brief: ResearchBrief | None) -> str:
         return ""
     lines = [
         "## Brief recherche contenu (Brave Search + Exa AI)",
-        "Utilise ces ├⌐l├⌐ments r├⌐els pour r├⌐diger du contenu personnalis├⌐ ΓÇö "
+        "Utilise ces éléments réels pour rédiger du contenu personnalisé — "
         "pas de noms, adresses ou statistiques fictifs.",
-        "Le nom d'entreprise, le secteur, la ville et les mots-cl├⌐s ci-dessous doivent "
-        "appara├«tre textuellement dans <title>, <h1>, meta description, sections et CTA.",
+        "Le nom d'entreprise, le secteur, la ville et les mots-clés ci-dessous doivent "
+        "apparaître textuellement dans <title>, <h1>, meta description, sections et CTA.",
         "",
     ]
     if brief.nom_entreprise or brief.secteur or brief.ville or brief.mots_cles:
-        lines.append("### Identit├⌐ client (copier verbatim dans le HTML)")
+        lines.append("### Identité client (copier verbatim dans le HTML)")
         if brief.nom_entreprise:
             lines.append(f"- Nom : {brief.nom_entreprise}")
         if brief.secteur:
@@ -107,10 +107,10 @@ def format_research_brief_for_prompt(brief: ResearchBrief | None) -> str:
         if brief.ville:
             lines.append(f"- Ville : {brief.ville}")
         if brief.mots_cles:
-            lines.append(f"- Mots-cl├⌐s : {', '.join(brief.mots_cles[:12])}")
+            lines.append(f"- Mots-clés : {', '.join(brief.mots_cles[:12])}")
         lines.append("")
     if brief.secteur or brief.nom_entreprise or brief.ville:
-        ctx = " ┬╖ ".join(
+        ctx = " · ".join(
             p
             for p in (
                 f"Secteur : {brief.secteur}" if brief.secteur else "",
@@ -131,11 +131,11 @@ def format_research_brief_for_prompt(brief: ResearchBrief | None) -> str:
         lines.extend(f"- {item}" for item in brief.concurrents[:8])
         lines.append("")
     if brief.mots_cles:
-        lines.append("### Mots-cl├⌐s populaires")
+        lines.append("### Mots-clés populaires")
         lines.append(", ".join(brief.mots_cles[:15]))
         lines.append("")
     if brief.contenu_suggere:
-        lines.append("### Contenu sugg├⌐r├⌐")
+        lines.append("### Contenu suggéré")
         lines.extend(f"- {item}" for item in brief.contenu_suggere[:8])
         lines.append("")
     if brief.exemples_sites:
@@ -177,19 +177,19 @@ def _guess_secteur(prompt: str) -> str:
         ("e-commerce", "e-commerce"),
         ("ecommerce", "e-commerce"),
         ("saas", "SaaS"),
-        ("fitness", "sport & bien-├¬tre"),
-        ("yoga", "sport & bien-├¬tre"),
-        ("h├┤tel", "h├┤tellerie"),
-        ("hotel", "h├┤tellerie"),
+        ("fitness", "sport & bien-être"),
+        ("yoga", "sport & bien-être"),
+        ("hôtel", "hôtellerie"),
+        ("hotel", "hôtellerie"),
         ("artisan", "artisanat"),
         ("plombier", "artisanat"),
-        ("m├⌐decin", "sant├⌐"),
-        ("sant├⌐", "sant├⌐"),
+        ("médecin", "santé"),
+        ("santé", "santé"),
     )
     for needle, label in sectors:
         if needle in lower:
             return label
-    return "activit├⌐ locale"
+    return "activité locale"
 
 
 def _extract_company_name(prompt: str) -> str:
@@ -233,7 +233,7 @@ def _resolve_api_key(env_name: str, settings_value: Any) -> str:
 
 
 class ResearchAgent(BaseAgent):
-    """Recherche Brave Search + Exa pour enrichir le contenu g├⌐n├⌐r├⌐."""
+    """Recherche Brave Search + Exa pour enrichir le contenu généré."""
 
     @property
     def agent_id(self) -> str:
@@ -272,7 +272,7 @@ class ResearchAgent(BaseAgent):
 
         if not resolved.research_enabled:
             return base.model_copy(
-                update={"skipped": True, "skip_reason": "Recherche de contenu d├⌐sactiv├⌐e"},
+                update={"skipped": True, "skip_reason": "Recherche de contenu désactivée"},
             )
 
         brave_key = _resolve_api_key("BRAVE_SEARCH_API_KEY", resolved.brave_search_api_key)
@@ -281,7 +281,7 @@ class ResearchAgent(BaseAgent):
             return base.model_copy(
                 update={
                     "skipped": True,
-                    "skip_reason": "Cl├⌐s Brave Search / Exa non configur├⌐es",
+                    "skip_reason": "Clés Brave Search / Exa non configurées",
                 },
             )
 
@@ -331,7 +331,7 @@ class ResearchAgent(BaseAgent):
 
         if not any((tendances, concurrents, mots_cles, contenu_suggere, exemples_sites)):
             return base.model_copy(
-                update={"skipped": True, "skip_reason": "Aucun r├⌐sultat de recherche"},
+                update={"skipped": True, "skip_reason": "Aucun résultat de recherche"},
             )
 
         return ResearchBrief(
@@ -408,7 +408,7 @@ def _brave_research(
     queries = {
         "tendances": f"tendances {sector} {type_projet}{loc} 2025 2026",
         "concurrents": f"{sector} {ville} entreprises concurrents" if ville else f"{sector} entreprises leaders France",
-        "mots_cles": f"mots cl├⌐s SEO {sector} {type_projet}{loc}",
+        "mots_cles": f"mots clés SEO {sector} {type_projet}{loc}",
     }
     tendances: list[str] = []
     concurrents: list[str] = []
@@ -423,7 +423,7 @@ def _brave_research(
         for hit in hits:
             title = hit.get("title") or ""
             desc = hit.get("description") or ""
-            snippet = f"{title} ΓÇö {desc}".strip(" ΓÇö") if desc else title
+            snippet = f"{title} — {desc}".strip(" —") if desc else title
             if not snippet:
                 continue
             if label == "tendances":
@@ -434,7 +434,7 @@ def _brave_research(
                     line = f"{line} ({hit['url']})"
                 concurrents.append(line[:220])
             else:
-                words = re.findall(r"[a-z├á├ó├ñ├⌐├¿├¬├½├»├«├┤├╣├╗├╝├º0-9-]{3,}", f"{title} {desc}".lower())
+                words = re.findall(r"[a-zàâäéèêëïîôùûüç0-9-]{3,}", f"{title} {desc}".lower())
                 mots_cles.extend(words[:5])
 
     return {
@@ -457,9 +457,9 @@ def _exa_research(
         return {"contenu_suggere": [], "exemples_sites": []}
 
     exa = Exa(api_key=api_key.strip())
-    loc = f" ├á {ville}" if ville else ""
+    loc = f" à {ville}" if ville else ""
     query = (
-        f"sites web {type_projet} {sector}{loc} exemples r├⌐ussis contenu marketing"
+        f"sites web {type_projet} {sector}{loc} exemples réussis contenu marketing"
     )
     if nom_entreprise:
         query = f"{query} inspiration pour {nom_entreprise}"
@@ -484,7 +484,7 @@ def _exa_research(
         url = str(getattr(item, "url", "") or "").strip()
         text = str(getattr(item, "text", "") or "").strip()
         if url:
-            exemples_sites.append(f"{title or url} ΓÇö {url}"[:220])
+            exemples_sites.append(f"{title or url} — {url}"[:220])
         if text:
             excerpt = text.replace("\n", " ").strip()[:280]
             if excerpt:

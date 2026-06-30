@@ -1,5 +1,5 @@
-﻿"""
-TestPilotAI ΓÇö validation finale HTML/JS (rendu, liens, scripts) avant livraison.
+"""
+TestPilotAI — validation finale HTML/JS (rendu, liens, scripts) avant livraison.
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ from tools.generation_sources import is_usable_preview_html
 
 _JS_SYNTAX_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"console\.error\s*\(", "appel console.error dans le script"),
-    (r"\bthrow\s+new\s+Error", "throw Error non g├⌐r├⌐ (risque console)"),
+    (r"\bthrow\s+new\s+Error", "throw Error non géré (risque console)"),
     (r"<<<<<<<|=======|>>>>>>>", "marqueurs de conflit Git dans un script"),
-    (r"undefined\s+is\s+not", "erreur runtime typique affich├⌐e dans le HTML"),
-    (r"SyntaxError", "SyntaxError r├⌐f├⌐renc├⌐e dans le document"),
-    (r"ReferenceError", "ReferenceError r├⌐f├⌐renc├⌐e dans le document"),
+    (r"undefined\s+is\s+not", "erreur runtime typique affichée dans le HTML"),
+    (r"SyntaxError", "SyntaxError référencée dans le document"),
+    (r"ReferenceError", "ReferenceError référencée dans le document"),
 )
 
 _BROKEN_LINK_PATTERNS: tuple[tuple[str, str], ...] = (
@@ -82,7 +82,7 @@ def _extract_script_bodies(html: str) -> list[str]:
 
 
 def validate_demo_html(html: str) -> TestPilotReport:
-    """Valide le HTML g├⌐n├⌐r├⌐ (heuristiques rendu, liens, JS)."""
+    """Valide le HTML généré (heuristiques rendu, liens, JS)."""
     checks: list[str] = []
     issues: list[TestPilotIssue] = []
     stripped = html.strip()
@@ -110,7 +110,7 @@ def validate_demo_html(html: str) -> TestPilotReport:
         issues.append(
             TestPilotIssue(
                 code="render_invalid",
-                message="Aper├ºu HTML non utilisable (shell vide ou source visible).",
+                message="Aperçu HTML non utilisable (shell vide ou source visible).",
             )
         )
 
@@ -186,7 +186,7 @@ def validate_demo_html(html: str) -> TestPilotReport:
             issues.append(
                 TestPilotIssue(
                     code="js_console_risk",
-                    message="Script inline : parenth├¿ses/accolades non ├⌐quilibr├⌐es.",
+                    message="Script inline : parenthèses/accolades non équilibrées.",
                 )
             )
         for pattern, msg in _JS_SYNTAX_PATTERNS:
@@ -208,7 +208,7 @@ def validate_demo_html(html: str) -> TestPilotReport:
 
 
 def testpilot_to_bug_report(report: TestPilotReport) -> BugHuntReport:
-    """Convertit un ├⌐chec TestPilot en rapport BugHunter pour AutoFixAI."""
+    """Convertit un échec TestPilot en rapport BugHunter pour AutoFixAI."""
     return BugHuntReport(
         ok=False,
         html_bytes=report.html_bytes,
@@ -242,7 +242,7 @@ class TestPilotAgent(BaseAgent):
         self,
         generation: CodeGenerateResult,
         *,
-        title: str = "D├⌐mo",
+        title: str = "Démo",
         user_prompt: str = "",
     ) -> TestPilotReport:
         preview = preview_html_from_generation(

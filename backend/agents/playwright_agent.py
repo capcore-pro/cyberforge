@@ -1,5 +1,5 @@
-﻿"""
-PlaywrightAgent ΓÇö tests E2E headless (Chromium) sur l'aper├ºu HTML avant export.
+"""
+PlaywrightAgent — tests E2E headless (Chromium) sur l'aperçu HTML avant export.
 
 Sert le HTML en local si aucune URL de production n'est disponible.
 """
@@ -42,7 +42,7 @@ PASS_THRESHOLD = 70
 
 
 class PlaywrightReport(BaseModel):
-    """Rapport de tests Playwright ΓÇö score 0-100."""
+    """Rapport de tests Playwright — score 0-100."""
 
     agent_id: str = "playwright"
     agent_name: str = "Playwright"
@@ -104,7 +104,7 @@ def _stop_preview_server(server: HTTPServer | None) -> None:
 
 
 def playwright_to_bug_report(report: PlaywrightReport) -> BugHuntReport:
-    """Convertit un ├⌐chec Playwright en rapport BugHunter pour AutoFixAI."""
+    """Convertit un échec Playwright en rapport BugHunter pour AutoFixAI."""
     issues = [
         BugIssue(
             code="playwright_failed",
@@ -148,14 +148,14 @@ class PlaywrightAgent(BaseAgent):
         import platform
 
         if platform.system() == "Windows":
-            logger.info("[Playwright] ignor├⌐ sur Windows ΓÇö tests E2E d├⌐sactiv├⌐s")
+            logger.info("[Playwright] ignoré sur Windows — tests E2E désactivés")
             return PlaywrightReport(
                 passed=[],
                 failed=[],
                 score=0,
                 ok=True,
                 skipped=True,
-                skip_reason="Playwright ignor├⌐ sur Windows",
+                skip_reason="Playwright ignoré sur Windows",
             )
 
         resolved = settings or self._settings
@@ -166,7 +166,7 @@ class PlaywrightAgent(BaseAgent):
                 score=100,
                 ok=True,
                 skipped=True,
-                skip_reason="Playwright d├⌐sactiv├⌐",
+                skip_reason="Playwright désactivé",
                 passed=["playwright_disabled"],
             )
 
@@ -175,7 +175,7 @@ class PlaywrightAgent(BaseAgent):
                 score=100,
                 ok=True,
                 skipped=True,
-                skip_reason="playwright non install├⌐ (pip install playwright)",
+                skip_reason="playwright non installé (pip install playwright)",
                 passed=["playwright_unavailable"],
             )
 
@@ -224,7 +224,7 @@ class PlaywrightAgent(BaseAgent):
             return report
         except NotImplementedError:
             logger.warning(
-                "[Playwright] non support├⌐ sur cette plateforme (Windows/asyncio) ΓÇö ignor├⌐"
+                "[Playwright] non supporté sur cette plateforme (Windows/asyncio) — ignoré"
             )
             return PlaywrightReport(
                 passed=[],
@@ -232,12 +232,12 @@ class PlaywrightAgent(BaseAgent):
                 score=0,
                 ok=True,
                 skipped=True,
-                skip_reason="Playwright non support├⌐ sur Windows (asyncio)",
+                skip_reason="Playwright non supporté sur Windows (asyncio)",
             )
         except asyncio.TimeoutError:
             return PlaywrightReport(
                 target_url=target,
-                failed=["timeout: tests Playwright d├⌐pass├⌐s"],
+                failed=["timeout: tests Playwright dépassés"],
                 score=0,
                 ok=False,
             )
@@ -282,7 +282,7 @@ async def _run_vitrine_playwright_checks(
             if h1_count > 0 and h1_visible:
                 passed.append("vitrine_h1_visible")
             else:
-                failed.append("vitrine_h1: titre principal absent ou masqu├⌐")
+                failed.append("vitrine_h1: titre principal absent ou masqué")
 
             if await page.locator("#contact, #cf-contact-form, form").count() > 0:
                 passed.append("vitrine_contact")
@@ -357,9 +357,9 @@ async def _run_playwright_checks(
                 try:
                     link_resp = await page.request.get(full, timeout=timeout_ms)
                     if link_resp.status >= 400:
-                        broken_links.append(f"{href} ΓåÆ {link_resp.status}")
+                        broken_links.append(f"{href} → {link_resp.status}")
                 except Exception as exc:
-                    broken_links.append(f"{href} ΓåÆ {exc}")
+                    broken_links.append(f"{href} → {exc}")
             if not internal:
                 passed.append("internal_links: aucun lien interne")
             elif not broken_links:
@@ -367,7 +367,7 @@ async def _run_playwright_checks(
             else:
                 failed.append(f"internal_links: {broken_links[0]}")
 
-            # 3. Formulaires pr├⌐sents et soumettables
+            # 3. Formulaires présents et soumettables
             form_count = await page.locator("form").count()
             if form_count == 0:
                 passed.append("forms: aucun formulaire (N/A)")
@@ -388,14 +388,14 @@ async def _run_playwright_checks(
             )
             cta_count = await page.locator(cta_selector).count()
             if cta_count == 0:
-                passed.append("cta: aucun CTA d├⌐tect├⌐ (N/A)")
+                passed.append("cta: aucun CTA détecté (N/A)")
             else:
                 try:
                     first = page.locator(cta_selector).first
                     await first.click(timeout=3000)
                     passed.append(f"cta: {cta_count} CTA, premier cliquable")
                 except Exception as exc:
-                    failed.append(f"cta: clic ├⌐chou├⌐ ({exc})")
+                    failed.append(f"cta: clic échoué ({exc})")
 
             # 5. Responsive mobile + desktop
             for label, width, height in (("mobile_375", 375, 812), ("desktop_1280", 1280, 720)):
@@ -408,7 +408,7 @@ async def _run_playwright_checks(
                 else:
                     failed.append(f"responsive_{label}: contenu non visible")
 
-            # 6. Images charg├⌐es
+            # 6. Images chargées
             img_stats = await page.evaluate(
                 """() => {
                   const imgs = Array.from(document.querySelectorAll('img'));
@@ -427,7 +427,7 @@ async def _run_playwright_checks(
             elif broken_imgs == 0:
                 passed.append(f"images: {total_imgs} image(s) OK")
             else:
-                failed.append(f"images: {broken_imgs}/{total_imgs} image(s) cass├⌐e(s)")
+                failed.append(f"images: {broken_imgs}/{total_imgs} image(s) cassée(s)")
 
         finally:
             await browser.close()

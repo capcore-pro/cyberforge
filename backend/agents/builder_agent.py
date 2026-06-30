@@ -1,7 +1,7 @@
-﻿"""
-BuilderAI ΓÇö v2 assemblage template (vitrines) ou v0/DeepSeek (apps m├⌐tier).
+"""
+BuilderAI — v2 assemblage template (vitrines) ou v0/DeepSeek (apps métier).
 
-D├⌐l├¿gue l'assemblage HTML ├á builder_ai.py ΓÇö ne g├⌐n├¿re plus de vitrine from scratch.
+Délègue l'assemblage HTML à builder_ai.py — ne génère plus de vitrine from scratch.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ from core.agent_contract import require_ok
 
 logger = logging.getLogger(__name__)
 
-# Cat├⌐gories template-first : si sector_template_html est dans le state ΓåÆ assemblage obligatoire.
+# Catégories template-first : si sector_template_html est dans le state → assemblage obligatoire.
 _FORCED_ASSEMBLY_PRICING_CATEGORIES = frozenset(
     {
         "ecommerce",
@@ -74,8 +74,8 @@ def must_force_sector_template_assembly(
     sector_template: dict[str, Any] | None,
 ) -> bool:
     """
-    True si le pipeline a d├⌐j├á un template sectoriel et qu'on ne doit jamais
-    retomber sur CoreMind / v0 (ecommerce, r├⌐servation, app, desktop).
+    True si le pipeline a déjà un template sectoriel et qu'on ne doit jamais
+    retomber sur CoreMind / v0 (ecommerce, réservation, app, desktop).
     """
     category = (getattr(plan, "pricing_category", None) or "").strip().lower()
     pt = plan.project_type.value if hasattr(plan.project_type, "value") else str(
@@ -115,14 +115,14 @@ class BuilderProvider(str, Enum):
 
 
 class BuilderDecision(BaseModel):
-    """D├⌐cision de routage BuilderAI (align├⌐e sur CoreMindAI)."""
+    """Décision de routage BuilderAI (alignée sur CoreMindAI)."""
 
     provider: BuilderProvider
     rationale: str
 
 
 class BuilderRunResult(BaseModel):
-    """R├⌐sultat d'ex├⌐cution BuilderAI."""
+    """Résultat d'exécution BuilderAI."""
 
     agent_id: str = "builder"
     agent_name: str = "BuilderAI"
@@ -134,7 +134,7 @@ class BuilderRunResult(BaseModel):
 
 
 class BuilderAgent(BaseAgent):
-    """Assemble les vitrines depuis template ; v0/DeepSeek pour apps m├⌐tier."""
+    """Assemble les vitrines depuis template ; v0/DeepSeek pour apps métier."""
 
     @property
     def agent_id(self) -> str:
@@ -165,7 +165,7 @@ class BuilderAgent(BaseAgent):
             return BuilderDecision(
                 provider=BuilderProvider.DEEPSEEK,
                 rationale=analysis.tool_rationale
-                or "CoreMindAI ΓÇö logique backend / complexit├⌐ ├⌐lev├⌐e ΓåÆ DeepSeek.",
+                or "CoreMindAI — logique backend / complexité élevée → DeepSeek.",
             )
 
         if _BACKEND_COMPLEX_KEYWORDS.search(text) or plan.project_type in (
@@ -176,20 +176,20 @@ class BuilderAgent(BaseAgent):
         ):
             return BuilderDecision(
                 provider=BuilderProvider.DEEPSEEK,
-                rationale="Backend ou logique complexe d├⌐tect├⌐e ΓÇö DeepSeek.",
+                rationale="Backend ou logique complexe détectée — DeepSeek.",
             )
 
         if analysis.recommended_tool == RecommendedTool.V0:
             return BuilderDecision(
                 provider=BuilderProvider.V0,
                 rationale=analysis.tool_rationale
-                or "CoreMindAI ΓÇö interface React ΓåÆ v0.",
+                or "CoreMindAI — interface React → v0.",
             )
 
         if analysis.complexity == ComplexityLevel.ELEVEE and not _UI_KEYWORDS.search(text):
             return BuilderDecision(
                 provider=BuilderProvider.DEEPSEEK,
-                rationale="Complexit├⌐ ├⌐lev├⌐e sans focus UI ΓÇö DeepSeek.",
+                rationale="Complexité élevée sans focus UI — DeepSeek.",
             )
 
         if _UI_KEYWORDS.search(text) or plan.project_type in (
@@ -200,12 +200,12 @@ class BuilderAgent(BaseAgent):
         ):
             return BuilderDecision(
                 provider=BuilderProvider.V0,
-                rationale="Stack UI React/Next.js ΓÇö v0 by Vercel.",
+                rationale="Stack UI React/Next.js — v0 by Vercel.",
             )
 
         return BuilderDecision(
             provider=BuilderProvider.V0,
-            rationale="G├⌐n├⌐ration UI par d├⌐faut ΓÇö v0.",
+            rationale="Génération UI par défaut — v0.",
         )
 
     async def build(
@@ -225,9 +225,9 @@ class BuilderAgent(BaseAgent):
     ) -> BuilderRunResult:
         """
         Vitrine (vitrine_next / client_demo) : assemblage template + ContentAI.
-        Apps m├⌐tier : v0/DeepSeek avec design_system inject├⌐ si applicable.
+        Apps métier : v0/DeepSeek avec design_system injecté si applicable.
         """
-        del settings  # r├⌐serv├⌐ extensions
+        del settings  # réservé extensions
 
         force_assembly = must_force_sector_template_assembly(
             plan,
@@ -247,8 +247,8 @@ class BuilderAgent(BaseAgent):
         )
         if force_assembly:
             logger.info(
-                "[BuilderAI] FORCE assemble_template_html ΓÇö pas de CoreMind/v0 "
-                "(sector_template_html pr├⌐sent, category=%s)",
+                "[BuilderAI] FORCE assemble_template_html — pas de CoreMind/v0 "
+                "(sector_template_html présent, category=%s)",
                 getattr(plan, "pricing_category", ""),
             )
             return await self._build_template_assembly(
@@ -327,7 +327,7 @@ class BuilderAgent(BaseAgent):
                 already_filled = False
 
         if not html:
-            logger.error("[BuilderAI] assemblage ΓÇö template HTML absent")
+            logger.error("[BuilderAI] assemblage — template HTML absent")
             if forbid_coremind_fallback:
                 from tools.sector_template_catalog import load_sector_template_html_for_plan
 
@@ -366,7 +366,7 @@ class BuilderAgent(BaseAgent):
         if not assembly.ok:
             err = assembly.error
             logger.warning(
-                "[BuilderAI] assemble_template_html ├⌐chec (strict) | code=%s | %s ΓÇö retry loose=%s",
+                "[BuilderAI] assemble_template_html échec (strict) | code=%s | %s — retry loose=%s",
                 err.code if err else "?",
                 err.message if err else assembly,
                 forbid_coremind_fallback,
@@ -388,7 +388,7 @@ class BuilderAgent(BaseAgent):
         if not assembly.ok:
             err = assembly.error
             logger.error(
-                "[BuilderAI] assemble_template_html ├⌐chec | mode=%s | code=%s | %s",
+                "[BuilderAI] assemble_template_html échec | mode=%s | code=%s | %s",
                 mode,
                 err.code if err else "?",
                 err.message if err else assembly,
@@ -422,7 +422,7 @@ class BuilderAgent(BaseAgent):
             )
             img_total = enrich_stats.photos_stock + enrich_stats.photos_replicate
             if img_total:
-                logger.info("[VisionUI] %d images inject├⌐es", img_total)
+                logger.info("[VisionUI] %d images injectées", img_total)
 
         generation = data.generation
         if html_out != data.html and generation is not None:
@@ -442,7 +442,7 @@ class BuilderAgent(BaseAgent):
             decision=BuilderDecision(
                 provider=BuilderProvider.ASSEMBLY,
                 rationale=(
-                    f"Assemblage template-first ({data.template_id}) ΓÇö "
+                    f"Assemblage template-first ({data.template_id}) — "
                     "ContentAI + optimisation HTML (BuilderAI v2)."
                 ),
             ),
@@ -499,12 +499,12 @@ class BuilderAgent(BaseAgent):
         enriched = (
             f"Type : {plan.project_type_label}.\n"
             f"Template : {plan.template_label}.\n"
-            f"Complexit├⌐ CoreMind : {analysis.complexity.value}.\n\n"
+            f"Complexité CoreMind : {analysis.complexity.value}.\n\n"
             f"{PERSONALIZED_CONTENT_DIRECTIVE}\n"
             f"{vitrine_rules}"
             f"{literal_block}"
-            f"Si un brief ResearchAI (Brave / Exa) est pr├⌐sent en t├¬te du prompt, "
-            f"utilise-le pour du contenu r├⌐el et localis├⌐ ΓÇö pas de donn├⌐es fictives.\n\n"
+            f"Si un brief ResearchAI (Brave / Exa) est présent en tête du prompt, "
+            f"utilise-le pour du contenu réel et localisé — pas de données fictives.\n\n"
             f"{CMS_BUILDER_HINT}"
             f"{toolbox_block}"
             f"{research_block}"
@@ -520,9 +520,9 @@ class BuilderAgent(BaseAgent):
             )
 
         if not outcome.success or outcome.generation is None:
-            reason = outcome.error or "g├⌐n├⌐rateur indisponible"
+            reason = outcome.error or "générateur indisponible"
             logger.info(
-                "BuilderAI ΓÇö %s indisponible (%s), fallback CoreMindAI",
+                "BuilderAI — %s indisponible (%s), fallback CoreMindAI",
                 decision.provider.value,
                 reason,
             )
@@ -557,7 +557,7 @@ class BuilderAgent(BaseAgent):
         design_system: Any | None = None,
         sector_template: dict[str, Any] | None = None,
     ) -> tuple[CodeGenerateResult, str]:
-        """Reprise vitrine ΓÇö assemblage template en priorit├⌐."""
+        """Reprise vitrine — assemblage template en priorité."""
         del project_id
         result = await self.build(
             f"{SIMPLIFIED_VITRINE_DIRECTIVE.strip()}\n\n{prompt.strip()}",
@@ -590,7 +590,7 @@ class BuilderAgent(BaseAgent):
                 )
                 return generation, preview_html
             except Exception:
-                logger.exception("[BuilderAI] CodeGen vitrine simplifi├⌐e ├⌐chou├⌐")
+                logger.exception("[BuilderAI] CodeGen vitrine simplifiée échoué")
 
         from dataclasses import replace
         from tools.demo_template_service import (
@@ -605,6 +605,6 @@ class BuilderAgent(BaseAgent):
         html = build_html_from_seed(seed)
         generation = seed_to_code_result(
             seed,
-            summary="Template landing premium (reprise BuilderAI simplifi├⌐e).",
+            summary="Template landing premium (reprise BuilderAI simplifiée).",
         )
         return generation, html

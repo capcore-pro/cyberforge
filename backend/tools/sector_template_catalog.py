@@ -1,5 +1,5 @@
-﻿"""
-Catalogue templates sectoriels ΓÇö project_type + pricing_category + secteur.
+"""
+Catalogue templates sectoriels — project_type + pricing_category + secteur.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from tools.toolbox_sectors import normalize_sector_key
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "sectors"
 
-# Cat├⌐gories tarifaires en assemblage template-first (HTML vanilla).
+# Catégories tarifaires en assemblage template-first (HTML vanilla).
 TEMPLATE_FIRST_PRICING_CATEGORIES: frozenset[str] = frozenset(
     {
         "ecommerce",
@@ -48,11 +48,11 @@ _ECOMMERCE_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (
         (
             "boulanger",
-            "p├ótiss",
+            "pâtiss",
             "patiss",
-            "p├ótisserie",
+            "pâtisserie",
             "patisserie",
-            "├⌐picerie",
+            "épicerie",
             "alimentaire",
             "bio",
             "primeur",
@@ -62,26 +62,26 @@ _ECOMMERCE_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
         "ecommerce_alimentaire.html",
     ),
     (
-        ("mode", "v├¬tement", "vetement", "pr├¬t-├á-porter", "pret", "fashion", "lingerie"),
+        ("mode", "vêtement", "vetement", "prêt-à-porter", "pret", "fashion", "lingerie"),
         "ecommerce_mode.html",
     ),
 )
 
 _RESERVATION_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("dentiste", "m├⌐decin", "medecin", "kin├⌐", "kine", "ost├⌐o", "osteo", "clinique", "sant├⌐", "sante"), "reservation_sante.html"),
-    (("coiff", "salon", "beaut├⌐", "beaute", "spa", "esth├⌐tique", "esthetique"), "reservation_beaute.html"),
+    (("dentiste", "médecin", "medecin", "kiné", "kine", "ostéo", "osteo", "clinique", "santé", "sante"), "reservation_sante.html"),
+    (("coiff", "salon", "beauté", "beaute", "spa", "esthétique", "esthetique"), "reservation_beaute.html"),
 )
 
 _APP_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (
         (
             "garage",
-            "r├⌐paration",
+            "réparation",
             "reparation",
-            "v├⌐hicule",
+            "véhicule",
             "vehicule",
             "atelier",
-            "m├⌐canique",
+            "mécanique",
             "mecanique",
             "automobile",
             "voiture",
@@ -94,27 +94,27 @@ _APP_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 _DESKTOP_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("artisan", "btp", "plomb", "├⌐lectric", "electric", "chantier"), "desktop_artisan.html"),
+    (("artisan", "btp", "plomb", "électric", "electric", "chantier"), "desktop_artisan.html"),
     (("gestion", "stock", "facture", "devis", "erp", "compta"), "desktop_gestion.html"),
 )
 
-# Camping / h├⌐bergement touristique ΓÇö vitrine g├⌐n├⌐rique, pas vitrine_alimentaire.
+# Camping / hébergement touristique — vitrine générique, pas vitrine_alimentaire.
 _VITRINE_HOSPITALITY_HINTS: tuple[str, ...] = (
     "camping",
-    "h├⌐bergement touristique",
+    "hébergement touristique",
     "hebergement touristique",
-    "g├«te",
+    "gîte",
     "gite",
     "chalet",
     "chalets",
     "cabane",
     "cabanes",
     "tourisme",
-    "h├⌐bergement",
+    "hébergement",
     "hebergement",
 )
 
-# Famille de templates impos├⌐e par pricing_category (priorit├⌐ absolue).
+# Famille de templates imposée par pricing_category (priorité absolue).
 _CATEGORY_TO_FAMILY: dict[str, str] = {
     "ecommerce": "ecommerce",
     "site_reservation": "reservation",
@@ -165,7 +165,7 @@ def _project_type_value(plan: Any) -> str:
 
 def _resolve_template_family(category: str, pt_value: str) -> str:
     """
-    Choisit la famille de templates (ecommerce, app, vitrine, ΓÇª).
+    Choisit la famille de templates (ecommerce, app, vitrine, …).
     pricing_category prime ; le secteur n'influence pas la famille, seulement le fichier dans la famille.
     """
     cat = (category or "").strip().lower()
@@ -173,7 +173,7 @@ def _resolve_template_family(category: str, pt_value: str) -> str:
     if pt_value == "extension_navigateur" or cat == "extension_navigateur":
         return "extension"
 
-    # pricing_category prime ΓÇö jamais ecommerce/app si site_reservation impos├⌐.
+    # pricing_category prime — jamais ecommerce/app si site_reservation imposé.
     if cat == "site_reservation":
         return "reservation"
     if cat == "ecommerce":
@@ -183,7 +183,7 @@ def _resolve_template_family(category: str, pt_value: str) -> str:
     if cat == "vitrine_next":
         return "vitrine"
 
-    # G├⌐n├⌐rateur CyberForge ┬½ E-commerce ┬╗ (project_type saas_dashboard).
+    # Générateur CyberForge « E-commerce » (project_type saas_dashboard).
     if pt_value == "saas_dashboard":
         return "ecommerce"
 
@@ -202,16 +202,16 @@ def _resolve_template_family(category: str, pt_value: str) -> str:
 
 
 def _prompt_forces_vitrine_default_hospitality(blob: str) -> bool:
-    """H├⌐bergement outdoor / tourisme ΓåÆ vitrine_default (├⌐vite vitrine_alimentaire)."""
+    """Hébergement outdoor / tourisme → vitrine_default (évite vitrine_alimentaire)."""
     if any(h in blob for h in _VITRINE_HOSPITALITY_HINTS):
         return True
-    if "h├⌐bergement" in blob or "hebergement" in blob:
+    if "hébergement" in blob or "hebergement" in blob:
         return any(
             ctx in blob
             for ctx in (
                 "camping",
                 "chalet",
-                "g├«te",
+                "gîte",
                 "gite",
                 "cabane",
                 "touristique",
@@ -225,7 +225,7 @@ def resolve_vitrine_template_file(sector: str, user_prompt: str = "") -> str:
     blob = _blob(sector, user_prompt)
     if _prompt_forces_vitrine_default_hospitality(blob):
         logger.info(
-            "[sector_template_catalog] h├⌐bergement/tourisme d├⌐tect├⌐ ΓåÆ vitrine_default.html"
+            "[sector_template_catalog] hébergement/tourisme détecté → vitrine_default.html"
         )
         return "vitrine_default.html"
     family = resolve_visual_family(normalize_sector_key(sector), user_prompt)
@@ -237,7 +237,7 @@ def resolve_vitrine_template_file(sector: str, user_prompt: str = "") -> str:
 
 
 def resolve_template_family_from_plan(plan: Any) -> str:
-    """Famille impos├⌐e par pricing_category / project_type (diagnostic pipeline)."""
+    """Famille imposée par pricing_category / project_type (diagnostic pipeline)."""
     category = (getattr(plan, "pricing_category", None) or "").strip().lower()
     return _resolve_template_family(category, _project_type_value(plan))
 
@@ -257,7 +257,7 @@ def resolve_sector_template_from_plan(
 ) -> tuple[str, str]:
     """
     Retourne (template_id, filename) selon pricing_category / project_type / secteur.
-    Le secteur affine le choix ├á l'int├⌐rieur de la famille uniquement.
+    Le secteur affine le choix à l'intérieur de la famille uniquement.
     """
     blob = _blob(sector, user_prompt)
     category = (getattr(plan, "pricing_category", None) or "").strip().lower()
@@ -266,7 +266,7 @@ def resolve_sector_template_from_plan(
 
     if family == "extension":
         logger.info(
-            "[sector_template_catalog] extension_navigateur ΓÇö pas de template HTML sectoriel"
+            "[sector_template_catalog] extension_navigateur — pas de template HTML sectoriel"
         )
         return "extension_chrome", "extension_chrome.html"
 
@@ -288,7 +288,7 @@ def resolve_sector_template_from_plan(
 
     template_id = Path(filename).stem
     logger.info(
-        "[sector_template_catalog] pricing_category=%s project_type=%s family=%s ΓåÆ %s (%s)",
+        "[sector_template_catalog] pricing_category=%s project_type=%s family=%s → %s (%s)",
         category or "?",
         pt_value or "?",
         family,

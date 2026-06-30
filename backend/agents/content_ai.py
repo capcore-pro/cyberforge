@@ -1,8 +1,8 @@
-﻿"""
-ContentAI ΓÇö Agent 3.
+"""
+ContentAI — Agent 3.
 
-Enrichit le template via un bloc CSS premium g├⌐n├⌐r├⌐ par Claude Sonnet (injection dans <head>),
-puis remplit les placeholders avec le contenu client r├⌐el
+Enrichit le template via un bloc CSS premium généré par Claude Sonnet (injection dans <head>),
+puis remplit les placeholders avec le contenu client réel
 (research, secteur, design system) et applique les post-traitements.
 """
 
@@ -71,7 +71,7 @@ _PLACEHOLDER_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
 
 def _clean_client_name(text: str) -> str:
-    """Retire les caract├¿res Markdown (# * `) des noms affich├⌐s dans les placeholders."""
+    """Retire les caractères Markdown (# * `) des noms affichés dans les placeholders."""
     return re.sub(r"[#*`]", "", (text or "")).strip()
 
 
@@ -110,7 +110,7 @@ def inject_stripe(html: str, payment_config: Any | None) -> str:
         if "cf-stripe-public-key-hint" not in out and "</head>" in out.lower():
             hint = (
                 '<!-- cf-stripe-public-key-hint: remplacez pk_test_VOTRE_CLE_STRIPE '
-                "par votre cl├⌐ publique Stripe (pk_...) -->\n"
+                "par votre clé publique Stripe (pk_...) -->\n"
             )
             out = re.sub(r"</head>", f"  {hint}</head>", out, count=1, flags=re.I)
 
@@ -136,7 +136,7 @@ def inject_stripe(html: str, payment_config: Any | None) -> str:
         else 0
     )
     logger.info(
-        "[PaymentAI] Stripe inject├⌐: type=%s (%d caract├¿res JS)",
+        "[PaymentAI] Stripe injecté: type=%s (%d caractères JS)",
         payment_type,
         js_len,
     )
@@ -148,30 +148,30 @@ _FORBIDDEN_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bVotre\s+texte\b", re.I), "placeholder_text"),
     (re.compile(r"\bLorem\b", re.I), "lorem"),
     (re.compile(r'(?<![\w-])placeholder(?!\s*=)', re.I), "placeholder_word"),
-    (re.compile(r">\s*Texte\s+g├⌐n├⌐rique\s*<", re.I), "generic_text"),
+    (re.compile(r">\s*Texte\s+générique\s*<", re.I), "generic_text"),
 )
 
-# Prestations r├⌐elles par template sectoriel
+# Prestations réelles par template sectoriel
 _TEMPLATE_SERVICES: dict[str, list[str]] = {
     "vitrine_alimentaire": [
         "Pains et viennoiseries au levain",
-        "P├ótisseries maison et desserts",
-        "Traiteur & commandes ├⌐v├⌐nements",
+        "Pâtisseries maison et desserts",
+        "Traiteur & commandes événements",
     ],
     "vitrine_artisan": [
-        "D├⌐pannage et r├⌐parations urgentes",
-        "Installation et r├⌐novation",
+        "Dépannage et réparations urgentes",
+        "Installation et rénovation",
         "Devis gratuit sous 48 h",
         "Maintenance et entretien",
     ],
     "vitrine_sante": [
-        "Consultations et bilans de sant├⌐",
-        "Soins personnalis├⌐s et suivi",
+        "Consultations et bilans de santé",
+        "Soins personnalisés et suivi",
         "Prise en charge sur rendez-vous",
     ],
     "vitrine_beaute": [
         "Coupe & coiffure tendance",
-        "Soins visage et bien-├¬tre",
+        "Soins visage et bien-être",
         "Manucure & nail art",
     ],
     "vitrine_nautisme": [
@@ -181,18 +181,18 @@ _TEMPLATE_SERVICES: dict[str, list[str]] = {
     ],
     "vitrine_default": [
         "Accompagnement sur mesure",
-        "Conseil et expertise m├⌐tier",
-        "Suivi client r├⌐actif",
+        "Conseil et expertise métier",
+        "Suivi client réactif",
     ],
 }
 
 _HERO_TITLE_BUILDERS: dict[str, str] = {
-    "vitrine_alimentaire": "{brand} ΓÇö l'artisan {sector} de {city}",
-    "vitrine_artisan": "{brand} : votre expert {sector} ├á {city}",
-    "vitrine_sante": "{brand} ΓÇö {sector} de confiance ├á {city}",
-    "vitrine_beaute": "{brand} ΓÇö {sector} & bien-├¬tre ├á {city}",
-    "vitrine_nautisme": "{brand} ΓÇö {sector} sur la c├┤te de {city}",
-    "vitrine_default": "{brand} ΓÇö {sector} professionnel ├á {city}",
+    "vitrine_alimentaire": "{brand} — l'artisan {sector} de {city}",
+    "vitrine_artisan": "{brand} : votre expert {sector} à {city}",
+    "vitrine_sante": "{brand} — {sector} de confiance à {city}",
+    "vitrine_beaute": "{brand} — {sector} & bien-être à {city}",
+    "vitrine_nautisme": "{brand} — {sector} sur la côte de {city}",
+    "vitrine_default": "{brand} — {sector} professionnel à {city}",
 }
 
 
@@ -238,7 +238,7 @@ def _resolve_services(
     research_keywords: list[str],
     sector_label: str,
 ) -> tuple[str, str, str]:
-    """Trois libell├⌐s de services sectoriels ΓÇö jamais ┬½ Service N ┬╗."""
+    """Trois libellés de services sectoriels — jamais « Service N »."""
     catalog = list(_TEMPLATE_SERVICES.get(template_id, _TEMPLATE_SERVICES["vitrine_default"]))
     if len(catalog) > 4:
         catalog = catalog[:4]
@@ -266,7 +266,7 @@ def _build_hero_title(
 ) -> str:
     """Titre accrocheur mentionnant secteur et/ou ville."""
     city_part = city if city and city.lower() != "votre ville" else ""
-    sector_part = sector_label or "activit├⌐ locale"
+    sector_part = sector_label or "activité locale"
     pattern = _HERO_TITLE_BUILDERS.get(
         template_id,
         _HERO_TITLE_BUILDERS["vitrine_default"],
@@ -274,12 +274,12 @@ def _build_hero_title(
     title = pattern.format(
         brand=brand,
         sector=sector_part.lower(),
-        city=city_part or "votre r├⌐gion",
+        city=city_part or "votre région",
     )
     if research.get("contenu_suggere") and isinstance(research["contenu_suggere"], list):
         first = str(research["contenu_suggere"][0]).strip()
         if first and len(first) < 80 and not _looks_generic(first):
-            title = f"{brand} ΓÇö {first}"[:90]
+            title = f"{brand} — {first}"[:90]
     return title[:90]
 
 
@@ -292,17 +292,17 @@ def _build_hero_subtitle(
 ) -> str:
     kw_part = ""
     if keywords:
-        kw_part = f" Sp├⌐cialit├⌐s : {', '.join(keywords[:3])}."
-    city_part = f" ├Ç {city}." if city and city.lower() != "votre ville" else ""
+        kw_part = f" Spécialités : {', '.join(keywords[:3])}."
+    city_part = f" À {city}." if city and city.lower() != "votre ville" else ""
     base = (
-        f"{brand} vous accueille pour une exp├⌐rience {sector_label.lower()} "
+        f"{brand} vous accueille pour une expérience {sector_label.lower()} "
         f"d'excellence.{city_part}{kw_part}"
     )
     tendances = research.get("tendances")
     if isinstance(tendances, list) and tendances:
         t0 = str(tendances[0]).strip()
         if t0 and len(t0) < 120:
-            base = f"{t0} ΓÇö {brand}{city_part}."
+            base = f"{t0} — {brand}{city_part}."
     return base[:220]
 
 
@@ -470,21 +470,21 @@ def build_content_slots(
         health_team = _RESERVATION_TEAM["reservation_sante"]
         slots.update(_team_placeholder_slots(health_team))
         slots["TEAM_MEMBER_1_BIO"] = html_lib.escape(
-            f"{sector_label} ┬╖ 12 ans d'exp├⌐rience"
+            f"{sector_label} · 12 ans d'expérience"
         )
         slots["TEAM_MEMBER_2_BIO"] = html_lib.escape(
-            "Approche bienveillante et ├á l'├⌐coute"
+            "Approche bienveillante et à l'écoute"
         )
-        slots["TEAM_MEMBER_3_BIO"] = html_lib.escape(f"Accueil ┬╖ {city_clean}")
+        slots["TEAM_MEMBER_3_BIO"] = html_lib.escape(f"Accueil · {city_clean}")
     if tid == "vitrine_nautisme":
         slots["FLEET_1_NAME"] = html_lib.escape("Voilier 8m")
         slots["FLEET_1_DESC"] = html_lib.escape(
-            "Jusqu'├á 6 personnes ┬╖ Skipper optionnel"
+            "Jusqu'à 6 personnes · Skipper optionnel"
         )
         slots["FLEET_2_NAME"] = html_lib.escape("Catamaran")
-        slots["FLEET_2_DESC"] = html_lib.escape("Sorties journ├⌐e ┬╖ ├ëquipement complet")
+        slots["FLEET_2_DESC"] = html_lib.escape("Sorties journée · Équipement complet")
         slots["FLEET_3_NAME"] = html_lib.escape("Semi-rigide")
-        slots["FLEET_3_DESC"] = html_lib.escape(f"D├⌐couverte c├┤te ┬╖ {city_clean}")
+        slots["FLEET_3_DESC"] = html_lib.escape(f"Découverte côte · {city_clean}")
     return supplement_dynamic_template_slots(
         slots,
         template_html,
@@ -501,7 +501,7 @@ def _apply_design_system_css(html: str, design_system: Any | None) -> str:
         return apply_design_system_to_html(html, design_system, log_prefix="ContentAI")
     except Exception as exc:
         logger.warning(
-            "[ContentAI] apply design system ignor├⌐ ΓÇö HTML conserv├⌐: %s",
+            "[ContentAI] apply design system ignoré — HTML conservé: %s",
             exc,
         )
         return html
@@ -542,7 +542,7 @@ def _apply_project_name_to_html(html: str, project_name: str) -> str:
 
 
 def _fix_action_links(html: str) -> str:
-    """Remplace href='#' inertes par des ancres ou actions r├⌐elles."""
+    """Remplace href='#' inertes par des ancres ou actions réelles."""
     html = re.sub(
         r'(<a[^>]*class=["\'][^"\']*logo[^"\']*["\'][^>]*)href=["\'][^"\']*["\']',
         r'\1 href="#top"',
@@ -585,8 +585,8 @@ def _serialize_design_system(design_system: Any | None) -> dict[str, Any]:
 
 
 _CONTENT_AI_CSS_RULE_HEADER = (
-    "R├êGLE ABSOLUE : g├⌐n├¿re UNIQUEMENT du CSS pur. "
-    "Z├⌐ro Markdown, z├⌐ro ##, z├⌐ro **, z├⌐ro texte explicatif. "
+    "RÈGLE ABSOLUE : génère UNIQUEMENT du CSS pur. "
+    "Zéro Markdown, zéro ##, zéro **, zéro texte explicatif. "
     "Commence directement par <style> et termine par </style>."
 )
 
@@ -613,7 +613,7 @@ _CONTENT_PREMIUM_IO_SCRIPT = """
 
 
 def _plain_text_for_claude(text: str) -> str:
-    """Retire le Markdown des champs texte envoy├⌐s ├á Claude (pas de ##, **, `)."""
+    """Retire le Markdown des champs texte envoyés à Claude (pas de ##, **, `)."""
     t = (text or "").strip()
     if not t:
         return ""
@@ -627,7 +627,7 @@ def _plain_text_for_claude(text: str) -> str:
 
 
 def _is_markdown_artifact_line(line: str) -> bool:
-    """Ligne Markdown (# titre, * liste, ` code) ΓÇö pas du CSS."""
+    """Ligne Markdown (# titre, * liste, ` code) — pas du CSS."""
     stripped = line.lstrip()
     if not stripped:
         return False
@@ -644,7 +644,7 @@ def _strip_markdown_lines_from_css(inner: str) -> str:
 
 
 def _sanitize_premium_style_block(style_block: str) -> str:
-    """Supprime les lignes Markdown r├⌐siduelles dans le bloc <style>."""
+    """Supprime les lignes Markdown résiduelles dans le bloc <style>."""
     block = (style_block or "").strip()
     if not block:
         return ""
@@ -699,7 +699,7 @@ def _build_content_ai_css_user_prompt(
     city_plain = _plain_text_for_claude(city)
     tid = _plain_text_for_claude(template_id)
     description = _plain_text_for_claude(user_prompt) or (
-        f"Site vitrine {sector_plain} pour {name} ├á {city_plain}."
+        f"Site vitrine {sector_plain} pour {name} à {city_plain}."
     )
     return (
         f"{_CONTENT_AI_CSS_RULE_HEADER}\n\n"
@@ -715,7 +715,7 @@ def _build_content_ai_css_user_prompt(
 
 
 def _extract_style_block(text: str) -> str:
-    """Extrait le bloc <style> de la r├⌐ponse Claude."""
+    """Extrait le bloc <style> de la réponse Claude."""
     cleaned = strip_markdown_code_fences(text or "").strip()
     if not cleaned:
         return ""
@@ -740,7 +740,7 @@ def _extract_style_block(text: str) -> str:
 
 
 def _inject_premium_css_into_head(html: str, style_block: str) -> str:
-    """Injecte le CSS premium avant </head> ; le markup existant est inchang├⌐."""
+    """Injecte le CSS premium avant </head> ; le markup existant est inchangé."""
     style_block = _sanitize_premium_style_block(style_block)
     if not _is_valid_premium_style_block(style_block):
         return html
@@ -783,9 +783,9 @@ async def _enrich_template_html_with_claude(
     project_name: str,
 ) -> str | None:
     """
-    G├⌐n├¿re un bloc CSS premium via Claude et l'injecte dans <head>.
-    Le HTML existant (placeholders inclus) n'est pas r├⌐├⌐crit.
-    Retourne None si cl├⌐ absente ou ├⌐chec (repli sur template brut).
+    Génère un bloc CSS premium via Claude et l'injecte dans <head>.
+    Le HTML existant (placeholders inclus) n'est pas réécrit.
+    Retourne None si clé absente ou échec (repli sur template brut).
     """
     if os.environ.get("CONTENT_AI_ENRICH_LLM", "1").strip().lower() in (
         "0",
@@ -797,7 +797,7 @@ async def _enrich_template_html_with_claude(
 
     api_key = _anthropic_api_key()
     if not api_key:
-        logger.debug("[ContentAI] ANTHROPIC_API_KEY absente ΓÇö enrichissement LLM ignor├⌐")
+        logger.debug("[ContentAI] ANTHROPIC_API_KEY absente — enrichissement LLM ignoré")
         return None
 
     user_message = _build_content_ai_css_user_prompt(
@@ -820,13 +820,13 @@ async def _enrich_template_html_with_claude(
         )
     except (TimeoutError, httpx.TimeoutException) as exc:
         logger.warning(
-            "[ContentAI] Claude Sonnet timeout (%.0fs) ΓÇö repli template brut: %s",
+            "[ContentAI] Claude Sonnet timeout (%.0fs) — repli template brut: %s",
             CONTENT_AI_CLAUDE_TIMEOUT_SECONDS,
             exc,
         )
         return None
     except Exception as exc:
-        logger.warning("[ContentAI] Claude Sonnet ├⌐chou├⌐ ΓÇö repli template brut: %s", exc)
+        logger.warning("[ContentAI] Claude Sonnet échoué — repli template brut: %s", exc)
         return None
 
     parts: list[str] = []
@@ -838,13 +838,13 @@ async def _enrich_template_html_with_claude(
     style_block = _extract_style_block(raw)
     if not style_block or len(style_block) < 80:
         logger.warning(
-            "[ContentAI] Bloc <style> Claude invalide ou trop court (%d car.) ΓÇö repli template",
+            "[ContentAI] Bloc <style> Claude invalide ou trop court (%d car.) — repli template",
             len(style_block),
         )
         return None
     html_out = _inject_premium_css_into_head(template_html, style_block)
     logger.info(
-        "[ContentAI] Claude OK - CSS %d caract├¿res inject├⌐(s) dans le template",
+        "[ContentAI] Claude OK - CSS %d caractères injecté(s) dans le template",
         len(style_block),
     )
     return html_out
@@ -863,7 +863,7 @@ def _validate_content_html(html: str) -> None:
             raise AgentContractError(
                 agent_id=_AGENT_ID,
                 code=f"forbidden_{code}",
-                message=f"Contenu interdit d├⌐tect├⌐ ({code}).",
+                message=f"Contenu interdit détecté ({code}).",
             )
     if len(html.strip()) < 500:
         raise AgentContractError(
@@ -888,7 +888,7 @@ async def fill_template_content(
 ) -> AgentResult[ContentFillResult]:
     """
     Remplit le template et retourne le HTML final.
-    ├ëchoue explicitement si placeholder ou contenu interdit.
+    Échoue explicitement si placeholder ou contenu interdit.
     """
     if not (template_html or "").strip():
         return AgentResult.failure(
@@ -1018,7 +1018,7 @@ async def fill_template_content(
             detail=exc.detail,
         )
     except Exception as exc:
-        logger.exception("[ContentAI] ├⌐chec remplissage")
+        logger.exception("[ContentAI] échec remplissage")
         return AgentResult.failure(
             agent_id=_AGENT_ID,
             agent_name=_AGENT_NAME,
@@ -1068,7 +1068,7 @@ class ContentAgent(BaseAgent):
             raise AgentContractError(
                 agent_id=_AGENT_ID,
                 code=err.code if err else "failure",
-                message=err.message if err else "├ëchec ContentAI",
+                message=err.message if err else "Échec ContentAI",
                 detail=err.detail if err else None,
             )
         return result.data.html

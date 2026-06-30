@@ -1,8 +1,8 @@
-﻿"""
-DesignSystemAI ΓÇö Agent 1 (priorit├⌐ absolue).
+"""
+DesignSystemAI — Agent 1 (priorité absolue).
 
-G├⌐n├¿re un design system complet AVANT toute g├⌐n├⌐ration de code.
-Le JSON produit est la LOI VISUELLE du projet ΓÇö transmis ├á tous les agents suivants.
+Génère un design system complet AVANT toute génération de code.
+Le JSON produit est la LOI VISUELLE du projet — transmis à tous les agents suivants.
 """
 
 from __future__ import annotations
@@ -50,51 +50,51 @@ VisualFamily = Literal[
 
 FontStyle = Literal["artisanal", "moderne", "elegant"]
 
-# Couleurs par famille (primary, secondary, accent) ΓÇö loi sectorielle
+# Couleurs par famille (primary, secondary, accent) — loi sectorielle
 _FAMILY_PALETTES: dict[VisualFamily, dict[str, str]] = {
-    # Boulangerie / restaurant / alimentaire ΓÇö cr├¿me, brun, dor├⌐
+    # Boulangerie / restaurant / alimentaire — crème, brun, doré
     "alimentaire": {
         "primary": "#5C3A21",
         "secondary": "#FCF7F0",
         "accent": "#C9A84C",
     },
-    # Nautisme / sport ΓÇö bleus profonds, blancs
+    # Nautisme / sport — bleus profonds, blancs
     "marin_sport": {
         "primary": "#0A3D62",
         "secondary": "#FFFFFF",
         "accent": "#1E88E5",
     },
-    # Artisan / b├ótiment ΓÇö gris ardoise, orange
+    # Artisan / bâtiment — gris ardoise, orange
     "artisan_batiment": {
         "primary": "#4A5568",
         "secondary": "#F7FAFC",
         "accent": "#DD6B20",
     },
-    # Sant├⌐ / bien-├¬tre ΓÇö verts doux, blancs
+    # Santé / bien-être — verts doux, blancs
     "sante_bien_etre": {
         "primary": "#2D6A4F",
         "secondary": "#FFFFFF",
         "accent": "#74C69D",
     },
-    # Tech / digital ΓÇö sombres, n├⌐on subtil
+    # Tech / digital — sombres, néon subtil
     "tech_digital": {
         "primary": "#0D1117",
         "secondary": "#161B22",
         "accent": "#58A6FF",
     },
-    # Beaut├⌐ / mode ΓÇö rose poudr├⌐, noir ├⌐l├⌐gant
+    # Beauté / mode — rose poudré, noir élégant
     "beaute_mode": {
         "primary": "#1A1A1A",
         "secondary": "#FDF2F8",
         "accent": "#E8B4B8",
     },
-    # Juridique / finance ΓÇö navy, or, blanc
+    # Juridique / finance — navy, or, blanc
     "juridique_finance": {
         "primary": "#1C2833",
         "secondary": "#FFFFFF",
         "accent": "#C9A84C",
     },
-    # Automobile ΓÇö industriel, pro, moderne (gris acier + orange)
+    # Automobile — industriel, pro, moderne (gris acier + orange)
     "automobile": {
         "primary": "#2C3E50",
         "secondary": "#FFFFFF",
@@ -109,7 +109,7 @@ _FONT_STYLES: dict[FontStyle, tuple[str, str]] = {
     "elegant": ("Cormorant", "Raleway"),
 }
 
-# Famille ΓåÆ style typo par d├⌐faut
+# Famille → style typo par défaut
 _FAMILY_FONT_STYLE: dict[VisualFamily, FontStyle] = {
     "alimentaire": "artisanal",
     "marin_sport": "moderne",
@@ -123,12 +123,12 @@ _FAMILY_FONT_STYLE: dict[VisualFamily, FontStyle] = {
 
 _FAMILY_STYLE_KEYWORDS: dict[VisualFamily, list[str]] = {
     "alimentaire": ["artisanal", "chaleureux", "gourmand", "moderne"],
-    "marin_sport": ["moderne", "dynamique", "marin", "├⌐nergique"],
+    "marin_sport": ["moderne", "dynamique", "marin", "énergique"],
     "artisan_batiment": ["artisanal", "robuste", "authentique", "moderne"],
     "sante_bien_etre": ["apaisant", "clair", "humain", "rassurant"],
-    "tech_digital": ["moderne", "├⌐pur├⌐", "innovant", "pr├⌐cis"],
-    "beaute_mode": ["├⌐l├⌐gant", "raffin├⌐", "doux", "premium"],
-    "juridique_finance": ["prestige", "confiance", "├⌐l├⌐gant", "moderne"],
+    "tech_digital": ["moderne", "épuré", "innovant", "précis"],
+    "beaute_mode": ["élégant", "raffiné", "doux", "premium"],
+    "juridique_finance": ["prestige", "confiance", "élégant", "moderne"],
     "automobile": ["industriel", "professionnel", "moderne", "robuste"],
 }
 
@@ -146,21 +146,21 @@ _SECTOR_TO_FAMILY: dict[str, VisualFamily] = {
     "automobile": "automobile",
 }
 
-# Mots-cl├⌐s prompt ΓåÆ famille (priorit├⌐ haute)
+# Mots-clés prompt → famille (priorité haute)
 _PROMPT_FAMILY_RULES: tuple[tuple[tuple[str, ...], VisualFamily], ...] = (
     (
         (
             "boulangerie",
             "boulanger",
             "patisserie",
-            "p├ótisserie",
+            "pâtisserie",
             "restaurant",
             "restauration",
             "brasserie",
             "bistro",
             "traiteur",
             "alimentaire",
-            "caf├⌐",
+            "café",
             "cafe",
             "food",
             "cuisine",
@@ -182,11 +182,11 @@ _PROMPT_FAMILY_RULES: tuple[tuple[tuple[str, ...], VisualFamily], ...] = (
             "artisanat",
             "menuisier",
             "plombier",
-            "├⌐lectricien",
+            "électricien",
             "electricien",
-            "ma├ºon",
+            "maçon",
             "macon",
-            "b├ótiment",
+            "bâtiment",
             "batiment",
             "btp",
             "chantier",
@@ -196,17 +196,17 @@ _PROMPT_FAMILY_RULES: tuple[tuple[tuple[str, ...], VisualFamily], ...] = (
     ),
     (
         (
-            "sant├⌐",
+            "santé",
             "sante",
-            "m├⌐decin",
+            "médecin",
             "medecin",
             "clinique",
             "dentiste",
-            "bien-├¬tre",
+            "bien-être",
             "bien etre",
             "wellness",
             "spa",
-            "kin├⌐",
+            "kiné",
             "kine",
         ),
         "sante_bien_etre",
@@ -220,7 +220,7 @@ _PROMPT_FAMILY_RULES: tuple[tuple[tuple[str, ...], VisualFamily], ...] = (
             "logiciel",
             "software",
             "agence web",
-            "d├⌐veloppement",
+            "développement",
             "developpement",
             "ia ",
             " intelligence artificielle",
@@ -229,13 +229,13 @@ _PROMPT_FAMILY_RULES: tuple[tuple[tuple[str, ...], VisualFamily], ...] = (
     ),
     (
         (
-            "beaut├⌐",
+            "beauté",
             "beaute",
             "coiffeur",
             "coiffure",
             "mode",
             "fashion",
-            "esth├⌐tique",
+            "esthétique",
             "esthetique",
             "salon",
             "maquillage",
@@ -259,9 +259,9 @@ _PROMPT_FAMILY_RULES: tuple[tuple[tuple[str, ...], VisualFamily], ...] = (
 )
 
 _VISUAL_LAW_HEADER = (
-    "## LOI VISUELLE DU PROJET (DesignSystemAI ΓÇö non n├⌐gociable)\n"
-    "Ce JSON est transmis ├á TOUS les agents (Research, Builder, CoreMind, "
-    "Vision, BugHunter, Export). Interdiction de d├⌐vier des couleurs, polices et tokens.\n\n"
+    "## LOI VISUELLE DU PROJET (DesignSystemAI — non négociable)\n"
+    "Ce JSON est transmis à TOUS les agents (Research, Builder, CoreMind, "
+    "Vision, BugHunter, Export). Interdiction de dévier des couleurs, polices et tokens.\n\n"
 )
 
 
@@ -285,7 +285,7 @@ class DesignSystemSpacing(BaseModel):
 
 
 class DesignSystemJSON(BaseModel):
-    """JSON contractuel ΓÇö loi visuelle unique du projet."""
+    """JSON contractuel — loi visuelle unique du projet."""
 
     fonts: DesignSystemFonts
     colors: DesignSystemColors
@@ -321,7 +321,7 @@ def resolve_visual_family(
     sector: str,
     user_prompt: str = "",
 ) -> VisualFamily:
-    """D├⌐duit la famille visuelle (couleurs) depuis le secteur et le prompt."""
+    """Déduit la famille visuelle (couleurs) depuis le secteur et le prompt."""
     blob = f"{sector} {user_prompt}".lower()
     for keywords, family in _PROMPT_FAMILY_RULES:
         if any(kw in blob for kw in keywords):
@@ -334,14 +334,14 @@ def resolve_font_style(
     family: VisualFamily,
     style_keywords: list[str] | None = None,
 ) -> FontStyle:
-    """Polices selon le style : artisanal, moderne ou ├⌐l├⌐gant."""
+    """Polices selon le style : artisanal, moderne ou élégant."""
     if style_keywords:
         joined = " ".join(style_keywords).lower()
         if "artisanal" in joined or "authentique" in joined or "gourmand" in joined:
             return "artisanal"
-        if "├⌐l├⌐gant" in joined or "elegant" in joined or "raffin├⌐" in joined or "prestige" in joined:
+        if "élégant" in joined or "elegant" in joined or "raffiné" in joined or "prestige" in joined:
             return "elegant"
-        if "moderne" in joined or "├⌐pur├⌐" in joined or "innovant" in joined:
+        if "moderne" in joined or "épuré" in joined or "innovant" in joined:
             return "moderne"
     return _FAMILY_FONT_STYLE[family]
 
@@ -493,7 +493,7 @@ def _resolve_palette(
     if fc:
         merged = {**base, **fc}
         logger.info(
-            "[DesignSystemAI] Couleurs appliqu├⌐es: %s %s %s",
+            "[DesignSystemAI] Couleurs appliquées: %s %s %s",
             merged.get("primary"),
             merged.get("secondary"),
             merged.get("accent"),
@@ -525,7 +525,7 @@ def _shadow_for_colors(colors: DesignSystemColors) -> str:
 
 
 def design_system_to_css_variables(doc: DesignSystemJSON) -> str:
-    """Variables CSS ΓÇö injection Builder / TemplateEngine."""
+    """Variables CSS — injection Builder / TemplateEngine."""
     c = doc.colors
     p_hsl = hex_to_hsl_channels(c.primary)
     s_hsl = hex_to_hsl_channels(c.secondary)
@@ -585,7 +585,7 @@ def _sync_template_css_variables(html: str, doc: DesignSystemJSON) -> str:
         return out
     except Exception as exc:
         logger.warning(
-            "[DesignSystemAI] sync variables CSS ignor├⌐e ΓÇö HTML conserv├⌐: %s",
+            "[DesignSystemAI] sync variables CSS ignorée — HTML conservé: %s",
             exc,
         )
         return html
@@ -629,7 +629,7 @@ def apply_design_system_to_html(
 
     html = _sync_template_css_variables(html, doc)
     logger.info(
-        "[%s] design system inject├⌐: primary=%s font=%s/%s radius=%s",
+        "[%s] design system injecté: primary=%s font=%s/%s radius=%s",
         log_prefix,
         doc.colors.primary,
         doc.fonts.heading,
@@ -651,7 +651,7 @@ def _validate_contract(doc: DesignSystemJSON) -> None:
         raise AgentContractError(
             agent_id=_AGENT_ID,
             code="incomplete_json",
-            message=f"Cl├⌐s JSON manquantes : {', '.join(missing)}",
+            message=f"Clés JSON manquantes : {', '.join(missing)}",
         )
     for key in ("primary", "secondary", "accent", "bg", "text", "text_light"):
         _normalize_hex(getattr(doc.colors, key), field_name=key)
@@ -666,7 +666,7 @@ def build_design_system(
     user_prompt: str = "",
     firecrawl_data: Any | None = None,
 ) -> AgentResult[DesignSystemJSON]:
-    """Produit le JSON contractuel ou ├⌐choue explicitement."""
+    """Produit le JSON contractuel ou échoue explicitement."""
     raw_name = (client_name or "").strip()
     if len(raw_name) < 2:
         return AgentResult.failure(
@@ -704,7 +704,7 @@ def build_design_system(
         if fc_fonts:
             heading, body = fc_fonts
             logger.info(
-                "[DesignSystemAI] polices Firecrawl appliqu├⌐es: %s / %s",
+                "[DesignSystemAI] polices Firecrawl appliquées: %s / %s",
                 heading,
                 body,
             )
@@ -742,7 +742,7 @@ def build_design_system(
             detail=exc.detail,
         )
     except Exception as exc:
-        logger.exception("[DesignSystemAI] ├⌐chec g├⌐n├⌐ration")
+        logger.exception("[DesignSystemAI] échec génération")
         return AgentResult.failure(
             agent_id=_AGENT_ID,
             agent_name=_AGENT_NAME,
@@ -784,7 +784,7 @@ def _coerce_project_type(project_type: str | ProjectType) -> ProjectType | None:
 
 
 def format_design_system_for_prompt(doc: DesignSystemJSON | dict[str, Any] | None) -> str:
-    """Bloc loi visuelle inject├⌐ dans TOUS les prompts agents."""
+    """Bloc loi visuelle injecté dans TOUS les prompts agents."""
     if doc is None:
         return ""
     if isinstance(doc, dict):
@@ -798,8 +798,8 @@ def format_design_system_for_prompt(doc: DesignSystemJSON | dict[str, Any] | Non
     return (
         f"\n{_VISUAL_LAW_HEADER}"
         f"```json\n{doc.model_dump_json(indent=2)}\n```\n"
-        f"Polices impos├⌐es : {doc.fonts.heading} (titres) + {doc.fonts.body} (corps). "
-        f"Couleurs impos├⌐es : primary {doc.colors.primary}, bg {doc.colors.bg}. "
+        f"Polices imposées : {doc.fonts.heading} (titres) + {doc.fonts.body} (corps). "
+        f"Couleurs imposées : primary {doc.colors.primary}, bg {doc.colors.bg}. "
         f"Style : {', '.join(doc.style_keywords)}.\n\n"
     )
 
@@ -826,7 +826,7 @@ class DesignSystemAgent(BaseAgent):
             raise AgentContractError(
                 agent_id=_AGENT_ID,
                 code=err.code if err else "failure",
-                message=err.message if err else "├ëchec DesignSystemAI",
+                message=err.message if err else "Échec DesignSystemAI",
                 detail=err.detail if err else None,
             )
         return result.data.model_dump_json(indent=2)

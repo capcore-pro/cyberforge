@@ -1,10 +1,10 @@
-﻿"""
-BuilderAI v2 ΓÇö assemblage template-first et enrichissement LLM.
+"""
+BuilderAI v2 — assemblage template-first et enrichissement LLM.
 
-Tous les livrables HTML (vitrine, ecommerce, r├⌐servation, app web, desktop) :
-DesignSystem ΓåÆ Template ΓåÆ Content ΓåÆ assemble + optimise. Pas de HTML from scratch.
+Tous les livrables HTML (vitrine, ecommerce, réservation, app web, desktop) :
+DesignSystem → Template → Content → assemble + optimise. Pas de HTML from scratch.
 
-real_app : g├⌐n├⌐ration React/TS via v0/DeepSeek (+ design_system).
+real_app : génération React/TS via v0/DeepSeek (+ design_system).
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 _ASSEMBLY_PROVIDER = "builder_assembly"
 _ASSEMBLY_MODEL = "template-first-v2"
 
-# real_app uniquement ΓÇö le reste passe par assemblage template
+# real_app uniquement — le reste passe par assemblage template
 _LLM_WITH_DESIGN_SYSTEM_CATEGORIES = frozenset()
 
 _VOID_TAGS = frozenset({
@@ -70,7 +70,7 @@ def uses_template_assembly(
     generation_mode: str | None,
 ) -> bool:
     """
-    Modes assembl├⌐s depuis un template sectoriel ΓÇö pas de HTML LLM libre.
+    Modes assemblés depuis un template sectoriel — pas de HTML LLM libre.
   """
     from agents.coremind_agent import ProjectType
 
@@ -95,7 +95,7 @@ def uses_llm_with_design_system(
     *,
     generation_mode: str | None,
 ) -> bool:
-    """real_app ΓÇö prompts enrichis v0/DeepSeek."""
+    """real_app — prompts enrichis v0/DeepSeek."""
     mode = (generation_mode or "").strip().lower()
     return mode == "real_app"
 
@@ -120,7 +120,7 @@ def _html_without_embedded_code(html: str) -> str:
 
 
 def validate_html_tags(html: str) -> HtmlOptimizeReport:
-    """V├⌐rifications structurelles l├⌐g├¿res (balises, document)."""
+    """Vérifications structurelles légères (balises, document)."""
     issues: list[str] = []
     stripped = html.strip()
     for_validation = _html_without_embedded_code(stripped)
@@ -156,9 +156,9 @@ def validate_html_tags(html: str) -> HtmlOptimizeReport:
             stack.append(tag)
 
     if len(stack) > 24:
-        issues.append(f"trop de balises non ferm├⌐es ({len(stack)})")
+        issues.append(f"trop de balises non fermées ({len(stack)})")
     elif stack:
-        issues.append(f"balises non ferm├⌐es : {', '.join(stack[:8])}")
+        issues.append(f"balises non fermées : {', '.join(stack[:8])}")
 
     return HtmlOptimizeReport(
         valid=not issues,
@@ -168,7 +168,7 @@ def validate_html_tags(html: str) -> HtmlOptimizeReport:
 
 
 def minify_html_light(html: str) -> str:
-    """Minification l├⌐g├¿re ΓÇö espaces entre balises, commentaires HTML."""
+    """Minification légère — espaces entre balises, commentaires HTML."""
     out = re.sub(r"<!--[\s\S]*?-->", "", html)
     out = re.sub(r">\s+<", ">\n<", out)
     out = re.sub(r"\n{3,}", "\n\n", out)
@@ -176,7 +176,7 @@ def minify_html_light(html: str) -> str:
 
 
 def optimize_html(html: str, *, strict: bool = True) -> tuple[str, HtmlOptimizeReport]:
-    """Minifie et valide ; l├¿ve si strict et structure invalide."""
+    """Minifie et valide ; lève si strict et structure invalide."""
     report = validate_html_tags(html)
     optimized = minify_html_light(html)
     report.bytes_after = len(optimized.encode("utf-8"))
@@ -193,7 +193,7 @@ def optimize_html(html: str, *, strict: bool = True) -> tuple[str, HtmlOptimizeR
         raise AgentContractError(
             agent_id="builder_ai",
             code="invalid_html",
-            message="HTML final invalide apr├¿s assemblage.",
+            message="HTML final invalide après assemblage.",
             detail="; ".join(critical),
         )
     return optimized, report
@@ -215,7 +215,7 @@ async def assemble_template_html(
 ) -> AgentResult[VitrineAssemblyResult]:
     """
     Flux template-first BuilderAI v2 :
-    1. ContentAI remplit les placeholders (sauf HTML d├⌐j├á rempli)
+    1. ContentAI remplit les placeholders (sauf HTML déjà rempli)
     2. Optimisation + validation
     3. CodeGenerateResult pour le pipeline
     """
@@ -256,7 +256,7 @@ async def assemble_template_html(
                     agent_id="builder_ai",
                     agent_name="BuilderAI",
                     code=content_result.error.code if content_result.error else "content_failed",
-                    message=content_result.error.message if content_result.error else "ContentAI a ├⌐chou├⌐.",
+                    message=content_result.error.message if content_result.error else "ContentAI a échoué.",
                     detail=content_result.error.detail if content_result.error else None,
                 )
             filled_html = require_ok(content_result).html
@@ -267,7 +267,7 @@ async def assemble_template_html(
         )
         generation = code_result_from_html(
             final_html,
-            summary=f"Assemblage template ΓÇö {template_id} (BuilderAI v2)",
+            summary=f"Assemblage template — {template_id} (BuilderAI v2)",
             model=_ASSEMBLY_MODEL,
             provider=_ASSEMBLY_PROVIDER,
         )
@@ -296,12 +296,12 @@ async def assemble_template_html(
             agent_id="builder_ai",
             agent_name="BuilderAI",
             code="assembly_failed",
-            message="├ëchec assemblage template.",
+            message="Échec assemblage template.",
             detail=str(exc),
         )
 
 
-# Alias r├⌐trocompatibilit├⌐ tests / imports
+# Alias rétrocompatibilité tests / imports
 assemble_vitrine_html = assemble_template_html
 
 
@@ -315,7 +315,7 @@ def resolve_assembly_inputs(
     sector_template: dict[str, Any] | None,
 ) -> tuple[str, str, str, str, str, bool]:
     """
-    D├⌐duit template HTML, secteur, ville, template_id, client.
+    Déduit template HTML, secteur, ville, template_id, client.
     Retourne (html, client_name, sector, city, template_id, already_filled).
     """
     profile = build_client_content_profile(
@@ -375,7 +375,7 @@ def resolve_assembly_inputs(
         )
         if current_id and current_id != expected_id:
             logger.warning(
-                "[BuilderAI] template_id pipeline=%s attendu=%s (family=%s) ΓÇö correction catalogue",
+                "[BuilderAI] template_id pipeline=%s attendu=%s (family=%s) — correction catalogue",
                 current_id,
                 expected_id,
                 family,
@@ -385,7 +385,7 @@ def resolve_assembly_inputs(
             already_filled = False
         elif wrong_family:
             logger.warning(
-                "[BuilderAI] famille %s incompatible avec template_id=%s ΓÇö rechargement %s",
+                "[BuilderAI] famille %s incompatible avec template_id=%s — rechargement %s",
                 family,
                 current_id,
                 expected_id,
@@ -406,7 +406,7 @@ def resolve_assembly_inputs(
 
     if family == "ecommerce" and not template_id.startswith("ecommerce_"):
         logger.warning(
-            "[BuilderAI] force ecommerce | template_id=%s ΓåÆ %s",
+            "[BuilderAI] force ecommerce | template_id=%s → %s",
             template_id,
             expected_id,
         )
@@ -417,7 +417,7 @@ def resolve_assembly_inputs(
 
     if family == "reservation" and not template_id.startswith("reservation_"):
         logger.warning(
-            "[BuilderAI] force reservation | template_id=%s ΓåÆ %s",
+            "[BuilderAI] force reservation | template_id=%s → %s",
             template_id,
             expected_id,
         )
