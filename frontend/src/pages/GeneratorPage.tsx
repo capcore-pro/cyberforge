@@ -635,9 +635,9 @@ export function GeneratorPage({
   }, [personalMode, patch]);
 
   useEffect(() => {
-    const synced = syncSessionFromKind(selectedKind, deployMode);
+    const synced = syncSessionFromKind(selectedKind, deployMode, isPersonalFlow);
     patch(synced);
-  }, [selectedKind, deployMode, patch]);
+  }, [selectedKind, deployMode, isPersonalFlow, patch]);
 
   useEffect(() => {
     if (backendStatus === "offline" && phase === "running") {
@@ -780,7 +780,7 @@ export function GeneratorPage({
     setTouchedFields(new Set());
     setInspirationSecteur(kindToToolboxSecteur(kind));
     setWizardStep("sector");
-    const synced = syncSessionFromKind(kind, deployMode);
+    const synced = syncSessionFromKind(kind, deployMode, isPersonalFlow);
     patch({ ...synced, prompt: "", error: null });
   }
 
@@ -944,7 +944,7 @@ export function GeneratorPage({
   function selectDeployMode(mode: DeployMode) {
     if (isRunning) return;
     setDeployMode(mode);
-    patch({ generationMode: resolveGenerationMode(selectedKind, mode) });
+    patch({ generationMode: resolveGenerationMode(selectedKind, mode, isPersonalFlow) });
   }
 
   async function handleGenerate(
@@ -1076,7 +1076,7 @@ export function GeneratorPage({
       }
     };
 
-    const synced = syncSessionFromKind(selectedKind, deployMode);
+    const synced = syncSessionFromKind(selectedKind, deployMode, isPersonalFlow);
 
     try {
       const response = await streamCoremindRun(

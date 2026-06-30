@@ -208,8 +208,10 @@ export function getGeneratorKind(id: GeneratorKindId): GeneratorKindOption {
 export function resolveGenerationMode(
   kind: GeneratorKindId,
   deployMode: DeployMode,
+  isPersonal?: boolean,
 ): GenerationMode {
   if (deployMode === "demo") return "client_demo";
+  if (isPersonal && deployMode === "real") return "real_app";
   if (kind === "vitrine" || kind === "reservation") return "vitrine_next";
   return "real_app";
 }
@@ -281,11 +283,12 @@ export function buildGeneratorPipelinePrompt(
 export function syncSessionFromKind(
   kind: GeneratorKindId,
   deployMode: DeployMode,
+  isPersonal?: boolean,
 ): { projectType: ProjectType; generationMode: GenerationMode } {
   const option = getGeneratorKind(kind);
   return {
     projectType: option.projectType,
-    generationMode: resolveGenerationMode(kind, deployMode),
+    generationMode: resolveGenerationMode(kind, deployMode, isPersonal),
   };
 }
 

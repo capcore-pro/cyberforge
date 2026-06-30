@@ -22,6 +22,8 @@ _ROUTER_ORDER: tuple[str, ...] = (
     "orchestration",
     "communication",
     "generate",
+    "coremind",
+    "pipeline_stream",
     "projects",
     "editor",
     "clients",
@@ -102,6 +104,7 @@ clone_inspiration = _modules["clone_inspiration"] = _import_route_module("clone_
 clients = _modules["clients"] = _import_route_module("clients")
 client_review = _modules["client_review"] = _import_route_module("client_review")
 communication = _modules["communication"] = _import_route_module("communication")
+coremind = _modules["coremind"] = _import_route_module("coremind")
 demos = _modules["demos"] = _import_route_module("demos")
 demo_tracking = _modules["demo_tracking"] = _import_route_module("demo_tracking")
 editor = _modules["editor"] = _import_route_module("editor")
@@ -129,6 +132,7 @@ managed_vitrines = _modules["managed_vitrines"] = _import_route_module("managed_
 notifications = _modules["notifications"] = _import_route_module("notifications")
 orchestration = _modules["orchestration"] = _import_route_module("orchestration")
 pipeline = _modules["pipeline"] = _import_route_module("pipeline")
+pipeline_stream = _modules["pipeline_stream"] = _import_route_module("pipeline_stream")
 projects = _modules["projects"] = _import_route_module("projects")
 scrape_inspiration = _modules["scrape_inspiration"] = _import_route_module("scrape_inspiration")
 secrets = _modules["secrets"] = _import_route_module("secrets")

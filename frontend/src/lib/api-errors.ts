@@ -3,7 +3,13 @@ export function apiErrorMessage(
   response: { status: number; statusText: string; data: unknown },
   offline: string,
 ): string {
-  if (response.status === 0) return offline;
+  if (response.status === 0) {
+    const fromData = formatApiErrorDetail(response.data);
+    const fromStatusText = response.statusText?.trim();
+    if (fromData) return fromData;
+    if (fromStatusText) return fromStatusText;
+    return offline;
+  }
   return formatApiErrorDetail(response.data) || `Erreur ${response.status} : ${response.statusText}`;
 }
 

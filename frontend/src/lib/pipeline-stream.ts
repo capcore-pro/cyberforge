@@ -136,7 +136,35 @@ function buildGenerateBody(body: CoreMindRequest) {
     inspiration_brief: body.inspiration_brief ?? null,
     firecrawl_result: body.firecrawl_result ?? null,
     stripe_publishable_key: body.stripe_publishable_key?.trim() || null,
+    personal_project: body.personal_project ?? false,
+    pages_project_slug: body.pages_project_slug ?? null,
+    project_title: body.project_title ?? null,
   };
+}
+
+function buildCoreMindStreamBody(body: CoreMindRequest) {
+  return {
+    prompt: body.prompt,
+    project_type: body.project_type ?? null,
+    generation_mode: body.generation_mode ?? null,
+    project_id: body.project_id ?? null,
+    inspiration_brief: body.inspiration_brief ?? null,
+    firecrawl_result: body.firecrawl_result ?? null,
+    personal_project: body.personal_project ?? false,
+    pages_project_slug: body.pages_project_slug ?? null,
+    project_title: body.project_title ?? null,
+    openhands_enabled: body.openhands_enabled ?? null,
+    playwright_enabled: body.playwright_enabled ?? null,
+    lighthouse_enabled: body.lighthouse_enabled ?? null,
+    research_enabled: body.research_enabled ?? null,
+    stripe_publishable_key: body.stripe_publishable_key?.trim() || null,
+  };
+}
+
+function resolveCoremindStreamUrl(): string {
+  const base = resolveApiBase();
+  const path = `${API_PREFIX}/agents/coremind/run/stream`;
+  return base ? `${base}${path}` : path;
 }
 
 function mapGenerateToRunResponse(
@@ -348,8 +376,117 @@ function waitForGenerationSse(
   });
 }
 
+async function streamLangGraphPipeline(
+  body: CoreMindRequest,
+  handlers: PipelineStreamHandlers,
+  signal: AbortSignal,
+): Promise<CoreMindRunResponse> {
+  const response = await fetch(resolveCoremindStreamUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify(buildCoreMindStreamBody(body)),
+    signal,
+  });
+
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const errPayload = (await response.json()) as { detail?: string };
+      if (errPayload.detail?.trim()) {
+        detail = errPayload.detail.trim();
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(detail || "Erreur pipeline LangGraph");
+  }
+
+  if (!response.body) {
+    throw new Error("Réponse SSE vide (pipeline LangGraph)");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: CoreMindRunResponse | null = null;
+
+  const emit = (event: PipelineStepEvent) => handlers.onStep?.(event);
+
+  const handlePayload = (payload: Record<string, unknown>) => {
+    const type = String(payload.type ?? "");
+    if (type === "pipeline_start" || type === "pipeline_end") {
+      emit({ type });
+      return;
+    }
+    if (type === "step_start" || type === "step_done" || type === "step_error") {
+      emit(payload as PipelineStepEvent);
+      if (type === "step_done" && payload.production_url) {
+        emit({
+          type: "step_done",
+          agent: "export",
+          message: "Site en ligne",
+          production_url: String(payload.production_url),
+          unlock_url: (payload.unlock_url as string | null) ?? null,
+          demo_password: (payload.demo_password as string | null) ?? null,
+        });
+      }
+      return;
+    }
+    if (type === "result" && payload.data && typeof payload.data === "object") {
+      result = payload.data as CoreMindRunResponse;
+      return;
+    }
+    if (type === "error") {
+      const detail =
+        (typeof payload.detail === "string" && payload.detail.trim()) ||
+        "Erreur pipeline";
+      throw new Error(detail);
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() ?? "";
+    for (const chunk of chunks) {
+      const line = chunk
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.startsWith("data:"));
+      if (!line) continue;
+      const raw = line.slice(5).trim();
+      if (!raw) continue;
+      handlePayload(JSON.parse(raw) as Record<string, unknown>);
+    }
+  }
+
+  if (buffer.trim()) {
+    const line = buffer
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.startsWith("data:"));
+    if (line) {
+      const raw = line.slice(5).trim();
+      if (raw) {
+        handlePayload(JSON.parse(raw) as Record<string, unknown>);
+      }
+    }
+  }
+
+  if (!result) {
+    throw new Error("Pipeline LangGraph terminé sans résultat");
+  }
+  return result;
+}
+
 /**
- * Lance le pipeline CyberForge v2 via POST /api/generate + SSE.
+ * Lance le pipeline CyberForge v2 via POST /api/generate + SSE,
+ * ou LangGraph (ExportAI) pour les projets perso.
  */
 export async function streamCoremindRun(
   body: CoreMindRequest,
@@ -362,6 +499,17 @@ export async function streamCoremindRun(
 
   try {
     emit({ type: "pipeline_start" });
+
+    if (body.personal_project) {
+      const data = await streamLangGraphPipeline(body, handlers, controller.signal);
+      emit({ type: "pipeline_end", ok: true });
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        data,
+      };
+    }
 
     const startResponse = await fetch(resolveGenerateUrl(), {
       method: "POST",

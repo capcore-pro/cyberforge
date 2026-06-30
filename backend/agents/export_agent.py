@@ -191,7 +191,11 @@ class ExportAgent(BaseAgent):
             or "projet"
         )
         mode = (generation_mode or "client_demo").strip()
-        use_dedicated_pages = personal_project and mode == "real_app"
+        pages_slug = (pages_project_slug or "").strip()
+        use_dedicated_pages = personal_project and (
+            mode == "real_app"
+            or (mode == "vitrine_next" and bool(pages_slug))
+        )
         explicit_stable_pages_slug = bool(
             use_dedicated_pages and (pages_project_slug or "").strip()
         )
