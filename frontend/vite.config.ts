@@ -1,7 +1,8 @@
-import { defineConfig, loadEnv, type ProxyOptions } from "vite";
+import fs from "node:fs";
+import path from "node:path";
+import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron/simple";
-import path from "node:path";
 import { version } from "./package.json";
 import { electronCspPlugin } from "./vite-csp-plugin";
 
@@ -77,6 +78,22 @@ const resolveAlias = {
   "@shared": path.resolve(__dirname, "../shared"),
 };
 
+const SPLASH_HTML_SRC = path.join(__dirname, "electron/splash.html");
+
+/** Copie splash.html à côté de main.js dans dist-electron/ (build packagé). */
+function copySplashHtmlPlugin(): Plugin {
+  return {
+    name: "copy-splash-html",
+    apply: "build",
+    writeBundle(options) {
+      const outDir = options.dir ?? path.resolve(__dirname, "dist-electron");
+      const dest = path.join(outDir, "splash.html");
+      fs.copyFileSync(SPLASH_HTML_SRC, dest);
+      console.info(`[vite] splash.html → ${dest}`);
+    },
+  };
+}
+
 // Configuration Vite : React côté renderer, Electron pour le processus principal
 export default defineConfig(({ mode }) => {
   const env = loadMergedEnv(mode);
@@ -97,6 +114,7 @@ export default defineConfig(({ mode }) => {
           entry: "electron/main.ts",
           vite: {
             resolve: { alias: resolveAlias },
+            plugins: [copySplashHtmlPlugin()],
             build: {
               rollupOptions: {
                 external: ["electron", "electron-updater"],

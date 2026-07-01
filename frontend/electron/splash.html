@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=960, height=600" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;" />
+  <title>CyberForge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --cf-bg: #030308;
+      --cf-cyan: #00d4ff;
+      --cf-glow: rgba(0, 212, 255, 0.15);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--cf-bg);
+      color: #e2e8f0;
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    html.fade-out,
+    html.fade-out body {
+      opacity: 0;
+      transition: opacity 400ms ease-out;
+    }
+
+    body {
+      background-color: var(--cf-bg);
+      background-image: radial-gradient(
+        circle at 1px 1px,
+        rgba(0, 212, 255, 0.06) 1px,
+        transparent 0
+      );
+      background-size: 28px 28px;
+    }
+
+    .splash {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: 2rem;
+      animation: splash-in 900ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    }
+
+    @keyframes splash-in {
+      from {
+        opacity: 0;
+        transform: scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .logo-wrap {
+      position: relative;
+      margin-bottom: 2rem;
+      animation: logo-pulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes logo-pulse {
+      0%, 100% {
+        filter: drop-shadow(0 0 12px var(--cf-glow));
+      }
+      50% {
+        filter: drop-shadow(0 0 28px rgba(0, 212, 255, 0.45));
+      }
+    }
+
+    .logo-wrap svg {
+      display: block;
+      width: 260px;
+      height: auto;
+    }
+
+    .title-wrap {
+      position: relative;
+      margin-bottom: 2.5rem;
+      text-align: center;
+    }
+
+    .title {
+      position: relative;
+      font-size: 2.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #f8fafc;
+      text-shadow: 0 0 24px rgba(0, 212, 255, 0.35);
+    }
+
+    .title::before,
+    .title::after {
+      content: "CyberForge";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0.75;
+    }
+
+    .title::before {
+      color: var(--cf-cyan);
+      animation: glitch-1 2.8s infinite linear alternate-reverse;
+      clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+    }
+
+    .title::after {
+      color: #7c3aed;
+      animation: glitch-2 2.2s infinite linear alternate-reverse;
+      clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+    }
+
+    @keyframes glitch-1 {
+      0% { transform: translate(0); }
+      20% { transform: translate(-2px, 1px); }
+      40% { transform: translate(2px, -1px); }
+      60% { transform: translate(-1px, 0); }
+      80% { transform: translate(1px, 1px); }
+      100% { transform: translate(0); }
+    }
+
+    @keyframes glitch-2 {
+      0% { transform: translate(0); }
+      25% { transform: translate(2px, 0); }
+      50% { transform: translate(-2px, 1px); }
+      75% { transform: translate(1px, -1px); }
+      100% { transform: translate(0); }
+    }
+
+    .status {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--cf-cyan);
+      letter-spacing: 0.06em;
+      margin-bottom: 1.25rem;
+      opacity: 0;
+      animation: status-in 1.2s ease 0.5s forwards;
+    }
+
+    @keyframes status-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .scan-track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 3px;
+      background: rgba(0, 212, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .scan-bar {
+      position: absolute;
+      top: 0;
+      left: -40%;
+      width: 40%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        var(--cf-cyan),
+        transparent
+      );
+      box-shadow: 0 0 16px var(--cf-cyan);
+      animation: scan 1.8s ease-in-out infinite;
+    }
+
+    .scan-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, rgba(0, 212, 255, 0.2), var(--cf-cyan));
+      box-shadow: 0 0 12px var(--cf-glow);
+      animation: progress-sim 28s linear forwards;
+    }
+
+    @keyframes scan {
+      0% { left: -40%; }
+      100% { left: 100%; }
+    }
+
+    @keyframes progress-sim {
+      0% { width: 0%; }
+      85% { width: 92%; }
+      100% { width: 100%; }
+    }
+
+    .hex-deco {
+      position: absolute;
+      opacity: 0.12;
+      pointer-events: none;
+    }
+
+    .hex-deco--tl {
+      top: 2rem;
+      left: 2rem;
+      width: 72px;
+      height: 72px;
+    }
+
+    .hex-deco--br {
+      bottom: 3rem;
+      right: 2rem;
+      width: 96px;
+      height: 96px;
+    }
+  </style>
+</head>
+<body>
+  <svg class="hex-deco hex-deco--tl" viewBox="0 0 100 100" aria-hidden="true">
+    <polygon
+      points="50,4 96,27 96,73 50,96 4,73 4,27"
+      fill="none"
+      stroke="#00d4ff"
+      stroke-width="1"
+    />
+  </svg>
+  <svg class="hex-deco hex-deco--br" viewBox="0 0 100 100" aria-hidden="true">
+    <polygon
+      points="50,4 96,27 96,73 50,96 4,73 4,27"
+      fill="none"
+      stroke="#7c3aed"
+      stroke-width="1"
+    />
+  </svg>
+
+  <div class="splash">
+    <div class="logo-wrap" aria-hidden="true">
+      <svg width="260" height="60" viewBox="0 0 260 60" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="cyan-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <g filter="url(#cyan-glow)">
+          <circle cx="30" cy="30" r="18" fill="none" stroke="#00d4ff" stroke-width="1" stroke-dasharray="4 3" opacity="0.45" />
+          <circle cx="30" cy="30" r="11" fill="none" stroke="#00d4ff" stroke-width="1.5" />
+          <path d="M13 38 Q13 46 21 46 L27 46" fill="none" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" />
+          <path d="M47 22 Q47 14 39 14 L33 14" fill="none" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" />
+          <circle cx="30" cy="30" r="4" fill="#00d4ff" />
+          <line x1="30" y1="12" x2="30" y2="19" stroke="#00d4ff" stroke-width="1.5" />
+          <line x1="30" y1="41" x2="30" y2="48" stroke="#00d4ff" stroke-width="1.5" />
+          <line x1="12" y1="30" x2="19" y2="30" stroke="#00d4ff" stroke-width="1.5" />
+          <line x1="41" y1="30" x2="48" y2="30" stroke="#00d4ff" stroke-width="1.5" />
+        </g>
+        <text x="62" y="26" font-size="20" font-weight="500" fill="#F0F0F0" font-family="'Space Grotesk', sans-serif">CapCore</text>
+        <text x="63" y="42" font-size="9" fill="#8892a4" font-family="'Space Grotesk', sans-serif" letter-spacing="0.12em">STUDIO DIGITAL</text>
+      </svg>
+    </div>
+
+    <div class="title-wrap">
+      <h1 class="title" aria-label="CyberForge">CyberForge</h1>
+    </div>
+
+    <p class="status">Initialisation du système…</p>
+  </div>
+
+  <div class="scan-track" aria-hidden="true">
+    <div class="scan-progress"></div>
+    <div class="scan-bar"></div>
+  </div>
+</body>
+</html>
