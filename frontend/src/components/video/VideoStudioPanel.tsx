@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import { useVideoGeneration } from "@/context/VideoGenerationContext";
 import { apiClient } from "@/lib/api";
+import {
+  STUDIO_VIDEO_DRAFT_KEY,
+  type StudioVideoDraft,
+} from "@/lib/studio-video-draft";
 import SceneEditor from "./SceneEditor";
 import MusicSelector from "./MusicSelector";
 
@@ -164,6 +168,46 @@ export default function VideoStudioPanel({
   useEffect(() => {
     return () => setVideoGenerationActive(false);
   }, [setVideoGenerationActive]);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem(STUDIO_VIDEO_DRAFT_KEY);
+    if (!raw) return;
+    try {
+      const draft = JSON.parse(raw) as StudioVideoDraft;
+      sessionStorage.removeItem(STUDIO_VIDEO_DRAFT_KEY);
+
+      setTitle(draft.projectName);
+      if (draft.sector) {
+        setBrief(`Secteur : ${draft.sector}`);
+      }
+      if (draft.musicSection?.ambiance) {
+        setAmbiance(draft.musicSection.ambiance);
+      } else if (draft.musicSection?.style_musical) {
+        setAmbiance(`${draft.musicSection.style_musical} — ${draft.musicSection.bpm}`);
+      }
+
+      if (draft.sceneSections.length > 0) {
+        const loadedScenes = draft.sceneSections.map((scene, index) => ({
+          scene_number: index + 1,
+          title: `Scène ${index + 1}`,
+          description_fr: scene.description_fr,
+          prompt: scene.description_fr || scene.style,
+          camera_move: "slow dolly forward",
+          mood: SCENE_MOODS[Math.min(index, SCENE_MOODS.length - 1)],
+          duration: Number.parseInt(scene.duree_secondes, 10) || 5,
+        }));
+        setScenes(loadedScenes);
+        setScenesData({
+          concept: draft.projectName,
+          color_palette: "cyan / noir tech",
+          scenes: loadedScenes,
+        });
+        setStep("scenes");
+      }
+    } catch {
+      sessionStorage.removeItem(STUDIO_VIDEO_DRAFT_KEY);
+    }
+  }, []);
 
   const loadClientProject = useCallback(async (projectId: string) => {
     try {

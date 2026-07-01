@@ -2,6 +2,7 @@
 export type AppPage =
   | "dashboard"
   | "generator"
+  | "studio_builder"
   | "projects"
   | "clients"
   | "pipeline"
@@ -46,7 +47,7 @@ export const MAIN_NAV_GROUP: NavGroup = {
   id: "main",
   items: [
     { id: "dashboard", label: "Accueil", icon: "◈", enabled: true },
-    { id: "generator", label: "Générateur", icon: "⚡", enabled: true },
+    { id: "studio_builder", label: "✦ Créer", icon: "✦", enabled: true },
     {
       id: "idea_lab",
       label: "Idea Lab",
@@ -188,6 +189,7 @@ export const NAV_ITEMS: NavItem[] = [
 export const PAGE_HASH_PATHS: Partial<Record<AppPage, string>> = {
   clients: "clients",
   generator: "generator",
+  studio_builder: "studio-builder",
   idea_lab: "idea-lab",
   erp_builder: "erp-builder",
   desktop_builder: "desktop-builder",

@@ -19,6 +19,11 @@ import { ClientReviewPage } from "./pages/ClientReviewPage";
 const DashboardPage = lazy(() =>
   import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage })),
 );
+const StudioBuilderPage = lazy(() =>
+  import("./pages/StudioBuilderPage").then((m) => ({
+    default: m.StudioBuilderPage,
+  })),
+);
 const GeneratorPage = lazy(() =>
   import("./pages/GeneratorPage").then((m) => ({ default: m.GeneratorPage })),
 );
@@ -234,6 +239,8 @@ function AppWithNotifications({
     }
 
     switch (page) {
+      case "studio_builder":
+        return <StudioBuilderPage onNavigate={setPage} />;
       case "generator":
         return (
           <GeneratorPage

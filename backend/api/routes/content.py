@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from agents.content_agent import content_agent
@@ -105,3 +105,27 @@ async def generate_capcore_post(body: CapcorePostRequest):
     if "error" in result and "post" not in result:
         return {"success": False, "error": result["error"]}
     return {"success": True, **result}
+
+
+class AssistRequest(BaseModel):
+    field_type: str = Field(..., min_length=1, max_length=64)
+    context: str = Field(default="", max_length=2000)
+    current_value: str = Field(default="", max_length=2000)
+
+
+class AssistResponse(BaseModel):
+    suggestion: str
+
+
+@router.post("/assist", response_model=AssistResponse)
+async def assist_field(request: AssistRequest) -> AssistResponse:
+    sujet = request.current_value.strip() or request.context.strip() or "Projet"
+    try:
+        result = await content_agent.generate_free_text(
+            text_type=request.field_type,
+            sujet=sujet,
+            contexte=request.context,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return AssistResponse(suggestion=result.strip())

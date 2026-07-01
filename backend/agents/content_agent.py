@@ -121,6 +121,46 @@ class ContentAgent:
         )
         return response.choices[0].message.content.strip()
 
+    async def generate_free_text(
+        self,
+        text_type: str,
+        sujet: str,
+        contexte: str = "",
+    ) -> str:
+        """Texte court pour champs Studio Builder (titre, slogan, service, etc.)."""
+        TYPE_PROMPTS = {
+            "description": "Génère une description professionnelle courte (2-3 phrases)",
+            "presentation": "Génère une présentation complète (5-6 phrases)",
+            "titre": "Génère un titre accrocheur (max 8 mots)",
+            "slogan": "Génère un slogan percutant (max 12 mots)",
+            "service": "Génère une description de service (1-2 phrases, bénéfice client)",
+            "temoignage": "Génère un témoignage client authentique (2-3 phrases)",
+            "faq_question": "Génère une question FAQ pertinente",
+            "faq_reponse": "Génère une réponse FAQ claire et rassurante (2-3 phrases)",
+            "cta": "Génère un texte de bouton CTA court et engageant (2-5 mots)",
+        }
+        instruction = TYPE_PROMPTS.get(
+            text_type,
+            "Génère un texte professionnel court",
+        )
+
+        user_prompt = f"{instruction}\nSujet : {sujet.strip()}"
+        if contexte.strip():
+            user_prompt += f"\nContexte : {contexte.strip()}"
+        if not sujet.strip() and not contexte.strip():
+            raise ValueError("Sujet ou contexte requis")
+
+        raw = await self._call_mistral(
+            system_prompt=(
+                "Tu es expert en communication digitale pour artisans "
+                "et PME françaises. Réponds uniquement avec le texte demandé, "
+                "sans introduction ni commentaire."
+            ),
+            user_prompt=user_prompt,
+            max_tokens=300,
+        )
+        return raw.strip().strip('"').strip("'")
+
     async def _call_mistral(
         self,
         system_prompt: str,
