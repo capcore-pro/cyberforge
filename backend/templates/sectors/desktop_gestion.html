@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{APP_NAME}} — Gestion</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      font-size: 12px;
+      background: #e9e9e9;
+      color: #000;
+      display: flex;
+      flex-direction: column;
+    }
+    :root { --primary: {{PRIMARY_COLOR}}; }
+    .title-bar {
+      height: 30px; background: linear-gradient(180deg, #fff 0%, #e8e8e8 100%);
+      border-bottom: 1px solid #8e8e8e; display: flex; align-items: center; justify-content: space-between;
+    }
+    .title-bar .title { padding-left: 8px; font-size: 12px; }
+    .window-controls { display: flex; }
+    .win-btn {
+      width: 45px; height: 30px; border: none; background: transparent; cursor: pointer;
+      font-size: 9px; line-height: 30px;
+    }
+    .win-btn:hover { background: rgba(0,0,0,0.06); }
+    .win-btn.close:hover { background: #c42b1c; color: #fff; }
+    .menu-bar { height: 22px; background: #f0f0f0; border-bottom: 1px solid #c0c0c0; display: flex; }
+    .menu-item { padding: 2px 10px; cursor: default; position: relative; line-height: 18px; }
+    .menu-item:hover, .menu-item.open { background: #cce4f7; }
+    .dropdown {
+      display: none; position: absolute; top: 100%; left: 0; background: #fff;
+      border: 1px solid #8e8e8e; box-shadow: 2px 2px 4px rgba(0,0,0,0.2); z-index: 50; min-width: 160px;
+    }
+    .menu-item.open .dropdown { display: block; }
+    .dropdown div { padding: 4px 20px 4px 8px; }
+    .dropdown div:hover { background: #316ac5; color: #fff; }
+    .app-body { flex: 1; display: flex; min-height: 0; }
+    .sidebar {
+      width: 220px; background: #f5f5f5; border-right: 1px solid #ababab;
+      overflow-y: auto;
+    }
+    .tree-header { padding: 6px 10px; background: #e0e0e0; font-weight: 600; border-bottom: 1px solid #c0c0c0; }
+    .module-btn {
+      display: block; width: 100%; text-align: left; padding: 6px 10px 6px 24px;
+      border: none; background: transparent; font: inherit; cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    .module-btn:hover { background: #e8f4fc; }
+    .module-btn.active { background: #fff; font-weight: 600; border-left: 3px solid var(--primary); }
+    .main { flex: 1; display: flex; flex-direction: column; background: #fff; }
+    .toolbar {
+      padding: 6px 8px; background: #f0f0f0; border-bottom: 1px solid #c0c0c0;
+      display: flex; gap: 4px; flex-wrap: wrap;
+    }
+    .toolbar button {
+      padding: 3px 10px; border: 1px solid #7a7a7a;
+      background: linear-gradient(180deg, #fefefe, #e4e4e4); font: inherit; font-size: 11px; cursor: pointer;
+    }
+    .workspace { flex: 1; overflow: auto; padding: 12px; }
+    .form-group { margin-bottom: 10px; max-width: 520px; }
+    .form-group label { display: inline-block; width: 120px; }
+    .form-group input, .form-group select, .form-group textarea {
+      padding: 3px 6px; border: 1px solid #7a7a7a; font: inherit; width: 280px;
+    }
+    fieldset { border: 1px groove #ccc; padding: 10px 12px; margin-bottom: 12px; }
+    legend { font-weight: 600; padding: 0 4px; }
+    .grid { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .grid th, .grid td { border: 1px solid #c0c0c0; padding: 3px 6px; }
+    .grid th { background: #e8e8e8; }
+    .grid tr:hover { background: #f0f8ff; }
+    .status-bar {
+      height: 20px; background: #f0f0f0; border-top: 1px solid #8e8e8e;
+      display: flex; align-items: center; padding: 0 6px; font-size: 11px; gap: 12px;
+    }
+    .hidden { display: none !important; }
+    .tabs { display: flex; border-bottom: 1px solid #c0c0c0; margin-bottom: 10px; }
+    .tab { padding: 4px 12px; border: 1px solid #c0c0c0; border-bottom: none; background: #e8e8e8; cursor: pointer; margin-right: 2px; }
+    .tab.active { background: #fff; margin-bottom: -1px; padding-bottom: 5px; }
+  </style>
+</head>
+<body>
+  <div class="title-bar">
+    <span class="title">{{APP_NAME}} — {{CLIENT_NAME}}</span>
+    <div class="window-controls">
+      <button class="win-btn" id="btnMin">—</button>
+      <button class="win-btn" id="btnMax">□</button>
+      <button class="win-btn close" id="btnClose">✕</button>
+    </div>
+  </div>
+
+  <div class="menu-bar">
+    <div class="menu-item">Fichier<div class="dropdown">
+      <div data-a="import">Importer données</div>
+      <div data-a="export">Exporter Excel</div>
+      <div data-a="quit">Quitter</div>
+    </div></div>
+    <div class="menu-item">Édition<div class="dropdown">
+      <div data-a="find">Rechercher</div>
+      <div data-a="filter">Filtrer</div>
+    </div></div>
+    <div class="menu-item">Affichage<div class="dropdown">
+      <div data-a="list">Vue liste</div>
+      <div data-a="detail">Vue détail</div>
+    </div></div>
+    <div class="menu-item">Aide<div class="dropdown">
+      <div data-a="doc">Documentation</div>
+      <div data-a="about">À propos</div>
+    </div></div>
+  </div>
+
+  <div class="app-body">
+    <aside class="sidebar">
+      <div class="tree-header">Navigation</div>
+      <button class="module-btn active" data-m="compta">{{MODULE_1}}</button>
+      <button class="module-btn" data-m="rh">{{MODULE_2}}</button>
+      <button class="module-btn" data-m="stock">{{MODULE_3}}</button>
+    </aside>
+    <div class="main">
+      <div class="toolbar">
+        <button id="actAdd">Ajouter</button>
+        <button id="actEdit">Modifier</button>
+        <button id="actDel">Supprimer</button>
+        <button id="actRefresh">Actualiser</button>
+      </div>
+      <div class="workspace">
+        <div id="p-compta" class="panel">
+          <div class="tabs">
+            <button class="tab active" data-tab="ecritures">Écritures</button>
+            <button class="tab" data-tab="balance">Balance</button>
+          </div>
+          <fieldset>
+            <legend>Écriture comptable</legend>
+            <div class="form-group"><label>Journal</label><select><option>AC</option><option>VE</option><option>BQ</option></select></div>
+            <div class="form-group"><label>Compte</label><input type="text" value="401000" /></div>
+            <div class="form-group"><label>Libellé</label><input type="text" /></div>
+            <div class="form-group"><label>Débit</label><input type="number" step="0.01" /></div>
+            <div class="form-group"><label>Crédit</label><input type="number" step="0.01" /></div>
+          </fieldset>
+          <table class="grid" id="gridCompta">
+            <thead><tr><th>Date</th><th>Compte</th><th>Libellé</th><th>Débit</th><th>Crédit</th></tr></thead>
+            <tbody>
+              <tr><td>01/06/2026</td><td>401000</td><td>Fournisseur ABC</td><td></td><td>1 200,00</td></tr>
+              <tr><td>01/06/2026</td><td>512000</td><td>Banque</td><td>1 200,00</td><td></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="p-rh" class="panel hidden">
+          <fieldset><legend>Ressources humaines</legend>
+            <div class="form-group"><label>Employé</label><input type="text" /></div>
+            <div class="form-group"><label>Poste</label><input type="text" /></div>
+            <div class="form-group"><label>Salaire brut</label><input type="number" /></div>
+            <div class="form-group"><label>Date embauche</label><input type="date" /></div>
+          </fieldset>
+        </div>
+        <div id="p-stock" class="panel hidden">
+          <fieldset><legend>Stocks</legend>
+            <div class="form-group"><label>Article</label><input type="text" /></div>
+            <div class="form-group"><label>Quantité</label><input type="number" /></div>
+            <div class="form-group"><label>Entrepôt</label><select><option>Principal</option><option>Annexe</option></select></div>
+          </fieldset>
+          <table class="grid">
+            <thead><tr><th>SKU</th><th>Désignation</th><th>Qté</th><th>Seuil</th></tr></thead>
+            <tbody>
+              <tr><td>REF-001</td><td>Fourniture A</td><td>142</td><td>50</td></tr>
+              <tr><td>REF-002</td><td>Fourniture B</td><td>28</td><td>30</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="status-bar">
+        <span id="stMain">Prêt</span>
+        <span>|</span>
+        <span id="stMod">{{MODULE_1}}</span>
+        <span>|</span>
+        <span>{{CLIENT_NAME}}</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      document.querySelectorAll('.menu-item').forEach(function (mi) {
+        mi.addEventListener('click', function (e) {
+          if (e.target.closest('.dropdown')) {
+            document.getElementById('stMain').textContent = 'Menu : ' + e.target.dataset.a;
+            return;
+          }
+          document.querySelectorAll('.menu-item').forEach(function (m) { m.classList.remove('open'); });
+          mi.classList.toggle('open');
+        });
+      });
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('.menu-item')) document.querySelectorAll('.menu-item').forEach(function (m) { m.classList.remove('open'); });
+      });
+      document.getElementById('btnClose').onclick = function () { if (confirm('Quitter ?')) document.getElementById('stMain').textContent = 'Fermeture'; };
+      document.getElementById('btnMin').onclick = function () { document.getElementById('stMain').textContent = 'Réduit'; };
+      document.getElementById('btnMax').onclick = function () { document.getElementById('stMain').textContent = 'Agrandi / Restauré'; };
+
+      document.querySelectorAll('.module-btn').forEach(function (btn) {
+        btn.onclick = function () {
+          document.querySelectorAll('.module-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          var m = btn.dataset.m;
+          var label = btn.textContent.replace(/^\s+|\s+$/g, '');
+          document.querySelectorAll('.panel').forEach(function (p) { p.classList.add('hidden'); });
+          document.getElementById('p-' + m).classList.remove('hidden');
+          document.getElementById('stMod').textContent = label;
+        };
+      });
+
+      document.querySelectorAll('.tab').forEach(function (tab) {
+        tab.onclick = function () {
+          document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+          tab.classList.add('active');
+          document.getElementById('stMain').textContent = 'Onglet : ' + tab.textContent;
+        };
+      });
+
+      document.getElementById('actAdd').onclick = function () { document.getElementById('stMain').textContent = 'Ajout…'; };
+      document.getElementById('actEdit').onclick = function () { document.getElementById('stMain').textContent = 'Modification…'; };
+      document.getElementById('actDel').onclick = function () { document.getElementById('stMain').textContent = 'Suppression…'; };
+      document.getElementById('actRefresh').onclick = function () { document.getElementById('stMain').textContent = 'Actualisé ' + new Date().toLocaleTimeString('fr-FR'); };
+
+      document.querySelectorAll('#gridCompta tbody tr').forEach(function (row) {
+        row.onclick = function () {
+          document.querySelectorAll('#gridCompta tr').forEach(function (r) { r.style.background = ''; });
+          row.style.background = '#cce4f7';
+          document.getElementById('stMain').textContent = 'Ligne : ' + row.cells[2].textContent;
+        };
+      });
+    })();
+  </script>
+</body>
+</html>

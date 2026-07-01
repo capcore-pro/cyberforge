@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{HERO_TITLE}} — {{SECTOR}} · {{CITY}}</title>
+  <link rel="stylesheet" href="{{GOOGLE_FONTS_URL}}" />
+  <style>
+    :root{--primary:{{PRIMARY_COLOR}};--secondary:{{SECONDARY_COLOR}};--font-h:'{{FONT_HEADING}}',sans-serif;--font-b:'{{FONT_BODY}}',sans-serif;--wave:#1e88e5}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:var(--font-b);color:#0d2137;line-height:1.6}
+    h1,h2,h3{font-family:var(--font-h);color:var(--primary)}
+    .wrap{width:min(1140px,92vw);margin:0 auto}
+    .nav{position:fixed;inset:0 0 auto;z-index:99;background:rgba(10,61,98,.92);backdrop-filter:blur(8px)}
+    .nav-inner{display:flex;justify-content:space-between;align-items:center;padding:1rem 0}
+    .logo{color:#fff;font-weight:700;font-size:1.25rem}
+    .nav a{color:#b3d4fc;margin-left:1.2rem;font-weight:500}
+    .nav a:hover{color:#fff}
+    .hero{min-height:92vh;margin-top:0;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;
+      background:linear-gradient(180deg,rgba(10,61,98,.55),rgba(10,61,98,.8)),url('https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1920&q=80') center/cover;padding:6rem 1.5rem}
+    .hero h1{font-size:clamp(2.2rem,5vw,3.5rem);margin-bottom:1rem;text-shadow:0 2px 16px rgba(0,0,0,.3)}
+  .hero p{font-size:1.2rem;max-width:600px;margin:0 auto 2rem}
+    .btn{display:inline-block;padding:.9rem 2rem;background:var(--wave);color:#fff;border-radius:6px;font-weight:600;transition:transform .2s,box-shadow .2s}
+    .btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(30,136,229,.4)}
+    section{padding:4.5rem 0}
+    .title{text-align:center;font-size:2rem;margin-bottom:2rem}
+    .acts,.fleet{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem}
+    .card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(10,61,98,.1);transition:transform .3s}
+    .card:hover{transform:translateY(-6px)}
+    .card img{width:100%;height:180px;object-fit:cover}
+    .card-body{padding:1.5rem}
+    .join{background:var(--primary);color:#fff;padding:3rem;border-radius:16px;text-align:center}
+    .join form{max-width:400px;margin:1.5rem auto 0;display:flex;flex-direction:column;gap:.75rem}
+    .join input{padding:.8rem;border:none;border-radius:8px;font:inherit}
+    .join button{padding:.9rem;background:var(--wave);color:#fff;border:none;font-weight:700;cursor:pointer;border-radius:8px}
+    .reveal{opacity:0;transform:translateY(24px);transition:.65s}
+    .reveal.visible{opacity:1;transform:none}
+  </style>
+</head>
+<body>
+  <header class="nav"><div class="wrap nav-inner"><span class="logo">{{CLIENT_NAME}}</span>
+    <nav><a href="#activites">Activités</a><a href="#flotte">Flotte</a><a href="#rejoindre">Contact</a></nav></div></header>
+  <section class="hero reveal"><div class="wrap"><h1>{{HERO_TITLE}}</h1><p>{{HERO_SUBTITLE}}</p><a href="#rejoindre" class="btn">{{CTA_TEXT}}</a></div></section>
+  <section id="activites" class="reveal" style="background:var(--secondary)"><div class="wrap"><h2 class="title">Nos activités</h2>
+    <div class="acts">
+      <article class="card"><img src="https://images.unsplash.com/photo-1505118380757-91f5fbe2c731?w=600&q=80" alt="Voile" loading="lazy"/><div class="card-body"><h3>{{SERVICE_1}}</h3><p>Cours et sorties encadrées — {{CITY}}.</p></div></article>
+      <article class="card"><img src="https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=600&q=80" alt="Mer" loading="lazy"/><div class="card-body"><h3>{{SERVICE_2}}</h3><p>Location et croisières côtières.</p></div></article>
+      <article class="card"><img src="https://images.unsplash.com/photo-1567894340315-735d7c361db0?w=600&q=80" alt="Bateau" loading="lazy"/><div class="card-body"><h3>{{SERVICE_3}}</h3><p>Entretien et services nautiques.</p></div></article>
+    </div></div></section>
+  <section id="flotte" class="reveal"><div class="wrap"><h2 class="title">Notre flotte</h2>
+    <div class="fleet">
+      <article class="card"><img src="https://images.unsplash.com/photo-1605281314120-1aa44c71ab85?w=600&q=80" alt="{{FLEET_1_NAME}}" loading="lazy"/><div class="card-body"><h3>{{FLEET_1_NAME}}</h3><p>{{FLEET_1_DESC}}</p></div></article>
+      <article class="card"><img src="https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=600&q=80" alt="{{FLEET_2_NAME}}" loading="lazy"/><div class="card-body"><h3>{{FLEET_2_NAME}}</h3><p>{{FLEET_2_DESC}}</p></div></article>
+      <article class="card"><img src="https://images.unsplash.com/photo-1599139017226-9f9c0f5c0c0e?w=600&q=80" alt="{{FLEET_3_NAME}}" loading="lazy"/><div class="card-body"><h3>{{FLEET_3_NAME}}</h3><p>{{FLEET_3_DESC}}</p></div></article>
+    </div></div></section>
+  <section id="rejoindre" class="reveal"><div class="wrap"><div class="join"><h2 style="color:#fff">Nous rejoindre</h2>
+    <p style="opacity:.95">Une question ? Écrivez-nous ou appelez le {{PHONE}}.</p>
+    <form action="#" onsubmit="return false;"><input type="text" placeholder="Nom" required /><input type="email" placeholder="{{EMAIL}}" /><input type="tel" placeholder="Téléphone" /><button type="submit">{{CTA_TEXT}}</button></form>
+    <p style="margin-top:1.5rem;font-size:.9rem">{{ADDRESS}} · {{CITY}}</p></div></div></section>
+  <script>document.querySelectorAll('.reveal').forEach(el=>new IntersectionObserver((e,o)=>e.forEach(x=>{if(x.isIntersecting){x.target.classList.add('visible');o.unobserve(x.target)}}),{threshold:.1}).observe(el));</script>
+</body>
+</html>
