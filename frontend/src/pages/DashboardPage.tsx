@@ -8,12 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { API_PREFIX } from "@shared/constants";
-import type { ProjectRecord } from "@shared/types";
-import {
-  formatAgentsBadgeLabel,
-  useAgentsStatus,
-} from "@/context/AgentsStatusContext";
-import { useBackendHealth } from "@/context/BackendHealthContext";
+import type { AgentStatusItem, ProjectRecord } from "@shared/types";
+import { useAgentsStatus } from "@/context/AgentsStatusContext";
 import { useGeneratorSession } from "@/context/GeneratorSessionContext";
 import { apiRequest } from "@/lib/api-client";
 import { fetchLegalClients, type LegalClient } from "@/lib/legal-api";
@@ -29,19 +25,18 @@ import {
   STRIPE_CAPCORE_PROJECT_ID,
 } from "@/lib/stripe-api";
 import {
-  fetchSystemNotifications,
-  type SystemNotification,
-} from "@/lib/system-notifications-api";
-import {
   fetchLLMStats,
   fetchRecentGenerations,
   fetchRecentSessions,
   fetchSupervisorStats,
+  USD_TO_EUR,
   type AuditGenerationEvent,
   type LLMStats,
   type OrchestrationSession,
   type SupervisorStats,
 } from "@/lib/dashboard-api";
+import { fetchAgentRegistry, type AgentRegistryEntry } from "@/lib/agents-api";
+import { fetchPoseGallery } from "@/lib/visual-api";
 import { LLMCostWidget } from "@/components/dashboard/LLMCostWidget";
 import { PipelineHealthWidget } from "@/components/dashboard/PipelineHealthWidget";
 import { RecentGenerationsWidget } from "@/components/dashboard/RecentGenerationsWidget";
@@ -51,6 +46,20 @@ interface DashboardPageProps {
 }
 
 type DashboardProjectKind = GeneratorKindId;
+type AccentColor = "cyan" | "amber" | "purple" | "green";
+
+const V2_CARD =
+  "rounded-[10px] border border-[rgba(0,212,255,0.1)] bg-[#0a0a12]";
+const V2_PANEL_TITLE = "font-mono text-xs tracking-wide text-cf-cyan";
+
+const ACCENT_TOP: Record<AccentColor, string> = {
+  cyan: "#00d4ff",
+  amber: "#f59e0b",
+  purple: "#7c3aed",
+  green: "#00ff88",
+};
+
+const API_BUDGET_EUR = 20;
 
 const eurFmt = new Intl.NumberFormat("fr-FR", {
   style: "currency",
@@ -74,11 +83,6 @@ function formatEurPrecise(value: number): string {
   return eurPreciseFmt.format(value);
 }
 
-function projectTypeLabel(type: string): string {
-  const fromKind = GENERATOR_KINDS.find((k) => k.projectType === type);
-  return fromKind?.title ?? type;
-}
-
 function formatDayDate(now: Date): string {
   try {
     return new Intl.DateTimeFormat("fr-FR", {
@@ -90,31 +94,6 @@ function formatDayDate(now: Date): string {
   } catch {
     return now.toISOString();
   }
-}
-
-function formatCompactDate(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("fr-FR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
-function formatRelativeTime(iso: string): string {
-  const date = new Date(iso);
-  const deltaMs = Date.now() - date.getTime();
-  if (!Number.isFinite(deltaMs)) return iso;
-  const mins = Math.max(0, Math.round(deltaMs / 60_000));
-  if (mins < 2) return "à l’instant";
-  if (mins < 60) return `il y a ${mins} min`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `il y a ${hours} h`;
-  const days = Math.round(hours / 24);
-  return `il y a ${days} j`;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -130,35 +109,6 @@ function isThisMonth(iso: string): boolean {
   const d = new Date(iso);
   const start = startOfThisMonth().getTime();
   return Number.isFinite(d.getTime()) && d.getTime() >= start;
-}
-
-function isLastMonth(iso: string): boolean {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return false;
-  const now = new Date();
-  const startLast = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
-  const startThis = startOfThisMonth().getTime();
-  const t = d.getTime();
-  return t >= startLast && t < startThis;
-}
-
-function countBeforeThisMonth(items: { created_at: string }[]): number {
-  const start = startOfThisMonth().getTime();
-  return items.filter((item) => {
-    const t = new Date(item.created_at).getTime();
-    return Number.isFinite(t) && t < start;
-  }).length;
-}
-
-/** Tendance mois courant vs mois précédent — null si pas de base de comparaison. */
-function calcTrendPct(current: number, previous: number): number | null {
-  if (previous <= 0) return null;
-  return Math.round(((current - previous) / previous) * 100);
-}
-
-function safeNumber(value: unknown): number {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : 0;
 }
 
 function useCountUp(target: number, opts?: { durationMs?: number; enabled?: boolean }) {
@@ -198,167 +148,134 @@ function useCountUp(target: number, opts?: { durationMs?: number; enabled?: bool
   return value;
 }
 
-function GlassCard({
+function StatCardV2({
+  label,
+  value,
+  sub,
+  accentColor,
+  loading,
+  delayMs = 0,
+}: {
+  label: string;
+  value: string | number;
+  sub: string;
+  accentColor: AccentColor;
+  loading?: boolean;
+  delayMs?: number;
+}) {
+  return (
+    <div
+      className={`${V2_CARD} p-4`}
+      style={{
+        borderTop: `2px solid ${ACCENT_TOP[accentColor]}`,
+        animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
+        animationDelay: `${delayMs}ms`,
+      }}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cf-muted">
+        {label}
+      </p>
+      <p
+        className={[
+          "mt-2 font-mono text-3xl font-semibold tabular-nums text-cf-text",
+          loading ? "animate-pulse text-cf-muted" : "",
+        ].join(" ")}
+      >
+        {loading ? "—" : value}
+      </p>
+      <p className="mt-1.5 text-[11px] text-cf-muted">{sub}</p>
+    </div>
+  );
+}
+
+function AgentsPanelV2({
+  agents,
+  modelById,
+  loading,
+}: {
+  agents: AgentStatusItem[];
+  modelById: Map<string, string>;
+  loading?: boolean;
+}) {
+  const pipelineAgents = useMemo(
+    () => agents.filter((a) => a.in_pipeline).slice(0, 8),
+    [agents],
+  );
+
+  return (
+    <div className={`${V2_CARD} p-5`}>
+      <h2 className={`mb-4 ${V2_PANEL_TITLE}`}>// agents IA</h2>
+      {loading ? (
+        <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
+      ) : pipelineAgents.length === 0 ? (
+        <p className="text-sm text-cf-muted">Aucun agent pipeline disponible.</p>
+      ) : (
+        <ul className="space-y-2.5">
+          {pipelineAgents.map((agent) => {
+            const isActive = agent.status === "active";
+            const model =
+              modelById.get(agent.id) ??
+              modelById.get(agent.name.toLowerCase()) ??
+              "—";
+            return (
+              <li
+                key={agent.id}
+                className="flex items-center gap-3 rounded-control border border-[rgba(0,212,255,0.08)] bg-[#0d0d14] px-3 py-2"
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor: isActive ? "#00ff88" : "#f59e0b",
+                    boxShadow: isActive
+                      ? "0 0 6px rgba(0,255,136,0.5)"
+                      : "0 0 6px rgba(245,158,11,0.4)",
+                  }}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-cf-text">
+                  {agent.name}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-cf-muted">
+                  {model}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function V2SectionCard({
   children,
   className = "",
   style,
-  onClick,
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
-  onClick?: () => void;
 }) {
-  const clickable = Boolean(onClick);
   return (
-    <div
-      onClick={onClick}
-      style={style}
-      className={[
-        "rounded-card border border-white/10 bg-white/5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] backdrop-blur-xl",
-        clickable
-          ? "cursor-pointer transition hover:border-cf-gold/30 hover:bg-white/7 hover:shadow-gold"
-          : "",
-        className,
-      ].join(" ")}
-    >
+    <div className={`${V2_CARD} p-5 ${className}`} style={style}>
       {children}
     </div>
   );
 }
 
-function SectionTitle({
-  icon,
-  title,
-  action,
-}: {
-  icon?: string;
-  title: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
-        {icon ? (
-          <span
-            className="inline-flex h-7 w-7 items-center justify-center rounded-control border border-white/10 bg-white/5 text-sm text-cf-gold"
-            aria-hidden
-          >
-            {icon}
-          </span>
-        ) : null}
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cf-muted">
-          {title}
-        </h2>
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function TrendChip({
-  valuePct,
-}: {
-  valuePct: number;
-}) {
-  const up = valuePct >= 0;
-  const pct = Math.abs(valuePct);
-  return (
-    <span
-      className={[
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold tabular-nums",
-        up
-          ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
-          : "border-orange-400/20 bg-orange-500/10 text-orange-200",
-      ].join(" ")}
-      aria-label={`Tendance ${up ? "en hausse" : "en baisse"} de ${pct}%`}
-    >
-      <span aria-hidden>{up ? "↑" : "↓"}</span>
-      {pct}%
-    </span>
-  );
-}
-
-function KpiCard({
-  icon,
-  iconClassName,
-  label,
-  value,
-  valueSuffix,
-  trendPct,
-  loading,
-  delayMs = 0,
-}: {
-  icon: string;
-  iconClassName: string;
-  label: string;
-  value: string;
-  valueSuffix?: string;
-  trendPct?: number | null;
-  loading?: boolean;
-  delayMs?: number;
-}) {
-  return (
-    <GlassCard
-      className="p-4"
-      style={{
-        animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
-        animationDelay: `${delayMs}ms`,
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div
-            className={[
-              "flex h-10 w-10 items-center justify-center rounded-control border border-white/10 bg-white/5 text-lg",
-              iconClassName,
-            ].join(" ")}
-            aria-hidden
-          >
-            {icon}
-          </div>
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cf-muted">
-              {label}
-            </p>
-            <p
-              className={[
-                "mt-1 truncate text-3xl font-semibold tabular-nums text-cf-text",
-                loading ? "animate-pulse text-cf-muted" : "",
-              ].join(" ")}
-            >
-              {loading ? "—" : value}
-              {valueSuffix ? (
-                <span className="ml-1 text-sm font-medium text-cf-muted">
-                  {valueSuffix}
-                </span>
-              ) : null}
-            </p>
-          </div>
-        </div>
-        {trendPct != null ? <TrendChip valuePct={trendPct} /> : null}
-      </div>
-    </GlassCard>
-  );
-}
-
 /**
- * Tableau de bord principal — métriques, générateur rapide, projets et alertes.
+ * Tableau de bord principal — métriques V2, agents, activité et générateur rapide.
  */
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
-  const { status: backendStatus } = useBackendHealth();
-  const { activeCount, totalAgents, agentsCountKnown, loading: agentsLoading } =
-    useAgentsStatus();
+  const { status: agentsStatus, loading: agentsLoading } = useAgentsStatus();
   const { patch } = useGeneratorSession();
 
   const firstName = getUserFirstName();
 
   const [loading, setLoading] = useState(true);
-  const [revenueMonth, setRevenueMonth] = useState(0);
-  const [apiCostMonth, setApiCostMonth] = useState<number | null>(null);
+  const [mrrEur, setMrrEur] = useState(0);
   const [clients, setClients] = useState<LegalClient[]>([]);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
-  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
   const [llmStats, setLlmStats] = useState<LLMStats | null>(null);
   const [supervisorStats, setSupervisorStats] = useState<SupervisorStats | null>(
     null,
@@ -369,27 +286,32 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [recentGenerations, setRecentGenerations] = useState<
     AuditGenerationEvent[]
   >([]);
+  const [agentRegistry, setAgentRegistry] = useState<AgentRegistryEntry[]>([]);
+  const [posesCount, setPosesCount] = useState(0);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     const [
       clientsRes,
       projectsRes,
-      notifRes,
       stripeRes,
       llmRes,
       supervisorRes,
       sessionsRes,
       generationsRes,
+      registryRes,
     ] = await Promise.all([
       fetchLegalClients(),
       apiRequest<ProjectRecord[]>({ method: "GET", path: `${API_PREFIX}/projects` }),
-      fetchSystemNotifications(false),
       fetchStripeDashboard(STRIPE_CAPCORE_PROJECT_ID),
       fetchLLMStats(),
       fetchSupervisorStats(),
       fetchRecentSessions(5),
       fetchRecentGenerations(5),
+      fetchAgentRegistry().catch(() => [] as AgentRegistryEntry[]),
+      fetchPoseGallery()
+        .then((poses) => setPosesCount(poses.length))
+        .catch(() => setPosesCount(0)),
     ]);
 
     if (clientsRes.ok && Array.isArray(clientsRes.data)) {
@@ -404,18 +326,13 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setProjects([]);
     }
 
-    if (notifRes.ok && notifRes.data && Array.isArray(notifRes.data.items)) {
-      setNotifications(notifRes.data.items);
-    } else {
-      setNotifications([]);
-    }
-
     if (stripeRes.ok && stripeRes.data) {
-      setRevenueMonth(stripeRes.data.revenue_this_month_eur ?? 0);
+      setMrrEur(stripeRes.data.active_subscriptions_mrr_eur ?? 0);
     } else {
-      setRevenueMonth(0);
+      setMrrEur(0);
     }
 
+    setAgentRegistry(registryRes);
     setLlmStats(llmRes);
     setSupervisorStats(supervisorRes);
     setRecentSessions(sessionsRes);
@@ -428,74 +345,33 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const recentProjects = useMemo(() => {
-    return [...projects]
-      .sort(
-        (a, b) =>
-          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-      )
-      .slice(0, 3);
-  }, [projects]);
-
-  const activeProjectsCount = projects.length;
+  const projectsCount = projects.length;
+  const projectsThisMonth = useMemo(
+    () => projects.filter((p) => isThisMonth(p.created_at)).length,
+    [projects],
+  );
   const clientCount = clients.length;
-  const backendOnline = backendStatus === "online";
 
-  const estApiCostMonth = useMemo(() => {
-    return projects
-      .filter((p) => isThisMonth(p.updated_at))
-      .reduce((sum, p) => sum + safeNumber(p.latest_estimated_cost_usd), 0);
-  }, [projects]);
+  const llmCostUsd = llmStats?.monthly?.total_cost_usd ?? 0;
+  const llmCostEur = llmCostUsd * USD_TO_EUR;
+  const fluxCostEur = posesCount * 0.04;
 
-  const estApiCostLastMonth = useMemo(() => {
-    return projects
-      .filter((p) => isLastMonth(p.updated_at))
-      .reduce((sum, p) => sum + safeNumber(p.latest_estimated_cost_usd), 0);
-  }, [projects]);
-
-  const hasKpiData =
-    revenueMonth > 0 ||
-    activeProjectsCount > 0 ||
-    clientCount > 0 ||
-    estApiCostMonth > 0;
-
-  const kpiTrends = useMemo(() => {
-    if (!hasKpiData) {
-      return {
-        revenue: null,
-        projects: null,
-        clients: null,
-        apiCost: null,
-      } as const;
+  const modelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of agentRegistry) {
+      const label = entry.model ?? entry.provider ?? "—";
+      map.set(entry.agent_id, label);
+      if (entry.slug) map.set(entry.slug, label);
     }
-    return {
-      revenue: null,
-      projects: calcTrendPct(
-        activeProjectsCount,
-        countBeforeThisMonth(projects),
-      ),
-      clients: calcTrendPct(clientCount, countBeforeThisMonth(clients)),
-      apiCost: calcTrendPct(estApiCostMonth, estApiCostLastMonth),
-    } as const;
-  }, [
-    activeProjectsCount,
-    clientCount,
-    clients,
-    estApiCostLastMonth,
-    estApiCostMonth,
-    hasKpiData,
-    projects,
-    revenueMonth,
-  ]);
+    return map;
+  }, [agentRegistry]);
 
-  useEffect(() => {
-    setApiCostMonth(estApiCostMonth);
-  }, [estApiCostMonth]);
+  const kpiProjects = useCountUp(projectsCount, { enabled: !loading });
+  const kpiClients = useCountUp(clientCount, { enabled: !loading });
+  const kpiPoses = useCountUp(posesCount, { enabled: !loading });
+  const kpiLlmCost = useCountUp(llmCostEur, { enabled: !loading });
 
-  const kpiRevenue = useCountUp(revenueMonth, { enabled: !loading });
-  const kpiApiCost = useCountUp(apiCostMonth ?? 0, { enabled: !loading });
-  const kpiClients = useCountUp(clientCount ?? 0, { enabled: !loading });
-  const kpiProjects = useCountUp(activeProjectsCount, { enabled: !loading });
+  const activeAgentsCount = agentsStatus?.active_count ?? 0;
 
   const openGeneratorPreset = useCallback(
     (kindId: DashboardProjectKind) => {
@@ -515,35 +391,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     [onNavigate, patch],
   );
 
-  const handleGenerateFromKind = (kindId: DashboardProjectKind) => {
-    const kind =
-      GENERATOR_KINDS.find((k) => k.id === kindId) ?? GENERATOR_KINDS[0];
-    patch({
-      projectType: kind.projectType,
-      generationMode: resolveGenerationMode(kind.id, "real"),
-      prompt: kind.defaultDescription || "",
-      phase: "idle",
-      error: null,
-      actionError: null,
-      result: null,
-    });
-    onNavigate("generator");
-  };
-
   const today = useMemo(() => new Date(), []);
-  const activity = useMemo(() => notifications.slice(0, 5), [notifications]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 font-sans">
       <style>{`
         @keyframes cfFadeUp {
           from { opacity: 0; transform: translateY(12px); }
           to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes cfPulseDot {
-          0% { transform: scale(1); opacity: 1; }
-          60% { transform: scale(1.6); opacity: 0; }
-          100% { transform: scale(1.6); opacity: 0; }
         }
       `}</style>
 
@@ -557,100 +412,83 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-cf-text md:text-4xl">
             Bonjour {firstName}{" "}
-            <span className="text-cf-gold">👋</span>
+            <span className="text-cf-cyan">👋</span>
           </h1>
           <p className="mt-2 text-sm text-cf-body">Vue d&apos;ensemble CapCore</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <span className="inline-flex items-center gap-2 rounded-full border border-cf-cyan/30 bg-cf-cyan/10 px-3 py-1.5 text-xs font-semibold text-cf-cyan shadow-glow-cyan">
           <span
-            className={[
-              "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold",
-              backendOnline
-                ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-                : "border-red-400/30 bg-red-500/10 text-red-200",
-            ].join(" ")}
-          >
-            <span className="relative inline-flex h-2.5 w-2.5 items-center justify-center">
-              <span className="h-2.5 w-2.5 rounded-full bg-current" />
-              {backendOnline ? (
-                <span
-                  className="absolute inset-0 rounded-full bg-current opacity-60"
-                  style={{ animation: "cfPulseDot 1.3s ease-out infinite" }}
-                  aria-hidden
-                />
-              ) : null}
-            </span>
-            {formatAgentsBadgeLabel({
-              backendOnline,
-              activeCount,
-              totalAgents,
-              agentsCountKnown,
-              loading: agentsLoading,
-            })}
-          </span>
-        </div>
+            className="h-2 w-2 rounded-full bg-cf-cyan shadow-[0_0_8px_rgba(0,212,255,0.6)]"
+            aria-hidden
+          />
+          {agentsLoading ? "…" : activeAgentsCount} agents actifs
+        </span>
       </header>
 
-      {/* KPIs */}
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          icon="€"
-          iconClassName="text-cf-gold"
-          label="CA ce mois"
-          value={formatEurPrecise(kpiRevenue)}
-          trendPct={kpiTrends.revenue}
-          loading={loading}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCardV2
+          label="Projets générés"
+          value={Math.round(kpiProjects)}
+          sub={`+${projectsThisMonth} ce mois`}
+          accentColor="cyan"
+          loading={loading && projects.length === 0}
           delayMs={60}
         />
-        <KpiCard
-          icon="📁"
-          iconClassName="text-sky-200"
-          label="Projets actifs"
-          value={String(Math.round(kpiProjects))}
-          trendPct={kpiTrends.projects}
-          loading={loading && projects.length === 0}
+        <StatCardV2
+          label="Coût API mois"
+          value={formatEurPrecise(kpiLlmCost)}
+          sub={`budget : ${formatEur(API_BUDGET_EUR)}`}
+          accentColor="amber"
+          loading={loading}
           delayMs={120}
         />
-        <KpiCard
-          icon="👥"
-          iconClassName="text-violet-200"
-          label="Clients"
-          value={String(Math.round(kpiClients))}
-          trendPct={kpiTrends.clients}
+        <StatCardV2
+          label="Clients actifs"
+          value={Math.round(kpiClients)}
+          sub={`MRR : ${formatEurPrecise(mrrEur)}`}
+          accentColor="purple"
           loading={loading}
           delayMs={180}
         />
-        <KpiCard
-          icon="⚡"
-          iconClassName="text-orange-200"
-          label="Coût API ce mois"
-          value={formatEur(kpiApiCost)}
-          trendPct={kpiTrends.apiCost}
-          loading={loading && apiCostMonth === null}
+        <StatCardV2
+          label="Visuels FLUX"
+          value={Math.round(kpiPoses)}
+          sub={`~${fluxCostEur.toFixed(2)} € total`}
+          accentColor="green"
+          loading={loading}
           delayMs={240}
         />
       </section>
 
-      <div
-        className="grid gap-6 lg:grid-cols-2"
-        style={{
-          animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
-          animationDelay: "280ms",
-        }}
-      >
-        <PipelineHealthWidget data={supervisorStats} loading={loading} />
-        <LLMCostWidget data={llmStats} loading={loading} />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <AgentsPanelV2
+          agents={agentsStatus?.agents ?? []}
+          modelById={modelById}
+          loading={agentsLoading && !agentsStatus}
+        />
+        <RecentGenerationsWidget
+          sessions={recentSessions}
+          generations={recentGenerations}
+          loading={loading}
+          onNavigate={onNavigate}
+        />
       </div>
 
-      <GlassCard
-        className="p-5"
+      <div className="grid gap-6 lg:grid-cols-2">
+        <LLMCostWidget data={llmStats} loading={loading} />
+        <PipelineHealthWidget data={supervisorStats} loading={loading} />
+      </div>
+
+      <V2SectionCard
         style={{
           animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
           animationDelay: "340ms",
         }}
       >
-        <SectionTitle icon="➕" title="Démarrer un projet" />
+        <h2 className="mb-4 text-sm font-semibold tracking-tight text-cf-text">
+          ✦ Créer un projet
+        </h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {[
             { id: "vitrine" as DashboardProjectKind, label: "Vitrine", icon: "◈" },
@@ -664,186 +502,25 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               key={k.id}
               type="button"
               onClick={() => openGeneratorPreset(k.id)}
-              className="group flex flex-col gap-1.5 rounded-control border border-white/10 bg-white/5 p-3 text-left transition hover:border-cf-gold/35 hover:bg-white/7 hover:shadow-gold focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-gold/50"
+              className="group flex flex-col gap-1.5 rounded-control border border-[rgba(0,212,255,0.15)] bg-[#0d0d14] p-3 text-left transition hover:border-cf-cyan/40 hover:bg-cf-cyan/5 hover:shadow-glow-cyan focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-cyan/50"
             >
               <div className="flex items-center justify-between">
-                <span className="text-cf-gold" aria-hidden>
+                <span className="text-cf-cyan" aria-hidden>
                   {k.icon}
                 </span>
                 <span
-                  className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cf-muted transition group-hover:text-cf-gold"
+                  className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cf-muted transition group-hover:text-cf-cyan"
                   aria-hidden
                 >
                   →
                 </span>
               </div>
               <p className="text-sm font-medium text-cf-text">{k.label}</p>
-              <p className="text-[11px] text-cf-muted">
-                Ouvrir le générateur
-              </p>
+              <p className="text-[11px] text-cf-muted">Ouvrir le générateur</p>
             </button>
           ))}
         </div>
-      </GlassCard>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Projets récents */}
-        <GlassCard
-          className="p-5"
-          style={{
-            animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
-            animationDelay: "420ms",
-          }}
-        >
-          <SectionTitle
-            icon="▤"
-            title="Projets récents"
-            action={
-              <button
-                type="button"
-                className="text-[11px] font-semibold text-cf-gold hover:text-cf-gold-hover"
-                onClick={() => onNavigate("projects")}
-              >
-                Tout voir →
-              </button>
-            }
-          />
-
-          {loading ? (
-            <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
-          ) : recentProjects.length === 0 ? (
-            <div className="rounded-control border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-cf-body">
-                Aucun projet — créez votre premier{" "}
-                <button
-                  type="button"
-                  className="font-semibold text-cf-gold hover:text-cf-gold-hover"
-                  onClick={() => handleGenerateFromKind("vitrine")}
-                >
-                  ↗
-                </button>
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentProjects.map((project) => {
-                const isOnline = Boolean((project as any).demo_url?.trim?.());
-                const previewHtml = (project as any).preview_html as
-                  | string
-                  | undefined
-                  | null;
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    onClick={() => onNavigate("projects")}
-                    className="group flex w-full items-start gap-3 rounded-control border border-white/10 bg-white/5 p-3 text-left transition hover:border-cf-gold/35 hover:bg-white/7 hover:shadow-gold focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-gold/50"
-                  >
-                    <div className="h-[72px] w-[128px] shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40">
-                      {previewHtml?.trim() ? (
-                        <iframe
-                          title={`Miniature ${project.title}`}
-                          className="h-full w-full origin-top-left"
-                          sandbox="allow-scripts allow-same-origin allow-forms"
-                          srcDoc={previewHtml}
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-muted">
-                          Aperçu
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-cf-text">
-                            {project.title || "Sans titre"}
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-cf-muted">
-                            {projectTypeLabel(project.project_type)} ·{" "}
-                            {formatCompactDate(project.updated_at)}
-                          </p>
-                        </div>
-                        <span
-                          className={[
-                            "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em]",
-                            isOnline
-                              ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
-                              : "border-white/10 bg-white/5 text-cf-muted",
-                          ].join(" ")}
-                        >
-                          {isOnline ? "En ligne" : "Hors ligne"}
-                        </span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-cf-muted">
-                          {(project.generation_count ?? 0) > 0
-                            ? `${project.generation_count} génération(s)`
-                            : "Nouveau"}
-                        </span>
-                        <span className="text-[11px] font-semibold text-cf-gold group-hover:text-cf-gold-hover">
-                          Ouvrir →
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </GlassCard>
-
-        <RecentGenerationsWidget
-          sessions={recentSessions}
-          generations={recentGenerations}
-          loading={loading}
-          onNavigate={onNavigate}
-        />
-      </div>
-
-      <GlassCard
-        className="p-5"
-        style={{
-          animation: `cfFadeUp 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both`,
-          animationDelay: "520ms",
-        }}
-      >
-        <SectionTitle icon="⏺" title="Activité récente" />
-        {loading ? (
-          <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
-        ) : activity.length === 0 ? (
-          <p className="text-sm text-cf-muted">
-            Aucune activité récente.
-          </p>
-        ) : (
-          <ol className="relative space-y-4 pl-5">
-            <div className="absolute bottom-0 left-[10px] top-0 w-px bg-white/10" />
-            {activity.map((n) => (
-              <li key={n.id} className="relative">
-                <div className="absolute -left-[2px] top-1.5 h-3 w-3 rounded-full border border-white/20 bg-cf-gold shadow-gold" />
-                <div className="rounded-control border border-white/10 bg-white/5 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-cf-text">
-                        {n.title}
-                      </p>
-                      {n.message ? (
-                        <p className="mt-1 line-clamp-2 text-[11px] text-cf-body">
-                          {n.message}
-                        </p>
-                      ) : null}
-                    </div>
-                    <span className="shrink-0 text-[11px] font-semibold text-cf-muted">
-                      {formatRelativeTime(n.created_at)}
-                    </span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-      </GlassCard>
+      </V2SectionCard>
     </div>
   );
 }

@@ -15,6 +15,9 @@ interface RecentGenerationsWidgetProps {
   onNavigate: (page: AppPage) => void;
 }
 
+const V2_CARD =
+  "rounded-[10px] border border-[rgba(0,212,255,0.1)] bg-[#0a0a12]";
+
 const eurPreciseFmt = new Intl.NumberFormat("fr-FR", {
   style: "currency",
   currency: "EUR",
@@ -63,6 +66,23 @@ function projectTypeIcon(type: string): string {
   return "ti ti-file-code";
 }
 
+function projectTypeIconColor(type: string): string {
+  const normalized = type.toLowerCase();
+  if (normalized.includes("vitrine") || normalized === "site_vitrine") {
+    return "text-cf-cyan border-cf-cyan/30 bg-cf-cyan/10";
+  }
+  if (normalized.includes("ecommerce") || normalized.includes("e-commerce")) {
+    return "text-cf-purple border-cf-purple/30 bg-cf-purple/10";
+  }
+  if (normalized.includes("reservation")) {
+    return "text-[#f59e0b] border-[#f59e0b]/30 bg-[#f59e0b]/10";
+  }
+  if (normalized.includes("extension")) {
+    return "text-cf-green border-cf-green/30 bg-cf-green/10";
+  }
+  return "text-cf-cyan border-cf-cyan/20 bg-cf-cyan/5";
+}
+
 function statusClasses(status: string): {
   dot: string;
   label: string;
@@ -70,19 +90,19 @@ function statusClasses(status: string): {
   const s = status.toLowerCase();
   if (s === "completed" || s === "success") {
     return {
-      dot: "bg-teal-400",
-      label: "text-teal-200",
+      dot: "bg-cf-green",
+      label: "text-cf-green",
     };
   }
   if (s === "failed" || s === "error") {
     return {
-      dot: "bg-red-400",
-      label: "text-red-200",
+      dot: "bg-cf-red",
+      label: "text-cf-red",
     };
   }
   return {
-    dot: "bg-amber-400 animate-pulse",
-    label: "text-amber-200",
+    dot: "bg-[#f59e0b] animate-pulse",
+    label: "text-[#f59e0b]",
   };
 }
 
@@ -102,23 +122,15 @@ export function RecentGenerationsWidget({
   );
 
   return (
-    <div className="rounded-card border border-white/10 bg-white/5 p-5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] backdrop-blur-xl">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-flex h-7 w-7 items-center justify-center rounded-control border border-white/10 bg-white/5 text-cf-gold"
-            aria-hidden
-          >
-            <i className="ti ti-history text-sm" />
-          </span>
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cf-muted">
-            Dernières générations
-          </h2>
-        </div>
+    <div className={`${V2_CARD} p-5`}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="font-mono text-xs tracking-wide text-cf-cyan">
+          // activité récente
+        </h2>
         <button
           type="button"
           onClick={() => onNavigate("projects")}
-          className="text-[11px] font-semibold text-cf-gold hover:text-cf-gold-hover"
+          className="font-mono text-[11px] font-semibold text-cf-cyan hover:text-white"
         >
           Voir tout →
         </button>
@@ -127,14 +139,14 @@ export function RecentGenerationsWidget({
       {loading ? (
         <p className="text-sm text-cf-muted animate-pulse">Chargement…</p>
       ) : entries.length === 0 ? (
-        <div className="rounded-control border border-white/10 bg-white/5 p-4">
+        <div className="rounded-control border border-[rgba(0,212,255,0.1)] bg-[#0d0d14] p-4">
           <p className="text-sm text-cf-body">
             Aucune génération — lancez votre première création
           </p>
           <button
             type="button"
             onClick={() => onNavigate("generator")}
-            className="mt-3 text-[11px] font-semibold text-cf-gold hover:text-cf-gold-hover"
+            className="mt-3 font-mono text-[11px] font-semibold text-cf-cyan hover:text-white"
           >
             Créer →
           </button>
@@ -146,49 +158,46 @@ export function RecentGenerationsWidget({
             const typeLabel = entry.projectType
               ? projectTypeLabel(entry.projectType)
               : "Génération";
+            const iconColor = projectTypeIconColor(entry.projectType);
             return (
               <button
                 key={entry.generationId}
                 type="button"
                 onClick={() => onNavigate("projects")}
-                className="group flex w-full flex-col gap-2 rounded-control border border-white/10 bg-white/5 p-3 text-left transition hover:border-cf-gold/35 hover:bg-white/7 hover:shadow-gold focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-gold/50"
+                className="group flex w-full items-center gap-3 rounded-control border border-[rgba(0,212,255,0.1)] bg-[#0d0d14] p-3 text-left transition hover:border-cf-cyan/30 hover:bg-cf-cyan/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-cf-cyan/50"
               >
-                <div className="flex items-start gap-3">
-                  <span
-                    className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-white/10 bg-white/5 text-cf-gold"
-                    aria-hidden
-                  >
-                    <i className={projectTypeIcon(entry.projectType)} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-cf-text">
-                      {entry.clientName}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-cf-muted">
-                      {typeLabel} · {formatRelativeTime(entry.createdAt)}
-                    </p>
-                  </div>
+                <span
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-control border ${iconColor}`}
+                  aria-hidden
+                >
+                  <i className={projectTypeIcon(entry.projectType)} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-cf-text">
+                    {entry.clientName}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-cf-muted">{typeLabel}</p>
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 pl-11">
+                <div className="flex shrink-0 flex-col items-end gap-1">
                   <span
-                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${statusStyle.label}`}
+                    className={`font-mono text-[10px] text-cf-muted`}
+                  >
+                    {formatRelativeTime(entry.createdAt)}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 font-mono text-[10px] font-semibold ${statusStyle.label}`}
                   >
                     <span
-                      className={`h-2 w-2 rounded-full ${statusStyle.dot}`}
+                      className={`h-1.5 w-1.5 rounded-full ${statusStyle.dot}`}
                       aria-hidden
                     />
                     {entry.status}
                   </span>
-                  <div className="flex items-center gap-3 text-[11px] text-cf-muted">
-                    {entry.qualityScore != null ? (
-                      <span>Score: {Math.round(entry.qualityScore)}/100</span>
-                    ) : null}
-                    {entry.costUsd != null && entry.costUsd > 0 ? (
-                      <span className="tabular-nums">
-                        {formatCostEur(entry.costUsd)}
-                      </span>
-                    ) : null}
-                  </div>
+                  {entry.costUsd != null && entry.costUsd > 0 ? (
+                    <span className="font-mono text-[10px] tabular-nums text-cf-muted">
+                      {formatCostEur(entry.costUsd)}
+                    </span>
+                  ) : null}
                 </div>
               </button>
             );

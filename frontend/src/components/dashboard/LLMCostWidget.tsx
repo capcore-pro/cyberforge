@@ -6,6 +6,9 @@ interface LLMCostWidgetProps {
   loading?: boolean;
 }
 
+const V2_CARD =
+  "rounded-[10px] border border-[rgba(0,212,255,0.1)] bg-[#0a0a12]";
+
 const eurPreciseFmt = new Intl.NumberFormat("fr-FR", {
   style: "currency",
   currency: "EUR",
@@ -28,13 +31,10 @@ function formatProviderLabel(provider: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function providerBarColor(provider: string): string {
-  const key = provider.toLowerCase();
-  if (key === "mistral") return "bg-[#f97316]";
-  if (key === "gemini") return "bg-[#3b82f6]";
-  if (key.includes("anthropic")) return "bg-cf-gold";
-  if (key.includes("openai")) return "bg-teal-400";
-  return "bg-white/40";
+const PROVIDER_BAR_COLORS = ["bg-cf-cyan", "bg-[#f59e0b]", "bg-cf-purple"];
+
+function providerBarColor(index: number): string {
+  return PROVIDER_BAR_COLORS[index % PROVIDER_BAR_COLORS.length];
 }
 
 function SkeletonBars() {
@@ -67,28 +67,22 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
       (row) =>
         row.provider.toLowerCase() === "mistral" ||
         row.provider.toLowerCase() === "gemini" ||
-        row.cost_usd > 0
+        row.cost_usd > 0,
     )
     .sort((a, b) => b.cost_usd - a.cost_usd);
   const maxAgentCost = agents.length > 0 ? agents[0].cost_usd : 0;
   const maxProviderCost =
     providers.length > 0 ? providers[0].cost_usd : 0;
 
+  const agentBarColors = ["bg-cf-cyan", "bg-[#f59e0b]", "bg-cf-purple"];
+
   return (
-    <div className="rounded-card border border-white/10 bg-white/5 p-5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] backdrop-blur-xl">
+    <div className={`${V2_CARD} p-5`}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-flex h-7 w-7 items-center justify-center rounded-control border border-white/10 bg-white/5 text-cf-gold"
-            aria-hidden
-          >
-            <i className="ti ti-coin text-sm" />
-          </span>
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cf-muted">
-            Coût LLM ce mois
-          </h2>
-        </div>
-        <span className="rounded-full border border-teal-400/30 bg-teal-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-200">
+        <h2 className="font-mono text-xs tracking-wide text-cf-cyan">
+          // coût LLM ce mois
+        </h2>
+        <span className="rounded-full border border-cf-cyan/30 bg-cf-cyan/10 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-cf-cyan">
           Données réelles
         </span>
       </div>
@@ -102,27 +96,25 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
         </p>
       ) : (
         <>
-          <p className="text-3xl font-semibold tabular-nums text-cf-text">
+          <p className="font-mono text-3xl font-semibold tabular-nums text-cf-text">
             {formatEurFromUsd(totalUsd)}
           </p>
-          <p className="mt-1 text-sm text-white/40">
+          <p className="mt-1 font-mono text-sm text-cf-muted">
             {totalTokens.toLocaleString("fr-FR")} tokens
           </p>
 
           {agents.length > 0 ? (
             <div className="mt-5 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-muted">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cf-muted">
                 Par agent
               </p>
-              {agents.map((row) => {
+              {agents.map((row, index) => {
                 const pct =
                   maxAgentCost > 0
                     ? Math.round((row.cost_usd / maxAgentCost) * 100)
                     : 0;
-                const shareOfTotal =
-                  totalUsd > 0 ? row.cost_usd / totalUsd : 0;
                 const barColor =
-                  shareOfTotal > 0.5 ? "bg-cf-gold" : "bg-teal-400";
+                  agentBarColors[index % agentBarColors.length];
                 return (
                   <div key={row.agent} className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3">
@@ -131,11 +123,11 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
                           .replace(/_/g, " ")
                           .replace(/\b\w/g, (c) => c.toUpperCase())}
                       </p>
-                      <p className="shrink-0 text-[11px] font-semibold tabular-nums text-cf-muted">
+                      <p className="shrink-0 font-mono text-[11px] font-semibold tabular-nums text-cf-muted">
                         {formatEurFromUsd(row.cost_usd)}
                       </p>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5">
+                    <div className="h-2 w-full overflow-hidden rounded-full border border-[rgba(0,212,255,0.1)] bg-[#0d0d14]">
                       <div
                         className={`h-full ${barColor}`}
                         style={{ width: `${pct}%` }}
@@ -149,47 +141,27 @@ export function LLMCostWidget({ data, loading }: LLMCostWidgetProps) {
 
           {providers.length > 0 ? (
             <div className="mt-6 space-y-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cf-muted">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cf-muted">
                 Par fournisseur
               </p>
-              {providers.map((row) => {
+              {providers.map((row, index) => {
                 const pct =
                   maxProviderCost > 0
                     ? Math.round((row.cost_usd / maxProviderCost) * 100)
                     : 0;
-                const isMistral = row.provider.toLowerCase() === "mistral";
-                const isGemini = row.provider.toLowerCase() === "gemini";
                 return (
                   <div key={row.provider} className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3">
-                      <p
-                        className={`truncate text-sm font-medium ${
-                          isMistral
-                            ? "text-[#f97316]"
-                            : isGemini
-                              ? "text-[#3b82f6]"
-                              : "text-cf-text"
-                        }`}
-                      >
+                      <p className="truncate text-sm font-medium text-cf-text">
                         {formatProviderLabel(row.provider)}
-                        {isMistral ? (
-                          <span className="ml-2 text-[10px] text-[#f59e0b]">
-                            volume coulisses
-                          </span>
-                        ) : null}
-                        {isGemini ? (
-                          <span className="ml-2 text-[10px] text-[#60a5fa]">
-                            quasi-gratuit
-                          </span>
-                        ) : null}
                       </p>
-                      <p className="shrink-0 text-[11px] font-semibold tabular-nums text-cf-muted">
+                      <p className="shrink-0 font-mono text-[11px] font-semibold tabular-nums text-cf-muted">
                         {formatEurFromUsd(row.cost_usd)}
                       </p>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5">
+                    <div className="h-2 w-full overflow-hidden rounded-full border border-[rgba(0,212,255,0.1)] bg-[#0d0d14]">
                       <div
-                        className={`h-full ${providerBarColor(row.provider)}`}
+                        className={`h-full ${providerBarColor(index)}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
