@@ -1,8 +1,22 @@
 /**
- * CyberForge — thème premium noir / or
+ * CyberForge — thème premium noir / or + V2 cyberpunk cyan
  */
 :root {
-  /* Fonds */
+  /* V2 — fonds & accents */
+  --cf-bg-primary: #030308;
+  --cf-bg-secondary: #0a0a12;
+  --cf-cyan: #00d4ff;
+  --cf-cyan-subtle: rgba(0, 212, 255, 0.08);
+  --cf-cyan-border: rgba(0, 212, 255, 0.12);
+  --cf-cyan-border-hover: rgba(0, 212, 255, 0.25);
+  --cf-cyan-glow: rgba(0, 212, 255, 0.15);
+  --cf-purple: #7c3aed;
+  --cf-green: #00ff88;
+  --cf-red: #ff3366;
+  --cf-font-ui: "Space Grotesk", sans-serif;
+  --cf-font-mono: "JetBrains Mono", monospace;
+
+  /* Fonds (legacy) */
   --cf-bg-main: #0d0d0d;
   --cf-bg-sidebar: #111111;
   --cf-bg-card: #111111;
@@ -48,12 +62,12 @@
   --cyber-surface: var(--cf-bg-card);
   --cyber-surface-alt: var(--cf-bg-sidebar);
   --cyber-border: var(--cf-border);
-  --cyber-border-glow: var(--cf-gold);
-  --cyber-accent: var(--cf-gold);
-  --cyber-accent-muted: var(--cf-gold-hover);
-  --cyber-violet: var(--cf-gold);
-  --cyber-violet-muted: var(--cf-gold-hover);
-  --cyber-neon: var(--cf-gold);
+  --cyber-border-glow: var(--cf-cyan-border);
+  --cyber-accent: var(--cf-cyan);
+  --cyber-accent-muted: var(--cf-cyan-border-hover);
+  --cyber-violet: var(--cf-purple);
+  --cyber-violet-muted: var(--cf-purple);
+  --cyber-neon: var(--cf-cyan);
   --cyber-text: var(--cf-text-primary);
   --cyber-muted: var(--cf-text-secondary);
 }

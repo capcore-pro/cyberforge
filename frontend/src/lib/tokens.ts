@@ -13,6 +13,10 @@ export const tokens = {
     success: "var(--cf-success)",
     alert: "var(--cf-alert)",
     info: "var(--cf-info)",
+    cyan: "var(--cf-cyan)",
+    cyanSubtle: "var(--cf-cyan-subtle)",
+    purple: "var(--cf-purple)",
+    green: "var(--cf-green)",
   },
   radius: {
     card: "var(--cf-radius-card)",
@@ -21,5 +25,9 @@ export const tokens = {
   fontSize: {
     body: "var(--cf-font-size-body)",
     label: "var(--cf-font-size-label)",
+  },
+  fontFamily: {
+    ui: "var(--cf-font-ui)",
+    mono: "var(--cf-font-mono)",
   },
 } as const;

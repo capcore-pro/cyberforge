@@ -13,8 +13,8 @@ export function BackendStatusBanner() {
       className="shrink-0 border-b border-cf-alert/30 bg-cf-alert/10 px-4 py-2 text-center text-xs text-cf-alert"
       role="status"
     >
-      Backend hors ligne — reconnexion automatique toutes les 3&nbsp;s. Les actions
-      API échoueront jusqu&apos;au retour du serveur sur le port&nbsp;8002.
+      Backend hors ligne — reconnexion automatique. Les actions API échoueront
+      jusqu&apos;au retour du serveur sur le port&nbsp;8002.
     </div>
   );
 }

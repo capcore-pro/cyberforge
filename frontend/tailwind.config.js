@@ -24,6 +24,13 @@ export default {
           success: "#4caf50",
           alert: "#e8a020",
           info: "#5b8dd9",
+          cyan: "#00d4ff",
+          "cyan-subtle": "rgba(0,212,255,0.08)",
+          "cyan-border": "rgba(0,212,255,0.12)",
+          purple: "#7c3aed",
+          green: "#00ff88",
+          red: "#ff3366",
+          primary: "#030308",
         },
         cyber: {
           bg: "#0a0a0a",
@@ -46,12 +53,14 @@ export default {
       },
       fontFamily: {
         sans: [
+          "Space Grotesk",
           "Inter",
           "Segoe UI",
           "system-ui",
           "-apple-system",
           "sans-serif",
         ],
+        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
       fontSize: {
         body: ["13px", { lineHeight: "1.5" }],
@@ -60,6 +69,8 @@ export default {
       boxShadow: {
         card: "0 1px 0 rgba(255, 255, 255, 0.04) inset",
         gold: "0 0 0 1px rgba(201, 168, 76, 0.25)",
+        "glow-cyan": "0 0 12px rgba(0,212,255,0.15)",
+        "glow-cyan-strong": "0 0 20px rgba(0,212,255,0.25)",
       },
     },
   },
